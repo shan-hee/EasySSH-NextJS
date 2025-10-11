@@ -1,0 +1,1506 @@
+openapi: 3.0.3
+info:
+  title: EasySSH 后端 API
+  version: 2.0.0
+  description: |
+    基于 Express 的 REST API，提供用户、服务器、连接管理、脚本中心与 AI 能力。
+    - 基础路径：/api
+    - 默认端口：8000（可用环境变量 SERVER_PORT 覆盖）
+servers:
+  - url: http://localhost:8000
+    description: 本地开发
+  - url: https://your-domain.example.com
+    description: 生产环境（示例）
+tags:
+  - name: Status
+  - name: Auth
+  - name: Users
+  - name: UserSettings
+  - name: Servers
+  - name: Connections
+  - name: Monitor
+  - name: Scripts
+  - name: AI
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      additionalProperties: true
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+    StatusDatabases:
+      type: object
+      properties:
+        sqlite:
+          type: string
+          enum: [connected, disconnected]
+        cache:
+          type: string
+          enum: [connected]
+    UserSafe:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        email: { type: string, nullable: true }
+        displayName: { type: string }
+        avatar: { type: string }
+        mfaEnabled: { type: boolean }
+        theme: { type: string, enum: [dark, light, system] }
+        fontSize: { type: integer }
+        isAdmin: { type: boolean }
+        status: { type: string }
+        lastLogin: { type: string, nullable: true }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    RegisterDto:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 3 }
+        password: { type: string, minLength: 6 }
+        email: { type: string, format: email }
+        profile: { type: object, additionalProperties: true }
+        settings: { type: object, additionalProperties: true }
+    LoginDto:
+      type: object
+      properties:
+        username: { type: string }
+        password: { type: string }
+        mfaCode: { type: string }
+        isMfaVerification: { type: boolean }
+        operation: { type: string }
+    UpdateUserDto:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string }
+        avatar: { type: string }
+        profile: { type: object, additionalProperties: true }
+        settings: { type: object, additionalProperties: true }
+        theme: { type: string, enum: [dark, light, system] }
+        fontSize: { type: integer, minimum: 10, maximum: 42 }
+        oldPassword: { type: string }
+        newPassword: { type: string }
+    ChangePasswordDto:
+      type: object
+      required: [oldPassword, newPassword]
+      properties:
+        oldPassword: { type: string, minLength: 6 }
+        newPassword: { type: string, minLength: 6 }
+    SharedInfo:
+      type: object
+      properties:
+        isShared: { type: boolean }
+        sharedWith:
+          type: array
+          items: { type: string }
+    Server:
+      type: object
+      description: toSafeObject 返回的服务器安全对象
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        usePrivateKey: { type: boolean }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        timeout: { type: integer }
+        lastConnected: { type: string, nullable: true }
+        connectionCount: { type: integer }
+        owner: { type: string, nullable: true }
+        shared: { $ref: '#/components/schemas/SharedInfo' }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    CreateServerDto:
+      type: object
+      required: [name, host, username]
+      properties:
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        username: { type: string }
+        password: { type: string }
+        privateKey: { type: string }
+        usePrivateKey: { type: boolean }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        timeout: { type: integer }
+    UpdateServerDto:
+      type: object
+      properties:
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        username: { type: string }
+        password: { type: string }
+        privateKey: { type: string }
+        usePrivateKey: { type: boolean }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        timeout: { type: integer }
+    Connection:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        password: { type: string }
+        rememberPassword: { type: boolean }
+        privateKey: { type: string }
+        passphrase: { type: string }
+        authType: { type: string, enum: [password, key] }
+        description: { type: string }
+        group: { type: string }
+        config: { type: object, additionalProperties: true }
+        sortOrder: { type: integer }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    ConnectionInput:
+      type: object
+      required: [host, username]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        password: { type: string }
+        rememberPassword: { type: boolean }
+        privateKey: { type: string }
+        passphrase: { type: string }
+        authType: { type: string, enum: [password, key] }
+        description: { type: string }
+        group: { type: string }
+        config: { type: object, additionalProperties: true }
+        sortOrder: { type: integer }
+    Script:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        command: { type: string }
+        author: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        keywords:
+          type: array
+          items: { type: string }
+        category: { type: string }
+        isPublic: { type: boolean }
+        isSystem: { type: boolean }
+        usageCount: { type: integer }
+        createdBy: { type: integer, nullable: true }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    ScriptExecution:
+      type: object
+      properties:
+        id: { type: integer }
+        scriptId: { type: integer, nullable: true }
+        scriptName: { type: string, nullable: true }
+        command: { type: string }
+        connectionId: { type: string }
+        serverName: { type: string, nullable: true }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        stdout: { type: string }
+        stderr: { type: string }
+        exitCode: { type: integer }
+        executedAt: { type: string }
+    MonitorSession:
+      type: object
+      properties:
+        id: { type: string }
+        clientIp: { type: string }
+        connectedAt: { type: string }
+        lastActivity: { type: string }
+        subscribedServers:
+          type: array
+          items: { type: string }
+        messageStats:
+          type: object
+          additionalProperties: true
+    AIConnectionTestDto:
+      type: object
+      required: [baseUrl, apiKey, model]
+      properties:
+        baseUrl: { type: string }
+        apiKey: { type: string }
+        model: { type: string }
+    AIStatus:
+      type: object
+      properties:
+        available: { type: boolean }
+        supportedModels:
+          type: array
+          items: { type: string }
+        features:
+          type: array
+          items: { type: string }
+paths:
+  /api/status:
+    get:
+      tags: [Status]
+      summary: 服务运行状态
+      security: []
+      responses:
+        '200':
+          description: 运行状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  version: { type: string }
+                  databases: { $ref: '#/components/schemas/StatusDatabases' }
+                  timestamp: { type: string }
+  /api/users/admin-exists:
+    get:
+      tags: [Auth]
+      summary: 检查是否已有管理员
+      security: []
+      responses:
+        '200':
+          description: 是否存在管理员
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  adminExists: { type: boolean }
+  /api/users/register:
+    post:
+      tags: [Auth]
+      summary: 注册（首个用户自动为管理员）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterDto' }
+            examples:
+              default:
+                value:
+                  username: admin
+                  password: admin123
+                  email: admin@example.com
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  user: { $ref: '#/components/schemas/UserSafe' }
+                  token: { type: string }
+        '400':
+          description: 注册失败
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/login:
+    post:
+      tags: [Auth]
+      summary: 登录或进行 MFA 二次验证
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginDto' }
+            examples:
+              byPassword:
+                value:
+                  username: admin
+                  password: admin123
+      responses:
+        '200':
+          description: 登录/验证结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  user: { $ref: '#/components/schemas/UserSafe' }
+                  token: { type: string }
+        '401':
+          description: 登录失败
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/verify-mfa:
+    post:
+      tags: [Auth]
+      summary: 独立 MFA 验证入口
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginDto' }
+      responses:
+        '200':
+          description: 验证成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  user: { $ref: '#/components/schemas/UserSafe' }
+                  token: { type: string }
+  /api/users/me:
+    get:
+      tags: [Users]
+      summary: 获取当前用户信息
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 用户信息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  user: { $ref: '#/components/schemas/UserSafe' }
+    put:
+      tags: [Users]
+      summary: 更新当前用户信息（含可选密码更新）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateUserDto' }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/change-password:
+    post:
+      tags: [Users]
+      summary: 修改密码
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordDto' }
+      responses:
+        '200':
+          description: 修改结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/logout:
+    post:
+      tags: [Auth]
+      summary: 注销当前设备
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 注销结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/logout-all-devices:
+    post:
+      tags: [Auth]
+      summary: 注销所有设备
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 注销结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/settings:
+    get:
+      tags: [UserSettings]
+      summary: 获取用户设置（可选按分类）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: category
+          schema: { type: string }
+          required: false
+      responses:
+        '200':
+          description: 设置字典
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+    put:
+      tags: [UserSettings]
+      summary: 更新用户设置（单分类）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, data]
+              properties:
+                category: { type: string }
+                data: { type: object, additionalProperties: true }
+                version: { type: integer }
+                clientTimestamp: { type: string }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/settings/terminal/minimal:
+    get:
+      tags: [UserSettings]
+      summary: 获取终端最小配置
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 最小配置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/settings/batch:
+    put:
+      tags: [UserSettings]
+      summary: 批量更新设置
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ops:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      op: { type: string }
+                      category: { type: string }
+                      data: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: 执行结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/settings/sync:
+    post:
+      tags: [UserSettings]
+      summary: 同步设置
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: 同步状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/users/settings/{category}:
+    delete:
+      tags: [UserSettings]
+      summary: 删除某个分类的设置
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: category
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/servers:
+    get:
+      tags: [Servers]
+      summary: 列出我的服务器
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 服务器列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  servers:
+                    type: array
+                    items: { $ref: '#/components/schemas/Server' }
+    post:
+      tags: [Servers]
+      summary: 创建服务器
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateServerDto' }
+            examples:
+              default:
+                value:
+                  name: demo
+                  host: 192.168.1.10
+                  port: 22
+                  username: root
+                  password: secret
+                  tags: [prod]
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  server: { $ref: '#/components/schemas/Server' }
+
+  /api/servers/{id}:
+    get:
+      tags: [Servers]
+      summary: 获取服务器详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: includeCredentials
+          required: false
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: 服务器详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  server: { $ref: '#/components/schemas/Server' }
+    put:
+      tags: [Servers]
+      summary: 更新服务器
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateServerDto' }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+    delete:
+      tags: [Servers]
+      summary: 删除服务器
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/servers/{id}/connect:
+    post:
+      tags: [Servers]
+      summary: 连接计数 +1
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/monitor/status:
+    get:
+      tags: [Monitor]
+      summary: 监控状态
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: hostname
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: 状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/monitor/sessions:
+    get:
+      tags: [Monitor]
+      summary: 会话列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 会话信息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/MonitorSession' }
+                  count: { type: integer }
+                  timestamp: { type: integer }
+
+  /api/connections/check:
+    get:
+      tags: [Connections]
+      summary: 连接 API 健康检查
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections:
+    get:
+      tags: [Connections]
+      summary: 获取我的连接列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  connections:
+                    type: array
+                    items: { $ref: '#/components/schemas/Connection' }
+    post:
+      tags: [Connections]
+      summary: 新增连接
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connection]
+              properties:
+                connection: { $ref: '#/components/schemas/ConnectionInput' }
+            examples:
+              default:
+                value:
+                  connection:
+                    name: my-ssh
+                    host: 10.0.0.2
+                    port: 22
+                    username: ubuntu
+                    authType: password
+                    rememberPassword: true
+                    password: s3cr3t
+                    group: 默认分组
+      responses:
+        '200':
+          description: 创建结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  connectionId: { type: string }
+                  message: { type: string }
+  /api/connections/overview:
+    get:
+      tags: [Connections]
+      summary: 概览统计
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 统计
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections/{id}:
+    put:
+      tags: [Connections]
+      summary: 更新连接
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connection]
+              properties:
+                connection: { $ref: '#/components/schemas/ConnectionInput' }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+    delete:
+      tags: [Connections]
+      summary: 删除连接
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections/favorites:
+    get:
+      tags: [Connections]
+      summary: 获取收藏
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 收藏列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+    post:
+      tags: [Connections]
+      summary: 更新收藏
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections/history:
+    get:
+      tags: [Connections]
+      summary: 获取历史
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 历史记录
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        entryId: { type: integer }
+                        id: { type: string }
+                        name: { type: string }
+                        host: { type: string }
+                        port: { type: integer }
+                        username: { type: string }
+                        description: { type: string }
+                        group: { type: string }
+                        authType: { type: string }
+                        timestamp: { type: integer }
+    post:
+      tags: [Connections]
+      summary: 记录历史
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                history:
+                  type: array
+                  items: { $ref: '#/components/schemas/Connection' }
+      responses:
+        '200':
+          description: 记录结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  entryId: { type: integer, nullable: true }
+    delete:
+      tags: [Connections]
+      summary: 清空历史
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 清空结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections/history/entry/{entryId}:
+    delete:
+      tags: [Connections]
+      summary: 删除某条历史记录
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: entryId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections/pinned:
+    get:
+      tags: [Connections]
+      summary: 获取置顶连接
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  pinned:
+                    type: object
+                    additionalProperties:
+                      type: integer
+    post:
+      tags: [Connections]
+      summary: 更新置顶连接
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections/order:
+    post:
+      tags: [Connections]
+      summary: 更新排序
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order:
+                  type: array
+                  items:
+                    oneOf:
+                      - type: string
+                      - type: object
+                        properties:
+                          id: { type: string }
+                          sortOrder: { type: integer }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/connections/sync:
+    post:
+      tags: [Connections]
+      summary: 批量同步
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connections:
+                  type: array
+                  items: { $ref: '#/components/schemas/ConnectionInput' }
+                favorites:
+                  type: array
+                  items: { type: string }
+                history:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      timestamp: { type: integer }
+                pinned:
+                  type: object
+                  additionalProperties: { type: integer }
+      responses:
+        '200':
+          description: 同步结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/scripts/public:
+    get:
+      tags: [Scripts]
+      summary: 公共脚本列表
+      security: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  scripts:
+                    type: array
+                    items: { $ref: '#/components/schemas/Script' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+  /api/scripts/categories:
+    get:
+      tags: [Scripts]
+      summary: 分类列表
+      security: []
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  categories:
+                    type: array
+                    items: { type: string }
+  /api/scripts/popular:
+    get:
+      tags: [Scripts]
+      summary: 热门脚本
+      security: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  scripts:
+                    type: array
+                    items: { $ref: '#/components/schemas/Script' }
+  /api/scripts/search:
+    get:
+      tags: [Scripts]
+      summary: 搜索脚本
+      security: []
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        '200':
+          description: 搜索结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  scripts:
+                    type: array
+                    items: { $ref: '#/components/schemas/Script' }
+                  query: { type: string }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+
+  /api/scripts/user:
+    get:
+      tags: [Scripts]
+      summary: 获取我的脚本
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  scripts:
+                    type: array
+                    items: { $ref: '#/components/schemas/Script' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+    post:
+      tags: [Scripts]
+      summary: 创建脚本
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, command]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                command: { type: string }
+                tags:
+                  type: array
+                  items: { type: string }
+                keywords:
+                  type: array
+                  items: { type: string }
+                category: { type: string }
+      responses:
+        '201':
+          description: 创建结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  script: { $ref: '#/components/schemas/Script' }
+                  message: { type: string }
+  /api/scripts/user/{id}:
+    put:
+      tags: [Scripts]
+      summary: 更新我的脚本
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                command: { type: string }
+                tags:
+                  type: array
+                  items: { type: string }
+                keywords:
+                  type: array
+                  items: { type: string }
+                category: { type: string }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  script: { $ref: '#/components/schemas/Script' }
+                  message: { type: string }
+    delete:
+      tags: [Scripts]
+      summary: 删除我的脚本
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/scripts/all:
+    get:
+      tags: [Scripts]
+      summary: 获取所有脚本（公开+我的）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/scripts/incremental:
+    get:
+      tags: [Scripts]
+      summary: 增量获取脚本
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: since
+          schema: { type: string }
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/scripts/usage:
+    post:
+      tags: [Scripts]
+      summary: 记录脚本使用
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scriptId: { type: integer }
+                userScriptId: { type: integer }
+                scriptName: { type: string }
+                command: { type: string }
+      responses:
+        '200':
+          description: 记录结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/scripts/execute:
+    post:
+      tags: [Scripts]
+      summary: 执行脚本
+      description: 需要在已有连接上执行；服务端将根据 host+username 查找连接配置。
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command, host, username]
+              properties:
+                scriptId: { type: integer }
+                scriptName: { type: string }
+                command: { type: string }
+                serverId: { type: string }
+                serverName: { type: string }
+                host: { type: string }
+                port: { type: integer }
+                username: { type: string }
+      responses:
+        '200':
+          description: 执行结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  result:
+                    type: object
+                    properties:
+                      stdout: { type: string }
+                      stderr: { type: string }
+                      exitCode: { type: integer }
+                      executedAt: { type: string }
+                      duration: { type: integer }
+                  message: { type: string }
+  /api/scripts/executions:
+    get:
+      tags: [Scripts]
+      summary: 执行历史
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: connectionId
+          schema: { type: string }
+        - in: query
+          name: scriptId
+          schema: { type: integer }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        '200':
+          description: 历史列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  history:
+                    type: array
+                    items: { $ref: '#/components/schemas/ScriptExecution' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+  /api/scripts/executions/{id}:
+    get:
+      tags: [Scripts]
+      summary: 执行详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: 详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  execution: { $ref: '#/components/schemas/ScriptExecution' }
+  /api/scripts/favorites:
+    get:
+      tags: [Scripts]
+      summary: 收藏脚本列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+    post:
+      tags: [Scripts]
+      summary: 更新收藏脚本
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/scripts/favorites/{scriptId}/toggle:
+    post:
+      tags: [Scripts]
+      summary: 切换收藏状态
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: scriptId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 切换结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /api/ai/test-connection:
+    post:
+      tags: [AI]
+      summary: 测试第三方 AI 连接
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AIConnectionTestDto' }
+            examples:
+              default:
+                value:
+                  baseUrl: https://api.openai.com
+                  apiKey: sk-***
+                  model: gpt-4o-mini
+      responses:
+        '200':
+          description: 测试结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /api/ai/status:
+    get:
+      tags: [AI]
+      summary: AI 状态能力
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 当前支持的模型与功能
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/AIStatus' }
+
+security:
+  - bearerAuth: []
+
