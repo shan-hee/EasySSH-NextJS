@@ -15,7 +15,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 export default function Home() {
   return (
     <main className="mx-auto max-w-3xl p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Next.js 15 + shadcn/ui</h1>
+      <h1 className="text-2xl font-semibold flex items-center gap-3">
+        <img src="/logo.svg" alt="EasySSH Logo" className="h-8 w-8" />
+        EasySSH
+      </h1>
 
       <Tabs defaultValue="form" className="w-full">
         <TabsList>
@@ -49,7 +52,7 @@ export default function Home() {
         <TabsContent value="about">
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">
-              已集成 Tailwind v4、shadcn/ui、Radix UI 与 Sonner。
+              已集成 Tailwind v4、shadcn/ui、Radix UI 与 Sonner。当前项目为 EasySSH 的 React/Next.js 前端实现。
             </CardContent>
           </Card>
         </TabsContent>

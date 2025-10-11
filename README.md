@@ -1,3 +1,7 @@
+EasySSH（React/Next.js 前端）
+
+本项目为 EasySSH 的 React/Next.js 前端实现，内部名称统一为“EasySSH”。
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
