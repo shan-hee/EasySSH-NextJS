@@ -2,19 +2,20 @@
 
 import * as React from "react"
 import {
-  Frame,
-  Map,
   Settings2,
   Server,
   Key,
   Monitor,
-  Shield,
+  Terminal,
+  FileText,
+  UserCog,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavUser } from "@/components/nav-user"
 import { NavExtra } from "@/components/nav-extra"
+import { QuickAccess } from "@/components/quick-access"
+import { QuickActions } from "@/components/quick-actions"
 import { TeamSwitcher } from "@/components/team-switcher"
 import {
   Sidebar,
@@ -47,7 +48,7 @@ const data = {
       isActive: true,
       items: [
         {
-          title: "所有服务器",
+          title: "服务器列表",
           url: "/dashboard/servers",
         },
         {
@@ -55,12 +56,35 @@ const data = {
           url: "/dashboard/servers/add",
         },
         {
-          title: "连接历史",
+          title: "快速连接",
+          url: "/dashboard/servers/quick-connect",
+        },
+        {
+          title: "批量操作",
+          url: "/dashboard/servers/batch",
+        },
+      ],
+    },
+    {
+      title: "终端会话",
+      url: "#",
+      icon: Terminal,
+      items: [
+        {
+          title: "Web终端",
+          url: "/dashboard/terminal",
+        },
+        {
+          title: "活动会话",
+          url: "/dashboard/sessions",
+        },
+        {
+          title: "会话历史",
           url: "/dashboard/history",
         },
         {
-          title: "在线终端",
-          url: "/dashboard/terminal",
+          title: "文件传输",
+          url: "/dashboard/sftp",
         },
       ],
     },
@@ -70,7 +94,7 @@ const data = {
       icon: Key,
       items: [
         {
-          title: "SSH 密钥",
+          title: "SSH密钥",
           url: "/dashboard/keys",
         },
         {
@@ -81,34 +105,88 @@ const data = {
           title: "导入密钥",
           url: "/dashboard/keys/import",
         },
+        {
+          title: "密钥分发",
+          url: "/dashboard/keys/deploy",
+        },
       ],
     },
     {
-      title: "监控",
+      title: "系统监控",
       url: "#",
       icon: Monitor,
       items: [
         {
-          title: "系统状态",
+          title: "服务器状态",
           url: "/dashboard/monitoring",
         },
         {
-          title: "性能指标",
+          title: "性能监控",
           url: "/dashboard/metrics",
         },
         {
-          title: "日志查看",
-          url: "/dashboard/logs",
+          title: "连接统计",
+          url: "/dashboard/statistics",
+        },
+        {
+          title: "告警管理",
+          url: "/dashboard/alerts",
         },
       ],
     },
     {
-      title: "设置",
+      title: "日志审计",
+      url: "#",
+      icon: FileText,
+      items: [
+        {
+          title: "操作日志",
+          url: "/dashboard/logs",
+        },
+        {
+          title: "登录日志",
+          url: "/dashboard/logs/login",
+        },
+        {
+          title: "命令记录",
+          url: "/dashboard/logs/commands",
+        },
+        {
+          title: "安全审计",
+          url: "/dashboard/logs/security",
+        },
+      ],
+    },
+    {
+      title: "用户管理",
+      url: "#",
+      icon: UserCog,
+      items: [
+        {
+          title: "用户列表",
+          url: "/dashboard/users",
+        },
+        {
+          title: "角色权限",
+          url: "/dashboard/roles",
+        },
+        {
+          title: "访问控制",
+          url: "/dashboard/access-control",
+        },
+        {
+          title: "组织架构",
+          url: "/dashboard/organization",
+        },
+      ],
+    },
+    {
+      title: "系统设置",
       url: "#",
       icon: Settings2,
       items: [
         {
-          title: "常规设置",
+          title: "基础配置",
           url: "/dashboard/settings/general",
         },
         {
@@ -116,31 +194,14 @@ const data = {
           url: "/dashboard/settings/security",
         },
         {
-          title: "用户管理",
-          url: "/dashboard/settings/users",
+          title: "邮件配置",
+          url: "/dashboard/settings/email",
         },
         {
           title: "备份恢复",
           url: "/dashboard/settings/backup",
         },
       ],
-    },
-  ],
-  projects: [
-    {
-      name: "生产环境",
-      url: "/dashboard/groups/production",
-      icon: Shield,
-    },
-    {
-      name: "测试环境",
-      url: "/dashboard/groups/testing",
-      icon: Frame,
-    },
-    {
-      name: "开发环境",
-      url: "/dashboard/groups/development",
-      icon: Map,
     },
   ],
 }
@@ -152,10 +213,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
+        <QuickAccess />
         <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
       </SidebarContent>
       <SidebarFooter>
+        <QuickActions />
+        <SidebarSeparator />
         <NavExtra />
         <SidebarSeparator />
         <NavUser user={data.user} />
