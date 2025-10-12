@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PanelLeftIcon } from "lucide-react"
+import { PanelLeft } from "lucide-react"
 import Image from "next/image"
 
 import {
@@ -10,7 +10,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
 
 export function TeamSwitcher({
   teams,
@@ -21,72 +20,47 @@ export function TeamSwitcher({
     plan: string
   }[]
 }) {
-  const { state, toggleSidebar } = useSidebar()
+  const { toggleSidebar } = useSidebar()
   const activeTeam = teams[0]
 
   if (!activeTeam) {
     return null
   }
 
-  // 在折叠状态下，显示可悬浮展开的logo
-  if (state === "collapsed") {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            size="lg"
-            onClick={toggleSidebar}
-            className="hover:bg-sidebar-accent group relative"
-            tooltip="展开侧边栏"
-          >
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-              <Image
-                src="/logo.svg"
-                alt="EasySSH Logo"
-                width={24}
-                height={24}
-                className="size-6"
-              />
-            </div>
-            {/* 悬浮时显示展开按钮 */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-sidebar-accent rounded-md">
-              <PanelLeftIcon className="size-4" />
-            </div>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    )
-  }
-
-  // 在展开状态下，显示logo + 文字 + 折叠按钮
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <div className="flex items-center justify-between w-full p-2">
-          {/* Logo + EasySSH 文字 */}
-          <div className="flex items-center gap-2">
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+        <div className="flex items-center w-full">
+          {/* Logo和文字区域 */}
+          <SidebarMenuButton
+            size="lg"
+            className="flex-1 pointer-events-none group-data-[collapsible=icon]:pointer-events-auto group-data-[collapsible=icon]:hover:bg-sidebar-accent group relative"
+            onClick={toggleSidebar}
+          >
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg relative">
+              {/* 默认显示的logo */}
               <Image
                 src="/logo.svg"
                 alt="EasySSH Logo"
                 width={24}
                 height={24}
-                className="size-6"
+                className="size-6 group-data-[collapsible=icon]:group-hover:opacity-0 transition-opacity"
               />
+              {/* 悬浮时显示的展开按钮 - 仅在折叠状态下 */}
+              <PanelLeft className="size-4 absolute inset-0 m-auto opacity-0 group-data-[collapsible=icon]:group-hover:opacity-100 transition-opacity" />
             </div>
-            <span className="font-medium text-sm">{activeTeam.name}</span>
-          </div>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-medium">{activeTeam.name}</span>
+            </div>
+          </SidebarMenuButton>
 
-          {/* 折叠按钮 */}
-          <Button
-            variant="ghost"
-            size="icon"
+          {/* 独立的折叠按钮 - 在折叠状态下隐藏 */}
+          <button
             onClick={toggleSidebar}
-            className="size-7 hover:bg-sidebar-accent"
+            className="flex items-center justify-center size-8 rounded hover:bg-sidebar-accent ml-1 group-data-[collapsible=icon]:hidden"
           >
-            <PanelLeftIcon className="size-4" />
-            <span className="sr-only">折叠侧边栏</span>
-          </Button>
+            <PanelLeft className="size-4" />
+          </button>
         </div>
       </SidebarMenuItem>
     </SidebarMenu>
