@@ -1,0 +1,261 @@
+"use client"
+
+import { useState } from "react"
+import { AppSidebar } from "@/components/app-sidebar"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import {
+  SidebarInset,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { ServerList } from "@/components/servers/server-card"
+import { ServerFilters } from "@/components/servers/server-filters"
+import {
+  Search,
+  Plus,
+  Server
+} from "lucide-react"
+import Link from "next/link"
+
+// 模拟数据
+const servers = [
+  {
+    id: 1,
+    name: "Web Server 01",
+    host: "192.168.1.100",
+    port: 22,
+    username: "root",
+    status: "online" as const,
+    os: "Ubuntu 22.04",
+    cpu: "2 cores",
+    memory: "4GB",
+    disk: "80GB",
+    lastConnected: "2024-01-15 14:30",
+    uptime: "15天 6小时",
+    tags: ["生产环境", "Web服务器"]
+  },
+  {
+    id: 2,
+    name: "Database Server",
+    host: "192.168.1.101",
+    port: 22,
+    username: "admin",
+    status: "online" as const,
+    os: "CentOS 8",
+    cpu: "4 cores",
+    memory: "8GB",
+    disk: "200GB",
+    lastConnected: "2024-01-15 13:45",
+    uptime: "30天 12小时",
+    tags: ["生产环境", "数据库"]
+  },
+  {
+    id: 3,
+    name: "Dev Server",
+    host: "192.168.1.102",
+    port: 2222,
+    username: "developer",
+    status: "offline" as const,
+    os: "Ubuntu 20.04",
+    cpu: "2 cores",
+    memory: "4GB",
+    disk: "50GB",
+    lastConnected: "2024-01-14 18:20",
+    uptime: "0天 0小时",
+    tags: ["开发环境", "测试"]
+  },
+  {
+    id: 4,
+    name: "Load Balancer",
+    host: "192.168.1.103",
+    port: 22,
+    username: "root",
+    status: "warning" as const,
+    os: "RHEL 8",
+    cpu: "2 cores",
+    memory: "2GB",
+    disk: "40GB",
+    lastConnected: "2024-01-15 12:00",
+    uptime: "5天 8小时",
+    tags: ["生产环境", "负载均衡"]
+  }
+]
+
+export default function ServersPage() {
+  const [filteredServers, setFilteredServers] = useState(servers)
+  const [searchTerm, setSearchTerm] = useState("")
+
+  const handleConnect = (serverId: number) => {
+    console.log("连接服务器:", serverId)
+    // 这里应该处理连接逻辑
+  }
+
+  const handleEdit = (serverId: number) => {
+    console.log("编辑服务器:", serverId)
+    // 这里应该跳转到编辑页面
+  }
+
+  const handleDelete = (serverId: number) => {
+    console.log("删除服务器:", serverId)
+    // 这里应该处理删除逻辑
+  }
+
+  const handleViewDetails = (serverId: number) => {
+    console.log("查看详情:", serverId)
+    // 这里应该跳转到详情页面
+    window.location.href = `/dashboard/servers/${serverId}`
+  }
+
+  const handleFiltersChange = (filters: any) => {
+    let filtered = [...servers]
+
+    // 搜索过滤
+    if (filters.search) {
+      filtered = filtered.filter(server =>
+        server.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+        server.host.toLowerCase().includes(filters.search.toLowerCase())
+      )
+    }
+
+    // 状态过滤
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(server => server.status === filters.status)
+    }
+
+    // 标签过滤
+    if (filters.tag !== 'all') {
+      filtered = filtered.filter(server => server.tags.includes(filters.tag))
+    }
+
+    // 操作系统过滤
+    if (filters.os !== 'all') {
+      filtered = filtered.filter(server => server.os === filters.os)
+    }
+
+    // 排序
+    filtered.sort((a, b) => {
+      let aValue = a[filters.sortBy as keyof typeof a]
+      let bValue = b[filters.sortBy as keyof typeof b]
+
+      if (typeof aValue === 'string') aValue = aValue.toLowerCase()
+      if (typeof bValue === 'string') bValue = bValue.toLowerCase()
+
+      if (filters.sortOrder === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
+      }
+    })
+
+    setFilteredServers(filtered)
+  }
+
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-2 px-4">
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem className="hidden md:block">
+                  <BreadcrumbLink href="/dashboard">
+                    EasySSH 控制台
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block" />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>服务器列表</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+        </header>
+
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          {/* 操作栏 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="搜索服务器..."
+                  className="pl-10 w-64"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  全部 ({servers.length})
+                </Button>
+                <Button variant="outline" size="sm">
+                  在线 ({servers.filter(s => s.status === 'online').length})
+                </Button>
+                <Button variant="outline" size="sm">
+                  离线 ({servers.filter(s => s.status === 'offline').length})
+                </Button>
+                <Button variant="outline" size="sm">
+                  警告 ({servers.filter(s => s.status === 'warning').length})
+                </Button>
+              </div>
+            </div>
+            <Link href="/dashboard/servers/add">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                添加服务器
+              </Button>
+            </Link>
+          </div>
+
+          {/* 筛选器 */}
+          <ServerFilters
+            servers={servers}
+            onFiltersChange={handleFiltersChange}
+          />
+
+          {/* 服务器列表 */}
+          <ServerList
+            servers={filteredServers}
+            onConnect={handleConnect}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onViewDetails={handleViewDetails}
+          />
+
+          {/* 空状态 */}
+          {filteredServers.length === 0 && servers.length > 0 && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Server className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">未找到匹配的服务器</h3>
+              <p className="text-muted-foreground mb-4">请尝试调整筛选条件</p>
+            </div>
+          )}
+
+          {/* 完全空状态 */}
+          {servers.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Server className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">暂无服务器</h3>
+              <p className="text-muted-foreground mb-4">开始添加您的第一台服务器</p>
+              <Link href="/dashboard/servers/add">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  添加服务器
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  )
+}

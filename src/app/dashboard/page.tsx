@@ -11,6 +11,7 @@ import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar"
+import Link from "next/link"
 
 export default function Page() {
   return (
@@ -55,30 +56,38 @@ export default function Page() {
           <div className="bg-card border rounded-xl p-6 flex-1">
             <h3 className="text-xl font-semibold mb-4">快速操作</h3>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <button className="bg-primary text-primary-foreground p-4 rounded-lg hover:bg-primary/90 transition-colors">
-                <div className="text-center">
-                  <div className="text-2xl mb-2">🖥️</div>
-                  <div>添加服务器</div>
-                </div>
-              </button>
-              <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors">
-                <div className="text-center">
-                  <div className="text-2xl mb-2">🔑</div>
-                  <div>管理密钥</div>
-                </div>
-              </button>
-              <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors">
-                <div className="text-center">
-                  <div className="text-2xl mb-2">📊</div>
-                  <div>查看监控</div>
-                </div>
-              </button>
-              <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors">
-                <div className="text-center">
-                  <div className="text-2xl mb-2">⚙️</div>
-                  <div>系统设置</div>
-                </div>
-              </button>
+              <Link href="/dashboard/servers/add">
+                <button className="bg-primary text-primary-foreground p-4 rounded-lg hover:bg-primary/90 transition-colors w-full">
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">🖥️</div>
+                    <div>添加服务器</div>
+                  </div>
+                </button>
+              </Link>
+              <Link href="/dashboard/keys">
+                <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">🔑</div>
+                    <div>管理密钥</div>
+                  </div>
+                </button>
+              </Link>
+              <Link href="/dashboard/monitoring">
+                <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">📊</div>
+                    <div>查看监控</div>
+                  </div>
+                </button>
+              </Link>
+              <Link href="/dashboard/settings/general">
+                <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">⚙️</div>
+                    <div>系统设置</div>
+                  </div>
+                </button>
+              </Link>
             </div>
           </div>
         </div>

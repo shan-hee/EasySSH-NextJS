@@ -23,7 +23,6 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
-  SidebarSeparator,
 } from "@/components/ui/sidebar"
 
 // This is sample data.
@@ -218,9 +217,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <QuickActions />
-        <SidebarSeparator />
         <NavExtra />
-        <SidebarSeparator />
         <NavUser user={data.user} />
       </SidebarFooter>
       <SidebarRail />
