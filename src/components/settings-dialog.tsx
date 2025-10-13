@@ -49,12 +49,22 @@ const data = {
   ],
 }
 
-export function SettingsDialog({ children }: { children: React.ReactNode }) {
+export const SettingsDialog = React.memo(function SettingsDialog({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   const [activeSection, setActiveSection] = React.useState("账户设置")
 
+  const handleOpenChange = React.useCallback((open: boolean) => {
+    setOpen(open)
+  }, [])
+
+  const handleSectionChange = React.useCallback((section: string) => {
+    setActiveSection(section)
+  }, [])
+
+  const navItems = React.useMemo(() => data.nav, [])
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
@@ -69,12 +79,12 @@ export function SettingsDialog({ children }: { children: React.ReactNode }) {
               <SidebarGroup>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {data.nav.map((item) => (
+                    {navItems.map((item) => (
                       <SidebarMenuItem key={item.name}>
                         <SidebarMenuButton
                           asChild
                           isActive={item.name === activeSection}
-                          onClick={() => setActiveSection(item.name)}
+                          onClick={() => handleSectionChange(item.name)}
                         >
                           <button>
                             <item.icon />
@@ -336,4 +346,4 @@ export function SettingsDialog({ children }: { children: React.ReactNode }) {
       </DialogContent>
     </Dialog>
   )
-}
+})

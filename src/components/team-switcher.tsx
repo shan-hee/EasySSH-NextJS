@@ -11,7 +11,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
-export function TeamSwitcher({
+export const TeamSwitcher = React.memo(function TeamSwitcher({
   teams,
 }: {
   teams: {
@@ -22,6 +22,10 @@ export function TeamSwitcher({
 }) {
   const { toggleSidebar } = useSidebar()
   const activeTeam = teams[0]
+
+  const handleToggleSidebar = React.useCallback(() => {
+    toggleSidebar()
+  }, [toggleSidebar])
 
   if (!activeTeam) {
     return null
@@ -35,7 +39,7 @@ export function TeamSwitcher({
           <SidebarMenuButton
             size="lg"
             className="flex-1 pointer-events-none group-data-[collapsible=icon]:pointer-events-auto group-data-[collapsible=icon]:hover:bg-sidebar-accent group relative"
-            onClick={toggleSidebar}
+            onClick={handleToggleSidebar}
           >
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg relative">
               {/* 默认显示的logo */}
@@ -56,7 +60,7 @@ export function TeamSwitcher({
 
           {/* 独立的折叠按钮 - 在折叠状态下隐藏 */}
           <button
-            onClick={toggleSidebar}
+            onClick={handleToggleSidebar}
             className="flex items-center justify-center size-8 rounded hover:bg-sidebar-accent ml-1 group-data-[collapsible=icon]:hidden"
           >
             <PanelLeft className="size-4" />
@@ -65,4 +69,4 @@ export function TeamSwitcher({
       </SidebarMenuItem>
     </SidebarMenu>
   )
-}
+})

@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-export function NavExtra() {
+export const NavExtra = React.memo(function NavExtra() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
 
@@ -18,12 +18,34 @@ export function NavExtra() {
     setMounted(true)
   }, [])
 
-  if (!mounted) {
-    return null
-  }
-
-  const handleThemeToggle = () => {
+  const handleThemeToggle = React.useCallback(() => {
     setTheme(theme === "dark" ? "light" : "dark")
+  }, [theme, setTheme])
+
+  if (!mounted) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            tooltip="GitHub"
+          >
+            <a href="https://github.com/shan-hee/EasySSH-NextJS" target="_blank" rel="noopener noreferrer">
+              <Github />
+              <span>GitHub</span>
+            </a>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            tooltip="主题切换"
+          >
+            <Moon />
+            <span>主题切换</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
   }
 
   return (
@@ -50,4 +72,4 @@ export function NavExtra() {
       </SidebarMenuItem>
     </SidebarMenu>
   )
-}
+})

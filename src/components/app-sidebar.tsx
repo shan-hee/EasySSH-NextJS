@@ -205,22 +205,24 @@ const data = {
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const memoizedData = React.useMemo(() => data, [])
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <TeamSwitcher teams={memoizedData.teams} />
       </SidebarHeader>
       <SidebarContent>
         <QuickAccess />
-        <NavMain items={data.navMain} />
+        <NavMain items={memoizedData.navMain} />
       </SidebarContent>
       <SidebarFooter>
         <QuickActions />
         <NavExtra />
-        <NavUser user={data.user} />
+        <NavUser user={memoizedData.user} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )
-}
+})

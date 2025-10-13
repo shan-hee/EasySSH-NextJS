@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   ChevronsUpDown,
   LogOut,
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/sidebar"
 import { SettingsDialog } from "@/components/settings-dialog"
 
-export function NavUser({
+export const NavUser = React.memo(function NavUser({
   user,
 }: {
   user: {
@@ -38,6 +39,14 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+
+  const handleSettingsSelect = React.useCallback((e: Event) => {
+    e.preventDefault()
+  }, [])
+
+  const avatarFallback = React.useMemo(() => {
+    return user.name.slice(0, 2).toUpperCase()
+  }, [user.name])
 
   return (
     <SidebarMenu>
@@ -50,7 +59,7 @@ export function NavUser({
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <AvatarFallback className="rounded-lg">{avatarFallback}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -69,7 +78,7 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">{avatarFallback}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
@@ -79,7 +88,7 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <SettingsDialog>
-              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+              <DropdownMenuItem onSelect={handleSettingsSelect}>
                 <Settings />
                 设置
               </DropdownMenuItem>
@@ -94,4 +103,4 @@ export function NavUser({
       </SidebarMenuItem>
     </SidebarMenu>
   )
-}
+})
