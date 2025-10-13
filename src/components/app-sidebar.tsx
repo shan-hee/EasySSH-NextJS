@@ -4,18 +4,17 @@ import * as React from "react"
 import {
   Settings2,
   Server,
-  Key,
   Monitor,
   Terminal,
   FileText,
-  UserCog,
+  FolderOpen,
+  Activity,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { NavExtra } from "@/components/nav-extra"
 import { QuickAccess } from "@/components/quick-access"
-import { QuickActions } from "@/components/quick-actions"
 import { TeamSwitcher } from "@/components/team-switcher"
 import {
   Sidebar,
@@ -41,92 +40,52 @@ const data = {
   ],
   navMain: [
     {
+      title: "控制台",
+      url: "/dashboard",
+      icon: Monitor,
+      isActive: true,
+      // 无子级，点击即进入控制台概览
+    },
+    {
       title: "连接管理",
       url: "#",
       icon: Server,
-      isActive: true,
       items: [
-        {
-          title: "服务器列表",
-          url: "/dashboard/servers",
-        },
-        {
-          title: "添加服务器",
-          url: "/dashboard/servers/add",
-        },
-        {
-          title: "批量操作",
-          url: "/dashboard/servers/batch",
-        },
+        { title: "连接配置", url: "/dashboard/servers" },
+        { title: "历史连接", url: "/dashboard/servers/history" },
+        { title: "连接模板", url: "/dashboard/servers/templates" },
       ],
     },
     {
-      title: "终端会话",
+      title: "自动化",
       url: "#",
       icon: Terminal,
       items: [
-        {
-          title: "Web终端",
-          url: "/dashboard/terminal",
-        },
-        {
-          title: "活动会话",
-          url: "/dashboard/sessions",
-        },
-        {
-          title: "会话历史",
-          url: "/dashboard/history",
-        },
-        {
-          title: "SFTP文件传输",
-          url: "/dashboard/sftp",
-        },
+        { title: "脚本库", url: "/dashboard/scripts" },
+        { title: "任务调度", url: "/dashboard/automation/schedules" },
+        { title: "执行记录", url: "/dashboard/automation/history" },
+        { title: "批量操作", url: "/dashboard/automation/batch" },
       ],
     },
     {
-      title: "密钥管理",
+      title: "文件管理",
       url: "#",
-      icon: Key,
+      icon: FolderOpen,
       items: [
-        {
-          title: "SSH密钥",
-          url: "/dashboard/keys",
-        },
-        {
-          title: "生成密钥",
-          url: "/dashboard/keys/generate",
-        },
-        {
-          title: "导入密钥",
-          url: "/dashboard/keys/import",
-        },
-        {
-          title: "密钥分发",
-          url: "/dashboard/keys/deploy",
-        },
+        { title: "文件管理器", url: "/dashboard/sftp" },
+        { title: "传输记录", url: "/dashboard/transfers/history" },
+        { title: "存储空间", url: "/dashboard/storage" },
       ],
     },
     {
-      title: "系统监控",
+      title: "监控告警",
       url: "#",
-      icon: Monitor,
+      icon: Activity,
       items: [
-        {
-          title: "服务器状态",
-          url: "/dashboard/monitoring",
-        },
-        {
-          title: "性能监控",
-          url: "/dashboard/metrics",
-        },
-        {
-          title: "连接统计",
-          url: "/dashboard/statistics",
-        },
-        {
-          title: "告警管理",
-          url: "/dashboard/alerts",
-        },
+        { title: "资源监控", url: "/dashboard/monitoring/resources" },
+        { title: "告警规则", url: "/dashboard/monitoring/alerts" },
+        { title: "性能分析", url: "/dashboard/monitoring/perf" },
+        { title: "健康检查", url: "/dashboard/monitoring/health" },
       ],
     },
     {
@@ -134,68 +93,22 @@ const data = {
       url: "#",
       icon: FileText,
       items: [
-        {
-          title: "操作日志",
-          url: "/dashboard/logs",
-        },
-        {
-          title: "登录日志",
-          url: "/dashboard/logs/login",
-        },
-        {
-          title: "命令记录",
-          url: "/dashboard/logs/commands",
-        },
-        {
-          title: "安全审计",
-          url: "/dashboard/logs/security",
-        },
+        { title: "操作日志", url: "/dashboard/logs" },
+        { title: "登录日志", url: "/dashboard/logs/login" },
+        { title: "命令审计", url: "/dashboard/logs/commands" },
+        { title: "文件审计", url: "/dashboard/logs/files" },
       ],
     },
     {
-      title: "用户管理",
-      url: "#",
-      icon: UserCog,
-      items: [
-        {
-          title: "用户列表",
-          url: "/dashboard/users",
-        },
-        {
-          title: "角色权限",
-          url: "/dashboard/roles",
-        },
-        {
-          title: "访问控制",
-          url: "/dashboard/access-control",
-        },
-        {
-          title: "组织架构",
-          url: "/dashboard/organization",
-        },
-      ],
-    },
-    {
-      title: "系统设置",
+      title: "系统配置",
       url: "#",
       icon: Settings2,
       items: [
-        {
-          title: "基础配置",
-          url: "/dashboard/settings/general",
-        },
-        {
-          title: "安全设置",
-          url: "/dashboard/settings/security",
-        },
-        {
-          title: "邮件配置",
-          url: "/dashboard/settings/email",
-        },
-        {
-          title: "备份恢复",
-          url: "/dashboard/settings/backup",
-        },
+        { title: "通用设置", url: "/dashboard/settings/general" },
+        { title: "安全策略", url: "/dashboard/settings/security" },
+        { title: "通知设置", url: "/dashboard/settings/notifications" },
+        { title: "用户管理", url: "/dashboard/users" },
+        { title: "备份恢复", url: "/dashboard/settings/backup" },
       ],
     },
   ],
@@ -203,6 +116,19 @@ const data = {
 
 export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const memoizedData = React.useMemo(() => data, [])
+  const all = memoizedData.navMain
+
+  // 基于标题分组：工作台 / 核心功能 / 可观测与审计 / 平台设置
+  const groupWorkbench = React.useMemo(() => all.filter((i) => i.title === "控制台"), [all])
+  const groupCore = React.useMemo(
+    () => all.filter((i) => ["连接管理", "自动化", "文件管理"].includes(i.title)),
+    [all]
+  )
+  const groupObserveAudit = React.useMemo(
+    () => all.filter((i) => ["监控告警", "日志审计"].includes(i.title)),
+    [all]
+  )
+  const groupSettings = React.useMemo(() => all.filter((i) => i.title === "系统配置"), [all])
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -211,10 +137,12 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       </SidebarHeader>
       <SidebarContent>
         <QuickAccess />
-        <NavMain items={memoizedData.navMain} />
+        {groupWorkbench.length > 0 && <NavMain label="工作台" items={groupWorkbench} />}
+        {groupCore.length > 0 && <NavMain label="核心功能" items={groupCore} />}
+        {groupObserveAudit.length > 0 && <NavMain label="监控与审计" items={groupObserveAudit} />}
+        {groupSettings.length > 0 && <NavMain label="系统与组织" items={groupSettings} />}
       </SidebarContent>
       <SidebarFooter>
-        <QuickActions />
         <NavExtra />
         <NavUser user={memoizedData.user} />
       </SidebarFooter>

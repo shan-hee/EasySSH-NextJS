@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Plus, Search, Zap, Smartphone } from "lucide-react"
+import { Plus, Search, Zap, Smartphone, Bot } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -32,8 +32,8 @@ export function QuickAccess() {
     {
       title: "快速连接",
       icon: Zap,
-      description: "连接最近使用的服务器",
-      href: "/dashboard/sessions",
+      description: "打开终端并快速连接",
+      href: "/dashboard/terminal",
     },
     {
       title: "添加服务器",
@@ -42,10 +42,12 @@ export function QuickAccess() {
       href: "/dashboard/servers/add",
     },
     {
-      title: "移动终端",
-      icon: Smartphone,
-      description: "打开移动适配终端",
-      href: "/dashboard/terminal?mode=mobile",
+      title: "AI助手",
+      icon: Bot,
+      description: "把需求交给AI，生成计划并执行",
+      action: () => {
+        console.log("Open AI Assistant")
+      },
     },
   ]
 

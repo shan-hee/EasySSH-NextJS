@@ -23,7 +23,9 @@ import {
 
 export function NavMain({
   items,
+  label = "核心功能",
 }: {
+  label?: string
   items: {
     title: string
     url: string
@@ -60,10 +62,25 @@ export function NavMain({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>核心功能</SidebarGroupLabel>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
-          const groupActive = isGroupActive(item.items)
+          const hasSubItems = (item.items?.length ?? 0) > 0
+          const groupActive = hasSubItems ? isGroupActive(item.items) : isSubActive(item.url)
+
+          if (!hasSubItems) {
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton asChild tooltip={item.title} isActive={groupActive}>
+                  <Link href={item.url}>
+                    {item.icon && <item.icon />}
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          }
+
           const open = openGroups[item.title] ?? (item.isActive || groupActive)
           return (
             <Collapsible
