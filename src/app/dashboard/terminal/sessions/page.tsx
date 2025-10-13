@@ -73,7 +73,7 @@ const mockSessions = [
   },
 ]
 
-export default function SessionsPage() {
+export default function TerminalSessionsPage() {
   const [sessions, setSessions] = useState(mockSessions)
   const router = useRouter()
 
@@ -124,6 +124,12 @@ export default function SessionsPage() {
               <BreadcrumbItem className="hidden md:block">
                 <BreadcrumbLink asChild>
                   <Link href="/dashboard">EasySSH 控制台</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href="/dashboard/terminal">终端</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />

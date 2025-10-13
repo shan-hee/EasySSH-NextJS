@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Plus, Search, Zap, Smartphone, Bot } from "lucide-react"
+import { Plus, Search, Zap, Bot } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 

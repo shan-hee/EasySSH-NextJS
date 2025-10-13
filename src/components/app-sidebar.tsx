@@ -138,7 +138,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       <SidebarContent>
         <QuickAccess />
         {groupWorkbench.length > 0 && <NavMain label="工作台" items={groupWorkbench} />}
-        {groupCore.length > 0 && <NavMain label="核心功能" items={groupCore} />}
+        {groupCore.length > 0 && <NavMain label="服务器管理" items={groupCore} />}
         {groupObserveAudit.length > 0 && <NavMain label="监控与审计" items={groupObserveAudit} />}
         {groupSettings.length > 0 && <NavMain label="系统与组织" items={groupSettings} />}
       </SidebarContent>

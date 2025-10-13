@@ -31,8 +31,24 @@ interface FilterOptions {
   search: string
 }
 
+interface Server {
+  id: number
+  name: string
+  host: string
+  port: number
+  username: string
+  status: "online" | "offline" | "warning"
+  os: string
+  cpu: string
+  memory: string
+  disk: string
+  lastConnected: string
+  uptime: string
+  tags: string[]
+}
+
 interface ServerFiltersProps {
-  servers: any[]
+  servers: Server[]
   onFiltersChange: (filters: FilterOptions) => void
 }
 

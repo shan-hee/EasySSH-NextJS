@@ -111,7 +111,14 @@ export default function ServersPage() {
     router.push(`/dashboard/servers/${serverId}`)
   }
 
-  const handleFiltersChange = (filters: any) => {
+  const handleFiltersChange = (filters: {
+    search: string;
+    status: string;
+    tag: string;
+    os: string;
+    sortBy: string;
+    sortOrder: string;
+  }) => {
     let filtered = [...servers]
 
     // 搜索过滤
