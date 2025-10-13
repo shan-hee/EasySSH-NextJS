@@ -57,11 +57,11 @@ export default function Page() {
                 </div>
               </button>
             </Link>
-            <Link href="/dashboard/keys">
+            <Link href="/dashboard/terminal">
               <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
                 <div className="text-center">
-                  <div className="text-2xl mb-2">🔑</div>
-                  <div>管理密钥</div>
+                  <div className="text-2xl mb-2">💻</div>
+                  <div>Web终端</div>
                 </div>
               </button>
             </Link>
