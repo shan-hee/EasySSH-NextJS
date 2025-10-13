@@ -122,14 +122,14 @@ export default function ServerDetailPage({ params }: { params: { id: string } })
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="/dashboard">
-                    EasySSH 控制台
+                  <BreadcrumbLink asChild>
+                    <Link href="/dashboard">EasySSH 控制台</Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbLink href="/dashboard/servers">
-                    服务器列表
+                  <BreadcrumbLink asChild>
+                    <Link href="/dashboard/servers">服务器列表</Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />

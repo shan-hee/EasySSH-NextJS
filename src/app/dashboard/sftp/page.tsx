@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { FileTransfer } from "@/components/terminal/file-transfer"
 import { FolderOpen, Server } from "lucide-react"
+import Link from "next/link"
 
 // 模拟服务器数据
 const servers = [
@@ -190,8 +191,8 @@ export default function SftpPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">
-                  EasySSH 控制台
+                <BreadcrumbLink asChild>
+                  <Link href="/dashboard">EasySSH 控制台</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />

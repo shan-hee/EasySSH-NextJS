@@ -19,6 +19,7 @@ import {
   Server
 } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 // 模拟数据
 const servers = [
@@ -85,6 +86,7 @@ const servers = [
 ]
 
 export default function ServersPage() {
+  const router = useRouter()
   const [filteredServers, setFilteredServers] = useState(servers)
   const [searchTerm, setSearchTerm] = useState("")
 
@@ -105,8 +107,8 @@ export default function ServersPage() {
 
   const handleViewDetails = (serverId: number) => {
     console.log("查看详情:", serverId)
-    // 这里应该跳转到详情页面
-    window.location.href = `/dashboard/servers/${serverId}`
+    // 使用客户端路由避免整页刷新
+    router.push(`/dashboard/servers/${serverId}`)
   }
 
   const handleFiltersChange = (filters: any) => {
@@ -160,8 +162,8 @@ export default function ServersPage() {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="/dashboard">
-                    EasySSH 控制台
+                  <BreadcrumbLink asChild>
+                    <Link href="/dashboard">EasySSH 控制台</Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />

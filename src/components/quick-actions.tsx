@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -23,6 +24,7 @@ import {
 
 export function QuickActions() {
   const { state } = useSidebar()
+  const [activeKey, setActiveKey] = React.useState<string | null>(null)
 
   const quickActions = [
     {
@@ -68,8 +70,16 @@ export function QuickActions() {
               key={action.title}
               variant={action.variant}
               size="sm"
-              onClick={action.action}
-              className="h-8 text-xs"
+              onClick={() => {
+                setActiveKey(action.title)
+                window.setTimeout(() => setActiveKey((k) => (k === action.title ? null : k)), 1200)
+                action.action()
+              }}
+              data-active={activeKey === action.title || undefined}
+              className={cn(
+                "h-8 text-xs",
+                activeKey === action.title && "ring-2 ring-primary/50"
+              )}
             >
               <action.icon className="h-3 w-3 mr-1" />
               {action.title}

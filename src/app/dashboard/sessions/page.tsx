@@ -10,6 +10,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { SessionList } from "@/components/terminal/session-list"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 // 模拟活动会话数据
 const mockSessions = [
@@ -73,6 +75,7 @@ const mockSessions = [
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState(mockSessions)
+  const router = useRouter()
 
   const handleDisconnect = (sessionId: string) => {
     console.log("断开会话:", sessionId)
@@ -103,8 +106,8 @@ export default function SessionsPage() {
 
   const handleViewDetails = (sessionId: string) => {
     console.log("查看会话详情:", sessionId)
-    // 这里应该跳转到终端页面并显示特定会话
-    window.location.href = `/dashboard/terminal?session=${sessionId}`
+    // 使用客户端路由避免整页刷新
+    router.push(`/dashboard/terminal?session=${sessionId}`)
   }
 
   const handleForceDisconnect = (sessionId: string) => {
@@ -119,8 +122,8 @@ export default function SessionsPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">
-                  EasySSH 控制台
+                <BreadcrumbLink asChild>
+                  <Link href="/dashboard">EasySSH 控制台</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />

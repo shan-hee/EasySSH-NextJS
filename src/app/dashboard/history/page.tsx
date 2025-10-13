@@ -9,6 +9,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import Link from "next/link"
 import { SessionHistory } from "@/components/terminal/session-history"
 
 // 模拟历史会话数据
@@ -174,8 +175,8 @@ export default function HistoryPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">
-                  EasySSH 控制台
+                <BreadcrumbLink asChild>
+                  <Link href="/dashboard">EasySSH 控制台</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />

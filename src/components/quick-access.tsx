@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { Plus, Search, Zap, Smartphone } from "lucide-react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,25 +20,32 @@ import {
 export function QuickAccess() {
   const [searchQuery, setSearchQuery] = React.useState("")
   const { state } = useSidebar()
+  const pathname = usePathname()
 
-  const quickActions = [
+  const quickActions: Array<{
+    title: string
+    icon: React.ComponentType<{ className?: string }>
+    description: string
+    href?: string
+    action?: () => void
+  }> = [
     {
       title: "快速连接",
       icon: Zap,
       description: "连接最近使用的服务器",
-      action: () => console.log("Quick connect"),
+      href: "/dashboard/sessions",
     },
     {
       title: "添加服务器",
       icon: Plus,
       description: "添加新的SSH服务器",
-      action: () => console.log("Add server"),
+      href: "/dashboard/servers/add",
     },
     {
       title: "移动终端",
       icon: Smartphone,
       description: "打开移动适配终端",
-      action: () => console.log("Mobile terminal"),
+      href: "/dashboard/terminal?mode=mobile",
     },
   ]
 
@@ -66,19 +75,27 @@ export function QuickAccess() {
 
         {/* 快速操作按钮 */}
         <SidebarMenu>
-          {quickActions.map((action) => (
-            <SidebarMenuItem key={action.title}>
-              <SidebarMenuButton
-                onClick={action.action}
-                tooltip={action.description}
-                size="sm"
-                className="h-8"
-              >
-                <action.icon className="h-4 w-4" />
-                <span className="text-sm">{action.title}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+          {quickActions.map((qa) => {
+            const baseHref = qa.href?.split("?")[0]
+            const isActive = !!baseHref && (pathname === baseHref || pathname.startsWith(`${baseHref}/`))
+            return (
+              <SidebarMenuItem key={qa.title}>
+                {qa.href ? (
+                  <SidebarMenuButton asChild tooltip={qa.description} size="sm" className="h-8" isActive={isActive}>
+                    <Link href={qa.href} aria-current={isActive ? "page" : undefined}>
+                      <qa.icon className="h-4 w-4" />
+                      <span className="text-sm">{qa.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                ) : (
+                  <SidebarMenuButton onClick={qa.action} tooltip={qa.description} size="sm" className="h-8">
+                    <qa.icon className="h-4 w-4" />
+                    <span className="text-sm">{qa.title}</span>
+                  </SidebarMenuButton>
+                )}
+              </SidebarMenuItem>
+            )
+          })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
