@@ -41,7 +41,7 @@ const data = {
   ],
   navMain: [
     {
-      title: "服务器管理",
+      title: "连接管理",
       url: "#",
       icon: Server,
       isActive: true,
@@ -53,10 +53,6 @@ const data = {
         {
           title: "添加服务器",
           url: "/dashboard/servers/add",
-        },
-        {
-          title: "快速连接",
-          url: "/dashboard/servers/quick-connect",
         },
         {
           title: "批量操作",
@@ -82,7 +78,7 @@ const data = {
           url: "/dashboard/history",
         },
         {
-          title: "文件传输",
+          title: "SFTP文件传输",
           url: "/dashboard/sftp",
         },
       ],
