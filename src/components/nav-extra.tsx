@@ -11,42 +11,12 @@ import {
 } from "@/components/ui/sidebar"
 
 export const NavExtra = React.memo(function NavExtra() {
-  const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  const { setTheme } = useTheme()
 
   const handleThemeToggle = React.useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark")
-  }, [theme, setTheme])
-
-  if (!mounted) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            asChild
-            tooltip="GitHub"
-          >
-            <a href="https://github.com/shan-hee/EasySSH-NextJS" target="_blank" rel="noopener noreferrer">
-              <Github />
-              <span>GitHub</span>
-            </a>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            tooltip="主题切换"
-          >
-            <Moon />
-            <span>主题切换</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    )
-  }
+    const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+    setTheme(isDark ? "light" : "dark")
+  }, [setTheme])
 
   return (
     <SidebarMenu>
@@ -62,11 +32,10 @@ export const NavExtra = React.memo(function NavExtra() {
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>
-        <SidebarMenuButton
-          onClick={handleThemeToggle}
-          tooltip={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-        >
-          {theme === "dark" ? <Sun /> : <Moon />}
+        <SidebarMenuButton onClick={handleThemeToggle} tooltip="主题切换">
+          {/* 基于 CSS 的无闪烁切换：在暗色下显示 Moon，亮色下显示 Sun */}
+          <Sun className="dark:hidden" />
+          <Moon className="hidden dark:block" />
           <span>主题切换</span>
         </SidebarMenuButton>
       </SidebarMenuItem>

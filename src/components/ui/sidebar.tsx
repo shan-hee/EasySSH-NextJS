@@ -88,6 +88,24 @@ function SidebarProvider({
     [setOpenProp, open]
   )
 
+  // Read persisted state on first mount to keep sidebar state across refreshes
+  // useLayoutEffect helps avoid visible flicker before first paint
+  React.useLayoutEffect(() => {
+    try {
+      if (typeof document === "undefined") return
+      const match = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+      if (match) {
+        const persisted = match.split("=")[1] === "true"
+        _setOpen(persisted)
+      }
+    } catch (_) {
+      // no-op if cookie parsing fails
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
