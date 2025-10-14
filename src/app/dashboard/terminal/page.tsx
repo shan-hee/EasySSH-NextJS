@@ -1,14 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -27,7 +19,8 @@ import {
 } from "@/components/ui/select"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import { Terminal, Plus, Server } from "lucide-react"
-import Link from "next/link"
+import { toast } from "sonner"
+import { TerminalSession } from "@/components/terminal/types"
 
 // 模拟服务器数据
 const servers = [
@@ -38,6 +31,8 @@ const servers = [
     port: 22,
     username: "root",
     status: "online" as const,
+    group: "生产",
+    tags: ["web"],
   },
   {
     id: 2,
@@ -46,6 +41,8 @@ const servers = [
     port: 22,
     username: "admin",
     status: "online" as const,
+    group: "生产",
+    tags: ["db"],
   },
   {
     id: 3,
@@ -54,23 +51,31 @@ const servers = [
     port: 2222,
     username: "developer",
     status: "offline" as const,
+    group: "开发",
+    tags: ["dev"],
   },
 ]
-
-interface TerminalSession {
-  id: string
-  serverId: number
-  serverName: string
-  host: string
-  username: string
-  isConnected: boolean
-  lastActivity: string
-}
 
 export default function TerminalPage() {
   const [sessions, setSessions] = useState<TerminalSession[]>([])
   const [showServerSelector, setShowServerSelector] = useState(false)
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null)
+  const [hibernateBackground, setHibernateBackground] = useState(true)
+  const [maxTabs, setMaxTabs] = useState(50)
+  const [inactiveMinutes, setInactiveMinutes] = useState(60)
+  const inactivityNotifiedRef = useRef<Set<string>>(new Set())
+
+  // 读取通用设置（仅使用本地存储集成）
+  useEffect(() => {
+    try {
+      const mt = Number(localStorage.getItem("tab.maxTabs") || "50")
+      if (!isNaN(mt)) setMaxTabs(mt)
+      const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
+      if (!isNaN(im)) setInactiveMinutes(im)
+      const hb = localStorage.getItem("tab.hibernate")
+      if (hb != null) setHibernateBackground(hb === "true")
+    } catch {}
+  }, [])
 
   // 创建新会话
   const handleNewSession = () => {
@@ -84,14 +89,26 @@ export default function TerminalPage() {
     const server = servers.find(s => s.id === selectedServerId)
     if (!server) return
 
+    // 最大页签数限制
+    if (sessions.length >= maxTabs) {
+      toast.error(`已达到最大页签数限制 (${maxTabs})`)
+      return
+    }
+
+    const now = Date.now()
     const newSession: TerminalSession = {
-      id: `session-${Date.now()}`,
+      id: `session-${now}`,
       serverId: server.id,
       serverName: server.name,
       host: server.host,
+      port: server.port,
       username: server.username,
       isConnected: server.status === "online",
-      lastActivity: new Date().toLocaleString(),
+      status: server.status === "online" ? "connected" : "disconnected",
+      lastActivity: now,
+      group: server.group,
+      tags: server.tags,
+      pinned: false,
     }
 
     setSessions(prev => [...prev, newSession])
@@ -104,39 +121,69 @@ export default function TerminalPage() {
     setSessions(prev => prev.filter(s => s.id !== sessionId))
   }
 
+  const handleDuplicateSession = (sessionId: string) => {
+    const src = sessions.find(s => s.id === sessionId)
+    if (!src) return
+    if (sessions.length >= maxTabs) {
+      toast.error(`已达到最大页签数限制 (${maxTabs})`)
+      return
+    }
+    const now = Date.now()
+    const dup: TerminalSession = { ...src, id: `session-${now}`, lastActivity: now, pinned: false }
+    setSessions(prev => [...prev, dup])
+  }
+
+  const handleCloseOthers = (sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id === sessionId || s.pinned))
+  }
+
+  const handleCloseAll = () => {
+    setSessions(prev => prev.filter(s => s.pinned))
+  }
+
+  const handleTogglePin = (sessionId: string) => {
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, pinned: !s.pinned } : s))
+  }
+
+  const handleReorder = (newOrderIds: string[]) => {
+    const map = new Map(sessions.map(s => [s.id, s]))
+    const newList = newOrderIds.map(id => map.get(id)!).filter(Boolean)
+    if (newList.length === sessions.length) setSessions(newList)
+  }
+
   // 发送命令
   const handleSendCommand = (sessionId: string, command: string) => {
     console.log(`Session ${sessionId}: ${command}`)
     // 这里应该处理实际的命令发送逻辑
 
     // 更新最后活动时间
-    setSessions(prev => prev.map(session =>
-      session.id === sessionId
-        ? { ...session, lastActivity: new Date().toLocaleString() }
-        : session
-    ))
+    const now = Date.now()
+    setSessions(prev => prev.map(session => session.id === sessionId ? { ...session, lastActivity: now } : session))
+    // 清除已提醒标记
+    inactivityNotifiedRef.current.delete(sessionId)
   }
+
+  // 未活动断开提醒
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = Date.now()
+      const threshold = inactiveMinutes * 60 * 1000
+      sessions.forEach(s => {
+        if (!s) return
+        if (now - s.lastActivity >= threshold && !inactivityNotifiedRef.current.has(s.id)) {
+          inactivityNotifiedRef.current.add(s.id)
+          toast(`会话“${s.serverName}”长时间未活动`, {
+            description: `已超过 ${inactiveMinutes} 分钟未活动，是否断开？`,
+            action: { label: "断开", onClick: () => handleCloseSession(s.id) },
+          })
+        }
+      })
+    }, 60 * 1000)
+    return () => clearInterval(t)
+  }, [sessions, inactiveMinutes])
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink asChild>
-                  <Link href="/dashboard">EasySSH 控制台</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Web终端</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
-
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         {sessions.length === 0 ? (
           // 欢迎页面
@@ -231,6 +278,12 @@ export default function TerminalPage() {
             onNewSession={handleNewSession}
             onCloseSession={handleCloseSession}
             onSendCommand={handleSendCommand}
+            onDuplicateSession={handleDuplicateSession}
+            onCloseOthers={handleCloseOthers}
+            onCloseAll={handleCloseAll}
+            onTogglePin={handleTogglePin}
+            onReorderSessions={handleReorder}
+            hibernateBackground={hibernateBackground}
           />
         )}
       </div>

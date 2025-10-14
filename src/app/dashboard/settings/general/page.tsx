@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -64,6 +64,25 @@ export default function SettingsGeneralPage() {
   })
 
   const [isSaving, setIsSaving] = useState(false)
+  const [tabSettings, setTabSettings] = useState({
+    maxTabs: 50,
+    inactiveMinutes: 60,
+    hibernate: true,
+  })
+
+  // 载入页签设置
+  useEffect(() => {
+    try {
+      const maxTabs = Number(localStorage.getItem("tab.maxTabs") || "50")
+      const inactiveMinutes = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
+      const hibernate = (localStorage.getItem("tab.hibernate") || "true") === "true"
+      setTabSettings({
+        maxTabs: isNaN(maxTabs) ? 50 : maxTabs,
+        inactiveMinutes: isNaN(inactiveMinutes) ? 60 : inactiveMinutes,
+        hibernate,
+      })
+    } catch {}
+  }, [])
 
   const handleSettingChange = (key: string, value: any) => {
     setSettings(prev => ({
@@ -84,6 +103,14 @@ export default function SettingsGeneralPage() {
   const handleLogoUpload = () => {
     console.log("上传Logo")
     // 这里应该打开文件选择对话框
+  }
+
+  const handleSaveTabs = async () => {
+    try {
+      localStorage.setItem("tab.maxTabs", String(tabSettings.maxTabs))
+      localStorage.setItem("tab.inactiveMinutes", String(tabSettings.inactiveMinutes))
+      localStorage.setItem("tab.hibernate", String(tabSettings.hibernate))
+    } catch {}
   }
 
   return (
@@ -509,8 +536,59 @@ export default function SettingsGeneralPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* 标签/会话设置 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              标签/会话设置
+            </CardTitle>
+            <CardDescription>
+              控制页签数量、未活动断开提醒和后台休眠
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="maxTabs">最大页签数</Label>
+                <Input
+                  id="maxTabs"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={tabSettings.maxTabs}
+                  onChange={(e) => setTabSettings(s => ({ ...s, maxTabs: Math.max(1, Math.min(200, parseInt(e.target.value || '0'))) }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="inactiveMinutes">未活动断开提醒 (分钟)</Label>
+                <Input
+                  id="inactiveMinutes"
+                  type="number"
+                  min={5}
+                  max={1440}
+                  value={tabSettings.inactiveMinutes}
+                  onChange={(e) => setTabSettings(s => ({ ...s, inactiveMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value || '0'))) }))}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>后台页签休眠</Label>
+                <p className="text-sm text-muted-foreground">未激活的页签不渲染终端以释放资源</p>
+              </div>
+              <Switch
+                checked={tabSettings.hibernate}
+                onCheckedChange={(checked) => setTabSettings(s => ({ ...s, hibernate: checked }))}
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={handleSaveTabs}>保存页签设置</Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </>
   )
 }
-
