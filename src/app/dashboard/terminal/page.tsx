@@ -18,6 +18,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import Link from "next/link"
 import { Terminal, Plus, Server } from "lucide-react"
 import { toast } from "sonner"
 import { TerminalSession } from "@/components/terminal/types"
@@ -184,6 +193,23 @@ export default function TerminalPage() {
 
   return (
     <>
+      <header className="flex h-16 shrink-0 items-center gap-2 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:duration-200 group-data-[ready=true]/sidebar-wrapper:ease-in-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+        <div className="flex items-center gap-2 px-4">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem className="hidden md:block">
+                <BreadcrumbLink asChild>
+                  <Link href="/dashboard">EasySSH 控制台</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbPage>终端管理</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+      </header>
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         {sessions.length === 0 ? (
           // 欢迎页面

@@ -21,6 +21,9 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-status-connected: var(--status-connected);
+  --color-status-warning: var(--status-warning);
+  --color-status-danger: var(--status-danger);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -77,6 +80,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* 状态色（固定，不随主题变化） */
+  /* 连接: 稍沉的终端绿；警告: 柔和琥珀；危险: 稳定红 */
+  --status-connected: oklch(0.809 0.174 142.0);
+  --status-warning: oklch(0.905 0.173 102.0);
+  --status-danger: oklch(0.628 0.257 25.5);
 }
 
 .dark {
@@ -111,6 +119,10 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* 状态色（深色主题同样固定） */
+  --status-connected: oklch(0.809 0.174 142.0);
+  --status-warning: oklch(0.905 0.173 102.0);
+  --status-danger: oklch(0.628 0.257 25.5);
 }
 
 @layer base {
