@@ -55,6 +55,8 @@ export function LoginForm({
               id="username"
               type="text"
               placeholder="请输入账号"
+              name="username"
+              autoComplete="username"
               required
             />
           </Field>
@@ -64,6 +66,8 @@ export function LoginForm({
               id="password"
               type="password"
               placeholder="请输入密码"
+              name="password"
+              autoComplete="current-password"
               required
             />
           </Field>
