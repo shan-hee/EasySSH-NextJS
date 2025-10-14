@@ -38,7 +38,8 @@ export const TeamSwitcher = React.memo(function TeamSwitcher({
           {/* Logo和文字区域 */}
           <SidebarMenuButton
             size="lg"
-            className="flex-1 pointer-events-none group-data-[collapsible=icon]:pointer-events-auto group-data-[collapsible=icon]:hover:bg-sidebar-accent group relative"
+            className="flex-1 pointer-events-none group-data-[collapsible=icon]:pointer-events-auto group-data-[collapsible=icon]:hover:bg-sidebar-accent group relative group-data-[collapsible=icon]:cursor-ew-resize"
+            aria-label="展开侧边栏"
             onClick={handleToggleSidebar}
           >
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg relative">
@@ -61,7 +62,8 @@ export const TeamSwitcher = React.memo(function TeamSwitcher({
           {/* 独立的折叠按钮 - 在折叠状态下隐藏 */}
           <button
             onClick={handleToggleSidebar}
-            className="flex items-center justify-center size-8 rounded hover:bg-sidebar-accent ml-1 group-data-[collapsible=icon]:hidden"
+            className="flex items-center justify-center size-8 rounded hover:bg-sidebar-accent ml-1 group-data-[collapsible=icon]:hidden cursor-ew-resize"
+            aria-label="折叠侧边栏"
           >
             <PanelLeft className="size-4" />
           </button>
