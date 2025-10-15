@@ -24,7 +24,7 @@ export function QuickConnect({ servers, onSelectServer }: QuickConnectProps) {
   const offlineServers = servers.filter((s) => s.status === "offline")
 
   return (
-    <div className="h-full flex flex-col bg-black rounded-lg border border-zinc-800/50 overflow-hidden relative">
+    <div className="h-full flex flex-col bg-black rounded-b-lg border border-zinc-800/50 overflow-hidden relative">
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
 
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-12">
