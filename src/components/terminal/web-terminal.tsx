@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { ConnectionLoader } from "./connection-loader"
 
 interface WebTerminalProps {
   sessionId: string
@@ -27,6 +28,7 @@ export function WebTerminal({
   const [currentLine, setCurrentLine] = useState("")
   const [cursorPosition, setCursorPosition] = useState(0)
   const [isClient, setIsClient] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   // 确保只在客户端执行
   useEffect(() => {
@@ -39,10 +41,15 @@ export function WebTerminal({
     let terminal: any
     let fitAddon: any
     let webLinksAddon: any
+    let isMounted = true
 
     // 动态导入 xterm.js 及其插件
     const initTerminal = async () => {
       try {
+        // 模拟连接延迟，显示加载动画
+        if (isMounted) setIsLoading(true)
+        await new Promise(resolve => setTimeout(resolve, 1500))
+
         const { Terminal } = await import("xterm")
         const { FitAddon } = await import("@xterm/addon-fit")
         const { WebLinksAddon } = await import("@xterm/addon-web-links")
@@ -103,6 +110,9 @@ export function WebTerminal({
         // 存储引用
         terminalInstanceRef.current = terminal
         fitAddonRef.current = fitAddon
+
+        // 终端准备完成，隐藏加载动画
+        if (isMounted) setIsLoading(false)
 
         // 显示欢迎信息 - 现代化样式
         if (isConnected) {
@@ -181,12 +191,14 @@ export function WebTerminal({
         }
       } catch (error) {
         console.error("Failed to initialize terminal:", error)
+        if (isMounted) setIsLoading(false)
       }
     }
 
     initTerminal()
 
     return () => {
+      isMounted = false
       if (terminal) {
         terminal.dispose()
       }
@@ -235,23 +247,30 @@ export function WebTerminal({
   if (!isClient) {
     return (
       <div className="h-full w-full bg-black flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-          <div className="text-zinc-400 font-mono text-sm">
-            Initializing terminal...
-          </div>
-        </div>
+        <ConnectionLoader serverName={serverName} message="正在初始化" />
       </div>
     )
   }
 
   return (
     <div className="h-full w-full relative overflow-hidden">
+      {/* 加载动画覆盖层 */}
+      {isLoading && (
+        <div className="absolute inset-0 z-50">
+          <ConnectionLoader
+            serverName={`${username}@${host}`}
+            message="正在连接"
+          />
+        </div>
+      )}
+
+      {/* 终端容器 - 始终渲染以保持 ref 可用 */}
       <div
         ref={terminalRef}
         className="h-full w-full terminal-container"
         style={{
           backgroundColor: "#000000",
+          visibility: isLoading ? "hidden" : "visible",
         }}
       />
       <style jsx global>{`
