@@ -1,24 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ServerList } from "@/components/servers/server-card"
 import { ServerFilters } from "@/components/servers/server-filters"
+import { AddServerDialog } from "@/components/servers/add-server-dialog"
+import type { ServerFormData } from "@/components/servers/add-server-dialog"
 import {
   Search,
   Plus,
   Server
 } from "lucide-react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 // 模拟数据
@@ -89,6 +83,7 @@ export default function ServersPage() {
   const router = useRouter()
   const [filteredServers, setFilteredServers] = useState(servers)
   const [searchTerm, setSearchTerm] = useState("")
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
   const handleConnect = (serverId: number) => {
     console.log("连接服务器:", serverId)
@@ -109,6 +104,11 @@ export default function ServersPage() {
     console.log("查看详情:", serverId)
     // 使用客户端路由避免整页刷新
     router.push(`/dashboard/servers/${serverId}`)
+  }
+
+  const handleAddServer = (data: ServerFormData) => {
+    console.log("添加服务器:", data)
+    // 这里应该处理添加服务器逻辑
   }
 
   const handleFiltersChange = (filters: {
@@ -164,23 +164,7 @@ export default function ServersPage() {
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:duration-200 group-data-[ready=true]/sidebar-wrapper:ease-in-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink asChild>
-                    <Link href="/dashboard">EasySSH 控制台</Link>
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>服务器列表</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
-          </div>
-        </header>
+      <PageHeader title="服务器列表" />
 
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
           {/* 操作栏 */}
@@ -210,12 +194,10 @@ export default function ServersPage() {
                 </Button>
               </div>
             </div>
-            <Link href="/dashboard/servers/add">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                添加服务器
-              </Button>
-            </Link>
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              添加服务器
+            </Button>
           </div>
 
           {/* 筛选器 */}
@@ -248,15 +230,20 @@ export default function ServersPage() {
               <Server className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">暂无服务器</h3>
               <p className="text-muted-foreground mb-4">开始添加您的第一台服务器</p>
-              <Link href="/dashboard/servers/add">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  添加服务器
-                </Button>
-              </Link>
+              <Button onClick={() => setIsAddDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                添加服务器
+              </Button>
             </div>
           )}
         </div>
+
+        {/* 添加服务器弹窗 */}
+        <AddServerDialog
+          open={isAddDialogOpen}
+          onOpenChange={setIsAddDialogOpen}
+          onSubmit={handleAddServer}
+        />
     </>
   )
 }

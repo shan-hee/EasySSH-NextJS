@@ -428,7 +428,7 @@ export default function SettingsGeneralPage() {
             </div>
 
             {settings.enableEmailNotifications && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={(e) => e.preventDefault()}>
                 <div className="space-y-2">
                   <Label htmlFor="smtpHost">SMTP 服务器</Label>
                   <Input
@@ -462,6 +462,7 @@ export default function SettingsGeneralPage() {
                   <Input
                     id="smtpPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={settings.smtpPassword}
                     onChange={(e) => handleSettingChange("smtpPassword", e.target.value)}
                     placeholder="••••••••"
@@ -476,7 +477,7 @@ export default function SettingsGeneralPage() {
                     placeholder="noreply@example.com"
                   />
                 </div>
-              </div>
+              </form>
             )}
           </CardContent>
         </Card>

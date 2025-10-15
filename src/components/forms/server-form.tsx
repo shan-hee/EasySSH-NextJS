@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { useFormValidation, validationRules } from "@/hooks/use-form-validation"
 import { X, Plus, Save, TestTube } from "lucide-react"
+import { PrivateKeyInput } from "@/components/servers/private-key-input"
 
 interface ServerFormData {
   name: string
@@ -116,8 +117,13 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
   }
 
   const onFormSubmit = handleSubmit((data) => {
-    onSubmit(data)
+    const normalized = {
+      ...data,
+      jumpServer: data.jumpServer === "none" ? "" : data.jumpServer,
+    }
+    onSubmit(normalized)
   })
+
 
   return (
     <form onSubmit={onFormSubmit} className="space-y-6">
@@ -231,6 +237,7 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
               <Input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 value={values.password}
                 onChange={(e) => setValue("password", e.target.value)}
                 placeholder="登录密码"
@@ -241,20 +248,15 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              <Label htmlFor="privateKey">私钥 *</Label>
-              <Textarea
-                id="privateKey"
-                value={values.privateKey}
-                onChange={(e) => setValue("privateKey", e.target.value)}
-                placeholder="粘贴私钥内容"
-                rows={8}
-                className={`font-mono text-sm ${errors.privateKey ? "border-red-500" : ""}`}
-              />
-              {errors.privateKey && (
-                <p className="text-sm text-red-500">{errors.privateKey}</p>
-              )}
-            </div>
+            <PrivateKeyInput
+              id="privateKey"
+              label="私钥"
+              required
+              value={values.privateKey}
+              onChange={(v) => setValue("privateKey", v)}
+              placeholder="粘贴或从文件导入私钥内容"
+              errorText={errors.privateKey as string | undefined}
+            />
           )}
         </CardContent>
       </Card>
@@ -308,7 +310,7 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
                 <SelectValue placeholder="选择跳板机（可选）" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">无</SelectItem>
+                <SelectItem value="none">无</SelectItem>
                 <SelectItem value="jump-01">跳板机01 (192.168.1.10)</SelectItem>
                 <SelectItem value="jump-02">跳板机02 (192.168.1.11)</SelectItem>
               </SelectContent>

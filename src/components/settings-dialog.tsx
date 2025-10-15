@@ -121,21 +121,21 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">密码设置</h4>
                       <p className="text-sm text-muted-foreground mb-3">修改登录密码</p>
-                      <div className="space-y-4">
+                      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
                         <div className="space-y-2">
                           <Label htmlFor="current-password">当前密码</Label>
-                          <Input id="current-password" type="password" placeholder="输入当前密码" />
+                          <Input id="current-password" type="password" autoComplete="current-password" placeholder="输入当前密码" />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="new-password">新密码</Label>
-                          <Input id="new-password" type="password" placeholder="输入新密码" />
+                          <Input id="new-password" type="password" autoComplete="new-password" placeholder="输入新密码" />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="confirm-password">确认新密码</Label>
-                          <Input id="confirm-password" type="password" placeholder="再次输入新密码" />
+                          <Input id="confirm-password" type="password" autoComplete="new-password" placeholder="再次输入新密码" />
                         </div>
                         <Button className="mt-4">保存密码</Button>
-                      </div>
+                      </form>
                     </div>
                   </div>
                 )}
@@ -164,7 +164,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">API配置</h4>
                       <p className="text-sm text-muted-foreground mb-3">配置AI服务的API设置</p>
-                      <div className="space-y-4">
+                      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
                         <div className="space-y-2">
                           <Label htmlFor="ai-provider">AI服务提供商</Label>
                           <div className="flex gap-2">
@@ -179,14 +179,14 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="api-key">API密钥</Label>
-                          <Input id="api-key" type="password" placeholder="输入您的API密钥" />
+                          <Input id="api-key" type="password" autoComplete="off" placeholder="输入您的API密钥" />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="ai-model">AI模型</Label>
                           <Input id="ai-model" placeholder="gpt-4" defaultValue="gpt-4" />
                         </div>
                         <Button className="mt-4">测试连接</Button>
-                      </div>
+                      </form>
                     </div>
                   </div>
                 )}

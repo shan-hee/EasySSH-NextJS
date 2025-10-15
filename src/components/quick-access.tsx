@@ -39,7 +39,7 @@ export function QuickAccess() {
       title: "添加服务器",
       icon: Plus,
       description: "添加新的SSH服务器",
-      href: "/dashboard/servers/add",
+      href: "/dashboard/servers",
     },
     {
       title: "AI助手",
