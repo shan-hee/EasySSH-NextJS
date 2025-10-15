@@ -50,21 +50,43 @@ export function WebTerminal({
         // 动态导入样式
         await import("xterm/css/xterm.css")
 
-        // 创建终端实例
+        // 创建终端实例 - 现代化主题
         terminal = new Terminal({
           theme: {
             background: "#000000",
-            foreground: "#00ff00",
-            cursor: "#ffffff",
-            selection: "#ffffff40",
+            foreground: "#d4d4d8", // zinc-300
+            cursor: "#22c55e", // green-500
+            cursorAccent: "#000000",
+            selection: "#3f3f46", // zinc-700
+            black: "#18181b", // zinc-900
+            red: "#ef4444", // red-500
+            green: "#22c55e", // green-500
+            yellow: "#eab308", // yellow-500
+            blue: "#3b82f6", // blue-500
+            magenta: "#a855f7", // purple-500
+            cyan: "#06b6d4", // cyan-500
+            white: "#f4f4f5", // zinc-100
+            brightBlack: "#52525b", // zinc-600
+            brightRed: "#f87171", // red-400
+            brightGreen: "#4ade80", // green-400
+            brightYellow: "#facc15", // yellow-400
+            brightBlue: "#60a5fa", // blue-400
+            brightMagenta: "#c084fc", // purple-400
+            brightCyan: "#22d3ee", // cyan-400
+            brightWhite: "#fafafa", // zinc-50
           },
-          fontSize: 14,
-          fontFamily: "Monaco, Menlo, 'Ubuntu Mono', monospace",
+          fontSize: 13,
+          fontFamily: "'JetBrains Mono', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace",
+          fontWeight: "400",
+          fontWeightBold: "600",
           cursorBlink: true,
-          cursorStyle: "block",
-          scrollback: 1000,
+          cursorStyle: "bar",
+          cursorWidth: 2,
+          scrollback: 5000,
           cols: 80,
           rows: 24,
+          lineHeight: 1.2,
+          letterSpacing: 0,
         })
 
         // 添加插件
@@ -82,16 +104,16 @@ export function WebTerminal({
         terminalInstanceRef.current = terminal
         fitAddonRef.current = fitAddon
 
-        // 显示欢迎信息
+        // 显示欢迎信息 - 现代化样式
         if (isConnected) {
-          terminal.writeln(`\x1b[32m✓ 连接到 ${serverName} (${host})\x1b[0m`)
-          terminal.writeln(`\x1b[36m用户: ${username}\x1b[0m`)
-          terminal.writeln(`\x1b[33m会话ID: ${sessionId}\x1b[0m`)
+          terminal.writeln(`\x1b[1;32m✓\x1b[0m \x1b[2mConnected to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
+          terminal.writeln(`\x1b[2m┌─ User:\x1b[0m \x1b[36m${username}\x1b[0m`)
+          terminal.writeln(`\x1b[2m└─ Session:\x1b[0m \x1b[33m${sessionId}\x1b[0m`)
           terminal.writeln("")
           writePrompt(terminal)
         } else {
-          terminal.writeln(`\x1b[31m✗ 无法连接到 ${serverName} (${host})\x1b[0m`)
-          terminal.writeln(`\x1b[33m请检查服务器状态或网络连接\x1b[0m`)
+          terminal.writeln(`\x1b[1;31m✗\x1b[0m \x1b[2mConnection failed to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
+          terminal.writeln(`\x1b[2m└─\x1b[0m \x1b[33mPlease check server status or network connection\x1b[0m`)
         }
 
         // 处理用户输入
@@ -171,9 +193,10 @@ export function WebTerminal({
     }
   }, [sessionId, isConnected, isClient])
 
-  // 写入命令提示符
+  // 写入命令提示符 - 现代化样式
   const writePrompt = (terminal: any) => {
-    terminal.write(`\x1b[32m${username}@${host.split('.').pop()}\x1b[0m:\x1b[34m~\x1b[0m$ `)
+    const hostShort = host.split('.')[0] || host
+    terminal.write(`\x1b[1;32m${username}\x1b[0m\x1b[2m@\x1b[0m\x1b[1;36m${hostShort}\x1b[0m \x1b[1;34m~\x1b[0m\x1b[1;35m $\x1b[0m `)
   }
 
   // 公开方法供父组件调用
@@ -208,19 +231,22 @@ export function WebTerminal({
     }
   }, [])
 
-  // 如果不是客户端，显示加载状态
+  // 如果不是客户端，显示加载状态 - 现代化设计
   if (!isClient) {
     return (
       <div className="h-full w-full bg-black flex items-center justify-center">
-        <div className="text-green-400 font-mono">
-          正在初始化终端...
+        <div className="text-center space-y-3">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+          <div className="text-zinc-400 font-mono text-sm">
+            Initializing terminal...
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full relative overflow-hidden">
       <div
         ref={terminalRef}
         className="h-full w-full terminal-container"
@@ -230,27 +256,35 @@ export function WebTerminal({
       />
       <style jsx global>{`
         .terminal-container .xterm {
-          padding: 10px;
+          padding: 16px;
         }
         .terminal-container .xterm-screen {
-          border-radius: 4px;
+          border-radius: 0;
         }
         .terminal-container .xterm-viewport {
           scrollbar-width: thin;
-          scrollbar-color: #444 transparent;
+          scrollbar-color: #3f3f46 transparent;
         }
         .terminal-container .xterm-viewport::-webkit-scrollbar {
-          width: 8px;
+          width: 10px;
         }
         .terminal-container .xterm-viewport::-webkit-scrollbar-track {
           background: transparent;
         }
         .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
-          background-color: #444;
-          border-radius: 4px;
+          background-color: #3f3f46;
+          border-radius: 5px;
+          border: 2px solid transparent;
+          background-clip: padding-box;
         }
         .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
-          background-color: #555;
+          background-color: #52525b;
+          border: 2px solid transparent;
+          background-clip: padding-box;
+        }
+        /* 光标增强效果 */
+        .terminal-container .xterm-cursor-layer .xterm-cursor {
+          box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
         }
       `}</style>
     </div>

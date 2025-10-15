@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { TerminalSession } from "@/components/terminal/types"
-import { Plus, Maximize2, Minimize2, Settings, X } from "lucide-react"
+import { Plus, Settings, X } from "lucide-react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -138,10 +138,10 @@ export function SessionTabBar(props: SessionTabBarProps) {
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
                   <BreadcrumbLink asChild>
-                    <Link href="/dashboard/terminal">终端管理</Link>
+                  <Link href="/dashboard/terminal">快速连接</Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
-                {activeSession && (
+                {activeSession && activeSession.type !== 'quick' && (
                   <>
                     <BreadcrumbSeparator className="hidden md:block" />
                     {activeSession.group && (
@@ -173,20 +173,26 @@ export function SessionTabBar(props: SessionTabBarProps) {
         </header>
       )}
 
-      {/* 页签栏（与终端同色背景） */}
-      <div className="w-full bg-black">
-        <div className="flex items-center h-9 gap-0">
+      {/* 页签栏（现代化设计） */}
+      <div className="w-full bg-gradient-to-b from-black/95 to-black border-b border-white/5">
+        <div className="flex items-center h-10 gap-0 px-2">
           {/* Tabs 容器 */}
           <div className="flex-1 overflow-x-auto scrollbar-hide">
-            <div className="flex items-center gap-0 min-h-0">
+            <div className="flex items-center gap-1 min-h-0 py-1">
             {sessions.map((s, idx) => {
               const active = s.id === activeId
+              const statusColor =
+                s.status === "connected"
+                  ? "bg-green-500"
+                  : s.status === "reconnecting"
+                  ? "bg-yellow-500 animate-pulse"
+                  : "bg-red-500"
               const statusClass =
                 s.status === "connected"
-                  ? "text-status-connected"
+                  ? "text-green-400"
                   : s.status === "reconnecting"
-                  ? "text-status-warning"
-                  : "text-status-danger"
+                  ? "text-yellow-400"
+                  : "text-red-400"
               return (
                       <div key={s.id}
                         role="button"
@@ -199,27 +205,40 @@ export function SessionTabBar(props: SessionTabBarProps) {
                         onAuxClick={(e) => onAuxClick(e, s.id, s.pinned)}
                         onDoubleClick={() => onDoubleClick(s.id)}
                         className={cn(
-                          "group relative flex items-center gap-2 h-6 pl-3 pr-2 transition-all duration-200 ease-out select-none rounded-xl first:ml-[-2px] first:mt-[-1px] first:mb-[-1px] hover:pr-6",
-                          statusClass,
+                          "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm",
                           active
-                            ? "opacity-100 bg-sidebar-accent"
-                            : "opacity-75 hover:opacity-100 hover:bg-sidebar-accent"
+                            ? "bg-gradient-to-b from-zinc-800/90 to-zinc-900/90 border-zinc-700/50 shadow-lg shadow-black/20"
+                            : "bg-zinc-900/40 border-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700/40 opacity-75 hover:opacity-100",
+                          s.pinned && "ring-1 ring-blue-500/20"
                         )}
-                        title={s.serverName}
+                        
                       >
-                        <span className="max-w-40 truncate text-sm">
+                        {/* 状态指示点 */}
+                        <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusColor)} />
+
+                        <span className={cn(
+                          "max-w-32 truncate text-xs font-medium transition-colors",
+                          active ? "text-white" : "text-gray-400"
+                        )}>
                           {s.serverName}
                         </span>
+
+                        
+
+                        {/* 固定图标 */}
+                        {s.pinned && (
+                          <div className="absolute top-1 right-1 w-1 h-1 rounded-full bg-blue-400" />
+                        )}
+
                         {!s.pinned && (
                           <button
-                            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-sm p-0.5 hover:bg-accent opacity-0 -translate-x-1 pointer-events-none transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-red-500/20 hover:text-red-400 opacity-0 scale-90 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
                             onClick={(e) => { e.stopPropagation(); onCloseSession(s.id) }}
                             aria-label="关闭"
                           >
-                            <X className="h-3.5 w-3.5" />
+                            <X className="h-3 w-3" />
                           </button>
                         )}
-                        {/* 分隔符去掉，使用卡片背景与圆角分隔视觉 */}
                       </div>
               )
             })}
@@ -227,7 +246,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="ml-2 h-8 w-8 rounded-xl hover:bg-sidebar-accent"
+              className="ml-1 h-8 w-8 rounded-lg hover:bg-zinc-800/60 hover:text-green-400 text-gray-500 transition-all duration-200 hover:scale-105"
               onClick={onNewSession}
               aria-label="新建会话"
             >
@@ -235,33 +254,63 @@ export function SessionTabBar(props: SessionTabBarProps) {
             </Button>
           </div>
         </div>
-      </div>
+
+          {onOpenSettings && (
+            <div className="flex items-center gap-1 px-2 border-l border-white/5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-lg hover:bg-zinc-800/60 text-gray-400 hover:text-white"
+                onClick={onOpenSettings}
+                aria-label="设置"
+                title="设置"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 右键菜单 */}
+      {/* 右键菜单（现代化设计） */}
       {menu.open && (
         <div
           ref={menuRef}
-          className="fixed z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          className="fixed z-50 min-w-48 rounded-lg border border-zinc-800/50 bg-gradient-to-b from-zinc-900 to-black p-1.5 text-white shadow-2xl shadow-black/50 backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-200"
           style={{ left: menu.x, top: menu.y }}
         >
-          <div className="text-xs px-2 py-1.5 text-muted-foreground">页签操作</div>
+          <div className="text-[10px] px-3 py-1.5 text-zinc-500 uppercase font-semibold tracking-wider">页签操作</div>
+          <div className="h-px bg-gradient-to-r from-transparent via-zinc-800 to-transparent my-1" />
+
           <button
-            className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted"
+            className="w-full text-left text-sm px-3 py-2 rounded-md hover:bg-zinc-800/60 transition-colors flex items-center gap-2 group"
             onClick={() => { menu.targetId && onDuplicateSession(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
-          >复制会话</button>
+          >
+            <span className="text-zinc-400 group-hover:text-white transition-colors">复制会话</span>
+          </button>
+
           <button
-            className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted"
+            className="w-full text-left text-sm px-3 py-2 rounded-md hover:bg-zinc-800/60 transition-colors flex items-center gap-2 group"
             onClick={() => { menu.targetId && onCloseOthers(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
-          >关闭其他</button>
+          >
+            <span className="text-zinc-400 group-hover:text-white transition-colors">关闭其他</span>
+          </button>
+
           <button
-            className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted"
+            className="w-full text-left text-sm px-3 py-2 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center gap-2 text-zinc-400"
             onClick={() => { onCloseAll(); setMenu(m => ({ ...m, open: false })) }}
-          >全部关闭</button>
+          >
+            全部关闭
+          </button>
+
+          <div className="h-px bg-gradient-to-r from-transparent via-zinc-800 to-transparent my-1" />
+
           <button
-            className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted"
+            className="w-full text-left text-sm px-3 py-2 rounded-md hover:bg-blue-500/20 hover:text-blue-400 transition-colors flex items-center gap-2 text-zinc-400"
             onClick={() => { menu.targetId && onTogglePin(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
-          >固定/取消固定</button>
+          >
+            固定/取消固定
+          </button>
         </div>
       )}
     </>

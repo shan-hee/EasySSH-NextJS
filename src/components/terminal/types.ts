@@ -14,5 +14,6 @@ export interface TerminalSession {
   group?: string
   tags?: string[]
   pinned?: boolean
+  // 新增：会话类型，quick 表示快速连接页签（无工具栏）
+  type?: "quick" | "terminal"
 }
-
