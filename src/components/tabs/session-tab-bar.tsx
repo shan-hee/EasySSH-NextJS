@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { TerminalSession } from "@/components/terminal/types"
@@ -189,10 +188,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                   ? "text-status-warning"
                   : "text-status-danger"
               return (
-                <TooltipProvider key={s.id}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div
+                      <div key={s.id}
                         role="button"
                         draggable
                         onDragStart={(e) => onDragStart(e, s.id)}
@@ -203,9 +199,11 @@ export function SessionTabBar(props: SessionTabBarProps) {
                         onAuxClick={(e) => onAuxClick(e, s.id, s.pinned)}
                         onDoubleClick={() => onDoubleClick(s.id)}
                         className={cn(
-                          "group relative flex items-center gap-2 h-9 px-3 transition-colors select-none",
+                          "group relative flex items-center gap-2 h-6 pl-3 pr-2 transition-all duration-200 ease-out select-none rounded-xl first:ml-[-2px] first:mt-[-1px] first:mb-[-1px] hover:pr-6",
                           statusClass,
-                          active ? "opacity-100" : "opacity-75 hover:opacity-100"
+                          active
+                            ? "opacity-100 bg-sidebar-accent"
+                            : "opacity-75 hover:opacity-100 hover:bg-sidebar-accent"
                         )}
                         title={s.serverName}
                       >
@@ -214,29 +212,27 @@ export function SessionTabBar(props: SessionTabBarProps) {
                         </span>
                         {!s.pinned && (
                           <button
-                            className="hover:bg-accent rounded-sm p-0.5"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-sm p-0.5 hover:bg-accent opacity-0 -translate-x-1 pointer-events-none transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto"
                             onClick={(e) => { e.stopPropagation(); onCloseSession(s.id) }}
                             aria-label="关闭"
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        {idx < sessions.length - 1 && (
-                          <span aria-hidden className="text-current select-none">|</span>
-                        )}
+                        {/* 分隔符去掉，使用卡片背景与圆角分隔视觉 */}
                       </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" align="start">
-                      <div className="text-xs space-y-1">
-                        <div className="font-medium">{s.serverName}</div>
-                        <div className="text-muted-foreground">{s.username}@{s.host}{s.port ? `:${s.port}` : ""}</div>
-                        <div>最后活动: {new Date(s.lastActivity).toLocaleString()}</div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
               )
             })}
+            {/* 新建会话按钮：放在标签之后 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-2 h-8 w-8 rounded-xl hover:bg-sidebar-accent"
+              onClick={onNewSession}
+              aria-label="新建会话"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>

@@ -2,13 +2,12 @@
 
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { WebTerminal } from "./web-terminal"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
 import { TerminalSession } from "@/components/terminal/types"
-import { Plus, Maximize2, Minimize2, Settings } from "lucide-react"
+import { Maximize2, Minimize2, Settings, FolderOpen, Globe, Activity, Bot } from "lucide-react"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -73,26 +72,37 @@ export function TerminalComponent({
           <Tabs value={active?.id} className="flex-1 flex flex-col gap-0">
             {/* 工具栏（会话信息条） */}
             {active && (
-              <div className="px-4 py-2 bg-black text-sm flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sidebar-foreground">已连接到:</span>
-                  <span className="font-mono text-sidebar-foreground">{active.username}@{active.host}{active.port ? `:${active.port}` : ""}</span>
-                  <Badge
-                    variant={active.isConnected ? "default" : "secondary"}
-                    className="ml-2"
+              <div className="bg-black text-sm flex items-center justify-between">
+                {/* 左侧工具图标组 */}
+                <div className="flex items-center gap-1 text-sidebar-foreground">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:!bg-sidebar-accent hover:!text-sidebar-foreground transition-colors" aria-label="文件管理器">
+                    <FolderOpen className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 rounded-md hover:!bg-sidebar-accent hover:!text-sidebar-foreground transition-colors flex items-center gap-2 px-2"
+                    aria-label="网络延迟"
                   >
-                    {active.isConnected ? "已连接" : "已断开"}
-                  </Badge>
+                    <Globe className="h-4 w-4" />
+                    <div className="flex flex-col items-start leading-none text-left">
+                      <span className="text-[10px] text-muted-foreground">RTT</span>
+                      <span className="text-xs tabular-nums text-status-connected">2 ms</span>
+                    </div>
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:!bg-sidebar-accent hover:!text-sidebar-foreground transition-colors" aria-label="监控">
+                    <Activity className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:!bg-sidebar-accent hover:!text-sidebar-foreground transition-colors" aria-label="AI 助手">
+                    <Bot className="h-4 w-4" />
+                  </Button>
                 </div>
                 {/* 工具按钮 */}
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-sidebar-accent" onClick={onNewSession}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-sidebar-accent" onClick={() => setIsFullscreen(!isFullscreen)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:!bg-sidebar-accent hover:!text-sidebar-foreground transition-colors" onClick={() => setIsFullscreen(!isFullscreen)}>
                     {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-sidebar-accent">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:!bg-sidebar-accent hover:!text-sidebar-foreground transition-colors">
                     <Settings className="h-4 w-4" />
                   </Button>
                 </div>
