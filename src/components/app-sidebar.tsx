@@ -9,6 +9,7 @@ import {
   FileText,
   FolderOpen,
   Activity,
+  Bot,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -44,7 +45,13 @@ const data = {
       url: "/dashboard",
       icon: Monitor,
       isActive: true,
-      // 无子级，点击即进入控制台概览
+      // 无子级,点击即进入控制台概览
+    },
+    {
+      title: "AI 助手",
+      url: "/dashboard/ai-assistant",
+      icon: Bot,
+      // 无子级,点击即进入AI助手
     },
     {
       title: "连接管理",
@@ -119,7 +126,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
   const all = memoizedData.navMain
 
   // 基于标题分组：工作台 / 核心功能 / 可观测与审计 / 平台设置
-  const groupWorkbench = React.useMemo(() => all.filter((i) => i.title === "控制台"), [all])
+  const groupWorkbench = React.useMemo(() => all.filter((i) => ["控制台", "AI 助手"].includes(i.title)), [all])
   const groupCore = React.useMemo(
     () => all.filter((i) => ["连接管理", "自动化", "文件管理"].includes(i.title)),
     [all]

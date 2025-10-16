@@ -45,9 +45,7 @@ export function QuickAccess() {
       title: "AI助手",
       icon: Bot,
       description: "把需求交给AI，生成计划并执行",
-      action: () => {
-        console.log("Open AI Assistant")
-      },
+      href: "/dashboard/ai-assistant",
     },
   ]
 
