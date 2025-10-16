@@ -23,6 +23,22 @@ import {
   WifiOff,
   AlertTriangle
 } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { DraggableServerCard } from './draggable-server-card'
 
 interface ServerData {
   id: number
@@ -190,6 +206,8 @@ interface ServerListProps {
   onEdit?: (serverId: number) => void
   onDelete?: (serverId: number) => void
   onViewDetails?: (serverId: number) => void
+  onReorder?: (newOrder: ServerData[]) => void
+  viewMode?: 'grid' | 'list'
 }
 
 export function ServerList({
@@ -197,8 +215,33 @@ export function ServerList({
   onConnect,
   onEdit,
   onDelete,
-  onViewDetails
+  onViewDetails,
+  onReorder,
+  viewMode = 'grid'
 }: ServerListProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      const oldIndex = servers.findIndex((server) => server.id === active.id)
+      const newIndex = servers.findIndex((server) => server.id === over.id)
+
+      const newOrder = arrayMove(servers, oldIndex, newIndex)
+      onReorder?.(newOrder)
+    }
+  }
+
   if (servers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -210,17 +253,36 @@ export function ServerList({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {servers.map((server) => (
-        <ServerCard
-          key={server.id}
-          server={server}
-          onConnect={onConnect}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onViewDetails={onViewDetails}
-        />
-      ))}
-    </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={servers.map(s => s.id)}
+        strategy={rectSortingStrategy}
+      >
+        <div
+          className={`
+            grid gap-4 transition-all duration-300
+            ${viewMode === 'grid'
+              ? 'md:grid-cols-2 lg:grid-cols-3'
+              : 'grid-cols-1'
+            }
+          `}
+        >
+          {servers.map((server) => (
+            <DraggableServerCard
+              key={server.id}
+              server={server}
+              onConnect={onConnect}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onViewDetails={onViewDetails}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   )
 }

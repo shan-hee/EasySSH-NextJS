@@ -50,9 +50,16 @@ interface Server {
 interface ServerFiltersProps {
   servers: Server[]
   onFiltersChange: (filters: FilterOptions) => void
+  onViewModeChange?: (mode: 'grid' | 'list') => void
+  viewMode?: 'grid' | 'list'
 }
 
-export function ServerFilters({ servers, onFiltersChange }: ServerFiltersProps) {
+export function ServerFilters({
+  servers,
+  onFiltersChange,
+  onViewModeChange,
+  viewMode: externalViewMode = 'grid'
+}: ServerFiltersProps) {
   const [filters, setFilters] = useState<FilterOptions>({
     status: 'all',
     tag: 'all',
@@ -62,7 +69,11 @@ export function ServerFilters({ servers, onFiltersChange }: ServerFiltersProps) 
     search: ''
   })
 
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const viewMode = externalViewMode
+
+  const handleViewModeChange = (mode: 'grid' | 'list') => {
+    onViewModeChange?.(mode)
+  }
 
   // 获取唯一的标签列表
   const uniqueTags = Array.from(
@@ -245,14 +256,14 @@ export function ServerFilters({ servers, onFiltersChange }: ServerFiltersProps) 
             <Button
               variant={viewMode === 'grid' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setViewMode('grid')}
+              onClick={() => handleViewModeChange('grid')}
             >
               <Grid className="h-4 w-4" />
             </Button>
             <Button
               variant={viewMode === 'list' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setViewMode('list')}
+              onClick={() => handleViewModeChange('list')}
             >
               <List className="h-4 w-4" />
             </Button>

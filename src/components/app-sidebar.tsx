@@ -9,7 +9,6 @@ import {
   FileText,
   FolderOpen,
   Activity,
-  Bot,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -47,12 +46,7 @@ const data = {
       isActive: true,
       // 无子级,点击即进入控制台概览
     },
-    {
-      title: "AI 助手",
-      url: "/dashboard/ai-assistant",
-      icon: Bot,
-      // 无子级,点击即进入AI助手
-    },
+    // 移除工作台中的“AI 助手”入口，仅保留快速访问中的 AI 助手
     {
       title: "连接管理",
       url: "#",
@@ -60,7 +54,6 @@ const data = {
       items: [
         { title: "连接配置", url: "/dashboard/servers" },
         { title: "历史连接", url: "/dashboard/servers/history" },
-        { title: "连接模板", url: "/dashboard/servers/templates" },
       ],
     },
     {
@@ -91,7 +84,6 @@ const data = {
       items: [
         { title: "资源监控", url: "/dashboard/monitoring/resources" },
         { title: "告警规则", url: "/dashboard/monitoring/alerts" },
-        { title: "性能分析", url: "/dashboard/monitoring/perf" },
         { title: "健康检查", url: "/dashboard/monitoring/health" },
       ],
     },
@@ -126,7 +118,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
   const all = memoizedData.navMain
 
   // 基于标题分组：工作台 / 核心功能 / 可观测与审计 / 平台设置
-  const groupWorkbench = React.useMemo(() => all.filter((i) => ["控制台", "AI 助手"].includes(i.title)), [all])
+  const groupWorkbench = React.useMemo(() => all.filter((i) => ["控制台"].includes(i.title)), [all])
   const groupCore = React.useMemo(
     () => all.filter((i) => ["连接管理", "自动化", "文件管理"].includes(i.title)),
     [all]

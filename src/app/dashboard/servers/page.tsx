@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,8 +15,25 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+// 定义服务器数据类型
+interface ServerData {
+  id: number
+  name: string
+  host: string
+  port: number
+  username: string
+  status: 'online' | 'offline' | 'warning'
+  os: string
+  cpu: string
+  memory: string
+  disk: string
+  lastConnected: string
+  uptime: string
+  tags: string[]
+}
+
 // 模拟数据
-const servers = [
+const defaultServers: ServerData[] = [
   {
     id: 1,
     name: "Web Server 01",
@@ -79,11 +96,61 @@ const servers = [
   }
 ]
 
+const STORAGE_KEY = 'servers-order'
+
 export default function ServersPage() {
   const router = useRouter()
-  const [filteredServers, setFilteredServers] = useState(servers)
+  const [servers, setServers] = useState<ServerData[]>(defaultServers)
+  const [filteredServers, setFilteredServers] = useState<ServerData[]>(defaultServers)
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+
+  // 从 localStorage 加载服务器顺序和视图模式
+  useEffect(() => {
+    const savedOrder = localStorage.getItem(STORAGE_KEY)
+    if (savedOrder) {
+      try {
+        const orderIds = JSON.parse(savedOrder) as number[]
+        const orderedServers = orderIds
+          .map(id => defaultServers.find(s => s.id === id))
+          .filter((s): s is ServerData => s !== undefined)
+
+        // 添加任何新的服务器（不在保存的顺序中）
+        const newServers = defaultServers.filter(
+          s => !orderIds.includes(s.id)
+        )
+
+        const finalOrder = [...orderedServers, ...newServers]
+        setServers(finalOrder)
+        setFilteredServers(finalOrder)
+      } catch (error) {
+        console.error('Failed to load server order:', error)
+      }
+    }
+
+    // 加载视图模式
+    const savedViewMode = localStorage.getItem('servers-view-mode')
+    if (savedViewMode === 'grid' || savedViewMode === 'list') {
+      setViewMode(savedViewMode)
+    }
+  }, [])
+
+  // 处理拖拽重新排序
+  const handleReorder = (newOrder: ServerData[]) => {
+    setServers(newOrder)
+    setFilteredServers(newOrder)
+
+    // 保存到 localStorage
+    const orderIds = newOrder.map(s => s.id)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(orderIds))
+  }
+
+  // 处理视图模式切换
+  const handleViewModeChange = (mode: 'grid' | 'list') => {
+    setViewMode(mode)
+    localStorage.setItem('servers-view-mode', mode)
+  }
 
   const handleConnect = (serverId: number) => {
     console.log("连接服务器:", serverId)
@@ -204,6 +271,8 @@ export default function ServersPage() {
           <ServerFilters
             servers={servers}
             onFiltersChange={handleFiltersChange}
+            onViewModeChange={handleViewModeChange}
+            viewMode={viewMode}
           />
 
           {/* 服务器列表 */}
@@ -213,6 +282,8 @@ export default function ServersPage() {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onViewDetails={handleViewDetails}
+            onReorder={handleReorder}
+            viewMode={viewMode}
           />
 
           {/* 空状态 */}
