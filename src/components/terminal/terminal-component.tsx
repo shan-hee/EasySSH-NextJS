@@ -105,27 +105,29 @@ export function TerminalComponent({
 
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-black' : ''}`}>
-      {/* 面包屑头部：放在圆角容器之外 */}
-      <header className="flex h-16 shrink-0 items-center gap-2 sticky top-0 z-30 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:duration-200 group-data-[ready=true]/sidebar-wrapper:ease-in-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink asChild>
-                  <Link href="/dashboard">EasySSH 控制台</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/dashboard/terminal">快速连接</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              {/* 根据需求：终端内操作不再把服务器名称或标签加入面包屑，仅保留到“快速连接” */}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
+      {/* 全屏时隐藏面包屑头部 */}
+      {!isFullscreen && (
+        <header className="flex h-16 shrink-0 items-center gap-2 sticky top-0 z-30 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:duration-200 group-data-[ready=true]/sidebar-wrapper:ease-in-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-2 px-4">
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem className="hidden md:block">
+                  <BreadcrumbLink asChild>
+                    <Link href="/dashboard">EasySSH 控制台</Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block" />
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link href="/dashboard/terminal">快速连接</Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                {/* 根据需求：终端内操作不再把服务器名称或标签加入面包屑，仅保留到“快速连接” */}
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+        </header>
+      )}
 
       <div className="flex-1 flex flex-col rounded-xl border border-zinc-800/50 overflow-hidden bg-gradient-to-b from-black to-zinc-950 shadow-2xl">
         {/* 页签栏（仅保留标签，不显示面包屑） */}
