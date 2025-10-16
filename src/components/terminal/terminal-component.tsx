@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { WebTerminal } from "./web-terminal"
+import { ConnectionLoader } from "./connection-loader"
 import { QuickConnect, QuickServer } from "./quick-connect"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
 import { TerminalSession } from "@/components/terminal/types"
@@ -52,6 +53,10 @@ export function TerminalComponent({
 }: TerminalComponentProps) {
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
+  const [loaderState, setLoaderState] = useState<"entering" | "loading" | "exiting">("entering")
+  // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
+  const initializedSessionsRef = useRef<Set<string>>(new Set())
 
   const handleCommand = (sessionId: string, command: string) => {
     onSendCommand(sessionId, command)
@@ -63,6 +68,40 @@ export function TerminalComponent({
     const id = onNewSession()
     if (id) setActiveSession(String(id))
   }
+
+  const handleLoadingChange = (sessionId: string, isLoading: boolean) => {
+    if (isLoading) {
+      setLoadingSessionId(sessionId)
+      setLoaderState("entering")
+    } else {
+      // 连接成功，触发退出动画
+      setLoaderState("exiting")
+    }
+  }
+
+  const handleAnimationComplete = () => {
+    // 退出动画完成后，标记该会话已初始化并清除加载状态
+    if (loadingSessionId) {
+      initializedSessionsRef.current.add(loadingSessionId)
+    }
+    setLoadingSessionId(null)
+    setLoaderState("entering")
+  }
+
+  const isActiveSessionLoading = loadingSessionId === activeSession
+  const shouldForceLoading = !!(active && active.type !== 'quick' && !initializedSessionsRef.current.has(active.id))
+  const effectiveIsLoading = !!(active && active.type !== 'quick' && (isActiveSessionLoading || shouldForceLoading))
+
+  // 当从“快速连接”升级为“终端”时，立刻设置为加载中，避免工具栏闪烁
+  useEffect(() => {
+    if (shouldForceLoading && active) {
+      // 若还未设置当前加载会话，则设置并进入动画
+      if (loadingSessionId !== active.id) {
+        setLoadingSessionId(active.id)
+        setLoaderState("entering")
+      }
+    }
+  }, [shouldForceLoading, active?.id])
 
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-black' : ''}`}>
@@ -106,7 +145,19 @@ export function TerminalComponent({
           hideBreadcrumb
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* 加载动画覆盖层 - 覆盖工具栏和终端内容区 */}
+        {effectiveIsLoading && active && active.type !== 'quick' && (
+          <div className="absolute inset-0 z-50">
+            <ConnectionLoader
+              serverName={`${active.username}@${active.host}`}
+              message="正在连接"
+              state={loaderState}
+              onAnimationComplete={handleAnimationComplete}
+            />
+          </div>
+        )}
+
         {sessions.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-zinc-500">
             暂无活动会话，使用右上角 + 新建
@@ -114,7 +165,7 @@ export function TerminalComponent({
         ) : (
           <Tabs value={active?.id} className="flex-1 flex flex-col gap-0">
             {/* 工具栏（会话信息条）- 现代化设计 */}
-            {active && active.type !== 'quick' && (
+            {active && active.type !== 'quick' && !effectiveIsLoading && (
               <div className="bg-gradient-to-b from-black/90 to-black border-b border-zinc-800/30 text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm">
                 {/* 左侧工具图标组 */}
                 <div className="flex items-center">
@@ -218,6 +269,7 @@ export function TerminalComponent({
                       username={active.username}
                       isConnected={active.isConnected}
                       onCommand={(command) => handleCommand(active.id, command)}
+                      onLoadingChange={(isLoading) => handleLoadingChange(active.id, isLoading)}
                     />
                   </TabsContent>
                 )
@@ -231,6 +283,7 @@ export function TerminalComponent({
                       username={session.username}
                       isConnected={session.isConnected}
                       onCommand={(command) => handleCommand(session.id, command)}
+                      onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
                     />
                   </TabsContent>
                 ))

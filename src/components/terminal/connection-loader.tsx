@@ -1,16 +1,64 @@
 "use client"
 
+import { useEffect, useState } from "react"
+
+type LoaderState = "entering" | "loading" | "exiting"
+
 interface ConnectionLoaderProps {
   serverName?: string
   message?: string
+  state?: LoaderState
+  onAnimationComplete?: () => void
 }
 
 export function ConnectionLoader({
   serverName = "服务器",
-  message = "正在连接"
+  message = "正在连接",
+  state = "loading",
+  onAnimationComplete
 }: ConnectionLoaderProps) {
+  const [animationState, setAnimationState] = useState<LoaderState>(state)
+
+  useEffect(() => {
+    setAnimationState(state)
+  }, [state])
+
+  useEffect(() => {
+    if (animationState === "entering") {
+      // 进入动画持续 500ms
+      const timer = setTimeout(() => {
+        setAnimationState("loading")
+      }, 500)
+      return () => clearTimeout(timer)
+    } else if (animationState === "exiting") {
+      // 退出动画持续 500ms
+      const timer = setTimeout(() => {
+        onAnimationComplete?.()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [animationState, onAnimationComplete])
+
+  // 根据状态计算飞船的样式（只有飞船移动）
+  const getSpaceshipStyle = (): React.CSSProperties => {
+    switch (animationState) {
+      case "entering":
+        return {
+          animation: "slide-in-from-left 0.5s linear forwards"
+        }
+      case "loading":
+        return {}
+      case "exiting":
+        return {
+          animation: "slide-out-to-right 0.5s linear forwards"
+        }
+      default:
+        return {}
+    }
+  }
+
   return (
-    <div className="h-full w-full bg-black flex items-center justify-center overflow-hidden relative">
+    <div className="h-full w-full bg-black overflow-hidden relative">
       {/* 动画背景线条 */}
       <div className="longfazers absolute inset-0">
         <span className="longfazer-1" />
@@ -19,8 +67,11 @@ export function ConnectionLoader({
         <span className="longfazer-4" />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center gap-8">
-        {/* 飞船动画 */}
+      {/* 飞船动画 - 绝对定位，独立移动 */}
+      <div
+        className="spaceship-wrapper"
+        style={getSpaceshipStyle()}
+      >
         <div className="spaceship-container">
           <div className="body">
             <span className="body-main">
@@ -35,19 +86,67 @@ export function ConnectionLoader({
             </div>
           </div>
         </div>
+      </div>
 
-        {/* 文字信息 */}
-        <div className="text-center space-y-2">
-          <h1 className="text-sm font-semibold text-white uppercase tracking-wider">
-            {message}
-          </h1>
-          <p className="text-xs text-zinc-500 font-mono">
-            {serverName}
-          </p>
-        </div>
+      {/* 文字信息 - 绝对定位，固定在中间 */}
+      <div className="text-wrapper">
+        <h1 className="text-sm font-semibold text-white uppercase tracking-wider">
+          {animationState === "exiting" ? "连接成功" : message}
+        </h1>
+        <p className="text-xs text-zinc-500 font-mono">
+          {serverName}
+        </p>
       </div>
 
       <style jsx>{`
+        .spaceship-wrapper {
+          position: absolute;
+          top: calc(50% - 60px);
+          left: 50%;
+          margin-left: -60px;
+          width: 120px;
+          height: 40px;
+          z-index: 10;
+        }
+
+        .spaceship-container {
+          position: relative;
+          width: 100%;
+          height: 100%;
+        }
+
+        .text-wrapper {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, 20px);
+          text-align: center;
+          z-index: 10;
+        }
+
+        .text-wrapper h1 {
+          margin-bottom: 8px;
+        }
+
+        /* 进入和退出动画 - 飞船水平移动，无淡入淡出 */
+        @keyframes slide-in-from-left {
+          from {
+            transform: translateX(calc(-50vw ));
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+
+        @keyframes slide-out-to-right {
+          from {
+            transform: translateX(0);
+          }
+          to {
+            transform: translateX(calc(50vw));
+          }
+        }
+
         .body {
           position: absolute;
           left: 50%;

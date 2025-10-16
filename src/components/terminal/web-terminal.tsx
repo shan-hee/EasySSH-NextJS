@@ -11,6 +11,7 @@ interface WebTerminalProps {
   isConnected: boolean
   onCommand: (command: string) => void
   onResize?: (cols: number, rows: number) => void
+  onLoadingChange?: (isLoading: boolean) => void
 }
 
 export function WebTerminal({
@@ -20,7 +21,8 @@ export function WebTerminal({
   username,
   isConnected,
   onCommand,
-  onResize
+  onResize,
+  onLoadingChange
 }: WebTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstanceRef = useRef<any>(null)
@@ -28,7 +30,6 @@ export function WebTerminal({
   const [currentLine, setCurrentLine] = useState("")
   const [cursorPosition, setCursorPosition] = useState(0)
   const [isClient, setIsClient] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
 
   // 确保只在客户端执行
   useEffect(() => {
@@ -46,8 +47,12 @@ export function WebTerminal({
     // 动态导入 xterm.js 及其插件
     const initTerminal = async () => {
       try {
-        // 模拟连接延迟，显示加载动画
-        if (isMounted) setIsLoading(true)
+        // 开始进入动画
+        if (isMounted) {
+          onLoadingChange?.(true)
+        }
+
+        // 进入动画 800ms + 加载延迟 700ms
         await new Promise(resolve => setTimeout(resolve, 1500))
 
         const { Terminal } = await import("xterm")
@@ -112,7 +117,9 @@ export function WebTerminal({
         fitAddonRef.current = fitAddon
 
         // 终端准备完成，隐藏加载动画
-        if (isMounted) setIsLoading(false)
+        if (isMounted) {
+          onLoadingChange?.(false)
+        }
 
         // 显示欢迎信息 - 现代化样式
         if (isConnected) {
@@ -191,7 +198,9 @@ export function WebTerminal({
         }
       } catch (error) {
         console.error("Failed to initialize terminal:", error)
-        if (isMounted) setIsLoading(false)
+        if (isMounted) {
+          onLoadingChange?.(false)
+        }
       }
     }
 
@@ -254,23 +263,12 @@ export function WebTerminal({
 
   return (
     <div className="h-full w-full relative overflow-hidden">
-      {/* 加载动画覆盖层 */}
-      {isLoading && (
-        <div className="absolute inset-0 z-50">
-          <ConnectionLoader
-            serverName={`${username}@${host}`}
-            message="正在连接"
-          />
-        </div>
-      )}
-
-      {/* 终端容器 - 始终渲染以保持 ref 可用 */}
+      {/* 终端容器 */}
       <div
         ref={terminalRef}
         className="h-full w-full terminal-container"
         style={{
           backgroundColor: "#000000",
-          visibility: isLoading ? "hidden" : "visible",
         }}
       />
       <style jsx global>{`
