@@ -49,7 +49,7 @@ export interface ServerFormData {
 }
 
 export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialogProps) {
-  const [authMethod, setAuthMethod] = useState<"password" | "privateKey">("password")
+  // 认证方式切换改为使用 shadcn Tabs，统一以 formData.authMethod 为单一数据源
   const [formData, setFormData] = useState<ServerFormData>({
     name: "",
     host: "",
@@ -129,7 +129,6 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
       autoConnect: false,
       keepAlive: true,
     })
-    setAuthMethod("password")
     setNewTag("")
   }
 
@@ -196,81 +195,69 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
               </div>
             </div>
 
-            <div>
-              <Label className="mb-3 block">验证方式</Label>
-              <div className="inline-flex rounded-md shadow-sm" role="group">
-                <Button
-                  type="button"
-                  variant={authMethod === "password" ? "default" : "outline"}
-                  onClick={() => {
-                    setAuthMethod("password")
-                    handleInputChange("authMethod", "password")
-                  }}
-                  className="rounded-r-none"
-                >
-                  密码验证
-                </Button>
-                <Button
-                  type="button"
-                  variant={authMethod === "privateKey" ? "default" : "outline"}
-                  onClick={() => {
-                    setAuthMethod("privateKey")
-                    handleInputChange("authMethod", "privateKey")
-                  }}
-                  className="rounded-l-none border-l-0"
-                >
-                  秘钥验证
-                </Button>
-              </div>
-            </div>
+            <div className="space-y-2">
+              <Label>验证方式</Label>
+              <Tabs
+                className="w-full"
+                value={formData.authMethod}
+                onValueChange={(value: "password" | "privateKey") => handleInputChange("authMethod", value)}
+              >
+                <TabsList className="w-1/2">
+                  <TabsTrigger value="password">密码验证</TabsTrigger>
+                  <TabsTrigger value="privateKey">私钥验证</TabsTrigger>
+                </TabsList>
 
-            {authMethod === "password" ? (
-              // 将密码输入包裹在 form 中，并提供隐藏的用户名字段，满足密码管理器与无障碍建议
-              <form className="space-y-2" onSubmit={(e) => e.preventDefault()}>
-                <Label htmlFor="username-hidden" className="sr-only">用户名</Label>
-                <Input
-                  id="username-hidden"
-                  name="username"
-                  type="text"
-                  autoComplete="username"
-                  value={formData.username}
-                  onChange={(e) => handleInputChange("username", e.target.value)}
-                  className="sr-only"
-                />
-                <Label htmlFor="password">密码 (选填)</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="请输入密码"
-                  value={formData.password}
-                  onChange={(e) => handleInputChange("password", e.target.value)}
-                />
-                <div className="flex items-center space-x-2 mt-2">
-                  <Checkbox
-                    id="remember"
-                    checked={formData.rememberPassword}
-                    onCheckedChange={(checked) =>
-                      handleInputChange("rememberPassword", checked === true)
-                    }
+                <TabsContent value="password" forceMount className="space-y-2 mt-4 data-[state=inactive]:hidden">
+                  {/* 将密码输入包裹在 form 中，并提供隐藏的用户名字段，满足密码管理器与无障碍建议 */}
+                  <form className="space-y-2" onSubmit={(e) => e.preventDefault()}>
+                    <Label htmlFor="username-hidden" className="sr-only">用户名</Label>
+                    <Input
+                      id="username-hidden"
+                      name="username"
+                      type="text"
+                      autoComplete="username"
+                      value={formData.username}
+                      onChange={(e) => handleInputChange("username", e.target.value)}
+                      className="sr-only"
+                    />
+                    <Label htmlFor="password">密码 (选填)</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="请输入密码"
+                      value={formData.password}
+                      onChange={(e) => handleInputChange("password", e.target.value)}
+                    />
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Checkbox
+                        id="remember"
+                        checked={formData.rememberPassword}
+                        onCheckedChange={(checked) =>
+                          handleInputChange("rememberPassword", checked === true)
+                        }
+                      />
+                      <Label
+                        htmlFor="remember"
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        记住密码
+                      </Label>
+                    </div>
+                  </form>
+                </TabsContent>
+
+                <TabsContent value="privateKey" forceMount className="mt-4 data-[state=inactive]:hidden">
+                  <PrivateKeyInput
+                    id="privateKey"
+                    label="私钥"
+                    value={formData.privateKey}
+                    onChange={(v) => handleInputChange("privateKey", v)}
+                    placeholder="请输入或从文件导入私钥内容"
                   />
-                  <Label
-                    htmlFor="remember"
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    记住密码
-                  </Label>
-                </div>
-              </form>
-            ) : (
-              <PrivateKeyInput
-                id="privateKey"
-                label="私钥"
-                value={formData.privateKey}
-                onChange={(v) => handleInputChange("privateKey", v)}
-                placeholder="请输入或从文件导入私钥内容"
-              />
-            )}
+                </TabsContent>
+              </Tabs>
+            </div>
           </TabsContent>
 
           {/* 高级配置标签 */}
