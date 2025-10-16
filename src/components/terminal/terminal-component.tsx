@@ -118,9 +118,7 @@ export function TerminalComponent({
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                    <Link href="/dashboard/terminal">快速连接</Link>
-                  </BreadcrumbLink>
+                  <BreadcrumbPage>快速连接</BreadcrumbPage>
                 </BreadcrumbItem>
                 {/* 根据需求：终端内操作不再把服务器名称或标签加入面包屑，仅保留到“快速连接” */}
               </BreadcrumbList>

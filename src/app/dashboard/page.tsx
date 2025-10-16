@@ -4,7 +4,7 @@ import Link from "next/link"
 export default function Page() {
   return (
     <>
-      <PageHeader title="仪表盘" />
+      <PageHeader title="仪表盘" showTitleInBreadcrumb={false} />
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         <div className="grid auto-rows-min gap-4 md:grid-cols-3">
           <div className="bg-card border rounded-xl p-6">

@@ -137,9 +137,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                  <Link href="/dashboard/terminal">快速连接</Link>
-                  </BreadcrumbLink>
+                  <BreadcrumbPage>快速连接</BreadcrumbPage>
                 </BreadcrumbItem>
                 {activeSession && activeSession.type !== 'quick' && (
                   <>

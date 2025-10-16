@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/sonner"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import { TerminalSession } from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"

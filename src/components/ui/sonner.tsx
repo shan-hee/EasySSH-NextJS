@@ -2,6 +2,8 @@
 
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, ToasterProps } from "sonner"
+// 统一对外导出 toast，避免在业务代码中直接依赖第三方库入口
+export { toast } from "sonner"
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
