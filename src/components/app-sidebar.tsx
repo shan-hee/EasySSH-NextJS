@@ -105,6 +105,7 @@ const data = {
       items: [
         { title: "通用设置", url: "/dashboard/settings/general" },
         { title: "安全策略", url: "/dashboard/settings/security" },
+        { title: "AI 配置", url: "/dashboard/settings/ai" },
         { title: "通知设置", url: "/dashboard/settings/notifications" },
         { title: "用户管理", url: "/dashboard/users" },
         { title: "备份恢复", url: "/dashboard/settings/backup" },
