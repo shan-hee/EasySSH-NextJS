@@ -1,7 +1,11 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react"
+import { useTheme } from "next-themes"
 import { ConnectionLoader } from "./connection-loader"
+import { getTerminalTheme } from "./terminal-themes"
+import type { Terminal } from "xterm"
+import type { FitAddon } from "@xterm/addon-fit"
 
 interface WebTerminalProps {
   sessionId: string
@@ -12,6 +16,12 @@ interface WebTerminalProps {
   onCommand: (command: string) => void
   onResize?: (cols: number, rows: number) => void
   onLoadingChange?: (isLoading: boolean) => void
+  theme?: 'default' | 'dark' | 'light' | 'solarized' | 'dracula'
+  fontSize?: number
+  fontFamily?: string
+  cursorStyle?: 'block' | 'underline' | 'bar'
+  cursorBlink?: boolean
+  scrollback?: number
 }
 
 export function WebTerminal({
@@ -22,26 +32,59 @@ export function WebTerminal({
   isConnected,
   onCommand,
   onResize,
-  onLoadingChange
+  onLoadingChange,
+  theme = 'default',
+  fontSize = 14,
+  fontFamily = 'JetBrains Mono',
+  cursorStyle = 'bar',
+  cursorBlink = true,
+  scrollback = 1000,
 }: WebTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
-  const terminalInstanceRef = useRef<any>(null)
-  const fitAddonRef = useRef<any>(null)
+  const terminalInstanceRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
   const [currentLine, setCurrentLine] = useState("")
   const [cursorPosition, setCursorPosition] = useState(0)
   const [isClient, setIsClient] = useState(false)
+
+  // 使用 next-themes 获取应用主题
+  const { theme: appTheme, resolvedTheme } = useTheme()
+
+  // 获取实际的主题（light 或 dark），未解析时优先读取 html 上的类，避免黑屏闪烁
+  const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
+  const initialIsDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const effectiveAppTheme: 'light' | 'dark' =
+    currentAppTheme === 'system' || !currentAppTheme
+      ? (initialIsDark ? 'dark' : 'light')
+      : currentAppTheme
 
   // 确保只在客户端执行
   useEffect(() => {
     setIsClient(true)
   }, [])
 
+  // 监听应用主题变化（仅当 theme 为 default 时）；使用 layoutEffect 减少可见延迟
+  useLayoutEffect(() => {
+    if (theme !== 'default') return
+    if (!terminalInstanceRef.current) return
+
+    // 应用主题变化时更新终端主题
+    const terminalTheme = getTerminalTheme('default', effectiveAppTheme)
+    terminalInstanceRef.current.options.theme = terminalTheme
+    // xterm 会在设置 theme 后重绘，这里无需额外 refresh
+  }, [theme, effectiveAppTheme])
+
+  // Write prompt function - defined early to be used in useEffect
+  const writePrompt = useCallback((terminal: Terminal) => {
+    const hostShort = host.split('.')[0] || host
+    terminal.write(`\x1b[1;32m${username}\x1b[0m\x1b[2m@\x1b[0m\x1b[1;36m${hostShort}\x1b[0m \x1b[1;34m~\x1b[0m\x1b[1;35m $\x1b[0m `)
+  }, [host, username])
+
   useEffect(() => {
     if (!isClient || !terminalRef.current) return
 
-    let terminal: any
-    let fitAddon: any
-    let webLinksAddon: any
+    let terminal: Terminal | undefined
+    let fitAddon: FitAddon | undefined
     let isMounted = true
 
     // 动态导入 xterm.js 及其插件
@@ -55,46 +98,49 @@ export function WebTerminal({
         // 进入动画 800ms + 加载延迟 700ms
         await new Promise(resolve => setTimeout(resolve, 1500))
 
-        const { Terminal } = await import("xterm")
-        const { FitAddon } = await import("@xterm/addon-fit")
+        const { Terminal: XTermTerminal } = await import("xterm")
+        const { FitAddon: XTermFitAddon } = await import("@xterm/addon-fit")
         const { WebLinksAddon } = await import("@xterm/addon-web-links")
 
         // 动态导入样式
         await import("xterm/css/xterm.css")
 
-        // 创建终端实例 - 现代化主题
-        terminal = new Terminal({
+        // 获取终端主题 - 使用应用主题
+        const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
+
+        // 创建终端实例 - 使用配置的主题
+        terminal = new XTermTerminal({
           theme: {
-            background: "#000000",
-            foreground: "#d4d4d8", // zinc-300
-            cursor: "#22c55e", // green-500
-            cursorAccent: "#000000",
-            selection: "#3f3f46", // zinc-700
-            black: "#18181b", // zinc-900
-            red: "#ef4444", // red-500
-            green: "#22c55e", // green-500
-            yellow: "#eab308", // yellow-500
-            blue: "#3b82f6", // blue-500
-            magenta: "#a855f7", // purple-500
-            cyan: "#06b6d4", // cyan-500
-            white: "#f4f4f5", // zinc-100
-            brightBlack: "#52525b", // zinc-600
-            brightRed: "#f87171", // red-400
-            brightGreen: "#4ade80", // green-400
-            brightYellow: "#facc15", // yellow-400
-            brightBlue: "#60a5fa", // blue-400
-            brightMagenta: "#c084fc", // purple-400
-            brightCyan: "#22d3ee", // cyan-400
-            brightWhite: "#fafafa", // zinc-50
+            background: terminalTheme.background,
+            foreground: terminalTheme.foreground,
+            cursor: terminalTheme.cursor,
+            cursorAccent: terminalTheme.cursorAccent,
+            selectionBackground: terminalTheme.selectionBackground,
+            black: terminalTheme.black,
+            red: terminalTheme.red,
+            green: terminalTheme.green,
+            yellow: terminalTheme.yellow,
+            blue: terminalTheme.blue,
+            magenta: terminalTheme.magenta,
+            cyan: terminalTheme.cyan,
+            white: terminalTheme.white,
+            brightBlack: terminalTheme.brightBlack,
+            brightRed: terminalTheme.brightRed,
+            brightGreen: terminalTheme.brightGreen,
+            brightYellow: terminalTheme.brightYellow,
+            brightBlue: terminalTheme.brightBlue,
+            brightMagenta: terminalTheme.brightMagenta,
+            brightCyan: terminalTheme.brightCyan,
+            brightWhite: terminalTheme.brightWhite,
           },
-          fontSize: 13,
-          fontFamily: "'JetBrains Mono', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace",
+          fontSize: fontSize,
+          fontFamily: `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`,
           fontWeight: "400",
           fontWeightBold: "600",
-          cursorBlink: true,
-          cursorStyle: "bar",
-          cursorWidth: 2,
-          scrollback: 5000,
+          cursorBlink: cursorBlink,
+          cursorStyle: cursorStyle,
+          cursorWidth: cursorStyle === 'bar' ? 2 : 1,
+          scrollback: scrollback,
           cols: 80,
           rows: 24,
           lineHeight: 1.2,
@@ -102,8 +148,8 @@ export function WebTerminal({
         })
 
         // 添加插件
-        fitAddon = new FitAddon()
-        webLinksAddon = new WebLinksAddon()
+        fitAddon = new XTermFitAddon()
+        const webLinksAddon = new WebLinksAddon()
 
         terminal.loadAddon(fitAddon)
         terminal.loadAddon(webLinksAddon)
@@ -212,54 +258,52 @@ export function WebTerminal({
         terminal.dispose()
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, isConnected, isClient])
 
-  // 写入命令提示符 - 现代化样式
-  const writePrompt = (terminal: any) => {
-    const hostShort = host.split('.')[0] || host
-    terminal.write(`\x1b[1;32m${username}\x1b[0m\x1b[2m@\x1b[0m\x1b[1;36m${hostShort}\x1b[0m \x1b[1;34m~\x1b[0m\x1b[1;35m $\x1b[0m `)
-  }
-
   // 公开方法供父组件调用
-  const writeToTerminal = (text: string) => {
+  const writeToTerminal = useCallback((text: string) => {
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.writeln(text)
     }
-  }
+  }, [])
 
-  const clearTerminal = () => {
+  const clearTerminal = useCallback(() => {
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.clear()
       writePrompt(terminalInstanceRef.current)
     }
-  }
+  }, [writePrompt])
 
-  const fitTerminal = () => {
+  const fitTerminal = useCallback(() => {
     if (fitAddonRef.current) {
       fitAddonRef.current.fit()
     }
-  }
+  }, [])
 
   // 暴露方法给父组件
   useEffect(() => {
     if (terminalRef.current) {
-      // @ts-ignore
+      // @ts-expect-error - Extending DOM element with custom methods
       terminalRef.current.writeToTerminal = writeToTerminal
-      // @ts-ignore
+      // @ts-expect-error - Extending DOM element with custom methods
       terminalRef.current.clearTerminal = clearTerminal
-      // @ts-ignore
+      // @ts-expect-error - Extending DOM element with custom methods
       terminalRef.current.fitTerminal = fitTerminal
     }
-  }, [])
+  }, [writeToTerminal, clearTerminal, fitTerminal])
 
-  // 如果不是客户端，显示加载状态 - 现代化设计
+  // 如果不是客户端，显示加载状态 - 使用主题变量背景避免闪烁
   if (!isClient) {
     return (
-      <div className="h-full w-full bg-black flex items-center justify-center">
+      <div className="h-full w-full bg-background flex items-center justify-center">
         <ConnectionLoader serverName={serverName} message="正在初始化" />
       </div>
     )
   }
+
+  // 获取当前终端主题用于背景色
+  const currentTheme = getTerminalTheme(theme, effectiveAppTheme)
 
   return (
     <div className="h-full w-full relative overflow-hidden">
@@ -268,7 +312,7 @@ export function WebTerminal({
         ref={terminalRef}
         className="h-full w-full terminal-container"
         style={{
-          backgroundColor: "#000000",
+          backgroundColor: currentTheme.background,
         }}
       />
       <style jsx global>{`

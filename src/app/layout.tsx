@@ -29,8 +29,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* no-FOUC: 在样式加载前同步设置主题类，避免闪烁 */}
+        <script
+          id="no-flash-theme"
+          dangerouslySetInnerHTML={{
+            __html: `!function(){try{var d=document.documentElement;var t=localStorage.getItem('theme');var dark=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(dark){d.classList.add('dark')}else{d.classList.remove('dark')}}catch(e){}}();`,
+          }}
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           <Toaster richColors position="top-right" />
         </ThemeProvider>

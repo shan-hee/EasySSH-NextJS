@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTheme } from "next-themes"
 
 type LoaderState = "entering" | "loading" | "exiting"
 
@@ -18,6 +19,19 @@ export function ConnectionLoader({
   onAnimationComplete
 }: ConnectionLoaderProps) {
   const [animationState, setAnimationState] = useState<LoaderState>(state)
+
+  // 获取应用主题
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  // 确保只在客户端渲染时应用主题
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // 初始从 html.dark 读取，挂载后使用 resolvedTheme，避免浅色初始黑屏
+  const initialIsDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const isDark = mounted ? resolvedTheme === 'dark' : initialIsDark
 
   useEffect(() => {
     setAnimationState(state)
@@ -58,7 +72,7 @@ export function ConnectionLoader({
   }
 
   return (
-    <div className="h-full w-full bg-black overflow-hidden relative">
+    <div className={`h-full w-full overflow-hidden relative transition-colors bg-background`}>
       {/* 动画背景线条 */}
       <div className="longfazers absolute inset-0">
         <span className="longfazer-1" />
@@ -90,10 +104,14 @@ export function ConnectionLoader({
 
       {/* 文字信息 - 绝对定位，固定在中间 */}
       <div className="text-wrapper">
-        <h1 className="text-sm font-semibold text-white uppercase tracking-wider">
+        <h1 className={`text-sm font-semibold uppercase tracking-wider ${
+          isDark ? 'text-white' : 'text-zinc-900'
+        }`}>
           {animationState === "exiting" ? "连接成功" : message}
         </h1>
-        <p className="text-xs text-zinc-500 font-mono">
+        <p className={`text-xs font-mono ${
+          isDark ? 'text-zinc-500' : 'text-zinc-600'
+        }`}>
           {serverName}
         </p>
       </div>

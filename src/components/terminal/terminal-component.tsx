@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useTheme } from "next-themes"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
@@ -10,6 +11,7 @@ import { QuickConnect, QuickServer } from "./quick-connect"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
 import { TerminalSession } from "@/components/terminal/types"
 import { Maximize2, Minimize2, Settings, FolderOpen, Globe, Activity, Bot } from "lucide-react"
+import { cn } from "@/lib/utils"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -19,6 +21,10 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import Link from "next/link"
+import {
+  TerminalSettingsDialog,
+  type TerminalSettings,
+} from "./terminal-settings-dialog"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -55,8 +61,70 @@ export function TerminalComponent({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
   const [loaderState, setLoaderState] = useState<"entering" | "loading" | "exiting">("entering")
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  // 获取应用主题
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  // 确保只在客户端渲染时应用主题
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // 初始从 html.dark 读取，挂载后使用 resolvedTheme，避免浅色初始黑屏
+  const initialIsDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const isDark = mounted ? resolvedTheme === 'dark' : initialIsDark
+
+  const [settings, setSettings] = useState<TerminalSettings>(() => {
+    // 从 localStorage 加载设置
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('terminal-settings')
+        if (saved) {
+          return JSON.parse(saved)
+        }
+      } catch (error) {
+        console.error('Failed to load terminal settings:', error)
+      }
+    }
+    // 默认设置
+    return {
+      fontSize: 14,
+      fontFamily: 'JetBrains Mono',
+      cursorStyle: 'block',
+      cursorBlink: true,
+      scrollback: 1000,
+      rightClickPaste: true,
+      copyOnSelect: true,
+      theme: 'default',
+      opacity: 95,
+      backgroundImage: '',
+      backgroundImageOpacity: 20,
+      maxTabs: 50,
+      inactiveMinutes: 60,
+      hibernateBackground: true,
+      autoReconnect: true,
+      confirmBeforeClose: true,
+      copyShortcut: 'Ctrl+Shift+C',
+      pasteShortcut: 'Ctrl+Shift+V',
+      clearShortcut: 'Ctrl+L',
+    }
+  })
   // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
   const initializedSessionsRef = useRef<Set<string>>(new Set())
+
+  // 保存设置到 localStorage
+  const handleSettingsChange = (newSettings: TerminalSettings) => {
+    setSettings(newSettings)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('terminal-settings', JSON.stringify(newSettings))
+      } catch (error) {
+        console.error('Failed to save terminal settings:', error)
+      }
+    }
+  }
 
   const handleCommand = (sessionId: string, command: string) => {
     onSendCommand(sessionId, command)
@@ -127,7 +195,12 @@ export function TerminalComponent({
         </header>
       )}
 
-      <div className="flex-1 flex flex-col rounded-xl border border-zinc-800/50 overflow-hidden bg-gradient-to-b from-black to-zinc-950 shadow-2xl">
+      <div className={cn(
+        "flex-1 flex flex-col rounded-xl border overflow-hidden shadow-2xl transition-colors",
+        isDark
+          ? "border-zinc-800/50 bg-gradient-to-b from-black to-zinc-950"
+          : "border-zinc-200 bg-gradient-to-b from-white to-zinc-50"
+      )}>
         {/* 页签栏（仅保留标签，不显示面包屑） */}
         <SessionTabBar
           sessions={sessions}
@@ -166,31 +239,50 @@ export function TerminalComponent({
           <Tabs value={active?.id} className="flex-1 flex flex-col gap-0">
             {/* 工具栏（会话信息条）- 现代化设计 */}
             {active && active.type !== 'quick' && !effectiveIsLoading && (
-              <div className="bg-gradient-to-b from-black/90 to-black border-b border-zinc-800/30 text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm">
+              <div className={cn(
+                "border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors",
+                isDark
+                  ? "bg-gradient-to-b from-black/90 to-black border-zinc-800/30"
+                  : "bg-gradient-to-b from-white to-zinc-50 border-zinc-200"
+              )}>
                 {/* 左侧工具图标组 */}
                 <div className="flex items-center">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 rounded-md hover:bg-zinc-800/60 hover:text-white text-zinc-400 transition-all duration-200 hover:scale-105"
+                    className={cn(
+                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
+                      isDark
+                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
+                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                    )}
                     aria-label="文件管理器"
                     title="文件管理器"
                   >
                     <FolderOpen className="h-3.5 w-3.5" />
                   </Button>
 
-                  <div className="h-4 w-px bg-zinc-800/50" />
+                  <div className={cn(
+                    "h-4 w-px",
+                    isDark ? "bg-zinc-800/50" : "bg-zinc-300"
+                  )} />
 
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 rounded-md hover:bg-zinc-800/60 transition-all duration-200 flex items-center gap-2 px-2.5"
+                    className={cn(
+                      "h-7 rounded-md transition-all duration-200 flex items-center gap-2 px-2.5",
+                      isDark ? "hover:bg-zinc-800/60" : "hover:bg-zinc-200"
+                    )}
                     aria-label="网络延迟"
                     title="网络延迟"
                   >
                     <Globe className="h-3.5 w-3.5 text-green-400" />
                     <div className="flex flex-col items-start leading-none text-left">
-                      <span className="text-[9px] text-zinc-500 uppercase font-semibold">RTT</span>
+                      <span className={cn(
+                        "text-[9px] uppercase font-semibold",
+                        isDark ? "text-zinc-500" : "text-zinc-600"
+                      )}>RTT</span>
                       <span className="text-xs tabular-nums text-green-400 font-medium">2 ms</span>
                     </div>
                   </Button>
@@ -198,7 +290,12 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 rounded-md hover:bg-zinc-800/60 hover:text-white text-zinc-400 transition-all duration-200 hover:scale-105"
+                    className={cn(
+                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
+                      isDark
+                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
+                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                    )}
                     aria-label="监控"
                     title="系统监控"
                   >
@@ -208,7 +305,10 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 rounded-md hover:bg-purple-500/20 hover:text-purple-400 text-zinc-400 transition-all duration-200 hover:scale-105"
+                    className={cn(
+                      "h-7 w-7 rounded-md hover:bg-purple-500/20 hover:text-purple-400 transition-all duration-200 hover:scale-105",
+                      isDark ? "text-zinc-400" : "text-zinc-600"
+                    )}
                     aria-label="AI 助手"
                     title="AI 助手"
                   >
@@ -217,11 +317,14 @@ export function TerminalComponent({
                 </div>
 
                 {/* 中间：会话信息 */}
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                <div className={cn(
+                  "flex items-center gap-2 text-xs",
+                  isDark ? "text-zinc-500" : "text-zinc-600"
+                )}>
                   <span className="font-mono">
                     {active.username}@{active.host}
                   </span>
-                  <span className="text-zinc-700">|</span>
+                  <span className={isDark ? "text-zinc-700" : "text-zinc-400"}>|</span>
                   <span className={active.isConnected ? "text-green-400" : "text-red-400"}>
                     {active.isConnected ? "已连接" : "已断开"}
                   </span>
@@ -232,7 +335,12 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 rounded-md hover:bg-zinc-800/60 hover:text-white text-zinc-400 transition-all duration-200"
+                    className={cn(
+                      "h-7 w-7 rounded-md transition-all duration-200",
+                      isDark
+                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
+                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                    )}
                     onClick={() => setIsFullscreen(!isFullscreen)}
                     title={isFullscreen ? "退出全屏" : "全屏"}
                   >
@@ -241,7 +349,13 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 rounded-md hover:bg-zinc-800/60 hover:text-white text-zinc-400 transition-all duration-200"
+                    className={cn(
+                      "h-7 w-7 rounded-md transition-all duration-200",
+                      isDark
+                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
+                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                    )}
+                    onClick={() => setIsSettingsOpen(true)}
                     title="设置"
                   >
                     <Settings className="h-3.5 w-3.5" />
@@ -270,6 +384,12 @@ export function TerminalComponent({
                       isConnected={active.isConnected}
                       onCommand={(command) => handleCommand(active.id, command)}
                       onLoadingChange={(isLoading) => handleLoadingChange(active.id, isLoading)}
+                      theme={settings.theme}
+                      fontSize={settings.fontSize}
+                      fontFamily={settings.fontFamily}
+                      cursorStyle={settings.cursorStyle}
+                      cursorBlink={settings.cursorBlink}
+                      scrollback={settings.scrollback}
                     />
                   </TabsContent>
                 )
@@ -284,6 +404,12 @@ export function TerminalComponent({
                       isConnected={session.isConnected}
                       onCommand={(command) => handleCommand(session.id, command)}
                       onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
+                      theme={settings.theme}
+                      fontSize={settings.fontSize}
+                      fontFamily={settings.fontFamily}
+                      cursorStyle={settings.cursorStyle}
+                      cursorBlink={settings.cursorBlink}
+                      scrollback={settings.scrollback}
                     />
                   </TabsContent>
                 ))
@@ -293,6 +419,14 @@ export function TerminalComponent({
         )}
         </div>
       </div>
+
+      {/* 设置对话框 */}
+      <TerminalSettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        settings={settings}
+        onSettingsChange={handleSettingsChange}
+      />
     </div>
   )
 }
