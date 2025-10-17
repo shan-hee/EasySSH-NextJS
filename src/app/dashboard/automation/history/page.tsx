@@ -6,6 +6,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -36,11 +46,9 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  AlertTriangle,
   Terminal,
-  FileText,
-  Zap,
-  Calendar
+  Calendar,
+  Server
 } from "lucide-react"
 
 // 模拟执行记录数据
@@ -49,7 +57,6 @@ const mockHistory = [
     id: 1,
     taskName: "数据库备份",
     type: "schedule",
-    taskType: "backup",
     command: "bash /scripts/backup_db.sh",
     server: "DB Server 01",
     status: "success",
@@ -64,7 +71,6 @@ const mockHistory = [
     id: 2,
     taskName: "手动命令执行",
     type: "manual",
-    taskType: "command",
     command: "systemctl restart nginx",
     server: "Web Server 01",
     status: "success",
@@ -79,7 +85,6 @@ const mockHistory = [
     id: 3,
     taskName: "批量系统更新",
     type: "batch",
-    taskType: "command",
     command: "apt update && apt upgrade -y",
     server: "Web Server 01, Web Server 02, App Server 01",
     status: "failed",
@@ -94,7 +99,6 @@ const mockHistory = [
     id: 4,
     taskName: "日志清理",
     type: "schedule",
-    taskType: "maintenance",
     command: "find /var/log -name '*.log' -mtime +30 -delete",
     server: "All Servers",
     status: "success",
@@ -109,7 +113,6 @@ const mockHistory = [
     id: 5,
     taskName: "部署脚本",
     type: "script",
-    taskType: "deploy",
     command: "bash /scripts/deploy_app.sh",
     server: "App Server 01",
     status: "running",
@@ -124,7 +127,6 @@ const mockHistory = [
     id: 6,
     taskName: "配置文件分发",
     type: "batch",
-    taskType: "file",
     command: "scp /config/nginx.conf remote:/etc/nginx/",
     server: "Web Server 01, Web Server 02",
     status: "success",
@@ -139,7 +141,6 @@ const mockHistory = [
     id: 7,
     taskName: "数据库备份",
     type: "schedule",
-    taskType: "backup",
     command: "bash /scripts/backup_db.sh",
     server: "DB Server 02",
     status: "failed",
@@ -154,7 +155,6 @@ const mockHistory = [
     id: 8,
     taskName: "性能监控报告",
     type: "schedule",
-    taskType: "monitoring",
     command: "python /scripts/collect_metrics.py",
     server: "Monitoring Server",
     status: "success",
@@ -166,24 +166,6 @@ const mockHistory = [
     output: "Metrics collected: CPU 45%, Memory 62%, Disk 78%",
   },
 ]
-
-const taskTypeColors = {
-  backup: "bg-blue-100 text-blue-800",
-  maintenance: "bg-purple-100 text-purple-800",
-  command: "bg-green-100 text-green-800",
-  monitoring: "bg-orange-100 text-orange-800",
-  deploy: "bg-cyan-100 text-cyan-800",
-  file: "bg-pink-100 text-pink-800",
-}
-
-const taskTypeLabels = {
-  backup: "备份",
-  maintenance: "维护",
-  command: "命令",
-  monitoring: "监控",
-  deploy: "部署",
-  file: "文件",
-}
 
 const sourceTypeColors = {
   schedule: "bg-blue-50 text-blue-700 border-blue-200",
@@ -197,6 +179,8 @@ export default function AutomationHistoryPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
   const [selectedType, setSelectedType] = useState<string>("all")
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [selectedRecord, setSelectedRecord] = useState<typeof mockHistory[0] | null>(null)
 
   // 过滤记录
   const filteredHistory = history.filter(record => {
@@ -236,15 +220,84 @@ export default function AutomationHistoryPage() {
   }
 
   const handleViewDetails = (recordId: number) => {
-    console.log("查看执行详情:", recordId)
+    const record = history.find(r => r.id === recordId)
+    if (record) {
+      setSelectedRecord(record)
+      setIsDetailsDialogOpen(true)
+    }
   }
 
   const handleRetry = (recordId: number) => {
-    console.log("重新执行任务:", recordId)
+    const record = history.find(r => r.id === recordId)
+    if (record) {
+      console.log("重新执行任务:", record.taskName)
+      // TODO: 实际的重新执行逻辑
+      alert(`即将重新执行任务: ${record.taskName}`)
+    }
   }
 
   const handleDownloadOutput = (recordId: number) => {
-    console.log("下载执行输出:", recordId)
+    const record = history.find(r => r.id === recordId)
+    if (record) {
+      // 创建输出内容
+      const content = `任务名称: ${record.taskName}
+来源类型: ${record.type === "schedule" ? "定时任务" : record.type === "manual" ? "手动执行" : record.type === "batch" ? "批量操作" : "脚本执行"}
+执行命令: ${record.command}
+服务器: ${record.server}
+状态: ${record.status === "success" ? "成功" : record.status === "failed" ? "失败" : "执行中"}
+开始时间: ${record.startTime}
+结束时间: ${record.endTime || "未结束"}
+耗时: ${record.duration}
+退出码: ${record.exitCode !== null ? record.exitCode : "N/A"}
+执行者: ${record.user}
+
+========== 执行输出 ==========
+${record.output}
+`
+      // 创建 Blob 并下载
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `execution_${record.id}_${record.startTime.replace(/[: ]/g, '_')}.txt`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  const handleExportRecords = () => {
+    // 导出当前筛选的记录为 CSV
+    const headers = ['ID', '任务名称', '来源类型', '命令', '服务器', '状态', '开始时间', '结束时间', '耗时', '退出码', '执行者']
+    const rows = filteredHistory.map(record => [
+      record.id,
+      record.taskName,
+      record.type === "schedule" ? "定时任务" : record.type === "manual" ? "手动执行" : record.type === "batch" ? "批量操作" : "脚本执行",
+      record.command,
+      record.server,
+      record.status === "success" ? "成功" : record.status === "failed" ? "失败" : "执行中",
+      record.startTime,
+      record.endTime || "未结束",
+      record.duration,
+      record.exitCode !== null ? record.exitCode : "N/A",
+      record.user
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `execution_history_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -259,7 +312,7 @@ export default function AutomationHistoryPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => console.log("导出记录")}
+          onClick={handleExportRecords}
         >
           <Download className="mr-2 h-4 w-4" />
           导出记录
@@ -389,7 +442,6 @@ export default function AutomationHistoryPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>任务信息</TableHead>
-                    <TableHead>类型</TableHead>
                     <TableHead>服务器</TableHead>
                     <TableHead>状态</TableHead>
                     <TableHead>执行时间</TableHead>
@@ -418,11 +470,6 @@ export default function AutomationHistoryPage() {
                             {record.command}
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={taskTypeColors[record.taskType as keyof typeof taskTypeColors]}>
-                          {taskTypeLabels[record.taskType as keyof typeof taskTypeLabels]}
-                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm max-w-xs truncate" title={record.server}>
@@ -494,6 +541,145 @@ export default function AutomationHistoryPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 执行详情对话框 */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>执行详情</DialogTitle>
+            <DialogDescription>
+              查看任务执行的详细信息和输出结果
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRecord && (
+            <div className="space-y-6 py-4">
+              {/* 基本信息 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">任务名称</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{selectedRecord.taskName}</span>
+                    <Badge
+                      variant="outline"
+                      className={sourceTypeColors[selectedRecord.type as keyof typeof sourceTypeColors]}
+                    >
+                      {selectedRecord.type === "schedule" ? "定时任务" :
+                       selectedRecord.type === "manual" ? "手动执行" :
+                       selectedRecord.type === "batch" ? "批量操作" : "脚本执行"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">执行状态</Label>
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(selectedRecord.status)}
+                    {getStatusBadge(selectedRecord.status)}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">执行者</Label>
+                  <div className="font-medium">{selectedRecord.user}</div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">服务器</Label>
+                  <div className="flex items-center gap-2">
+                    <Server className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{selectedRecord.server}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 执行时间信息 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">开始时间</Label>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-sm">{selectedRecord.startTime}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">结束时间</Label>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-sm">{selectedRecord.endTime || "执行中..."}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">执行耗时</Label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{selectedRecord.duration}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">退出码</Label>
+                  <div className={`font-mono font-medium ${
+                    selectedRecord.exitCode === 0 ? 'text-green-600' :
+                    selectedRecord.exitCode === null ? 'text-muted-foreground' : 'text-red-600'
+                  }`}>
+                    {selectedRecord.exitCode !== null ? selectedRecord.exitCode : "N/A"}
+                  </div>
+                </div>
+              </div>
+
+              {/* 执行命令 */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-muted-foreground">执行命令</Label>
+                <div className="bg-muted rounded-md p-3">
+                  <code className="text-sm font-mono">{selectedRecord.command}</code>
+                </div>
+              </div>
+
+              {/* 执行输出 */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-muted-foreground">执行输出</Label>
+                <Textarea
+                  value={selectedRecord.output}
+                  readOnly
+                  className="font-mono text-sm min-h-[300px] scrollbar-custom"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            {selectedRecord && selectedRecord.status === "failed" && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDetailsDialogOpen(false)
+                  handleRetry(selectedRecord.id)
+                }}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                重新执行
+              </Button>
+            )}
+            {selectedRecord && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  handleDownloadOutput(selectedRecord.id)
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                下载输出
+              </Button>
+            )}
+            <Button onClick={() => setIsDetailsDialogOpen(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

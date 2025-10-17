@@ -660,7 +660,7 @@ export default function ScriptsPage() {
 
                 {/* 标签建议下拉列表 */}
                 {showSuggestions && filteredSuggestions.length > 0 && tagInput.trim() && (
-                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto">
+                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto scrollbar-custom">
                     <div className="p-1">
                       {filteredSuggestions.map((tag, index) => (
                         <button
@@ -808,7 +808,7 @@ export default function ScriptsPage() {
 
                 {/* 标签建议下拉列表 */}
                 {showEditSuggestions && filteredEditSuggestions.length > 0 && editTagInput.trim() && (
-                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto">
+                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto scrollbar-custom">
                     <div className="p-1">
                       {filteredEditSuggestions.map((tag, index) => (
                         <button
