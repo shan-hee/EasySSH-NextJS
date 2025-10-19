@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileTransfer } from "@/components/terminal/file-transfer"
+import { SftpManager } from "@/components/sftp/sftp-manager"
 import { FolderOpen, Server } from "lucide-react"
 
 // 模拟服务器数据
@@ -271,45 +271,24 @@ export default function SftpPage() {
             </CardContent>
           </Card>
         ) : (
-          // 文件传输界面
-          <div className="space-y-4">
-            {/* 连接信息 */}
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    <div>
-                      <div className="font-medium">
-                        已连接到 {selectedServer?.name}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        SFTP - {selectedServer?.host}
-                      </div>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsConnected(false)}
-                  >
-                    断开连接
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 文件传输组件 */}
-            <FileTransfer
-              currentPath={currentPath}
-              files={files}
-              onNavigate={handleNavigate}
-              onUpload={handleUpload}
-              onDownload={handleDownload}
-              onDelete={handleDelete}
-              onCreateFolder={handleCreateFolder}
-              onRename={handleRename}
-            />
-          </div>
+          // 文件传输界面 - 使用新的 SftpManager 组件
+          <SftpManager
+            serverId={selectedServerId!}
+            serverName={selectedServer?.name || ""}
+            host={selectedServer?.host || ""}
+            username="root"
+            isConnected={isConnected}
+            currentPath={currentPath}
+            files={files}
+            onNavigate={handleNavigate}
+            onUpload={handleUpload}
+            onDownload={handleDownload}
+            onDelete={handleDelete}
+            onCreateFolder={handleCreateFolder}
+            onRename={handleRename}
+            onDisconnect={() => setIsConnected(false)}
+            onRefresh={() => console.log("刷新文件列表")}
+          />
         )}
       </div>
     </>

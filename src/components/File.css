@@ -1,0 +1,183 @@
+:root {
+  --file-body-color: #6C63FF;
+  --file-fold-color: #5648CC;
+  --file-accent-color: #8B84FF;
+  --file-shadow-color: #3D3699;
+}
+
+.file-wrapper {
+  transition: transform 0.2s ease-in;
+}
+
+.file-wrapper--active {
+  transform: translateY(-8px);
+}
+
+.file {
+  cursor: pointer;
+}
+
+.file:hover .file__body,
+.file.hover .file__body {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+  transition: box-shadow 0.2s ease-in;
+}
+
+.file:hover .file__fold,
+.file.hover .file__fold {
+  transform: translate(0, 0) rotate(0deg);
+  border-bottom-right-radius: 8px;
+}
+
+.file:hover .file__lines,
+.file.hover .file__lines {
+  opacity: 1;
+}
+
+.file__body {
+  position: relative;
+  width: 70px;
+  height: 90px;
+  background: var(--file-body-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease-in;
+  overflow: hidden;
+}
+
+/* 右上角折叠效果 */
+.file__fold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--file-fold-color);
+  border-bottom-left-radius: 8px;
+  transition: all 0.2s ease-in;
+  box-shadow: -2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.file__fold::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 20px 20px 0;
+  border-color: transparent var(--file-accent-color) transparent transparent;
+}
+
+/* 文件内容区域 */
+.file__content {
+  position: absolute;
+  top: 25px;
+  left: 5%;
+  right: 5%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  will-change: auto;
+}
+
+.file__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  will-change: auto;
+}
+
+.file__type {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  will-change: auto;
+}
+
+/* 文件内容线条 */
+.file__lines {
+  position: absolute;
+  bottom: 15px;
+  left: 10%;
+  right: 10%;
+  opacity: 0.7;
+  transition: opacity 0.2s ease-in;
+}
+
+.file__line {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  margin-bottom: 4px;
+}
+
+.file__line--1 {
+  width: 100%;
+}
+
+.file__line--2 {
+  width: 85%;
+}
+
+.file__line--3 {
+  width: 60%;
+}
+
+/* 不同文件类型的颜色变体 */
+.file--code {
+  --file-body-color: #A66CFF;
+  --file-fold-color: #8B48CC;
+  --file-accent-color: #C084FF;
+}
+
+.file--image {
+  --file-body-color: #FF6C9D;
+  --file-fold-color: #CC4877;
+  --file-accent-color: #FF84B1;
+}
+
+.file--video {
+  --file-body-color: #FF5757;
+  --file-fold-color: #CC3939;
+  --file-accent-color: #FF7575;
+}
+
+.file--audio {
+  --file-body-color: #FFA94D;
+  --file-fold-color: #CC7F2E;
+  --file-accent-color: #FFBD70;
+}
+
+.file--archive {
+  --file-body-color: #FFD93D;
+  --file-fold-color: #CCAD1E;
+  --file-accent-color: #FFE066;
+}
+
+.file--database {
+  --file-body-color: #6BCF7F;
+  --file-fold-color: #4CA65F;
+  --file-accent-color: #88D999;
+}
+
+.file--text {
+  --file-body-color: #4D96FF;
+  --file-fold-color: #2E6FCC;
+  --file-accent-color: #70AAFF;
+}
+
+.file--default {
+  --file-body-color: #95A5A6;
+  --file-fold-color: #7F8C8D;
+  --file-accent-color: #AAB7B8;
+}
