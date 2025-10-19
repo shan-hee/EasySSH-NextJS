@@ -174,6 +174,20 @@ export default function SftpPage() {
     ))
   }
 
+  const handleReadFile = async (fileName: string): Promise<string> => {
+    console.log("读取文件:", fileName)
+    // 这里应该实现真实的文件读取逻辑
+    // 模拟文件内容
+    return `// 文件: ${fileName}\n// 路径: ${currentPath}/${fileName}\n\n// 这是一个示例文件内容\nconsole.log("Hello from ${fileName}");`
+  }
+
+  const handleSaveFile = async (fileName: string, content: string): Promise<void> => {
+    console.log("保存文件:", fileName, "内容长度:", content.length)
+    // 这里应该实现真实的文件保存逻辑
+    // 模拟保存延迟
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+
   const selectedServer = servers.find(s => s.id === selectedServerId)
 
   return (
@@ -288,6 +302,8 @@ export default function SftpPage() {
             onRename={handleRename}
             onDisconnect={() => setIsConnected(false)}
             onRefresh={() => console.log("刷新文件列表")}
+            onReadFile={handleReadFile}
+            onSaveFile={handleSaveFile}
           />
         )}
       </div>

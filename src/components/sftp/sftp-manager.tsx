@@ -41,6 +41,7 @@ import {
   Home,
   MoreHorizontal,
   Eye,
+  EyeOff,
   Edit,
   Copy,
   FolderPlus,
@@ -67,6 +68,7 @@ import {
 import { cn } from "@/lib/utils"
 import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
+import { FileEditor } from "@/components/sftp/file-editor"
 
 interface FileItem {
   name: string
@@ -105,6 +107,8 @@ interface SftpManagerProps {
   onRename: (oldName: string, newName: string) => void
   onDisconnect: () => void
   onRefresh: () => void
+  onReadFile?: (fileName: string) => Promise<string>
+  onSaveFile?: (fileName: string, content: string) => Promise<void>
 }
 
 export function SftpManager({
@@ -118,8 +122,11 @@ export function SftpManager({
   onDownload,
   onDelete,
   onCreateFolder,
+  onRename,
   onDisconnect,
   onRefresh,
+  onReadFile,
+  onSaveFile,
 }: SftpManagerProps) {
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
@@ -130,9 +137,9 @@ export function SftpManager({
   const [transferTasks, setTransferTasks] = useState<TransferTask[]>([])
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [showHidden, setShowHidden] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -143,13 +150,31 @@ export function SftpManager({
   const [editingFile, setEditingFile] = useState<string | null>(null)
   const [editingFileName, setEditingFileName] = useState("")
   const [creatingNew, setCreatingNew] = useState<"file" | "folder" | null>(null)
+  const [editorState, setEditorState] = useState<{
+    isOpen: boolean
+    fileName: string
+    filePath: string
+    content: string
+  }>({
+    isOpen: false,
+    fileName: "",
+    filePath: "",
+    content: "",
+  })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
   // 过滤和排序文件
   const filteredFiles = files
-    .filter(file => file.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter(file => {
+      // 如果不显示隐藏文件，过滤掉以 . 开头的文件（但保留 .. 父目录）
+      if (!showHidden && file.name.startsWith('.') && file.name !== '..') {
+        return false
+      }
+      // 搜索过滤
+      return file.name.toLowerCase().includes(searchTerm.toLowerCase())
+    })
     .sort((a, b) => {
       const aValue = a[sortBy] as string
       const bValue = b[sortBy] as string
@@ -371,6 +396,56 @@ export function SftpManager({
     setEditingFileName("")
   }
 
+  // 打开文件编辑器
+  const handleOpenEditor = async (fileName: string) => {
+    if (!onReadFile) {
+      console.warn("onReadFile 回调未提供")
+      return
+    }
+
+    try {
+      const content = await onReadFile(fileName)
+      const fullPath = `${currentPath}/${fileName}`.replace(/\/+/g, "/")
+      setEditorState({
+        isOpen: true,
+        fileName,
+        filePath: fullPath,
+        content,
+      })
+    } catch (error) {
+      console.error("读取文件失败:", error)
+    }
+  }
+
+  // 关闭文件编辑器
+  const handleCloseEditor = () => {
+    setEditorState({
+      isOpen: false,
+      fileName: "",
+      filePath: "",
+      content: "",
+    })
+  }
+
+  // 保存文件
+  const handleSaveFile = async (content: string) => {
+    if (!onSaveFile) {
+      console.warn("onSaveFile 回调未提供")
+      return
+    }
+
+    try {
+      await onSaveFile(editorState.fileName, content)
+      // 更新编辑器状态中的内容
+      setEditorState(prev => ({ ...prev, content }))
+      // 刷新文件列表
+      onRefresh()
+    } catch (error) {
+      console.error("保存文件失败:", error)
+      throw error
+    }
+  }
+
   // 批量下载
   const handleBatchDownload = () => {
     selectedFiles.forEach(fileName => {
@@ -517,8 +592,7 @@ export function SftpManager({
   return (
     <div
       className={cn(
-        "flex flex-col h-full rounded-xl border overflow-hidden transition-colors bg-card",
-        isFullscreen && "fixed inset-0 z-50 rounded-none"
+        "flex flex-col h-full rounded-xl border overflow-hidden transition-colors bg-card"
       )}
       onClick={handleClickOutside}
     >
@@ -526,56 +600,32 @@ export function SftpManager({
       <div className="border-b text-sm flex items-center justify-between px-3 py-1.5 transition-colors">
         {/* 左侧工具图标组 */}
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-              isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
-            )}
-            onClick={() => fileInputRef.current?.click()}
-            title="上传文件"
-          >
-            <Upload className="h-3.5 w-3.5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-              isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
-            )}
-            onClick={() => setShowCreateFolder(true)}
-            title="新建文件夹"
-          >
-            <FolderPlus className="h-3.5 w-3.5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-              isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
-            )}
-            onClick={onRefresh}
-            title="刷新"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
+          {/* 返回上级目录按钮 */}
+          {pathSegments.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
+                isDark
+                  ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
+                  : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+              )}
+              onClick={() =>
+                onNavigate(pathSegments.slice(0, -1).join("/") || "/")
+              }
+              title="返回上级目录"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </Button>
+          )}
 
           <div className={cn(
             "h-4 w-px mx-1",
             isDark ? "bg-zinc-800/50" : "bg-zinc-300"
           )} />
 
+          {/* 根目录按钮 */}
           <Button
             variant="ghost"
             size="icon"
@@ -591,34 +641,39 @@ export function SftpManager({
             <Home className="h-3.5 w-3.5" />
           </Button>
 
-          {pathSegments.length > 0 && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-                isDark
-                  ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                  : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
-              )}
-              onClick={() =>
-                onNavigate(pathSegments.slice(0, -1).join("/") || "/")
-              }
-              title="返回上级"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-            </Button>
-          )}
-
-          {/* 路径面包屑 */}
+          {/* 可点击的路径面包屑 */}
           <div className="flex items-center gap-1 ml-2">
             <HardDrive className="h-3.5 w-3.5 text-zinc-500" />
-            <span className={cn(
-              "text-xs font-mono",
-              isDark ? "text-zinc-400" : "text-zinc-600"
-            )}>
-              {currentPath || "/"}
-            </span>
+            <button
+              onClick={() => onNavigate("/")}
+              className={cn(
+                "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors",
+                isDark
+                  ? "text-zinc-400 hover:bg-zinc-800/60 hover:text-white"
+                  : "text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+              )}
+            >
+              /
+            </button>
+            {pathSegments.map((segment, index) => {
+              const segmentPath = "/" + pathSegments.slice(0, index + 1).join("/")
+              return (
+                <div key={index} className="flex items-center gap-1">
+                  <ChevronRight className="h-3 w-3 text-zinc-500" />
+                  <button
+                    onClick={() => onNavigate(segmentPath)}
+                    className={cn(
+                      "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors",
+                      isDark
+                        ? "text-zinc-400 hover:bg-zinc-800/60 hover:text-white"
+                        : "text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+                    )}
+                  >
+                    {segment}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
 
@@ -691,24 +746,6 @@ export function SftpManager({
                 ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
                 : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
             )}
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            title={isFullscreen ? "退出全屏" : "全屏"}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="h-3.5 w-3.5" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200",
-              isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
-            )}
             onClick={onDisconnect}
             title="关闭"
           >
@@ -734,6 +771,38 @@ export function SftpManager({
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
+
+        {/* 显示/隐藏隐藏文件按钮 */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-7 w-7 rounded-md transition-all duration-200",
+            showHidden
+              ? (isDark ? "bg-zinc-800/60 text-white" : "bg-zinc-200 text-zinc-900")
+              : (isDark ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400" : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600")
+          )}
+          onClick={() => setShowHidden(!showHidden)}
+          title={showHidden ? "隐藏隐藏文件" : "显示隐藏文件"}
+        >
+          {showHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        </Button>
+
+        {/* 刷新按钮 */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
+            isDark
+              ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
+              : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+          )}
+          onClick={onRefresh}
+          title="刷新"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
       {/* 主内容区域 - 文件列表 */}
@@ -750,16 +819,29 @@ export function SftpManager({
         onClick={() => setSelectedFiles([])}
         onContextMenu={handleBlankContextMenu}
       >
-        {/* 拖拽遮罩 */}
-        {isDragging && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm border-2 border-dashed border-blue-500 m-4 rounded-lg">
-            <div className="text-center">
-              <Upload className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-blue-500">拖放文件到这里上传</p>
-              <p className="text-sm text-muted-foreground mt-2">支持多文件上传</p>
-            </div>
-          </div>
-        )}
+        {/* 如果编辑器打开，显示编辑器；否则显示文件列表 */}
+        {editorState.isOpen ? (
+          <FileEditor
+            fileName={editorState.fileName}
+            filePath={editorState.filePath}
+            fileContent={editorState.content}
+            isOpen={editorState.isOpen}
+            onClose={handleCloseEditor}
+            onSave={handleSaveFile}
+            onDownload={() => onDownload(editorState.fileName)}
+          />
+        ) : (
+          <>
+            {/* 拖拽遮罩 */}
+            {isDragging && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm border-2 border-dashed border-blue-500 m-4 rounded-lg">
+                <div className="text-center">
+                  <Upload className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+                  <p className="text-lg font-semibold text-blue-500">拖放文件到这里上传</p>
+                  <p className="text-sm text-muted-foreground mt-2">支持多文件上传</p>
+                </div>
+              </div>
+            )}
 
         {filteredFiles.length === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -848,7 +930,8 @@ export function SftpManager({
                       const next = (currentPath.endsWith("/") ? currentPath : currentPath + "/") + file.name
                       onNavigate(next)
                     } else {
-                      onDownload(file.name)
+                      // 双击文件打开编辑器
+                      handleOpenEditor(file.name)
                     }
                   }}
                   onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
@@ -1151,7 +1234,8 @@ export function SftpManager({
                             if (file.type === "directory") {
                               onNavigate(`${currentPath}/${file.name}`.replace(/\/+/g, "/"))
                             } else {
-                              onDownload(file.name)
+                              // 打开编辑器
+                              handleOpenEditor(file.name)
                             }
                           }}
                           className={cn(
@@ -1161,7 +1245,7 @@ export function SftpManager({
                           )}
                         >
                           <Eye className="h-4 w-4 mr-2" />
-                          {file.type === "directory" ? "打开" : "查看"}
+                          {file.type === "directory" ? "打开" : "编辑"}
                         </DropdownMenuItem>
 
                         {/* 下载 - 仅文件 */}
@@ -1252,16 +1336,18 @@ export function SftpManager({
               ))}
             </TableBody>
           </Table>
-        )}
+            )}
 
-        {/* 隐藏的文件输入 */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={handleInputChange}
-        />
+            {/* 隐藏的文件输入 */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleInputChange}
+            />
+          </>
+        )}
       </div>
 
       {/* 传输任务面板 */}
@@ -1528,13 +1614,14 @@ export function SftpManager({
                     if (contextMenu.fileType === "directory" && contextMenu.fileName) {
                       onNavigate(`${currentPath}/${contextMenu.fileName}`.replace(/\/+/g, "/"))
                     } else if (contextMenu.fileName) {
-                      onDownload(contextMenu.fileName)
+                      // 打开编辑器
+                      handleOpenEditor(contextMenu.fileName)
                     }
                     closeContextMenu()
                   }}
                 >
                   <Eye className="h-4 w-4" />
-                  <span className="flex-1">{contextMenu.fileType === "directory" ? "打开" : "查看"}</span>
+                  <span className="flex-1">{contextMenu.fileType === "directory" ? "打开" : "编辑"}</span>
                   <kbd className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded font-mono",
                     isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
