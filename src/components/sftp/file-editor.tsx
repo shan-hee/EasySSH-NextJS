@@ -51,7 +51,7 @@ export function FileEditor({
   const [wordWrap, setWordWrap] = useState<'on' | 'off'>('on')
   const [fontSize, setFontSize] = useState(13)
   const [showMinimap, setShowMinimap] = useState(true)
-  const editorRef = useState<any>(null)
+  const editorRef = useState<unknown | null>(null)
 
   // 当文件内容变化时更新编辑器内容
   useEffect(() => {
@@ -148,21 +148,24 @@ export function FileEditor({
   // 查找
   const handleFind = () => {
     if (editorRef[0]) {
-      editorRef[0].getAction('actions.find')?.run()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (editorRef[0] as any).getAction?.('actions.find')?.run()
     }
   }
 
   // 替换
   const handleReplace = () => {
     if (editorRef[0]) {
-      editorRef[0].getAction('editor.action.startFindReplaceAction')?.run()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (editorRef[0] as any).getAction?.('editor.action.startFindReplaceAction')?.run()
     }
   }
 
   // 格式化代码
   const formatCode = () => {
     if (editorRef[0]) {
-      editorRef[0].getAction('editor.action.formatDocument')?.run()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (editorRef[0] as any).getAction?.('editor.action.formatDocument')?.run()
     }
   }
 

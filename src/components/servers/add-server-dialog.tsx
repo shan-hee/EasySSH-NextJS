@@ -200,7 +200,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
               <Tabs
                 className="w-full"
                 value={formData.authMethod}
-                onValueChange={(value: "password" | "privateKey") => handleInputChange("authMethod", value)}
+                onValueChange={(value) => handleInputChange("authMethod", value as "password" | "privateKey")}
               >
                 <TabsList className="w-1/2">
                   <TabsTrigger value="password">密码验证</TabsTrigger>

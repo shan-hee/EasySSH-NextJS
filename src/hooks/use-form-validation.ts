@@ -5,7 +5,7 @@ interface ValidationRule {
   minLength?: number
   maxLength?: number
   pattern?: RegExp
-  validate?: (value: any) => boolean | string
+  validate?: (value: unknown) => boolean | string
 }
 
 interface ValidationRules {
@@ -16,7 +16,7 @@ interface UseFormValidationReturn<T> {
   values: T
   errors: Partial<Record<keyof T, string>>
   isValid: boolean
-  setValue: (name: keyof T, value: any) => void
+  setValue: (name: keyof T, value: unknown) => void
   setError: (name: keyof T, error: string) => void
   clearError: (name: keyof T) => void
   validate: (name?: keyof T) => boolean
@@ -24,14 +24,14 @@ interface UseFormValidationReturn<T> {
   handleSubmit: (onSubmit: (values: T) => void) => (e: React.FormEvent) => void
 }
 
-export function useFormValidation<T extends Record<string, any>>(
+export function useFormValidation<T extends Record<string, unknown>>(
   initialValues: T,
   rules: ValidationRules = {}
 ): UseFormValidationReturn<T> {
   const [values, setValues] = useState<T>(initialValues)
   const [errors, setErrors] = useState<Partial<Record<keyof T, string>>>({})
 
-  const validateField = useCallback((name: keyof T, value: any): string | null => {
+  const validateField = useCallback((name: keyof T, value: unknown): string | null => {
     const rule = rules[name as string]
     if (!rule) return null
 
@@ -74,7 +74,7 @@ export function useFormValidation<T extends Record<string, any>>(
     return null
   }, [rules])
 
-  const setValue = useCallback((name: keyof T, value: any) => {
+  const setValue = useCallback((name: keyof T, value: unknown) => {
     setValues(prev => ({ ...prev, [name]: value }))
 
     // Validate field on change

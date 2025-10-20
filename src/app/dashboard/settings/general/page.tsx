@@ -84,7 +84,7 @@ export default function SettingsGeneralPage() {
     } catch {}
   }, [])
 
-  const handleSettingChange = (key: string, value: any) => {
+  const handleSettingChange = (key: string, value: string | boolean | number) => {
     setSettings(prev => ({
       ...prev,
       [key]: value

@@ -24,7 +24,6 @@ export function LoginForm({
   // 预取控制台页面，加速跳转
   useEffect(() => {
     try {
-      // @ts-expect-error: next/navigation 在运行时可用 prefetch
       router.prefetch?.('/dashboard')
     } catch {}
   }, [router])

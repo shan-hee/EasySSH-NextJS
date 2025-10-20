@@ -27,6 +27,7 @@ interface ServerFormData {
   autoConnect: boolean
   keepAlive: boolean
   jumpServer: string
+  [key: string]: unknown
 }
 
 interface ServerFormProps {
@@ -67,7 +68,8 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
       name: validationRules.required,
       host: {
         required: true,
-        validate: (value: string) => {
+        validate: (value: unknown) => {
+          if (typeof value !== 'string') return "请输入有效的IP地址或域名"
           // 验证IP地址或域名
           const ipPattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
           const domainPattern = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$/
@@ -76,13 +78,12 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
       },
       port: {
         required: true,
-        validate: (value: number) => {
-          return (value >= 1 && value <= 65535) || "端口号必须在1-65535之间"
+        validate: (value: unknown) => {
+          const numValue = typeof value === 'number' ? value : Number(value)
+          return (numValue >= 1 && numValue <= 65535) || "端口号必须在1-65535之间"
         }
       },
       username: validationRules.required,
-      password: values.authMethod === "password" ? validationRules.required : {},
-      privateKey: values.authMethod === "privateKey" ? validationRules.required : {},
     }
   )
 

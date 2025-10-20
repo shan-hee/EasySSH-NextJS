@@ -103,6 +103,7 @@ export function WebTerminal({
         const { WebLinksAddon } = await import("@xterm/addon-web-links")
 
         // 动态导入样式
+        // @ts-expect-error - CSS import
         await import("xterm/css/xterm.css")
 
         // 获取终端主题 - 使用应用主题
@@ -181,25 +182,25 @@ export function WebTerminal({
 
         // 处理用户输入
         terminal.onData((data: string) => {
-          if (!isConnected) return
+          if (!terminal || !isConnected) return
 
           const char = data.charCodeAt(0)
 
           if (char === 13) { // Enter
             if (currentLine.trim()) {
-              terminal.writeln("")
+              terminal!.writeln("")
               onCommand(currentLine.trim())
 
               // 模拟命令执行
               setTimeout(() => {
                 // 这里应该显示真实的命令输出
-                terminal.writeln(`模拟输出: ${currentLine}`)
-                terminal.writeln(`时间: ${new Date().toLocaleTimeString()}`)
-                writePrompt(terminal)
+                terminal!.writeln(`模拟输出: ${currentLine}`)
+                terminal!.writeln(`时间: ${new Date().toLocaleTimeString()}`)
+                writePrompt(terminal!)
               }, 100)
             } else {
-              terminal.writeln("")
-              writePrompt(terminal)
+              terminal!.writeln("")
+              writePrompt(terminal!)
             }
             setCurrentLine("")
             setCursorPosition(0)
@@ -208,21 +209,21 @@ export function WebTerminal({
               const newLine = currentLine.slice(0, cursorPosition - 1) + currentLine.slice(cursorPosition)
               setCurrentLine(newLine)
               setCursorPosition(cursorPosition - 1)
-              terminal.write("\b \b")
+              terminal!.write("\b \b")
             }
           } else if (char >= 32) { // 可打印字符
             const newLine = currentLine.slice(0, cursorPosition) + data + currentLine.slice(cursorPosition)
             setCurrentLine(newLine)
             setCursorPosition(cursorPosition + 1)
-            terminal.write(data)
+            terminal!.write(data)
           } else if (char === 27) { // ESC序列（方向键等）
             const sequence = data.slice(1)
             if (sequence === "[D" && cursorPosition > 0) { // 左箭头
               setCursorPosition(cursorPosition - 1)
-              terminal.write("\x1b[D")
+              terminal!.write("\x1b[D")
             } else if (sequence === "[C" && cursorPosition < currentLine.length) { // 右箭头
               setCursorPosition(cursorPosition + 1)
-              terminal.write("\x1b[C")
+              terminal!.write("\x1b[C")
             }
             // 可以添加更多方向键和快捷键处理
           }
@@ -230,8 +231,8 @@ export function WebTerminal({
 
         // 窗口大小变化时重新适配
         const handleResize = () => {
-          fitAddon.fit()
-          if (onResize) {
+          fitAddon!.fit()
+          if (onResize && terminal) {
             onResize(terminal.cols, terminal.rows)
           }
         }
@@ -240,7 +241,7 @@ export function WebTerminal({
 
         return () => {
           window.removeEventListener("resize", handleResize)
-          terminal.dispose()
+          terminal!.dispose()
         }
       } catch (error) {
         console.error("Failed to initialize terminal:", error)

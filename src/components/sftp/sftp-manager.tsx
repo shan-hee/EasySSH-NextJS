@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useRef, DragEvent } from "react"
+import { useState, useRef, useEffect, DragEvent } from "react"
 import { useTheme } from "next-themes"
+import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
 import "@/components/File.css"
 import { Button } from "@/components/ui/button"
@@ -49,12 +50,13 @@ import {
   HardDrive,
   Globe,
   Activity,
-  Maximize2,
-  Minimize2,
   XCircle,
   X,
   CheckCircle2,
+  Maximize2,
+  Minimize2,
   Clock,
+  GripVertical,
   LayoutGrid,
   List,
   FileText,
@@ -91,6 +93,15 @@ interface TransferTask {
   timeRemaining?: string
 }
 
+interface ClipboardFile {
+  fileName: string
+  sessionId: string
+  sessionLabel: string
+  filePath: string
+  fileType: "file" | "directory"
+  operation: "copy" | "cut"
+}
+
 interface SftpManagerProps {
   serverId: number
   serverName: string
@@ -99,6 +110,10 @@ interface SftpManagerProps {
   isConnected: boolean
   currentPath: string
   files: FileItem[]
+  sessionId: string
+  sessionLabel: string
+  sessionColor?: string
+  isFullscreen?: boolean
   onNavigate: (path: string) => void
   onUpload: (files: FileList) => void
   onDownload: (fileName: string) => void
@@ -109,36 +124,76 @@ interface SftpManagerProps {
   onRefresh: () => void
   onReadFile?: (fileName: string) => Promise<string>
   onSaveFile?: (fileName: string, content: string) => Promise<void>
+  onRenameSession?: (newLabel: string) => void
+  onCopyFiles?: (fileNames: string[]) => void
+  onCutFiles?: (fileNames: string[]) => void
+  onPasteFiles?: () => void
+  onToggleFullscreen?: () => void
+  clipboard?: ClipboardFile[]
+  dragHandleListeners?: any
+  dragHandleAttributes?: any
 }
 
-export function SftpManager({
-  host,
-  username,
-  isConnected,
-  currentPath,
-  files,
-  onNavigate,
-  onUpload,
-  onDownload,
-  onDelete,
-  onCreateFolder,
-  onRename,
-  onDisconnect,
-  onRefresh,
-  onReadFile,
-  onSaveFile,
-}: SftpManagerProps) {
+export function SftpManager(props: SftpManagerProps) {
+  const {
+    host,
+    username,
+    isConnected,
+    currentPath,
+    files,
+    sessionId,
+    sessionLabel,
+    sessionColor,
+    serverId,
+    serverName,
+    isFullscreen = false,
+    onNavigate,
+    onUpload,
+    onDownload,
+    onDelete,
+    onCreateFolder,
+    onRename,
+    onDisconnect,
+    onRefresh,
+    onReadFile,
+    onSaveFile,
+    onRenameSession,
+    onCopyFiles,
+    onPasteFiles,
+    onToggleFullscreen,
+    clipboard = [],
+    dragHandleListeners,
+    dragHandleAttributes,
+  } = props
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [sortedFiles, setSortedFiles] = useState<FileItem[]>(files)
+
+  // 同步files到sortedFiles
+  useEffect(() => {
+    setSortedFiles(files)
+  }, [files])
+
+  // 禁用 dnd-kit 的拖拽排序功能，改用原生拖拽实现 Windows 风格交互
+  // const fileSensors = useSensors(
+  //   useSensor(PointerSensor, {
+  //     activationConstraint: {
+  //       distance: 8,
+  //     },
+  //   }),
+  //   useSensor(KeyboardSensor, {
+  //     coordinateGetter: sortableKeyboardCoordinates,
+  //   })
+  // )
   const [sortBy, setSortBy] = useState<keyof FileItem>("name")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
   const [transferTasks, setTransferTasks] = useState<TransferTask[]>([])
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [isDragging, setIsDragging] = useState(false)
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid") // 默认图标视图
   const [showHidden, setShowHidden] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -150,6 +205,12 @@ export function SftpManager({
   const [editingFile, setEditingFile] = useState<string | null>(null)
   const [editingFileName, setEditingFileName] = useState("")
   const [creatingNew, setCreatingNew] = useState<"file" | "folder" | null>(null)
+  const [editingSessionLabel, setEditingSessionLabel] = useState(false)
+  const [tempSessionLabel, setTempSessionLabel] = useState(sessionLabel)
+  const [draggedFileName, setDraggedFileName] = useState<string | null>(null)
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
+  const [lastClickTime, setLastClickTime] = useState<number>(0)
+  const [lastClickFile, setLastClickFile] = useState<string | null>(null)
   const [editorState, setEditorState] = useState<{
     isOpen: boolean
     fileName: string
@@ -164,9 +225,35 @@ export function SftpManager({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const sessionLabelInputRef = useRef<HTMLInputElement>(null)
+
+  // 处理单击/双击文件
+  const handleFileClick = (fileName: string, fileType: "file" | "directory", event: React.MouseEvent) => {
+    const now = Date.now()
+    const timeSinceLastClick = now - lastClickTime
+
+    // 检测双击 (300ms 内且点击同一文件)
+    if (timeSinceLastClick < 300 && lastClickFile === fileName) {
+      // 双击 - 打开文件或进入目录
+      if (fileType === "directory") {
+        const next = (currentPath.endsWith("/") ? currentPath : currentPath + "/") + fileName
+        onNavigate(next)
+      } else {
+        handleOpenEditor(fileName)
+      }
+      // 重置双击检测
+      setLastClickTime(0)
+      setLastClickFile(null)
+    } else {
+      // 单击 - 选中文件
+      handleFileSelect(fileName, event)
+      setLastClickTime(now)
+      setLastClickFile(fileName)
+    }
+  }
 
   // 过滤和排序文件
-  const filteredFiles = files
+  const filteredFiles = sortedFiles
     .filter(file => {
       // 如果不显示隐藏文件，过滤掉以 . 开头的文件（但保留 .. 父目录）
       if (!showHidden && file.name.startsWith('.') && file.name !== '..') {
@@ -237,8 +324,171 @@ export function SftpManager({
   }
 
   // 点击其他地方关闭右键菜单
-  const handleClickOutside = () => {
-    closeContextMenu()
+  useEffect(() => {
+    if (!contextMenu) return
+
+    const handleClickOutside = () => {
+      closeContextMenu()
+    }
+
+    // 延迟绑定，避免立即触发
+    const timer = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside)
+    }, 0)
+
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('click', handleClickOutside)
+    }
+  }, [contextMenu])
+
+  // 原生拖拽事件处理
+  const handleNativeDragStart = (e: React.DragEvent, fileName: string) => {
+    setDraggedFileName(fileName)
+    e.dataTransfer.effectAllowed = 'move'
+
+    // 设置拖拽数据,用于跨会话拖拽
+    const file = files.find(f => f.name === fileName)
+    const dragData = {
+      sessionId,
+      fileName,
+      filePath: `${currentPath}/${fileName}`.replace(/\/+/g, "/"),
+      fileType: file?.type || 'file',
+      sourceSessionId: sessionId,
+    }
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData))
+    e.dataTransfer.setData('text/plain', fileName)
+  }
+
+  const handleNativeDragEnd = () => {
+    setDraggedFileName(null)
+    setDragOverFolder(null)
+  }
+
+  const handleNativeDragOver = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory") => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    // 检查是否是跨会话拖拽
+    const isFileFromOtherSession = e.dataTransfer.types.includes('application/json') && !draggedFileName
+
+    // 不能拖到自己身上
+    if (targetFileName === draggedFileName && !isFileFromOtherSession) {
+      setDragOverFolder(null)
+      return
+    }
+
+    // 只有文件夹才能作为拖放目标
+    if (targetType === "directory") {
+      setDragOverFolder(targetFileName)
+      e.dataTransfer.dropEffect = 'move'
+    } else {
+      setDragOverFolder(null)
+      e.dataTransfer.dropEffect = 'none'
+    }
+  }
+
+  const handleNativeDrop = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory") => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    // 检查是否是跨会话拖拽
+    try {
+      const jsonData = e.dataTransfer.getData('application/json')
+      if (jsonData) {
+        const dragData = JSON.parse(jsonData)
+        // 跨会话拖拽到文件夹
+        if (dragData.sourceSessionId !== sessionId && targetType === "directory") {
+          const targetPath = `${currentPath}/${targetFileName}`.replace(/\/+/g, "/")
+          console.log(`跨会话拖拽 ${dragData.fileName} 到文件夹 ${targetPath}`)
+          // TODO: 这里需要页面层级实现跨会话上传逻辑
+          setDragOverFolder(null)
+          return
+        }
+      }
+    } catch (error) {
+      // 不是JSON数据,继续处理本会话拖拽
+    }
+
+    // 本会话内拖拽
+    if (!draggedFileName || draggedFileName === targetFileName) {
+      setDragOverFolder(null)
+      return
+    }
+
+    // 移动文件到文件夹
+    if (targetType === "directory") {
+      const newPath = `${currentPath}/${targetFileName}/${draggedFileName}`.replace(/\/+/g, "/")
+      console.log(`移动 ${draggedFileName} 到 ${newPath}`)
+      onRename(draggedFileName, newPath)
+    }
+
+    setDragOverFolder(null)
+    setDraggedFileName(null)
+  }
+
+  // 文件拖拽处理（用于拖入文件夹）
+  const handleFileDragStart = (fileName: string) => {
+    setDraggedFileName(fileName)
+  }
+
+  const handleFileDragEnd = () => {
+    setDraggedFileName(null)
+    setDragOverFolder(null)
+  }
+
+  const handleFileDragOver = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", targetIndex: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (targetFileName === draggedFileName) {
+      setDragOverFolder(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    // 如果目标是文件夹，高亮文件夹（用于移入）
+    if (targetType === "directory") {
+      setDragOverFolder(targetFileName)
+      setDragOverIndex(null)
+    } else {
+      // 如果目标是文件，显示插入位置（用于排序）
+      setDragOverFolder(null)
+      setDragOverIndex(targetIndex)
+    }
+  }
+
+  const handleFileDragLeave = () => {
+    setDragOverFolder(null)
+    setDragOverIndex(null)
+  }
+
+  const handleFileDrop = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", targetIndex: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (!draggedFileName || draggedFileName === targetFileName) {
+      setDragOverFolder(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    // 移动文件到文件夹
+    if (targetType === "directory" && dragOverFolder) {
+      console.log(`移动 ${draggedFileName} 到文件夹 ${targetFileName}`)
+      // TODO: 调用实际的移动API
+      // onRename(draggedFileName, `${targetFileName}/${draggedFileName}`)
+    }
+    // 文件排序（暂时只是视觉效果，实际不改变服务器顺序）
+    else if (dragOverIndex !== null) {
+      console.log(`将 ${draggedFileName} 排序到 ${targetFileName} 附近`)
+      // 注意：SFTP文件列表顺序通常由服务器决定，客户端排序可能无意义
+      // 如果需要持久化排序，需要后端支持
+    }
+
+    setDragOverFolder(null)
+    setDragOverIndex(null)
+    setDraggedFileName(null)
   }
 
   // 空白区域右键菜单
@@ -283,7 +533,11 @@ export function SftpManager({
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragging(true)
+
+    // 只有外部文件才显示上传提示
+    if (!draggedFileName && e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true)
+    }
   }
 
   const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
@@ -304,6 +558,29 @@ export function SftpManager({
     e.stopPropagation()
     setIsDragging(false)
 
+    // 检查是否是跨会话拖拽
+    try {
+      const jsonData = e.dataTransfer.getData('application/json')
+      if (jsonData) {
+        const dragData = JSON.parse(jsonData)
+        if (dragData.sourceSessionId && dragData.sourceSessionId !== sessionId) {
+          console.log(`跨会话上传: ${dragData.fileName} 到当前目录 ${currentPath}`)
+          // TODO: 实现跨会话上传逻辑
+          return
+        }
+      }
+    } catch (error) {
+      // 不是JSON数据,继续检查其他类型
+    }
+
+    // 如果是内部文件拖拽到空白区，取消拖拽
+    if (draggedFileName) {
+      setDraggedFileName(null)
+      setDragOverFolder(null)
+      return
+    }
+
+    // 处理外部文件上传
     const files = e.dataTransfer.files
     if (files && files.length > 0) {
       handleFileUpload(files)
@@ -394,6 +671,30 @@ export function SftpManager({
   const cancelCreate = () => {
     setCreatingNew(null)
     setEditingFileName("")
+  }
+
+  // 开始编辑会话标签
+  const startEditSessionLabel = () => {
+    setEditingSessionLabel(true)
+    setTempSessionLabel(sessionLabel)
+    setTimeout(() => {
+      sessionLabelInputRef.current?.focus()
+      sessionLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  // 完成编辑会话标签
+  const finishEditSessionLabel = () => {
+    if (tempSessionLabel.trim() && onRenameSession) {
+      onRenameSession(tempSessionLabel.trim())
+    }
+    setEditingSessionLabel(false)
+  }
+
+  // 取消编辑会话标签
+  const cancelEditSessionLabel = () => {
+    setEditingSessionLabel(false)
+    setTempSessionLabel(sessionLabel)
   }
 
   // 打开文件编辑器
@@ -589,17 +890,104 @@ export function SftpManager({
     }
   }
 
+  // Context value for nested components
+  const sessionContextValue = {
+    sessionId,
+    sessionLabel,
+    sessionColor,
+    serverId,
+    serverName,
+    host,
+    username,
+    isConnected,
+    isFullscreen,
+    currentPath,
+    files,
+    clipboard,
+    onNavigate,
+    onUpload,
+    onDownload,
+    onDelete,
+    onCreateFolder,
+    onRename,
+    onDisconnect,
+    onRefresh,
+    onReadFile,
+    onSaveFile,
+    onRenameSession,
+    onCopyFiles,
+    onCutFiles: onPasteFiles, // placeholder
+    onPasteFiles,
+    onToggleFullscreen,
+  }
+
   return (
-    <div
-      className={cn(
-        "flex flex-col h-full rounded-xl border overflow-hidden transition-colors bg-card"
-      )}
-      onClick={handleClickOutside}
-    >
+    <SftpSessionProvider value={sessionContextValue}>
+      <div
+        className={cn(
+          "flex flex-col h-full rounded-xl border overflow-hidden transition-colors bg-card"
+        )}
+      >
       {/* 工具栏 */}
-      <div className="border-b text-sm flex items-center justify-between px-3 py-1.5 transition-colors">
-        {/* 左侧工具图标组 */}
-        <div className="flex items-center gap-1">
+      <div
+        className="border-b text-sm flex items-center justify-between px-3 py-1.5 transition-colors cursor-move hover:bg-muted/50"
+        {...dragHandleListeners}
+        {...dragHandleAttributes}
+      >
+        {/* 左侧: 会话标签 */}
+        <div className="flex items-center gap-2">
+          {/* 拖拽图标 */}
+          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+
+          {/* 会话颜色指示器 */}
+          {sessionColor && (
+            <div
+              className="w-1 h-6 rounded-full"
+              style={{ backgroundColor: sessionColor }}
+            />
+          )}
+
+          {/* 可编辑的会话标签 */}
+          {editingSessionLabel ? (
+            <Input
+              ref={sessionLabelInputRef}
+              value={tempSessionLabel}
+              onChange={(e) => setTempSessionLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  finishEditSessionLabel()
+                } else if (e.key === "Escape") {
+                  cancelEditSessionLabel()
+                }
+              }}
+              onBlur={finishEditSessionLabel}
+              className={cn(
+                "h-6 text-xs font-semibold px-2 max-w-[150px]",
+                isDark ? "bg-zinc-900 text-zinc-200" : "bg-white text-zinc-800"
+              )}
+            />
+          ) : (
+            <button
+              onClick={startEditSessionLabel}
+              onDoubleClick={startEditSessionLabel}
+              className={cn(
+                "text-xs font-semibold px-2 py-1 rounded transition-colors",
+                isDark
+                  ? "hover:bg-zinc-800/60 text-zinc-200"
+                  : "hover:bg-zinc-200 text-zinc-800"
+              )}
+              title="双击编辑会话名称"
+            >
+              {sessionLabel}
+            </button>
+          )}
+
+          <div className={cn(
+            "h-4 w-px mx-1",
+            isDark ? "bg-zinc-800/50" : "bg-zinc-300"
+          )} />
+
+          {/* 路径导航工具 */}
           {/* 返回上级目录按钮 */}
           {pathSegments.length > 0 && (
             <Button
@@ -737,6 +1125,29 @@ export function SftpManager({
           >
             <List className="h-3.5 w-3.5" />
           </Button>
+
+          {/* 全屏/退出全屏按钮 */}
+          {onToggleFullscreen && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
+                isDark
+                  ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
+                  : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+              )}
+              onClick={onToggleFullscreen}
+              title={isFullscreen ? "退出全屏 (ESC)" : "全屏"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="h-3.5 w-3.5" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="icon"
@@ -863,8 +1274,8 @@ export function SftpManager({
           </div>
         ) : viewMode === "grid" ? (
           <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {/* 新建项 */}
-            {creatingNew && (
+                {/* 新建项 */}
+                {creatingNew && (
               <div
                 className={cn(
                   "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
@@ -910,36 +1321,34 @@ export function SftpManager({
               </div>
             )}
 
-            {filteredFiles.map((file) => {
+            {filteredFiles.map((file, index) => {
               const isSelected = selectedFiles.includes(file.name)
               const isEditing = editingFile === file.name
+              const isDraggedOver = dragOverFolder === file.name
 
               return (
                 <div
                   key={file.name}
+                  draggable={!isEditing}
+                  onDragStart={(e) => handleNativeDragStart(e, file.name)}
+                  onDragEnd={handleNativeDragEnd}
+                  onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
+                  onDragLeave={(e) => {
+                    e.preventDefault()
+                    setDragOverFolder(null)
+                  }}
+                  onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
                   onClick={(e) => {
                     e.stopPropagation()
                     if (!isEditing) {
-                      handleFileSelect(file.name, e)
-                    }
-                  }}
-                  onDoubleClick={() => {
-                    if (isEditing) return
-                    // 双击才打开
-                    if (file.type === "directory") {
-                      const next = (currentPath.endsWith("/") ? currentPath : currentPath + "/") + file.name
-                      onNavigate(next)
-                    } else {
-                      // 双击文件打开编辑器
-                      handleOpenEditor(file.name)
+                      handleFileClick(file.name, file.type, e)
                     }
                   }}
                   onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
                   className={cn(
                     "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
-                    isSelected && (isDark
-                      ? "bg-zinc-800/60"
-                      : "bg-zinc-200/60")
+                    (isSelected || (isDraggedOver && file.type === "directory")) && (isDark ? "bg-zinc-800/60" : "bg-zinc-200/60"),
+                    draggedFileName === file.name && "opacity-50"
                   )}
                   title={file.name}
                 >
@@ -1115,27 +1524,34 @@ export function SftpManager({
                 </TableRow>
               )}
 
-              {filteredFiles.map(file => (
-                <TableRow
-                  key={file.name}
-                  className={cn(
-                    "cursor-pointer transition-colors",
-                    selectedFiles.includes(file.name) && (
-                      isDark ? "bg-zinc-800/50" : "bg-zinc-100"
-                    ),
-                    isDark ? "hover:bg-zinc-800/30" : "hover:bg-zinc-50"
-                  )}
-                  onClick={e => {
-                    e.stopPropagation()
-                    handleFileSelect(file.name, e)
-                  }}
-                  onDoubleClick={() => {
-                    if (file.type === "directory") {
-                      onNavigate(`${currentPath}/${file.name}`.replace(/\/+/g, "/"))
-                    }
-                  }}
-                  onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
-                >
+              {filteredFiles.map((file, index) => {
+                const isDraggedOver = dragOverFolder === file.name
+                return (
+                  <TableRow
+                    key={file.name}
+                    draggable={editingFile !== file.name}
+                    onDragStart={(e) => handleNativeDragStart(e, file.name)}
+                    onDragEnd={handleNativeDragEnd}
+                    onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
+                    onDragLeave={(e) => {
+                      e.preventDefault()
+                      setDragOverFolder(null)
+                    }}
+                    onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
+                    className={cn(
+                      "cursor-pointer transition-colors",
+                      (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && (
+                        isDark ? "bg-zinc-800/50" : "bg-zinc-100"
+                      ),
+                      isDark ? "hover:bg-zinc-800/30" : "hover:bg-zinc-50",
+                      draggedFileName === file.name && "opacity-50"
+                    )}
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleFileClick(file.name, file.type, e)
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
+                  >
                   <TableCell onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
@@ -1333,7 +1749,8 @@ export function SftpManager({
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
             )}
@@ -1555,18 +1972,23 @@ export function SftpManager({
                 <button
                   className={cn(
                     "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
+                    clipboard.length === 0 && "opacity-50 cursor-not-allowed",
                     isDark
                       ? "hover:bg-blue-600 hover:text-white text-zinc-200"
                       : "hover:bg-blue-500 hover:text-white text-zinc-800"
                   )}
                   onClick={() => {
-                    // TODO: 实现粘贴功能
-                    console.log("粘贴到当前目录:", currentPath)
+                    if (onPasteFiles && clipboard.length > 0) {
+                      onPasteFiles()
+                    }
                     closeContextMenu()
                   }}
+                  disabled={clipboard.length === 0}
                 >
                   <FileText className="h-4 w-4 rotate-180" />
-                  <span className="flex-1">粘贴</span>
+                  <span className="flex-1">
+                    粘贴{clipboard.length > 0 ? ` (${clipboard.length} 项)` : ''}
+                  </span>
                   <kbd className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded font-mono",
                     isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
@@ -1699,8 +2121,10 @@ export function SftpManager({
                       : "hover:bg-blue-500 hover:text-white text-zinc-800"
                   )}
                   onClick={() => {
-                    // TODO: 实现复制功能
-                    console.log("复制:", selectedFiles.length > 1 ? selectedFiles : contextMenu.fileName)
+                    const filesToCopy = selectedFiles.length > 1 ? selectedFiles : (contextMenu.fileName ? [contextMenu.fileName] : [])
+                    if (onCopyFiles && filesToCopy.length > 0) {
+                      onCopyFiles(filesToCopy)
+                    }
                     closeContextMenu()
                   }}
                 >
@@ -1720,18 +2144,23 @@ export function SftpManager({
                 <button
                   className={cn(
                     "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
+                    clipboard.length === 0 && "opacity-50 cursor-not-allowed",
                     isDark
                       ? "hover:bg-blue-600 hover:text-white text-zinc-200"
                       : "hover:bg-blue-500 hover:text-white text-zinc-800"
                   )}
                   onClick={() => {
-                    // TODO: 实现粘贴功能
-                    console.log("粘贴到当前目录:", currentPath)
+                    if (onPasteFiles && clipboard.length > 0) {
+                      onPasteFiles()
+                    }
                     closeContextMenu()
                   }}
+                  disabled={clipboard.length === 0}
                 >
                   <FileText className="h-4 w-4 rotate-180" />
-                  <span className="flex-1">粘贴</span>
+                  <span className="flex-1">
+                    粘贴{clipboard.length > 0 ? ` (${clipboard.length} 项)` : ''}
+                  </span>
                   <kbd className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded font-mono",
                     isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
@@ -1801,6 +2230,7 @@ export function SftpManager({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </SftpSessionProvider>
   )
 }

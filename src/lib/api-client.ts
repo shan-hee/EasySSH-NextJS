@@ -5,7 +5,7 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 type ApiFetchOptions = {
   method?: HttpMethod
   headers?: HeadersInit
-  body?: any
+  body?: unknown
   token?: string
   signal?: AbortSignal
 }
@@ -30,7 +30,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   if (options.body !== undefined && options.body !== null) {
     if (typeof options.body === "string" || options.body instanceof FormData) {
-      init.body = options.body as any
+      init.body = options.body as string | FormData
     } else {
       ;(headers as Record<string, string>)["Content-Type"] = "application/json"
       init.body = JSON.stringify(options.body)
