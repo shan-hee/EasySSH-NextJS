@@ -22,6 +22,8 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -32,6 +34,8 @@ import {
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { createPortal } from 'react-dom'
+import { GripVertical } from "lucide-react"
 
 // 模拟服务器数据
 const servers = [
@@ -164,6 +168,31 @@ interface CrossSessionDragData {
   sourceSessionId: string
 }
 
+// 轻量级工具栏预览组件（VSCode风格）- 使用 memo 避免重复渲染
+interface DragPreviewToolbarProps {
+  sessionLabel: string
+  sessionColor?: string
+  host: string
+}
+
+const DragPreviewToolbar = React.memo(({ sessionLabel, sessionColor, host }: DragPreviewToolbarProps) => {
+  return (
+    <div className="bg-card border rounded-lg shadow-2xl px-3 py-2 flex items-center gap-2 min-w-[200px] cursor-grabbing">
+      <GripVertical className="h-4 w-4 text-muted-foreground" />
+      {sessionColor && (
+        <div
+          className="w-1 h-5 rounded-full"
+          style={{ backgroundColor: sessionColor }}
+        />
+      )}
+      <div className="flex flex-col">
+        <span className="text-xs font-semibold text-foreground">{sessionLabel}</span>
+        <span className="text-[10px] text-muted-foreground font-mono">{host}</span>
+      </div>
+    </div>
+  )
+})
+
 // 可拖拽的会话项组件
 interface SortableSessionProps {
   session: SftpSession
@@ -171,7 +200,7 @@ interface SortableSessionProps {
   onCrossSessionDrop?: (targetSessionId: string, dragData: CrossSessionDragData) => void
 }
 
-function SortableSession({ session, children, onCrossSessionDrop }: SortableSessionProps) {
+const SortableSession = React.memo(({ session, children, onCrossSessionDrop }: SortableSessionProps) => {
   const {
     attributes,
     listeners,
@@ -183,29 +212,29 @@ function SortableSession({ session, children, onCrossSessionDrop }: SortableSess
 
   const [isDragOver, setIsDragOver] = React.useState(false)
 
-  const style = {
+  // 使用 useMemo 缓存样式对象
+  const style = React.useMemo(() => ({
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
+  }), [transform, transition])
 
   // 处理跨会话文件拖放
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = React.useCallback((e: React.DragEvent) => {
     // 检查是否是文件拖拽(不是会话拖拽)
     if (e.dataTransfer.types.includes('application/json')) {
       e.preventDefault()
       e.stopPropagation()
       setIsDragOver(true)
     }
-  }
+  }, [])
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = React.useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
-  }
+  }, [])
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = React.useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
@@ -222,20 +251,23 @@ function SortableSession({ session, children, onCrossSessionDrop }: SortableSess
     } catch (error) {
       console.error('解析拖拽数据失败:', error)
     }
-  }
+  }, [session.id, onCrossSessionDrop])
 
-  // 将拖拽监听器通过回调传递给子组件
-  const childrenWithDragHandle = React.cloneElement(children as React.ReactElement, {
-    dragHandleListeners: listeners,
-    dragHandleAttributes: attributes,
-  })
+  // 使用 useMemo 缓存 cloneElement 结果
+  const childrenWithDragHandle = React.useMemo(() =>
+    React.cloneElement(children as React.ReactElement, {
+      dragHandleListeners: listeners,
+      dragHandleAttributes: attributes,
+    }), [children, listeners, attributes])
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        "min-h-0 transition-all",
+        "min-h-0",
+        // 拖拽时轻微降低透明度，不影响性能
+        isDragging && "opacity-60",
         isDragOver && "ring-2 ring-blue-500 ring-offset-2"
       )}
       data-session-id={session.id}
@@ -246,7 +278,7 @@ function SortableSession({ session, children, onCrossSessionDrop }: SortableSess
       {childrenWithDragHandle}
     </div>
   )
-}
+})
 
 export default function SftpPage() {
   // 改用会话数组管理多个连接
@@ -254,6 +286,7 @@ export default function SftpPage() {
   const [nextSessionId, setNextSessionId] = useState(1)
   const [fullscreenSessionId, setFullscreenSessionId] = useState<string | null>(null)
   const [clipboard, setClipboard] = useState<ClipboardFile[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null) // 当前拖拽的会话ID
   const parentRef = useRef<HTMLDivElement>(null)
 
   // 会话标识颜色列表
@@ -266,11 +299,11 @@ export default function SftpPage() {
     "#EC4899", // pink
   ]
 
-  // 配置拖拽传感器
+  // 配置拖拽传感器 - 最小化激活约束
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 12, // 拖动12px后才激活，避免误触
+        distance: 5, // 更小的激活距离
       },
     }),
     useSensor(KeyboardSensor, {
@@ -278,8 +311,13 @@ export default function SftpPage() {
     })
   )
 
-  // 处理拖拽结束
-  const handleDragEnd = (event: DragEndEvent) => {
+  // 处理拖拽开始 - 直接更新状态
+  const handleDragStart = React.useCallback((event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }, [])
+
+  // 处理拖拽结束 - 使用 useCallback 缓存
+  const handleDragEnd = React.useCallback((event: DragEndEvent) => {
     const { active, over } = event
 
     if (over && active.id !== over.id) {
@@ -290,7 +328,16 @@ export default function SftpPage() {
         return arrayMove(items, oldIndex, newIndex)
       })
     }
-  }
+
+    // 清除拖拽状态
+    setActiveId(null)
+  }, [])
+
+  // 使用 useMemo 缓存当前拖拽的会话信息，避免重复查找
+  const activeSession = React.useMemo(
+    () => activeId ? sessions.find(s => s.id === activeId) : null,
+    [activeId, sessions]
+  )
 
 
   // ESC键退出全屏
@@ -787,6 +834,7 @@ export default function SftpPage() {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
@@ -853,6 +901,20 @@ export default function SftpPage() {
                 </div>
               </div>
             </SortableContext>
+
+            {/* VSCode 风格的轻量级拖拽预览 - 只显示工具栏 */}
+            {createPortal(
+              <DragOverlay dropAnimation={null}>
+                {activeSession ? (
+                  <DragPreviewToolbar
+                    sessionLabel={activeSession.label}
+                    sessionColor={activeSession.color}
+                    host={activeSession.host}
+                  />
+                ) : null}
+              </DragOverlay>,
+              document.body
+            )}
           </DndContext>
         )}
       </div>

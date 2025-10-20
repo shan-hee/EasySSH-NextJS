@@ -929,23 +929,25 @@ export function SftpManager(props: SftpManagerProps) {
         )}
       >
       {/* 工具栏 */}
-      <div
-        className="border-b text-sm flex items-center justify-between px-3 py-1.5 transition-colors cursor-move hover:bg-muted/50"
-        {...dragHandleListeners}
-        {...dragHandleAttributes}
-      >
-        {/* 左侧: 会话标签 */}
+      <div className="border-b text-sm flex items-center justify-between px-3 py-1.5">
+        {/* 左侧: 会话标签 - 带拖拽手柄 */}
         <div className="flex items-center gap-2">
-          {/* 拖拽图标 */}
-          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+          {/* 拖拽手柄区域 */}
+          <div
+            className="flex items-center gap-2 cursor-grab active:cursor-grabbing hover:bg-muted/50 px-1.5 py-0.5 -ml-1.5 rounded transition-colors"
+            {...dragHandleListeners}
+            {...dragHandleAttributes}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
 
-          {/* 会话颜色指示器 */}
-          {sessionColor && (
-            <div
-              className="w-1 h-6 rounded-full"
-              style={{ backgroundColor: sessionColor }}
-            />
-          )}
+            {/* 会话颜色指示器 */}
+            {sessionColor && (
+              <div
+                className="w-1 h-5 rounded-full"
+                style={{ backgroundColor: sessionColor }}
+              />
+            )}
+          </div>
 
           {/* 可编辑的会话标签 */}
           {editingSessionLabel ? (
