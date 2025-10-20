@@ -22,8 +22,6 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
-  DragStartEvent,
-  DragOverlay,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -34,8 +32,6 @@ import {
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { createPortal } from 'react-dom'
-import { GripVertical } from "lucide-react"
 
 // 模拟服务器数据
 const servers = [
@@ -168,31 +164,6 @@ interface CrossSessionDragData {
   sourceSessionId: string
 }
 
-// 轻量级工具栏预览组件（VSCode风格）- 使用 memo 避免重复渲染
-interface DragPreviewToolbarProps {
-  sessionLabel: string
-  sessionColor?: string
-  host: string
-}
-
-const DragPreviewToolbar = React.memo(({ sessionLabel, sessionColor, host }: DragPreviewToolbarProps) => {
-  return (
-    <div className="bg-card border rounded-lg shadow-2xl px-3 py-2 flex items-center gap-2 min-w-[200px] cursor-grabbing">
-      <GripVertical className="h-4 w-4 text-muted-foreground" />
-      {sessionColor && (
-        <div
-          className="w-1 h-5 rounded-full"
-          style={{ backgroundColor: sessionColor }}
-        />
-      )}
-      <div className="flex flex-col">
-        <span className="text-xs font-semibold text-foreground">{sessionLabel}</span>
-        <span className="text-[10px] text-muted-foreground font-mono">{host}</span>
-      </div>
-    </div>
-  )
-})
-
 // 可拖拽的会话项组件
 interface SortableSessionProps {
   session: SftpSession
@@ -286,7 +257,6 @@ export default function SftpPage() {
   const [nextSessionId, setNextSessionId] = useState(1)
   const [fullscreenSessionId, setFullscreenSessionId] = useState<string | null>(null)
   const [clipboard, setClipboard] = useState<ClipboardFile[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null) // 当前拖拽的会话ID
   const parentRef = useRef<HTMLDivElement>(null)
 
   // 会话标识颜色列表
@@ -311,11 +281,6 @@ export default function SftpPage() {
     })
   )
 
-  // 处理拖拽开始 - 直接更新状态
-  const handleDragStart = React.useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
-  }, [])
-
   // 处理拖拽结束 - 使用 useCallback 缓存
   const handleDragEnd = React.useCallback((event: DragEndEvent) => {
     const { active, over } = event
@@ -328,17 +293,7 @@ export default function SftpPage() {
         return arrayMove(items, oldIndex, newIndex)
       })
     }
-
-    // 清除拖拽状态
-    setActiveId(null)
   }, [])
-
-  // 使用 useMemo 缓存当前拖拽的会话信息，避免重复查找
-  const activeSession = React.useMemo(
-    () => activeId ? sessions.find(s => s.id === activeId) : null,
-    [activeId, sessions]
-  )
-
 
   // ESC键退出全屏
   useEffect(() => {
@@ -834,7 +789,6 @@ export default function SftpPage() {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
@@ -901,20 +855,6 @@ export default function SftpPage() {
                 </div>
               </div>
             </SortableContext>
-
-            {/* VSCode 风格的轻量级拖拽预览 - 只显示工具栏 */}
-            {createPortal(
-              <DragOverlay dropAnimation={null}>
-                {activeSession ? (
-                  <DragPreviewToolbar
-                    sessionLabel={activeSession.label}
-                    sessionColor={activeSession.color}
-                    host={activeSession.host}
-                  />
-                ) : null}
-              </DragOverlay>,
-              document.body
-            )}
           </DndContext>
         )}
       </div>

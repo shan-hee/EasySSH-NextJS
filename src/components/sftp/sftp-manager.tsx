@@ -932,11 +932,62 @@ export function SftpManager(props: SftpManagerProps) {
       <div className="border-b text-sm flex items-center justify-between px-3 py-1.5">
         {/* 左侧: 会话标签 - 带拖拽手柄 */}
         <div className="flex items-center gap-2">
-          {/* 拖拽手柄区域 */}
+          {/* 拖拽手柄区域 - 使用原生拖拽预览 */}
           <div
             className="flex items-center gap-2 cursor-grab active:cursor-grabbing hover:bg-muted/50 px-1.5 py-0.5 -ml-1.5 rounded transition-colors"
             {...dragHandleListeners}
             {...dragHandleAttributes}
+            onDragStart={(e: any) => {
+              // 创建原生轻量级拖拽预览
+              const ghost = document.createElement('div')
+              ghost.style.cssText = `
+                position: absolute;
+                top: -9999px;
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 0.5rem;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+                padding: 0.5rem 0.75rem;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                cursor: grabbing;
+                min-width: 200px;
+              `
+              ghost.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--muted-foreground); flex-shrink: 0;">
+                  <circle cx="9" cy="5" r="1"></circle>
+                  <circle cx="9" cy="12" r="1"></circle>
+                  <circle cx="9" cy="19" r="1"></circle>
+                  <circle cx="15" cy="5" r="1"></circle>
+                  <circle cx="15" cy="12" r="1"></circle>
+                  <circle cx="15" cy="19" r="1"></circle>
+                </svg>
+                ${sessionColor ? `<div style="width: 4px; height: 20px; border-radius: 9999px; background-color: ${sessionColor}; flex-shrink: 0;"></div>` : ''}
+                <div style="display: flex; flex-direction: column;">
+                  <span style="font-size: 0.75rem; font-weight: 600; color: var(--foreground);">${sessionLabel}</span>
+                  <span style="font-size: 0.625rem; color: var(--muted-foreground); font-family: monospace;">${host}</span>
+                </div>
+              `
+              document.body.appendChild(ghost)
+
+              // 使用原生 setDragImage
+              if (e.dataTransfer && e.dataTransfer.setDragImage) {
+                e.dataTransfer.setDragImage(ghost, 0, 0)
+              }
+
+              // 清理临时元素
+              setTimeout(() => {
+                if (document.body.contains(ghost)) {
+                  document.body.removeChild(ghost)
+                }
+              }, 0)
+
+              // 调用原始的 dragHandleListeners
+              if (dragHandleListeners?.onDragStart) {
+                dragHandleListeners.onDragStart(e)
+              }
+            }}
           >
             <GripVertical className="h-4 w-4 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
 
