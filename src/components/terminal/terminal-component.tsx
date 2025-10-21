@@ -26,6 +26,7 @@ import {
 } from "./terminal-settings-dialog"
 import { FileManagerPanel } from "./file-manager-panel"
 import { NetworkLatencyPopover } from "./network-latency-popover"
+import { MonitorPanel } from "./monitor/MonitorPanel"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -64,6 +65,7 @@ export function TerminalComponent({
   const [loaderState, setLoaderState] = useState<"entering" | "loading" | "exiting">("entering")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false)
+  const [isMonitorOpen, setIsMonitorOpen] = useState(true) // 默认显示监控面板
 
   // 主题样式全部改为静态类 + dark: 前缀，避免 SSR/CSR 水合不一致
 
@@ -253,8 +255,9 @@ export function TerminalComponent({
                     className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                     aria-label="监控"
                     title="系统监控"
+                    onClick={() => setIsMonitorOpen(!isMonitorOpen)}
                   >
-                    <Activity className="h-3.5 w-3.5" />
+                    <Activity className={cn("h-3.5 w-3.5", isMonitorOpen && "text-blue-500")} />
                   </Button>
 
                   <Button
@@ -305,56 +308,66 @@ export function TerminalComponent({
               </div>
             )}
 
-            {/* 内容区域：快速连接或终端 */}
-            <div className="flex-1 min-h-0 relative">
-              {active?.type === 'quick' ? (
-                <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
-                  <QuickConnect
-                    servers={servers}
-                    onSelectServer={(server) => onStartConnectionFromQuick(active.id, server)}
-                  />
-                </TabsContent>
-              ) : hibernateBackground ? (
-                active && (
-                  <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
-                    <WebTerminal
-                      sessionId={active.id}
-                      serverName={active.serverName}
-                      host={active.host}
-                      username={active.username}
-                      isConnected={active.isConnected}
-                      onCommand={(command) => handleCommand(active.id, command)}
-                      onLoadingChange={(isLoading) => handleLoadingChange(active.id, isLoading)}
-                      theme={settings.theme}
-                      fontSize={settings.fontSize}
-                      fontFamily={settings.fontFamily}
-                      cursorStyle={settings.cursorStyle}
-                      cursorBlink={settings.cursorBlink}
-                      scrollback={settings.scrollback}
-                    />
-                  </TabsContent>
-                )
-              ) : (
-                sessions.map((session) => (
-                  <TabsContent key={session.id} value={session.id} className="flex-1 flex flex-col m-0 absolute inset-0">
-                    <WebTerminal
-                      sessionId={session.id}
-                      serverName={session.serverName}
-                      host={session.host}
-                      username={session.username}
-                      isConnected={session.isConnected}
-                      onCommand={(command) => handleCommand(session.id, command)}
-                      onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
-                      theme={settings.theme}
-                      fontSize={settings.fontSize}
-                      fontFamily={settings.fontFamily}
-                      cursorStyle={settings.cursorStyle}
-                      cursorBlink={settings.cursorBlink}
-                      scrollback={settings.scrollback}
-                    />
-                  </TabsContent>
-                ))
+            {/* 内容区域：监控面板 + 终端/快速连接 */}
+            <div className="flex-1 min-h-0 relative flex">
+              {/* 监控面板 - 左侧固定 250px */}
+              {isMonitorOpen && active && active.type !== 'quick' && (
+                <div className="transition-all duration-300 ease-in-out">
+                  <MonitorPanel />
+                </div>
               )}
+
+              {/* 终端区域 - flex-1 占据剩余空间 */}
+              <div className="flex-1 min-w-0 relative">
+                {active?.type === 'quick' ? (
+                  <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
+                    <QuickConnect
+                      servers={servers}
+                      onSelectServer={(server) => onStartConnectionFromQuick(active.id, server)}
+                    />
+                  </TabsContent>
+                ) : hibernateBackground ? (
+                  active && (
+                    <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
+                      <WebTerminal
+                        sessionId={active.id}
+                        serverName={active.serverName}
+                        host={active.host}
+                        username={active.username}
+                        isConnected={active.isConnected}
+                        onCommand={(command) => handleCommand(active.id, command)}
+                        onLoadingChange={(isLoading) => handleLoadingChange(active.id, isLoading)}
+                        theme={settings.theme}
+                        fontSize={settings.fontSize}
+                        fontFamily={settings.fontFamily}
+                        cursorStyle={settings.cursorStyle}
+                        cursorBlink={settings.cursorBlink}
+                        scrollback={settings.scrollback}
+                      />
+                    </TabsContent>
+                  )
+                ) : (
+                  sessions.map((session) => (
+                    <TabsContent key={session.id} value={session.id} className="flex-1 flex flex-col m-0 absolute inset-0">
+                      <WebTerminal
+                        sessionId={session.id}
+                        serverName={session.serverName}
+                        host={session.host}
+                        username={session.username}
+                        isConnected={session.isConnected}
+                        onCommand={(command) => handleCommand(session.id, command)}
+                        onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
+                        theme={settings.theme}
+                        fontSize={settings.fontSize}
+                        fontFamily={settings.fontFamily}
+                        cursorStyle={settings.cursorStyle}
+                        cursorBlink={settings.cursorBlink}
+                        scrollback={settings.scrollback}
+                      />
+                    </TabsContent>
+                  ))
+                )}
+              </div>
             </div>
           </Tabs>
         )}
