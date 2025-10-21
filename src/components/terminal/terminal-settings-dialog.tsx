@@ -29,6 +29,7 @@ import {
   Clock,
   Layers
 } from "lucide-react"
+import { KeyboardShortcutInput } from "./keyboard-shortcut-input"
 
 export interface TerminalSettings {
   // 终端设置
@@ -451,39 +452,41 @@ export function TerminalSettingsDialog({
           <TabsContent value="shortcuts" className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="copyShortcut">复制</Label>
-              <Input
+              <KeyboardShortcutInput
                 id="copyShortcut"
                 value={localSettings.copyShortcut}
-                onChange={(e) => updateSetting('copyShortcut', e.target.value)}
-                placeholder="快捷键"
+                onChange={(value) => updateSetting('copyShortcut', value)}
+                placeholder="点击后按下快捷键"
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="pasteShortcut">粘贴</Label>
-              <Input
+              <KeyboardShortcutInput
                 id="pasteShortcut"
                 value={localSettings.pasteShortcut}
-                onChange={(e) => updateSetting('pasteShortcut', e.target.value)}
-                placeholder="快捷键"
+                onChange={(value) => updateSetting('pasteShortcut', value)}
+                placeholder="点击后按下快捷键"
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="clearShortcut">清屏</Label>
-              <Input
+              <KeyboardShortcutInput
                 id="clearShortcut"
                 value={localSettings.clearShortcut}
-                onChange={(e) => updateSetting('clearShortcut', e.target.value)}
-                placeholder="快捷键"
+                onChange={(value) => updateSetting('clearShortcut', value)}
+                placeholder="点击后按下快捷键"
               />
             </div>
 
             <div className="rounded-lg bg-muted p-4 space-y-2">
               <p className="text-sm font-medium">提示</p>
-              <p className="text-xs text-muted-foreground">
-                使用组合键格式，例如：Ctrl+Shift+C、Alt+Enter 等
-              </p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li>• 点击输入框后，按下任意键组合即可自动录入</li>
+                <li>• 支持 Ctrl、Shift、Alt、Meta 等修饰键</li>
+                <li>• 点击输入框右侧的 × 图标可清除快捷键</li>
+              </ul>
             </div>
           </TabsContent>
         </Tabs>
