@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, DragEvent } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "next-themes"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
@@ -921,11 +922,13 @@ export function SftpManager(props: SftpManagerProps) {
     onToggleFullscreen,
   }
 
-  return (
+  // 主界面内容
+  const managerContent = (
     <SftpSessionProvider value={sessionContextValue}>
       <div
         className={cn(
-          "flex flex-col h-full rounded-xl border overflow-hidden transition-colors bg-card"
+          "flex flex-col h-full overflow-hidden transition-colors bg-card",
+          isFullscreen ? "fixed inset-0 z-[9999] rounded-none border-0" : "rounded-xl border"
         )}
       >
       {/* 工具栏 */}
@@ -1067,27 +1070,6 @@ export function SftpManager(props: SftpManagerProps) {
           </div>
         </div>
 
-        {/* 中间:会话信息 */}
-        <div className={cn(
-          "flex items-center gap-2 text-xs",
-          isDark ? "text-zinc-500" : "text-zinc-600"
-        )}>
-          <Globe className="h-3.5 w-3.5 text-green-400" />
-          <span className="font-mono">
-            {username}@{host}
-          </span>
-          <span className={isDark ? "text-zinc-700" : "text-zinc-400"}>|</span>
-          <span className={isConnected ? "text-green-400" : "text-red-400"}>
-            {isConnected ? "已连接" : "已断开"}
-          </span>
-          {selectedFiles.length > 0 && (
-            <>
-              <span className={isDark ? "text-zinc-700" : "text-zinc-400"}>|</span>
-              <span>已选择 {selectedFiles.length} 项</span>
-            </>
-          )}
-        </div>
-
         {/* 右侧工具按钮 */}
         <div className="flex items-center gap-1">
           {/* 视图切换 */}
@@ -1216,6 +1198,16 @@ export function SftpManager(props: SftpManagerProps) {
         >
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>
+
+        {/* 已选择文件提示 */}
+        {selectedFiles.length > 0 && (
+          <div className={cn(
+            "flex items-center gap-2 text-xs px-2 py-1 rounded-md",
+            isDark ? "bg-blue-500/10 text-blue-400" : "bg-blue-500/10 text-blue-600"
+          )}>
+            <span>已选择 {selectedFiles.length} 项</span>
+          </div>
+        )}
       </div>
 
       {/* 主内容区域 - 文件列表 */}
@@ -1408,7 +1400,7 @@ export function SftpManager(props: SftpManagerProps) {
           </div>
         ) : (
           <Table>
-            <TableHeader className="sticky top-0 z-10 backdrop-blur-sm bg-background/95">
+            <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
               <TableRow className={cn(
                 isDark ? "border-zinc-800/50" : "border-zinc-200"
               )}>
@@ -2235,4 +2227,14 @@ export function SftpManager(props: SftpManagerProps) {
       </div>
     </SftpSessionProvider>
   )
+
+  // 全屏模式 - 使用 Portal 渲染到 body
+  if (isFullscreen) {
+    return typeof window !== 'undefined'
+      ? createPortal(managerContent, document.body)
+      : null
+  }
+
+  // 嵌入模式
+  return managerContent
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 import Editor from "@monaco-editor/react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
@@ -203,10 +204,9 @@ export function FileEditor({
 
   if (!isOpen) return null
 
-  // 全屏模式
-  if (isFullscreen) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-background">
+  // 全屏内容
+  const fullscreenContent = (
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-background">
         <div
           className={cn(
             "flex flex-col h-full",
@@ -420,6 +420,11 @@ export function FileEditor({
                 cursorBlinking: "smooth",
                 cursorSmoothCaretAnimation: "on",
                 padding: { top: 16, bottom: 16 },
+                find: {
+                  addExtraSpaceOnTop: false,
+                  autoFindInSelection: "never",
+                  seedSearchStringFromSelection: "selection",
+                },
               }}
               onMount={(editor) => {
                 editorRef[0] = editor
@@ -465,7 +470,13 @@ export function FileEditor({
           </div>
         </div>
       </div>
-    )
+  )
+
+  // 全屏模式 - 使用 Portal 渲染到 body
+  if (isFullscreen) {
+    return typeof window !== 'undefined'
+      ? createPortal(fullscreenContent, document.body)
+      : null
   }
 
   // 嵌入模式
@@ -676,6 +687,11 @@ export function FileEditor({
             cursorBlinking: "smooth",
             cursorSmoothCaretAnimation: "on",
             padding: { top: 12, bottom: 12 },
+            find: {
+              addExtraSpaceOnTop: false,
+              autoFindInSelection: "never",
+              seedSearchStringFromSelection: "selection",
+            },
           }}
           onMount={(editor) => {
             editorRef[0] = editor
