@@ -152,11 +152,11 @@ export function FileManagerPanel({
           width: isMobile ? '100%' : `${width}px`,
         }}
       >
-        {/* 调整大小手柄 - 仅桌面端 */}
+        {/* 调整大小手柄 - 仅桌面端，左侧圆角 */}
         {!isMobile && (
           <div
             className={cn(
-              "w-1 cursor-col-resize group hover:bg-blue-500/50 transition-colors relative flex items-center justify-center bg-transparent",
+              "w-1 cursor-col-resize group hover:bg-blue-500/50 transition-colors relative flex items-center justify-center bg-transparent rounded-l-xl",
               isResizing && "bg-blue-500/50"
             )}
             onMouseDown={handleResizeStart}
@@ -173,7 +173,10 @@ export function FileManagerPanel({
         )}
 
         {/* 主面板内容 */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl">
+        <div className={cn(
+          "flex-1 flex flex-col bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl",
+          !isMobile && "rounded-l-xl" // 桌面端添加左侧圆角
+        )}>
           {/* SFTP 管理器内容 - 直接显示，无顶部工具栏 */}
           <div className="flex-1 overflow-hidden">
             {sftpProps.isConnected ? (

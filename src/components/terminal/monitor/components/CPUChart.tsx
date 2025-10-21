@@ -1,11 +1,19 @@
 /**
  * CPU 使用率图表组件
- * 使用自定义 SVG 折线图显示最近 20 个数据点的 CPU 使用率
+ * 使用 recharts AreaChart 显示最近 20 个数据点的 CPU 使用率
  * 固定高度 142px
  */
 
-import React, { useMemo } from 'react';
+"use client"
+
+import React from 'react';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import type { CPUData } from '../types/metrics';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+} from "@/components/ui/chart";
 
 interface CPUChartProps {
   data: CPUData[];
@@ -13,55 +21,27 @@ interface CPUChartProps {
 }
 
 /**
+ * 图表配置
+ */
+const chartConfig = {
+  usage: {
+    label: "CPU",
+    color: "var(--chart-1)",
+  },
+} satisfies ChartConfig;
+
+/**
  * CPU 使用率图表组件
  */
 export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsage }) => {
-  // 计算 SVG 路径 - 使用平滑曲线
-  const { pathData, linePath } = useMemo(() => {
-    if (!data || data.length === 0) {
-      return { pathData: '', linePath: '' };
-    }
+  // 转换数据格式为 recharts 需要的格式
+  const chartData = data.map(item => ({
+    time: item.time.slice(3, 8), // 只显示时间部分
+    usage: item.usage,
+  }));
 
-    const width = 230;
-    const height = 100;
-    const padding = { left: 0, right: 0, top: 10, bottom: 20 };
-    const chartWidth = width - padding.left - padding.right;
-    const chartHeight = height - padding.top - padding.bottom;
-
-    // 计算点的坐标
-    const points = data.map((d, i) => {
-      const x = padding.left + (i / (data.length - 1)) * chartWidth;
-      const y = padding.top + chartHeight - (d.usage / 100) * chartHeight;
-      return { x, y };
-    });
-
-    // 生成平滑曲线路径 (使用三次贝塞尔曲线 - Catmull-Rom样条)
-    let smoothPath = '';
-    if (points.length > 0) {
-      smoothPath = `M ${points[0].x} ${points[0].y}`;
-
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i > 0 ? i - 1 : i];
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const p3 = points[i + 2] || p2;
-
-        // 使用Catmull-Rom样条计算控制点 (张力系数0.3使曲线更平缓)
-        const tension = 0.3;
-        const cp1x = p1.x + (p2.x - p0.x) / 6 * tension;
-        const cp1y = p1.y + (p2.y - p0.y) / 6 * tension;
-        const cp2x = p2.x - (p3.x - p1.x) / 6 * tension;
-        const cp2y = p2.y - (p3.y - p1.y) / 6 * tension;
-
-        smoothPath += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-      }
-    }
-
-    // 填充区域路径
-    const fillPath = `${smoothPath} L ${chartWidth} ${padding.top + chartHeight} L ${padding.left} ${padding.top + chartHeight} Z`;
-
-    return { pathData: fillPath, linePath: smoothPath };
-  }, [data]);
+  // Y 轴刻度值
+  const yAxisTicks = [0, 25, 50, 75, 100];
 
   return (
     <div className="space-y-1">
@@ -75,95 +55,100 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         </span>
       </div>
 
-      {/* 图表区域 - 固定高度 142px */}
-      <div className="h-[142px] w-full relative">
-        <svg width="230" height="120" className="absolute inset-0">
-          {/* 渐变定义 */}
-          <defs>
-            <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
-              <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
-            </linearGradient>
-          </defs>
+      {/* 图表区域 - 固定高度 106px */}
+      <div className="h-[106px] w-full relative">
+        {/* 内嵌 Y 轴标签 */}
+        <div className="absolute left-1 top-2 bottom-4 flex flex-col justify-between text-[9px] text-muted-foreground/70 pointer-events-none z-10">
+          {[...yAxisTicks].reverse().map((value, idx) => (
+            <span key={idx} className="leading-none">
+              {value === 0 ? '' : value}
+            </span>
+          ))}
+        </div>
 
-          {/* 网格线 */}
-          {[0, 25, 50, 75, 100].map((tick) => {
-            const y = 10 + 70 - (tick / 100) * 70;
-            return (
-              <g key={tick}>
-                <line
-                  x1="0"
-                  y1={y}
-                  x2="230"
-                  y2={y}
-                  stroke="hsl(var(--border))"
-                  strokeWidth="1"
-                  opacity="0.2"
-                  strokeDasharray="3 3"
+        <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+          <AreaChart
+            data={chartData}
+            margin={{
+              left: 12,
+              right: 12,
+              top: 8,
+              bottom: 0,
+            }}
+          >
+            <defs>
+              <linearGradient id="fillCPU" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-usage)"
+                  stopOpacity={0.8}
                 />
-                <text
-                  x="5"
-                  y={y - 2}
-                  fontSize="9"
-                  fill="hsl(var(--muted-foreground))"
-                  opacity="0.6"
-                >
-                  {tick}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* 填充区域 */}
-          {pathData && (
-            <path
-              d={pathData}
-              fill="url(#cpuGradient)"
-              stroke="none"
-              style={{
-                transition: 'd 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-usage)"
+                  stopOpacity={0.1}
+                />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              vertical={false}
+              strokeDasharray="3 3"
+              stroke="hsl(var(--border))"
+              opacity={0.3}
             />
-          )}
-
-          {/* 折线 */}
-          {linePath && (
-            <path
-              d={linePath}
-              fill="none"
-              stroke="hsl(var(--chart-1))"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                transition: 'd 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
+            <XAxis
+              dataKey="time"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              interval="preserveStartEnd"
             />
-          )}
+            <YAxis hide domain={[0, 100]} />
+            <ChartTooltip
+              cursor={false}
+              content={({ active, payload, label }) => {
+                if (!active || !payload || payload.length === 0) {
+                  return null;
+                }
 
-          {/* 时间标签 - 显示5个时间点 */}
-          {data.length >= 5 && (
-            <>
-              {[0, 2, 4, 6, 9].map((index) => {
-                if (index >= data.length) return null;
-                const x = (index / (data.length - 1)) * 230;
+                const usage = payload[0].value as number;
+
                 return (
-                  <text
-                    key={index}
-                    x={x}
-                    y="110"
-                    fontSize="8"
-                    fill="hsl(var(--muted-foreground))"
-                    opacity="0.6"
-                    textAnchor={index === 0 ? 'start' : index === 9 ? 'end' : 'middle'}
-                  >
-                    {data[index]?.time.slice(3, 8)}
-                  </text>
+                  <div className="rounded-lg border bg-background px-2.5 py-2 shadow-xl">
+                    <div className="mb-1.5 text-xs font-medium text-foreground">
+                      时间: {label}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-medium mb-1">
+                      <div
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: 'var(--chart-1)' }}
+                      />
+                      <span>CPU</span>
+                    </div>
+                    <div className="text-xs font-mono pl-3.5">
+                      <div className={`font-medium ${
+                        usage > 80 ? 'text-red-500' : usage > 60 ? 'text-yellow-500' : ''
+                      }`}>
+                        {usage}%
+                      </div>
+                    </div>
+                  </div>
                 );
-              })}
-            </>
-          )}
-        </svg>
+              }}
+            />
+            <Area
+              dataKey="usage"
+              type="natural"
+              fill="url(#fillCPU)"
+              fillOpacity={0.4}
+              stroke="var(--color-usage)"
+              strokeWidth={2}
+              animationDuration={800}
+              animationEasing="ease-out"
+            />
+          </AreaChart>
+        </ChartContainer>
       </div>
     </div>
   );

@@ -1,51 +1,56 @@
 /**
  * 内存使用图表组件
- * 使用双层圆环图显示 RAM 和 Swap
+ * 使用 recharts RadialBarChart 显示 RAM 和 Swap
  * 固定高度 142px
  */
 
+"use client"
+
 import React from 'react';
+import { RadialBarChart, RadialBar, PolarAngleAxis } from "recharts";
 import type { MemoryData } from '../types/metrics';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+} from "@/components/ui/chart";
 
 interface MemoryChartProps {
   data: MemoryData;
 }
 
 /**
- * 绘制圆环进度 - 使用 conic-gradient 实现
+ * 图表配置
  */
-const RingProgress: React.FC<{
-  percent: number;
-  size: number;
-  thickness: number;
-  color: string;
-}> = ({ percent, size, thickness }) => {
-  const radius = (size - thickness) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percent / 100) * circumference;
-
-  return (
-    <circle
-      cx={size / 2}
-      cy={size / 2}
-      r={radius}
-      fill="transparent"
-      stroke="currentColor"
-      strokeWidth={thickness}
-      strokeDasharray={circumference}
-      strokeDashoffset={offset}
-      strokeLinecap="round"
-      transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      style={{ transition: 'stroke-dashoffset 0.3s ease' }}
-    />
-  );
-};
+const chartConfig = {
+  ram: {
+    label: "RAM",
+    color: "var(--chart-2)",
+  },
+  swap: {
+    label: "Swap",
+    color: "var(--chart-4)",
+  },
+} satisfies ChartConfig;
 
 /**
  * 内存使用图表组件
  */
 export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => {
-  const svgSize = 110;
+  // 转换数据格式为 recharts 需要的格式
+  // 注意：数组顺序决定了径向条的层叠顺序（从内到外）
+  const chartData = [
+    {
+      name: "swap",
+      value: data.swap.percent,
+      fill: "var(--color-swap)",
+    },
+    {
+      name: "ram",
+      value: data.ram.percent,
+      fill: "var(--color-ram)",
+    },
+  ];
 
   return (
     <div className="space-y-1">
@@ -59,75 +64,80 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
         </span>
       </div>
 
-      {/* 图表区域 - 固定高度 142px,左图右文 */}
-      <div className="h-[142px] flex items-center gap-3">
-        {/* 左侧:双层圆环 */}
-        <div className="w-[110px] h-[110px] relative flex items-center justify-center flex-shrink-0">
-          <svg width={svgSize} height={svgSize} className="absolute">
-            {/* 背景圆环 - Swap (内圈) */}
-            <circle
-              cx={svgSize / 2}
-              cy={svgSize / 2}
-              r={34}
-              fill="none"
-              stroke="hsl(var(--border))"
-              strokeWidth={12}
-              opacity={0.15}
-            />
+      {/* 图表区域 - 固定高度 106px,左图右文 */}
+      <div className="h-[106px] flex items-center gap-3">
+        {/* 左侧:径向条形图 */}
+        <div className="w-[106px] h-[106px] relative flex-shrink-0">
+          <ChartContainer config={chartConfig} className="w-full h-full">
+            <RadialBarChart
+              data={chartData}
+              startAngle={90}
+              endAngle={450}
+              innerRadius={25}
+              outerRadius={55}
+            >
+              <PolarAngleAxis
+                type="number"
+                domain={[0, 100]}
+                angleAxisId={0}
+                tick={false}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={({ active, payload }) => {
+                  if (!active || !payload || payload.length === 0) {
+                    return null;
+                  }
 
-            {/* Swap 进度 (内圈) - 紫色 */}
-            <circle
-              cx={svgSize / 2}
-              cy={svgSize / 2}
-              r={34}
-              fill="transparent"
-              stroke="#a855f7"
-              strokeWidth={12}
-              strokeDasharray={2 * Math.PI * 34}
-              strokeDashoffset={2 * Math.PI * 34 - (data.swap.percent / 100) * 2 * Math.PI * 34}
-              transform={`rotate(-90 ${svgSize / 2} ${svgSize / 2})`}
-              style={{ transition: 'stroke-dashoffset 0.3s ease' }}
-            />
+                  const item = payload[0].payload;
+                  const isRAM = item.name === 'ram';
+                  const memData = isRAM ? data.ram : data.swap;
 
-            {/* 背景圆环 - RAM (外圈) */}
-            <circle
-              cx={svgSize / 2}
-              cy={svgSize / 2}
-              r={46}
-              fill="none"
-              stroke="hsl(var(--border))"
-              strokeWidth={12}
-              opacity={0.15}
-            />
+                  return (
+                    <div className="rounded-lg border bg-background px-2.5 py-2 shadow-xl">
+                      <div className="flex items-center gap-2 text-xs font-medium mb-1.5">
+                        <div
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: item.fill }}
+                        />
+                        <span>{isRAM ? 'RAM' : 'Swap'}</span>
+                      </div>
+                      <div className="text-xs font-mono space-y-0.5 pl-3.5">
+                        <div className={`font-medium ${
+                          memData.percent > 85 ? 'text-red-500' : memData.percent > 70 ? 'text-yellow-500' : ''
+                        }`}>
+                          {memData.percent}%
+                        </div>
+                        <div className="text-muted-foreground">
+                          {memData.used.toFixed(1)}G / {memData.total}G
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <RadialBar
+                dataKey="value"
+                background
+                cornerRadius={5}
+              />
+            </RadialBarChart>
+          </ChartContainer>
 
-            {/* RAM 进度 (外圈) - 蓝色 */}
-            <circle
-              cx={svgSize / 2}
-              cy={svgSize / 2}
-              r={46}
-              fill="transparent"
-              stroke="#3b82f6"
-              strokeWidth={12}
-              strokeDasharray={2 * Math.PI * 46}
-              strokeDashoffset={2 * Math.PI * 46 - (data.ram.percent / 100) * 2 * Math.PI * 46}
-              transform={`rotate(-90 ${svgSize / 2} ${svgSize / 2})`}
-              style={{ transition: 'stroke-dashoffset 0.3s ease' }}
-            />
-          </svg>
-
-          {/* 中心百分比 */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="text-2xl font-bold tabular-nums">{data.ram.percent}%</span>
-          </div>
         </div>
 
         {/* 右侧:文字信息 */}
         <div className="flex-1 space-y-3 text-xs min-w-0">
           {/* RAM 信息 */}
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: 'hsl(var(--chart-2))' }} />
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--chart-2)' }} />
               <span className="font-medium">RAM</span>
+            </div>
+            <div className={`font-medium tabular-nums pl-3.5 ${
+              data.ram.percent > 85 ? 'text-red-500' : data.ram.percent > 70 ? 'text-yellow-500' : ''
+            }`}>
+              {data.ram.percent}%
             </div>
             <div className="text-muted-foreground font-mono tabular-nums text-[11px] pl-3.5">
               {data.ram.used.toFixed(1)}G / {data.ram.total}G
@@ -135,10 +145,15 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
           </div>
 
           {/* Swap 信息 */}
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: 'hsl(var(--chart-4))' }} />
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--chart-4)' }} />
               <span className="font-medium">Swap</span>
+            </div>
+            <div className={`font-medium tabular-nums pl-3.5 ${
+              data.swap.percent > 85 ? 'text-red-500' : data.swap.percent > 70 ? 'text-yellow-500' : ''
+            }`}>
+              {data.swap.percent}%
             </div>
             <div className="text-muted-foreground font-mono tabular-nums text-[11px] pl-3.5">
               {data.swap.used.toFixed(1)}G / {data.swap.total}G

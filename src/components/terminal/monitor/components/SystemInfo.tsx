@@ -35,7 +35,7 @@ const InfoRow: React.FC<{
   return (
     <div
       className={cn(
-        "flex justify-between items-center h-6 leading-6 text-xs cursor-pointer transition-colors",
+        "flex justify-between items-center h-5 leading-5 text-xs cursor-pointer transition-colors",
         "hover:bg-accent/50 rounded px-1.5 -mx-1.5",
         copied && "bg-green-500/10"
       )}
@@ -59,13 +59,13 @@ const InfoRow: React.FC<{
  */
 export const SystemInfo: React.FC<SystemInfoProps> = React.memo(({ data }) => {
   return (
-    <div className="space-y-0">
-      {/* 模块标题 */}
-      <div className="h-6 flex items-center mb-1">
+    <div className="space-y-1">
+      {/* 模块标题 - 高度 28px */}
+      <div className="h-7 flex items-center">
         <span className="text-xs font-medium">系统信息</span>
       </div>
 
-      {/* 信息列表 - 6行×24px = 144px */}
+      {/* 信息列表 - 6行×20px = 120px */}
       <div className="space-y-0">
         <InfoRow label="OS" value={data.os} />
         <InfoRow label="主机" value={data.hostname} monospace />

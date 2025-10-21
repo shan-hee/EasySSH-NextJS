@@ -257,7 +257,7 @@ export function TerminalComponent({
                     title="系统监控"
                     onClick={() => setIsMonitorOpen(!isMonitorOpen)}
                   >
-                    <Activity className={cn("h-3.5 w-3.5", isMonitorOpen && "text-blue-500")} />
+                    <Activity className="h-3.5 w-3.5" />
                   </Button>
 
                   <Button
@@ -310,12 +310,21 @@ export function TerminalComponent({
 
             {/* 内容区域：监控面板 + 终端/快速连接 */}
             <div className="flex-1 min-h-0 relative flex">
-              {/* 监控面板 - 左侧固定 250px */}
-              {isMonitorOpen && active && active.type !== 'quick' && (
-                <div className="transition-all duration-300 ease-in-out">
+              {/* 监控面板 - 左侧固定 250px，带优雅的滑入/滑出动画 */}
+              <div
+                className={cn(
+                  "transition-all duration-300 ease-out overflow-hidden",
+                  "border-r border-zinc-200 dark:border-zinc-800/30", // 右边框与工具栏一致
+                  "bg-white dark:bg-black", // 背景色与终端一致
+                  isMonitorOpen && active && active.type !== 'quick'
+                    ? "w-[250px] opacity-100 translate-x-0"
+                    : "w-0 opacity-0 -translate-x-4"
+                )}
+              >
+                {active && active.type !== 'quick' && (
                   <MonitorPanel />
-                </div>
-              )}
+                )}
+              </div>
 
               {/* 终端区域 - flex-1 占据剩余空间 */}
               <div className="flex-1 min-w-0 relative">

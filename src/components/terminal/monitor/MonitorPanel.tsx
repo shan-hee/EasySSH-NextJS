@@ -22,18 +22,18 @@ interface MonitorPanelProps {
 /**
  * 监控面板主组件
  *
- * 高度分配 (总计 915px):
- * - 顶部内边距: 12px
- * - 系统信息: 168px (标题24px + 内容144px)
- * - 间距: 8px
- * - CPU图表: 170px (标题28px + 图表142px)
- * - 间距: 8px
- * - 内存图表: 170px (标题28px + 图表142px)
- * - 间距: 8px
- * - 网络图表: 170px (标题28px + 图表142px)
- * - 间距: 8px
- * - 磁盘使用: 155px (标题28px + 磁盘条×2~3)
- * - 底部内边距: 12px
+ * 高度分配 (总计 720px, 完美适配1080p):
+ * - 顶部内边距: 6px
+ * - 系统信息: 148px (标题28px + 内容120px)
+ * - 间距: 6px
+ * - CPU图表: 134px (标题28px + 图表106px)
+ * - 间距: 6px
+ * - 内存图表: 134px (标题28px + 图表106px)
+ * - 间距: 6px
+ * - 网络图表: 134px (标题28px + 图表106px)
+ * - 间距: 6px
+ * - 磁盘使用: 134px (标题28px + 图表106px)
+ * - 底部内边距: 6px
  */
 export const MonitorPanel: React.FC<MonitorPanelProps> = ({ className }) => {
   // 获取实时监控数据
@@ -43,35 +43,33 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({ className }) => {
     <div
       className={cn(
         // 固定宽度,最小高度
-        "w-[250px] min-h-[915px] flex-shrink-0",
+        "w-[250px] min-h-[720px] flex-shrink-0",
         // 内边距和间距
-        "py-3 px-3 space-y-2",
-        // 样式
-        "border-r overflow-y-auto",
-        "bg-gradient-to-b from-background to-muted/20",
-        "border-border/50",
+        "py-1.5 px-3 space-y-1.5",
+        // 样式 - 移除边框（由外层容器处理）
+        "overflow-y-auto",
         // 滚动条样式
         "scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent",
         className
       )}
     >
-      {/* 1. 系统信息 - 168px */}
-      <div className="min-h-[168px]">
+      {/* 1. 系统信息 - 148px */}
+      <div className="min-h-[148px]">
         <SystemInfo data={metrics.systemInfo} />
       </div>
 
-      {/* 2. CPU 图表 - 170px */}
-      <div className="min-h-[170px]">
+      {/* 2. CPU 图表 - 134px */}
+      <div className="min-h-[134px]">
         <CPUChart data={metrics.cpuHistory} currentUsage={metrics.currentCPU} />
       </div>
 
-      {/* 3. 内存图表 - 170px */}
-      <div className="min-h-[170px]">
+      {/* 3. 内存图表 - 134px */}
+      <div className="min-h-[134px]">
         <MemoryChart data={metrics.memory} />
       </div>
 
-      {/* 4. 网络图表 - 170px */}
-      <div className="min-h-[170px]">
+      {/* 4. 网络图表 - 134px */}
+      <div className="min-h-[134px]">
         <NetworkChart
           data={metrics.networkHistory}
           currentDownload={metrics.currentNetwork.download}
@@ -79,8 +77,8 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({ className }) => {
         />
       </div>
 
-      {/* 5. 磁盘使用 - 155px */}
-      <div className="min-h-[155px]">
+      {/* 5. 磁盘使用 - 134px */}
+      <div className="min-h-[134px]">
         <DiskUsage data={metrics.disks} />
       </div>
     </div>

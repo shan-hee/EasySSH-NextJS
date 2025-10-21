@@ -1,11 +1,20 @@
 /**
  * 网络流量图表组件
- * 使用自定义 SVG 堆叠面积图显示上行和下行流量
+ * 使用 recharts 库显示上行和下行流量
  * 固定高度 142px
  */
 
-import React, { useMemo } from 'react';
+"use client"
+
+import React from 'react';
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { NetworkData } from '../types/metrics';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 
 interface NetworkChartProps {
   data: NetworkData[];
@@ -24,6 +33,20 @@ function formatSpeed(kbps: number): string {
 }
 
 /**
+ * 图表配置
+ */
+const chartConfig = {
+  download: {
+    label: "下载",
+    color: "var(--chart-3)",
+  },
+  upload: {
+    label: "上传",
+    color: "var(--chart-5)",
+  },
+} satisfies ChartConfig;
+
+/**
  * 网络流量图表组件
  */
 export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
@@ -31,60 +54,31 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
   currentDownload,
   currentUpload,
 }) => {
-  // 计算 SVG 路径 - 使用平滑曲线
-  const { downloadPath, uploadPath, maxValue } = useMemo(() => {
-    if (!data || data.length === 0) {
-      return { downloadPath: '', uploadPath: '', maxValue: 0 };
-    }
+  // 转换数据格式为 recharts 需要的格式
+  const chartData = data.map(item => ({
+    time: item.time.slice(3, 8), // 只显示时间部分
+    download: item.download,
+    upload: item.upload,
+  }));
 
-    const width = 230;
-    const height = 100;
-    const padding = { left: 0, right: 0, top: 10, bottom: 20 };
-    const chartWidth = width - padding.left - padding.right;
-    const chartHeight = height - padding.top - padding.bottom;
+  // 计算Y轴的最大值用于显示刻度
+  const maxValue = chartData.length > 0
+    ? Math.max(...chartData.map(d => Math.max(d.download, d.upload)), 100)
+    : 100;
 
-    // 找到最大值
-    const max = Math.max(...data.map(d => Math.max(d.download, d.upload)));
-    const calculatedMaxValue = max > 0 ? max : 1000;
+  const yAxisTicks = [
+    0,
+    Math.round(maxValue * 0.33),
+    Math.round(maxValue * 0.66),
+    Math.round(maxValue)
+  ];
 
-    // 生成平滑曲线的辅助函数 (使用 Catmull-Rom 样条)
-    const createSmoothPath = (values: number[]) => {
-      const points = values.map((val, i) => {
-        const x = padding.left + (i / (data.length - 1)) * chartWidth;
-        const y = padding.top + chartHeight - (val / calculatedMaxValue) * chartHeight;
-        return { x, y };
-      });
-
-      let smoothPath = '';
-      if (points.length > 0) {
-        smoothPath = `M ${points[0].x} ${points[0].y}`;
-
-        for (let i = 0; i < points.length - 1; i++) {
-          const p0 = points[i > 0 ? i - 1 : i];
-          const p1 = points[i];
-          const p2 = points[i + 1];
-          const p3 = points[i + 2] || p2;
-
-          // 使用Catmull-Rom样条计算控制点 (张力系数0.3使曲线更平缓)
-          const tension = 0.3;
-          const cp1x = p1.x + (p2.x - p0.x) / 6 * tension;
-          const cp1y = p1.y + (p2.y - p0.y) / 6 * tension;
-          const cp2x = p2.x - (p3.x - p1.x) / 6 * tension;
-          const cp2y = p2.y - (p3.y - p1.y) / 6 * tension;
-
-          smoothPath += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-        }
-      }
-
-      return `${smoothPath} L ${chartWidth} ${padding.top + chartHeight} L ${padding.left} ${padding.top + chartHeight} Z`;
-    };
-
-    return {
-      downloadPath: createSmoothPath(data.map(d => d.download)),
-      uploadPath: createSmoothPath(data.map(d => d.upload)),
-      maxValue: calculatedMaxValue
-    };
-  }, [data]);
+  // 格式化 Y 轴刻度标签
+  const formatYAxisTick = (value: number): string => {
+    if (value === 0) return '0';
+    if (value >= 1024) return `${(value / 1024).toFixed(0)}M`;
+    return `${value}K`;
+  };
 
   return (
     <div className="space-y-1">
@@ -92,104 +86,99 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
       <div className="flex justify-between items-center h-7">
         <span className="text-xs font-medium">网络</span>
         <div className="text-xs font-mono tabular-nums flex items-center gap-2">
-          <span className="text-green-500">↓ {formatSpeed(currentDownload)}</span>
-          <span className="text-orange-500">↑ {formatSpeed(currentUpload)}</span>
+          <span style={{ color: 'var(--chart-3)' }}>↓ {formatSpeed(currentDownload)}</span>
+          <span style={{ color: 'var(--chart-5)' }}>↑ {formatSpeed(currentUpload)}</span>
         </div>
       </div>
 
-      {/* 图表区域 - 固定高度 142px */}
-      <div className="h-[142px] w-full relative">
-        <svg width="230" height="120" className="absolute inset-0">
-          {/* 渐变定义 */}
-          <defs>
-            <linearGradient id="downloadGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--chart-3))" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity={0.05} />
-            </linearGradient>
-            <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--chart-5))" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="hsl(var(--chart-5))" stopOpacity={0.05} />
-            </linearGradient>
-          </defs>
+      {/* 图表区域 - 固定高度 106px */}
+      <div className="h-[106px] w-full relative">
+        {/* 内嵌 Y 轴标签 */}
+        <div className="absolute left-1 top-2 bottom-4 flex flex-col justify-between text-[9px] text-muted-foreground/70 pointer-events-none z-10">
+          {[...yAxisTicks].reverse().map((value, idx) => (
+            <span key={idx} className="leading-none">
+              {value === 0 ? '' : formatYAxisTick(value)}
+            </span>
+          ))}
+        </div>
 
-          {/* 网格线 */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
-            const y = 10 + 70 - ratio * 70;
-            const value = maxValue * ratio;
-            return (
-              <g key={i}>
-                <line
-                  x1="0"
-                  y1={y}
-                  x2="230"
-                  y2={y}
-                  stroke="hsl(var(--border))"
-                  strokeWidth="1"
-                  opacity="0.2"
-                  strokeDasharray="3 3"
-                />
-                <text
-                  x="5"
-                  y={y - 2}
-                  fontSize="8"
-                  fill="hsl(var(--muted-foreground))"
-                  opacity="0.6"
-                >
-                  {value >= 1024 ? `${(value / 1024).toFixed(0)}M` : `${value.toFixed(0)}K`}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* 下载面积 */}
-          {downloadPath && (
-            <path
-              d={downloadPath}
-              fill="url(#downloadGradient)"
-              stroke="hsl(var(--chart-3))"
-              strokeWidth="1.5"
-              style={{
-                transition: 'd 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
+        <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+          <LineChart
+            data={chartData}
+            margin={{
+              left: 12,
+              right: 12,
+              top: 8,
+              bottom: 0,
+            }}
+          >
+            <CartesianGrid
+              vertical={false}
+              strokeDasharray="3 3"
+              stroke="hsl(var(--border))"
+              opacity={0.3}
             />
-          )}
-
-          {/* 上传面积 */}
-          {uploadPath && (
-            <path
-              d={uploadPath}
-              fill="url(#uploadGradient)"
-              stroke="hsl(var(--chart-5))"
-              strokeWidth="1.5"
-              style={{
-                transition: 'd 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
+            <XAxis
+              dataKey="time"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              interval="preserveStartEnd"
             />
-          )}
+            <YAxis hide />
+            <ChartTooltip
+              cursor={false}
+              content={({ active, payload, label }) => {
+                if (!active || !payload || payload.length === 0) {
+                  return null;
+                }
 
-          {/* 时间标签 - 显示5个时间点 */}
-          {data.length >= 5 && (
-            <>
-              {[0, 2, 4, 6, 9].map((index) => {
-                if (index >= data.length) return null;
-                const x = (index / (data.length - 1)) * 230;
                 return (
-                  <text
-                    key={index}
-                    x={x}
-                    y="110"
-                    fontSize="8"
-                    fill="hsl(var(--muted-foreground))"
-                    opacity="0.6"
-                    textAnchor={index === 0 ? 'start' : index === 9 ? 'end' : 'middle'}
-                  >
-                    {data[index]?.time.slice(3, 8)}
-                  </text>
+                  <div className="rounded-lg border bg-background px-3 py-2 shadow-xl">
+                    <div className="mb-1.5 text-xs font-medium text-foreground">
+                      时间: {label}
+                    </div>
+                    <div className="space-y-1">
+                      {payload.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2 text-xs">
+                          <div
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span className="text-muted-foreground">
+                            {item.name === 'download' ? '下载' : '上传'}:
+                          </span>
+                          <span className="font-mono font-medium text-foreground">
+                            {formatSpeed(item.value as number)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 );
-              })}
-            </>
-          )}
-        </svg>
+              }}
+            />
+            <Line
+              dataKey="download"
+              type="natural"
+              stroke="var(--color-download)"
+              strokeWidth={2}
+              dot={false}
+              animationDuration={800}
+              animationEasing="ease-out"
+            />
+            <Line
+              dataKey="upload"
+              type="natural"
+              stroke="var(--color-upload)"
+              strokeWidth={2}
+              dot={false}
+              animationDuration={800}
+              animationEasing="ease-out"
+            />
+          </LineChart>
+        </ChartContainer>
       </div>
     </div>
   );
