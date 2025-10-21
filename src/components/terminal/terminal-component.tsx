@@ -24,6 +24,7 @@ import {
   TerminalSettingsDialog,
   type TerminalSettings,
 } from "./terminal-settings-dialog"
+import { FileManagerPanel } from "./file-manager-panel"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -61,6 +62,7 @@ export function TerminalComponent({
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
   const [loaderState, setLoaderState] = useState<"entering" | "loading" | "exiting">("entering")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isFileManagerOpen, setIsFileManagerOpen] = useState(false)
 
   // 主题样式全部改为静态类 + dark: 前缀，避免 SSR/CSR 水合不一致
 
@@ -230,37 +232,30 @@ export function TerminalComponent({
                 "bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30"
               )}>
                 {/* 左侧工具图标组 */}
-                <div className="flex items-center">
+                <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
-                    )}
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                     aria-label="文件管理器"
-                    title="文件管理器"
+                    title="文件管理器 (Ctrl+E)"
+                    onClick={() => setIsFileManagerOpen(!isFileManagerOpen)}
                   >
                     <FolderOpen className="h-3.5 w-3.5" />
                   </Button>
 
-                  <div className={cn(
-                    "h-4 w-px bg-zinc-300 dark:bg-zinc-800/50"
-                  )} />
-
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={cn(
-                      "h-7 rounded-md transition-all duration-200 flex items-center gap-2 px-2.5 hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
-                    )}
+                    className="h-7 rounded-md transition-colors flex items-center gap-2 px-2.5 text-foreground hover:bg-accent hover:text-accent-foreground"
                     aria-label="网络延迟"
                     title="网络延迟"
                   >
-                    <Globe className="h-3.5 w-3.5 text-green-400" />
+                    <Globe className="h-3.5 w-3.5" />
                     <div className="flex flex-col items-start leading-none text-left">
-                      <span className={cn(
-                        "text-[9px] uppercase font-semibold text-zinc-600 dark:text-zinc-500",
-                      )}>RTT</span>
+                      <span className="text-[9px] uppercase font-semibold">
+                        RTT
+                      </span>
                       <span className="text-xs tabular-nums text-green-400 font-medium">2 ms</span>
                     </div>
                   </Button>
@@ -268,9 +263,7 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
-                    )}
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                     aria-label="监控"
                     title="系统监控"
                   >
@@ -280,9 +273,7 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn(
-                      "h-7 w-7 rounded-md hover:bg-purple-500/20 hover:text-purple-400 transition-all duration-200 hover:scale-105 text-zinc-600 dark:text-zinc-400",
-                    )}
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                     aria-label="AI 助手"
                     title="AI 助手"
                   >
@@ -308,9 +299,7 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
-                    )}
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                     onClick={() => setIsFullscreen(!isFullscreen)}
                     title={isFullscreen ? "退出全屏" : "全屏"}
                   >
@@ -319,9 +308,7 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
-                    )}
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                     onClick={() => setIsSettingsOpen(true)}
                     title="设置"
                   >
@@ -394,6 +381,31 @@ export function TerminalComponent({
         settings={settings}
         onSettingsChange={handleSettingsChange}
       />
+
+      {/* 文件管理器面板 */}
+      {active && active.type !== 'quick' && (
+        <FileManagerPanel
+          isOpen={isFileManagerOpen}
+          onClose={() => setIsFileManagerOpen(false)}
+          serverId={0}
+          serverName={active.serverName || ''}
+          host={active.host || ''}
+          username={active.username || ''}
+          isConnected={active.isConnected || false}
+          currentPath="/home"
+          files={[]}
+          sessionId={active.id}
+          sessionLabel={active.serverName || ''}
+          onNavigate={(path) => console.log('Navigate to:', path)}
+          onUpload={(files) => console.log('Upload files:', files)}
+          onDownload={(fileName) => console.log('Download file:', fileName)}
+          onDelete={(fileName) => console.log('Delete file:', fileName)}
+          onCreateFolder={(name) => console.log('Create folder:', name)}
+          onRename={(oldName, newName) => console.log('Rename:', oldName, '->', newName)}
+          onDisconnect={() => setIsFileManagerOpen(false)}
+          onRefresh={() => console.log('Refresh')}
+        />
+      )}
     </div>
   )
 }

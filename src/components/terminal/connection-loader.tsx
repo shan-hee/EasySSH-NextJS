@@ -58,7 +58,7 @@ export function ConnectionLoader({
   }
 
   return (
-    <div className={`h-full w-full overflow-hidden relative transition-colors bg-background`}>
+    <div className={`h-full w-full overflow-hidden relative transition-colors bg-background [--loader-color:oklch(0.145_0_0)] dark:[--loader-color:oklch(1_0_0)]`}>
       {/* 动画背景线条 */}
       <div className="longfazers absolute inset-0">
         <span className="longfazer-1" />
@@ -159,7 +159,7 @@ export function ConnectionLoader({
         .body .body-main {
           height: 5px;
           width: 35px;
-          background: #22c55e;
+          background: var(--loader-color);
           position: absolute;
           top: -19px;
           left: 60px;
@@ -175,7 +175,7 @@ export function ConnectionLoader({
           width: 0;
           height: 0;
           border-top: 6px solid transparent;
-          border-right: 100px solid #22c55e;
+          border-right: 100px solid var(--loader-color);
           border-bottom: 6px solid transparent;
         }
 
@@ -184,11 +184,10 @@ export function ConnectionLoader({
           height: 22px;
           width: 22px;
           border-radius: 50%;
-          background: #22c55e;
+          background: var(--loader-color);
           position: absolute;
           right: -110px;
           top: -16px;
-          box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
         }
 
         .base span:after {
@@ -197,7 +196,7 @@ export function ConnectionLoader({
           width: 0;
           height: 0;
           border-top: 0 solid transparent;
-          border-right: 55px solid #22c55e;
+          border-right: 55px solid var(--loader-color);
           border-bottom: 16px solid transparent;
           top: -16px;
           right: -98px;
@@ -207,7 +206,7 @@ export function ConnectionLoader({
           position: absolute;
           height: 12px;
           width: 20px;
-          background: #22c55e;
+          background: var(--loader-color);
           border-radius: 20px 20px 0 0;
           transform: rotate(-40deg);
           right: -125px;
@@ -218,7 +217,7 @@ export function ConnectionLoader({
           content: "";
           height: 12px;
           width: 12px;
-          background: #22c55e;
+          background: var(--loader-color);
           right: 4px;
           top: 7px;
           position: absolute;
@@ -230,7 +229,7 @@ export function ConnectionLoader({
         .body .body-main > span {
           width: 30px;
           height: 1px;
-          background: #22c55e;
+          background: var(--loader-color);
           position: absolute;
         }
 
@@ -345,8 +344,8 @@ export function ConnectionLoader({
           position: absolute;
           height: 2px;
           width: 20%;
-          background: #22c55e;
-          box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+          background: var(--loader-color);
+          box-shadow: 0 0 10px color-mix(in oklch, var(--loader-color) 50%, transparent);
         }
 
         .longfazer-1 {
