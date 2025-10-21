@@ -25,6 +25,7 @@ import {
   type TerminalSettings,
 } from "./terminal-settings-dialog"
 import { FileManagerPanel } from "./file-manager-panel"
+import { NetworkLatencyPopover } from "./network-latency-popover"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -244,21 +245,7 @@ export function TerminalComponent({
                     <FolderOpen className="h-3.5 w-3.5" />
                   </Button>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 rounded-md transition-colors flex items-center gap-2 px-2.5 text-foreground hover:bg-accent hover:text-accent-foreground"
-                    aria-label="网络延迟"
-                    title="网络延迟"
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                    <div className="flex flex-col items-start leading-none text-left">
-                      <span className="text-[9px] uppercase font-semibold">
-                        RTT
-                      </span>
-                      <span className="text-xs tabular-nums text-green-400 font-medium">2 ms</span>
-                    </div>
-                  </Button>
+                  <NetworkLatencyPopover currentLatency={2} />
 
                   <Button
                     variant="ghost"
