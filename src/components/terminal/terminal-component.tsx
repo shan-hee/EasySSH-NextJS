@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useTheme } from "next-themes"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
@@ -63,18 +62,7 @@ export function TerminalComponent({
   const [loaderState, setLoaderState] = useState<"entering" | "loading" | "exiting">("entering")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
-  // 获取应用主题
-  const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  // 确保只在客户端渲染时应用主题
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // 初始从 html.dark 读取，挂载后使用 resolvedTheme，避免浅色初始黑屏
-  const initialIsDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-  const isDark = mounted ? resolvedTheme === 'dark' : initialIsDark
+  // 主题样式全部改为静态类 + dark: 前缀，避免 SSR/CSR 水合不一致
 
   const [settings, setSettings] = useState<TerminalSettings>(() => {
     // 从 localStorage 加载设置
@@ -197,9 +185,7 @@ export function TerminalComponent({
 
       <div className={cn(
         "flex-1 flex flex-col rounded-xl border overflow-hidden shadow-2xl transition-colors",
-        isDark
-          ? "border-zinc-800/50 bg-gradient-to-b from-black to-zinc-950"
-          : "border-zinc-200 bg-gradient-to-b from-white to-zinc-50"
+        "border-zinc-200 bg-gradient-to-b from-white to-zinc-50 dark:border-zinc-800/50 dark:from-black dark:to-zinc-950"
       )}>
         {/* 页签栏（仅保留标签，不显示面包屑） */}
         <SessionTabBar
@@ -241,9 +227,7 @@ export function TerminalComponent({
             {active && active.type !== 'quick' && !effectiveIsLoading && (
               <div className={cn(
                 "border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors",
-                isDark
-                  ? "bg-gradient-to-b from-black/90 to-black border-zinc-800/30"
-                  : "bg-gradient-to-b from-white to-zinc-50 border-zinc-200"
+                "bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30"
               )}>
                 {/* 左侧工具图标组 */}
                 <div className="flex items-center">
@@ -251,10 +235,7 @@ export function TerminalComponent({
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-                      isDark
-                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
                     )}
                     aria-label="文件管理器"
                     title="文件管理器"
@@ -263,16 +244,14 @@ export function TerminalComponent({
                   </Button>
 
                   <div className={cn(
-                    "h-4 w-px",
-                    isDark ? "bg-zinc-800/50" : "bg-zinc-300"
+                    "h-4 w-px bg-zinc-300 dark:bg-zinc-800/50"
                   )} />
 
                   <Button
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      "h-7 rounded-md transition-all duration-200 flex items-center gap-2 px-2.5",
-                      isDark ? "hover:bg-zinc-800/60" : "hover:bg-zinc-200"
+                      "h-7 rounded-md transition-all duration-200 flex items-center gap-2 px-2.5 hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
                     )}
                     aria-label="网络延迟"
                     title="网络延迟"
@@ -280,8 +259,7 @@ export function TerminalComponent({
                     <Globe className="h-3.5 w-3.5 text-green-400" />
                     <div className="flex flex-col items-start leading-none text-left">
                       <span className={cn(
-                        "text-[9px] uppercase font-semibold",
-                        isDark ? "text-zinc-500" : "text-zinc-600"
+                        "text-[9px] uppercase font-semibold text-zinc-600 dark:text-zinc-500",
                       )}>RTT</span>
                       <span className="text-xs tabular-nums text-green-400 font-medium">2 ms</span>
                     </div>
@@ -291,10 +269,7 @@ export function TerminalComponent({
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-                      isDark
-                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                      "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
                     )}
                     aria-label="监控"
                     title="系统监控"
@@ -306,8 +281,7 @@ export function TerminalComponent({
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "h-7 w-7 rounded-md hover:bg-purple-500/20 hover:text-purple-400 transition-all duration-200 hover:scale-105",
-                      isDark ? "text-zinc-400" : "text-zinc-600"
+                      "h-7 w-7 rounded-md hover:bg-purple-500/20 hover:text-purple-400 transition-all duration-200 hover:scale-105 text-zinc-600 dark:text-zinc-400",
                     )}
                     aria-label="AI 助手"
                     title="AI 助手"
@@ -318,13 +292,12 @@ export function TerminalComponent({
 
                 {/* 中间：会话信息 */}
                 <div className={cn(
-                  "flex items-center gap-2 text-xs",
-                  isDark ? "text-zinc-500" : "text-zinc-600"
+                  "flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500",
                 )}>
                   <span className="font-mono">
                     {active.username}@{active.host}
                   </span>
-                  <span className={isDark ? "text-zinc-700" : "text-zinc-400"}>|</span>
+                  <span className={"text-zinc-400 dark:text-zinc-700"}>|</span>
                   <span className={active.isConnected ? "text-green-400" : "text-red-400"}>
                     {active.isConnected ? "已连接" : "已断开"}
                   </span>
@@ -336,10 +309,7 @@ export function TerminalComponent({
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200",
-                      isDark
-                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                      "h-7 w-7 rounded-md transition-all duration-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
                     )}
                     onClick={() => setIsFullscreen(!isFullscreen)}
                     title={isFullscreen ? "退出全屏" : "全屏"}
@@ -350,10 +320,7 @@ export function TerminalComponent({
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "h-7 w-7 rounded-md transition-all duration-200",
-                      isDark
-                        ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                        : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                      "h-7 w-7 rounded-md transition-all duration-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60",
                     )}
                     onClick={() => setIsSettingsOpen(true)}
                     title="设置"

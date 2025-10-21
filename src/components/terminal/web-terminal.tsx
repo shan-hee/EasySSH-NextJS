@@ -63,15 +63,14 @@ export function WebTerminal({
     setIsClient(true)
   }, [])
 
-  // 监听应用主题变化（仅当 theme 为 default 时）；使用 layoutEffect 减少可见延迟
+  // 监听应用主题/终端主题变化；使用 layoutEffect 减少可见延迟
   useLayoutEffect(() => {
-    if (theme !== 'default') return
     if (!terminalInstanceRef.current) return
 
-    // 应用主题变化时更新终端主题
-    const terminalTheme = getTerminalTheme('default', effectiveAppTheme)
+    // 根据当前终端主题选择（default/其他主题）与应用明暗态，动态更新 xterm 主题
+    const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
     terminalInstanceRef.current.options.theme = terminalTheme
-    // xterm 会在设置 theme 后重绘，这里无需额外 refresh
+    // xterm 在更新 options.theme 时会自动重绘
   }, [theme, effectiveAppTheme])
 
   // Write prompt function - defined early to be used in useEffect

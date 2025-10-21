@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { TerminalSession } from "@/components/terminal/types"
@@ -63,19 +62,6 @@ export function SessionTabBar(props: SessionTabBarProps) {
 
   const [menu, setMenu] = useState<MenuState>({ open: false, x: 0, y: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
-
-  // 获取应用主题
-  const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  // 确保只在客户端渲染时应用主题
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // 初始从 html.dark 读取，挂载后使用 resolvedTheme，避免浅色初始黑屏
-  const initialIsDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-  const isDark = mounted ? resolvedTheme === 'dark' : initialIsDark
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -186,11 +172,9 @@ export function SessionTabBar(props: SessionTabBarProps) {
       )}
 
       {/* 页签栏（现代化设计） */}
-      <div className={`w-full border-b transition-colors ${
-        isDark
-          ? 'bg-gradient-to-b from-black/95 to-black border-white/5'
-          : 'bg-gradient-to-b from-white to-zinc-50 border-zinc-200'
-      }`}>
+      <div className={
+        "w-full border-b transition-colors bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/95 dark:to-black dark:border-white/5"
+      }>
         <div className="flex items-center h-10 gap-0 px-2">
           {/* Tabs 容器 */}
           <div className="flex-1 overflow-x-auto scrollbar-hide">
@@ -223,12 +207,8 @@ export function SessionTabBar(props: SessionTabBarProps) {
                         className={cn(
                           "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm",
                           active
-                            ? isDark
-                              ? "bg-gradient-to-b from-zinc-800/90 to-zinc-900/90 border-zinc-700/50 shadow-lg shadow-black/20"
-                              : "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 shadow-lg shadow-zinc-200/50"
-                            : isDark
-                              ? "bg-zinc-900/40 border-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700/40 opacity-75 hover:opacity-100"
-                              : "bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 opacity-75 hover:opacity-100",
+                            ? "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 shadow-lg shadow-zinc-200/50 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50 dark:shadow-black/20"
+                            : "bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 opacity-75 hover:opacity-100 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40",
                           s.pinned && "ring-1 ring-blue-500/20"
                         )}
                         
@@ -238,9 +218,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
 
                         <span className={cn(
                           "max-w-32 truncate text-xs font-medium transition-colors",
-                          active
-                            ? isDark ? "text-white" : "text-zinc-900"
-                            : isDark ? "text-gray-400" : "text-zinc-600"
+                          active ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-gray-400"
                         )}>
                           {s.serverName}
                         </span>
@@ -269,10 +247,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
               variant="ghost"
               size="icon"
               className={cn(
-                "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105",
-                isDark
-                  ? "hover:bg-zinc-800/60 text-gray-500"
-                  : "hover:bg-zinc-200 text-zinc-500"
+                "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
               )}
               onClick={onNewSession}
               aria-label="新建会话"
@@ -283,17 +258,12 @@ export function SessionTabBar(props: SessionTabBarProps) {
         </div>
 
           {onOpenSettings && (
-            <div className={`flex items-center gap-1 px-2 border-l ${
-              isDark ? 'border-white/5' : 'border-zinc-200'
-            }`}>
+            <div className={"flex items-center gap-1 px-2 border-l border-zinc-200 dark:border-white/5"}>
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 rounded-lg",
-                  isDark
-                    ? "hover:bg-zinc-800/60 text-gray-400 hover:text-white"
-                    : "hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900"
+                  "h-8 w-8 rounded-lg hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:text-gray-400 dark:hover:text-white",
                 )}
                 onClick={onOpenSettings}
                 aria-label="设置"
@@ -311,56 +281,42 @@ export function SessionTabBar(props: SessionTabBarProps) {
         <div
           ref={menuRef}
           className={cn(
-            "fixed z-50 min-w-48 rounded-lg border p-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-200",
-            isDark
-              ? "border-zinc-800/50 bg-gradient-to-b from-zinc-900 to-black text-white shadow-black/50"
-              : "border-zinc-200 bg-gradient-to-b from-white to-zinc-50 text-zinc-900 shadow-zinc-300/50"
+            "fixed z-50 min-w-48 rounded-lg border p-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-200 border-zinc-200 bg-gradient-to-b from-white to-zinc-50 text-zinc-900 shadow-zinc-300/50 dark:border-zinc-800/50 dark:from-zinc-900 dark:to-black dark:text-white dark:shadow-black/50",
           )}
           style={{ left: menu.x, top: menu.y }}
         >
           <div className={cn(
-            "text-[10px] px-3 py-1.5 uppercase font-semibold tracking-wider",
-            isDark ? "text-zinc-500" : "text-zinc-600"
+            "text-[10px] px-3 py-1.5 uppercase font-semibold tracking-wider text-zinc-600 dark:text-zinc-500",
           )}>页签操作</div>
           <div className={cn(
-            "h-px bg-gradient-to-r from-transparent to-transparent my-1",
-            isDark ? "via-zinc-800" : "via-zinc-300"
+            "h-px bg-gradient-to-r from-transparent to-transparent my-1 via-zinc-300 dark:via-zinc-800",
           )} />
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group",
-              isDark ? "hover:bg-zinc-800/60" : "hover:bg-zinc-200"
+              "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
             )}
             onClick={() => { menu.targetId && onDuplicateSession(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
           >
             <span className={cn(
-              "transition-colors",
-              isDark
-                ? "text-zinc-400 group-hover:text-white"
-                : "text-zinc-600 group-hover:text-zinc-900"
+              "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
             )}>复制会话</span>
           </button>
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group",
-              isDark ? "hover:bg-zinc-800/60" : "hover:bg-zinc-200"
+              "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
             )}
             onClick={() => { menu.targetId && onCloseOthers(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
           >
             <span className={cn(
-              "transition-colors",
-              isDark
-                ? "text-zinc-400 group-hover:text-white"
-                : "text-zinc-600 group-hover:text-zinc-900"
+              "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
             )}>关闭其他</span>
           </button>
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center gap-2",
-              isDark ? "text-zinc-400" : "text-zinc-600"
+              "w-full text-left text-sm px-3 py-2 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center gap-2 text-zinc-600 dark:text-zinc-400",
             )}
             onClick={() => { onCloseAll(); setMenu(m => ({ ...m, open: false })) }}
           >
@@ -368,14 +324,12 @@ export function SessionTabBar(props: SessionTabBarProps) {
           </button>
 
           <div className={cn(
-            "h-px bg-gradient-to-r from-transparent to-transparent my-1",
-            isDark ? "via-zinc-800" : "via-zinc-300"
+            "h-px bg-gradient-to-r from-transparent to-transparent my-1 via-zinc-300 dark:via-zinc-800",
           )} />
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md hover:bg-blue-500/20 hover:text-blue-400 transition-colors flex items-center gap-2",
-              isDark ? "text-zinc-400" : "text-zinc-600"
+              "w-full text-left text-sm px-3 py-2 rounded-md hover:bg-blue-500/20 hover:text-blue-400 transition-colors flex items-center gap-2 text-zinc-600 dark:text-zinc-400",
             )}
             onClick={() => { menu.targetId && onTogglePin(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
           >

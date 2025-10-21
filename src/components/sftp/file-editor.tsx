@@ -44,7 +44,7 @@ export function FileEditor({
   onDownload,
 }: FileEditorProps) {
   const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === "dark"
+  const monacoTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'light'
   const [content, setContent] = useState(fileContent)
   const [isModified, setIsModified] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -209,22 +209,19 @@ export function FileEditor({
     <div className="fixed inset-0 z-[9999] flex flex-col bg-background">
         <div
           className={cn(
-            "flex flex-col h-full",
-            isDark ? "bg-zinc-900" : "bg-white"
+            "flex flex-col h-full bg-white dark:bg-zinc-900",
           )}
         >
           {/* 编辑器工具栏 */}
           <div
             className={cn(
-              "flex items-center justify-between px-3 py-2 border-b",
-              isDark ? "bg-zinc-900/50 border-zinc-800" : "bg-zinc-50 border-zinc-200"
+              "flex items-center justify-between px-3 py-2 border-b bg-zinc-50 border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
             )}
           >
             {/* 左侧：文件信息 */}
             <div className="flex items-center gap-2">
               <FileText className={cn(
-                "h-4 w-4",
-                isDark ? "text-blue-400" : "text-blue-500"
+                "h-4 w-4 text-blue-500 dark:text-blue-400",
               )} />
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm">{fileName}</span>
@@ -235,8 +232,7 @@ export function FileEditor({
                 )}
               </div>
               <span className={cn(
-                "text-xs font-mono",
-                isDark ? "text-zinc-500" : "text-zinc-400"
+                "text-xs font-mono text-zinc-400 dark:text-zinc-500",
               )}>
                 {filePath}
               </span>
@@ -249,10 +245,7 @@ export function FileEditor({
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-7 px-2 gap-1.5",
-                  isDark
-                    ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                    : "hover:bg-zinc-100 text-zinc-600"
+                  "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={handleFind}
                 title="查找 (Ctrl+F)"
@@ -266,10 +259,7 @@ export function FileEditor({
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-7 px-2 gap-1.5",
-                  isDark
-                    ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                    : "hover:bg-zinc-100 text-zinc-600"
+                  "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={handleReplace}
                 title="替换 (Ctrl+H)"
@@ -283,10 +273,7 @@ export function FileEditor({
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-7 px-2 gap-1.5",
-                  isDark
-                    ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                    : "hover:bg-zinc-100 text-zinc-600"
+                  "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={formatCode}
                 title="格式化代码"
@@ -296,8 +283,7 @@ export function FileEditor({
               </Button>
 
               <div className={cn(
-                "h-6 w-px mx-1",
-                isDark ? "bg-zinc-800" : "bg-zinc-200"
+                "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
               )} />
 
               {/* 重置 */}
@@ -305,10 +291,7 @@ export function FileEditor({
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-7 px-2 gap-1.5",
-                  isDark
-                    ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                    : "hover:bg-zinc-100 text-zinc-600"
+                  "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={handleReset}
                 disabled={!isModified}
@@ -324,10 +307,7 @@ export function FileEditor({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-7 px-2 gap-1.5",
-                    isDark
-                      ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                      : "hover:bg-zinc-100 text-zinc-600"
+                    "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                   )}
                   onClick={onDownload}
                   title="下载文件"
@@ -342,10 +322,7 @@ export function FileEditor({
                 variant="default"
                 size="sm"
                 className={cn(
-                  "h-7 px-2 gap-1.5",
-                  isDark
-                    ? "bg-blue-600 hover:bg-blue-700 text-white"
-                    : "bg-blue-500 hover:bg-blue-600 text-white"
+                  "h-7 px-2 gap-1.5 bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700",
                 )}
                 onClick={handleSave}
                 disabled={!isModified || isSaving}
@@ -356,8 +333,7 @@ export function FileEditor({
               </Button>
 
               <div className={cn(
-                "h-6 w-px mx-1",
-                isDark ? "bg-zinc-800" : "bg-zinc-200"
+                "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
               )} />
 
               {/* 退出全屏 */}
@@ -365,10 +341,7 @@ export function FileEditor({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-7 w-7",
-                  isDark
-                    ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                    : "hover:bg-zinc-100 text-zinc-600"
+                  "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={toggleFullscreen}
                 title="退出全屏 (Esc)"
@@ -381,10 +354,7 @@ export function FileEditor({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-7 w-7",
-                  isDark
-                    ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                    : "hover:bg-zinc-100 text-zinc-600"
+                  "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={onClose}
                 title="关闭编辑器"
@@ -396,14 +366,14 @@ export function FileEditor({
 
           {/* Monaco Editor */}
           <div className="flex-1 overflow-hidden">
-            <Editor
-              height="100%"
-              language={getLanguage(fileName)}
-              value={content}
-              onChange={handleEditorChange}
-              theme={isDark ? "vs-dark" : "light"}
-              options={{
-                fontSize: fontSize,
+             <Editor
+               height="100%"
+               language={getLanguage(fileName)}
+               value={content}
+               onChange={handleEditorChange}
+              theme={monacoTheme}
+               options={{
+                 fontSize: fontSize,
                 fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
                 fontLigatures: true,
                 lineNumbers: "on",
@@ -432,8 +402,7 @@ export function FileEditor({
               loading={
                 <div className="flex items-center justify-center h-full">
                   <div className={cn(
-                    "text-sm",
-                    isDark ? "text-zinc-500" : "text-zinc-400"
+                    "text-sm text-zinc-400 dark:text-zinc-500",
                   )}>
                     加载编辑器...
                   </div>
@@ -445,10 +414,7 @@ export function FileEditor({
           {/* 底部状态栏 */}
           <div
             className={cn(
-              "flex items-center justify-between px-3 py-1 border-t text-xs",
-              isDark
-                ? "bg-zinc-900/50 border-zinc-800 text-zinc-500"
-                : "bg-zinc-50 border-zinc-200 text-zinc-600"
+              "flex items-center justify-between px-3 py-1 border-t text-xs bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-500",
             )}
           >
             <div className="flex items-center gap-3">
@@ -462,7 +428,7 @@ export function FileEditor({
               <span>行 {content.split('\n').length}</span>
               <span>字符 {content.length}</span>
               {isModified && (
-                <span className={isDark ? "text-yellow-400" : "text-yellow-600"}>
+                <span className={"text-yellow-600 dark:text-yellow-400"}>
                   • 已修改
                 </span>
               )}
@@ -485,8 +451,7 @@ export function FileEditor({
       {/* 编辑器工具栏 */}
       <div
         className={cn(
-          "flex items-center justify-between px-3 py-2 border-b",
-          isDark ? "bg-zinc-900/50 border-zinc-800" : "bg-zinc-50 border-zinc-200"
+          "flex items-center justify-between px-3 py-2 border-b bg-zinc-50 border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
         )}
       >
         {/* 左侧：文件信息 */}
@@ -495,10 +460,7 @@ export function FileEditor({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7",
-              isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                : "hover:bg-zinc-100 text-zinc-600"
+              "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={onClose}
             title="返回文件列表"
@@ -506,8 +468,7 @@ export function FileEditor({
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <FileText className={cn(
-            "h-4 w-4",
-            isDark ? "text-blue-400" : "text-blue-500"
+            "h-4 w-4 text-blue-500 dark:text-blue-400",
           )} />
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">{fileName}</span>
@@ -518,8 +479,7 @@ export function FileEditor({
             )}
           </div>
           <span className={cn(
-            "text-xs font-mono",
-            isDark ? "text-zinc-500" : "text-zinc-400"
+            "text-xs font-mono text-zinc-400 dark:text-zinc-500",
           )}>
             {filePath}
           </span>
@@ -532,10 +492,7 @@ export function FileEditor({
             variant="ghost"
             size="sm"
             className={cn(
-              "h-7 px-2 gap-1.5",
-              isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                : "hover:bg-zinc-100 text-zinc-600"
+              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleFind}
             title="查找 (Ctrl+F)"
@@ -549,10 +506,7 @@ export function FileEditor({
             variant="ghost"
             size="sm"
             className={cn(
-              "h-7 px-2 gap-1.5",
-              isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                : "hover:bg-zinc-100 text-zinc-600"
+              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleReplace}
             title="替换 (Ctrl+H)"
@@ -566,10 +520,7 @@ export function FileEditor({
             variant="ghost"
             size="sm"
             className={cn(
-              "h-7 px-2 gap-1.5",
-              isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                : "hover:bg-zinc-100 text-zinc-600"
+              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={formatCode}
             title="格式化代码"
@@ -579,8 +530,7 @@ export function FileEditor({
           </Button>
 
           <div className={cn(
-            "h-6 w-px mx-1",
-            isDark ? "bg-zinc-800" : "bg-zinc-200"
+            "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
           )} />
 
           {/* 重置 */}
@@ -588,10 +538,7 @@ export function FileEditor({
             variant="ghost"
             size="sm"
             className={cn(
-              "h-7 px-2 gap-1.5",
-              isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                : "hover:bg-zinc-100 text-zinc-600"
+              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleReset}
             disabled={!isModified}
@@ -607,10 +554,7 @@ export function FileEditor({
               variant="ghost"
               size="sm"
               className={cn(
-                "h-7 px-2 gap-1.5",
-                isDark
-                  ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  : "hover:bg-zinc-100 text-zinc-600"
+                "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
               )}
               onClick={onDownload}
               title="下载文件"
@@ -625,10 +569,7 @@ export function FileEditor({
             variant="default"
             size="sm"
             className={cn(
-              "h-7 px-2 gap-1.5",
-              isDark
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "bg-blue-500 hover:bg-blue-600 text-white"
+              "h-7 px-2 gap-1.5 bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700",
             )}
             onClick={handleSave}
             disabled={!isModified || isSaving}
@@ -639,8 +580,7 @@ export function FileEditor({
           </Button>
 
           <div className={cn(
-            "h-6 w-px mx-1",
-            isDark ? "bg-zinc-800" : "bg-zinc-200"
+            "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
           )} />
 
           {/* 全屏 */}
@@ -648,10 +588,7 @@ export function FileEditor({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7",
-              isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                : "hover:bg-zinc-100 text-zinc-600"
+              "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={toggleFullscreen}
             title="全屏"
@@ -668,7 +605,7 @@ export function FileEditor({
           language={getLanguage(fileName)}
           value={content}
           onChange={handleEditorChange}
-          theme={isDark ? "vs-dark" : "light"}
+          theme={monacoTheme}
           options={{
             fontSize: fontSize,
             fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
@@ -699,8 +636,7 @@ export function FileEditor({
           loading={
             <div className="flex items-center justify-center h-full">
               <div className={cn(
-                "text-sm",
-                isDark ? "text-zinc-500" : "text-zinc-400"
+                "text-sm text-zinc-400 dark:text-zinc-500",
               )}>
                 加载编辑器...
               </div>
@@ -712,10 +648,7 @@ export function FileEditor({
       {/* 底部状态栏 */}
       <div
         className={cn(
-          "flex items-center justify-between px-3 py-1 border-t text-xs",
-          isDark
-            ? "bg-zinc-900/50 border-zinc-800 text-zinc-500"
-            : "bg-zinc-50 border-zinc-200 text-zinc-600"
+          "flex items-center justify-between px-3 py-1 border-t text-xs bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-500",
         )}
       >
         <div className="flex items-center gap-3">
@@ -729,7 +662,7 @@ export function FileEditor({
           <span>行 {content.split('\n').length}</span>
           <span>字符 {content.length}</span>
           {isModified && (
-            <span className={isDark ? "text-yellow-400" : "text-yellow-600"}>
+            <span className={"text-yellow-600 dark:text-yellow-400"}>
               • 已修改
             </span>
           )}

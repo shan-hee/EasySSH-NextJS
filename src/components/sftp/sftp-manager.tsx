@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, DragEvent } from "react"
 import { createPortal } from "react-dom"
-import { useTheme } from "next-themes"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
 import "@/components/File.css"
@@ -166,8 +165,6 @@ export function SftpManager(props: SftpManagerProps) {
     dragHandleListeners,
     dragHandleAttributes,
   } = props
-  const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === "dark"
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [sortedFiles, setSortedFiles] = useState<FileItem[]>(files)
@@ -967,8 +964,7 @@ export function SftpManager(props: SftpManagerProps) {
               }}
               onBlur={finishEditSessionLabel}
               className={cn(
-                "h-6 text-xs font-semibold px-2 max-w-[150px]",
-                isDark ? "bg-zinc-900 text-zinc-200" : "bg-white text-zinc-800"
+                "h-6 text-xs font-semibold px-2 max-w-[150px] bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
               )}
             />
           ) : (
@@ -976,10 +972,7 @@ export function SftpManager(props: SftpManagerProps) {
               onClick={startEditSessionLabel}
               onDoubleClick={startEditSessionLabel}
               className={cn(
-                "text-xs font-semibold px-2 py-1 rounded transition-colors",
-                isDark
-                  ? "hover:bg-zinc-800/60 text-zinc-200"
-                  : "hover:bg-zinc-200 text-zinc-800"
+                "text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-zinc-200 text-zinc-800 dark:hover:bg-zinc-800/60 dark:text-zinc-200",
               )}
               title="双击编辑会话名称"
             >
@@ -988,8 +981,7 @@ export function SftpManager(props: SftpManagerProps) {
           )}
 
           <div className={cn(
-            "h-4 w-px mx-1",
-            isDark ? "bg-zinc-800/50" : "bg-zinc-300"
+            "h-4 w-px mx-1 bg-zinc-300 dark:bg-zinc-800/50",
           )} />
 
           {/* 路径导航工具 */}
@@ -999,10 +991,7 @@ export function SftpManager(props: SftpManagerProps) {
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-                isDark
-                  ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                  : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
               )}
               onClick={() =>
                 onNavigate(pathSegments.slice(0, -1).join("/") || "/")
@@ -1014,8 +1003,7 @@ export function SftpManager(props: SftpManagerProps) {
           )}
 
           <div className={cn(
-            "h-4 w-px mx-1",
-            isDark ? "bg-zinc-800/50" : "bg-zinc-300"
+            "h-4 w-px mx-1 bg-zinc-300 dark:bg-zinc-800/50",
           )} />
 
           {/* 根目录按钮 */}
@@ -1023,10 +1011,7 @@ export function SftpManager(props: SftpManagerProps) {
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-              isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
             onClick={() => onNavigate("/")}
             title="根目录"
@@ -1040,10 +1025,7 @@ export function SftpManager(props: SftpManagerProps) {
             <button
               onClick={() => onNavigate("/")}
               className={cn(
-                "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors",
-                isDark
-                  ? "text-zinc-400 hover:bg-zinc-800/60 hover:text-white"
-                  : "text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+                "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white",
               )}
             >
               /
@@ -1056,10 +1038,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <button
                     onClick={() => onNavigate(segmentPath)}
                     className={cn(
-                      "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors",
-                      isDark
-                        ? "text-zinc-400 hover:bg-zinc-800/60 hover:text-white"
-                        : "text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+                      "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white",
                     )}
                   >
                     {segment}
@@ -1079,12 +1058,8 @@ export function SftpManager(props: SftpManagerProps) {
             className={cn(
               "h-7 w-7 rounded-md transition-all duration-200",
               viewMode === "grid"
-                ? isDark
-                  ? "bg-zinc-800/60 text-white"
-                  : "bg-zinc-200 text-zinc-900"
-                : isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
+                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
             onClick={() => setViewMode("grid")}
             title="图标视图"
@@ -1097,12 +1072,8 @@ export function SftpManager(props: SftpManagerProps) {
             className={cn(
               "h-7 w-7 rounded-md transition-all duration-200",
               viewMode === "list"
-                ? isDark
-                  ? "bg-zinc-800/60 text-white"
-                  : "bg-zinc-200 text-zinc-900"
-                : isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+                ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
+                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
             onClick={() => setViewMode("list")}
             title="列表视图"
@@ -1115,12 +1086,9 @@ export function SftpManager(props: SftpManagerProps) {
             <Button
               variant="ghost"
               size="icon"
-              className={cn(
-                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-                isDark
-                  ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                  : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
-              )}
+            className={cn(
+              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+            )}
               onClick={onToggleFullscreen}
               title={isFullscreen ? "退出全屏 (ESC)" : "全屏"}
             >
@@ -1136,10 +1104,7 @@ export function SftpManager(props: SftpManagerProps) {
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200",
-              isDark
-                ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+              "h-7 w-7 rounded-md transition-all duration-200 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
             onClick={onDisconnect}
             title="关闭"
@@ -1153,14 +1118,12 @@ export function SftpManager(props: SftpManagerProps) {
       <div className="px-3 py-2 border-b flex items-center gap-2">
         <div className="relative flex-1 max-w-xs">
           <Search className={cn(
-            "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5",
-            isDark ? "text-zinc-500" : "text-zinc-400"
+            "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500",
           )} />
           <Input
             placeholder="搜索文件..."
             className={cn(
-              "h-7 pl-8 pr-2 text-xs border-0",
-              isDark ? "bg-zinc-900/50" : "bg-zinc-100"
+              "h-7 pl-8 pr-2 text-xs border-0 bg-zinc-100 dark:bg-zinc-900/50",
             )}
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
@@ -1174,8 +1137,8 @@ export function SftpManager(props: SftpManagerProps) {
           className={cn(
             "h-7 w-7 rounded-md transition-all duration-200",
             showHidden
-              ? (isDark ? "bg-zinc-800/60 text-white" : "bg-zinc-200 text-zinc-900")
-              : (isDark ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400" : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600")
+              ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
+              : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
           )}
           onClick={() => setShowHidden(!showHidden)}
           title={showHidden ? "隐藏隐藏文件" : "显示隐藏文件"}
@@ -1188,10 +1151,7 @@ export function SftpManager(props: SftpManagerProps) {
           variant="ghost"
           size="icon"
           className={cn(
-            "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105",
-            isDark
-              ? "hover:bg-zinc-800/60 hover:text-white text-zinc-400"
-              : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600"
+            "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
           )}
           onClick={onRefresh}
           title="刷新"
@@ -1202,8 +1162,7 @@ export function SftpManager(props: SftpManagerProps) {
         {/* 已选择文件提示 */}
         {selectedFiles.length > 0 && (
           <div className={cn(
-            "flex items-center gap-2 text-xs px-2 py-1 rounded-md",
-            isDark ? "bg-blue-500/10 text-blue-400" : "bg-blue-500/10 text-blue-600"
+            "flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400",
           )}>
             <span>已选择 {selectedFiles.length} 项</span>
           </div>
@@ -1252,12 +1211,10 @@ export function SftpManager(props: SftpManagerProps) {
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <FolderOpen className={cn(
-                "h-16 w-16 mx-auto mb-4",
-                isDark ? "text-zinc-700" : "text-zinc-300"
+                "h-16 w-16 mx-auto mb-4 text-zinc-300 dark:text-zinc-700",
               )} />
               <h3 className={cn(
-                "text-lg font-semibold mb-2",
-                isDark ? "text-zinc-500" : "text-zinc-600"
+                "text-lg font-semibold mb-2 text-zinc-600 dark:text-zinc-500",
               )}>
                 目录为空
               </h3>
@@ -1272,8 +1229,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {creatingNew && (
               <div
                 className={cn(
-                  "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
-                  isDark ? "bg-zinc-800/60" : "bg-zinc-200/60"
+                  "group relative rounded-lg p-3 cursor-pointer select-none transition-all bg-zinc-200/60 dark:bg-zinc-800/60",
                 )}
               >
                 <div className="flex flex-col items-center gap-2">
@@ -1303,8 +1259,7 @@ export function SftpManager(props: SftpManagerProps) {
                       }}
                       onBlur={finishCreate}
                       className={cn(
-                        "h-6 text-xs text-center px-1",
-                        isDark ? "bg-zinc-900 text-zinc-200" : "bg-white text-zinc-800"
+                        "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                       )}
                     />
                     <div className="text-[10px] text-muted-foreground truncate mt-1">
@@ -1341,7 +1296,7 @@ export function SftpManager(props: SftpManagerProps) {
                   onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
                   className={cn(
                     "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
-                    (isSelected || (isDraggedOver && file.type === "directory")) && (isDark ? "bg-zinc-800/60" : "bg-zinc-200/60"),
+                    (isSelected || (isDraggedOver && file.type === "directory")) && "bg-zinc-200/60 dark:bg-zinc-800/60",
                     draggedFileName === file.name && "opacity-50"
                   )}
                   title={file.name}
@@ -1377,14 +1332,12 @@ export function SftpManager(props: SftpManagerProps) {
                           }}
                           onBlur={finishRename}
                           className={cn(
-                            "h-6 text-xs text-center px-1",
-                            isDark ? "bg-zinc-900 text-zinc-200" : "bg-white text-zinc-800"
+                            "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                           )}
                         />
                       ) : (
                         <div className={cn(
-                          "text-xs font-medium truncate",
-                          isDark ? "text-zinc-200" : "text-zinc-800"
+                          "text-xs font-medium truncate text-zinc-800 dark:text-zinc-200",
                         )}>
                           {file.name}
                         </div>
@@ -1402,7 +1355,7 @@ export function SftpManager(props: SftpManagerProps) {
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
               <TableRow className={cn(
-                isDark ? "border-zinc-800/50" : "border-zinc-200"
+                "border-zinc-200 dark:border-zinc-800/50",
               )}>
                 <TableHead className="w-12">
                   <input
@@ -1452,8 +1405,7 @@ export function SftpManager(props: SftpManagerProps) {
               {creatingNew && (
                 <TableRow
                   className={cn(
-                    "cursor-pointer transition-colors",
-                    isDark ? "bg-zinc-800/50" : "bg-zinc-100"
+                    "cursor-pointer transition-colors bg-zinc-100 dark:bg-zinc-800/50",
                   )}
                 >
                   <TableCell onClick={e => e.stopPropagation()}>
@@ -1487,8 +1439,7 @@ export function SftpManager(props: SftpManagerProps) {
                         onBlur={finishCreate}
                         onClick={(e) => e.stopPropagation()}
                         className={cn(
-                          "h-7 text-sm px-2 flex-1",
-                          isDark ? "bg-zinc-900 text-zinc-200" : "bg-white text-zinc-800"
+                          "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                         )}
                       />
                     </div>
@@ -1534,10 +1485,8 @@ export function SftpManager(props: SftpManagerProps) {
                     onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
                     className={cn(
                       "cursor-pointer transition-colors",
-                      (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && (
-                        isDark ? "bg-zinc-800/50" : "bg-zinc-100"
-                      ),
-                      isDark ? "hover:bg-zinc-800/30" : "hover:bg-zinc-50",
+                      (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-zinc-100 dark:bg-zinc-800/50",
+                      "hover:bg-zinc-50 dark:hover:bg-zinc-800/30",
                       draggedFileName === file.name && "opacity-50"
                     )}
                     onClick={e => {
@@ -1574,8 +1523,7 @@ export function SftpManager(props: SftpManagerProps) {
                           onBlur={finishRename}
                           onClick={(e) => e.stopPropagation()}
                           className={cn(
-                            "h-7 text-sm px-2 flex-1",
-                            isDark ? "bg-zinc-900 text-zinc-200" : "bg-white text-zinc-800"
+                            "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                           )}
                         />
                       ) : (
@@ -1620,10 +1568,7 @@ export function SftpManager(props: SftpManagerProps) {
                           variant="ghost"
                           size="sm"
                           className={cn(
-                            "h-7 w-7 p-0 transition-all",
-                            isDark
-                              ? "hover:bg-zinc-800/60 hover:text-white"
-                              : "hover:bg-zinc-200"
+                            "h-7 w-7 p-0 transition-all hover:bg-zinc-200 dark:hover:bg-zinc-800/60 dark:hover:text-white",
                           )}
                         >
                           <MoreHorizontal className="h-4 w-4" />
@@ -1632,10 +1577,7 @@ export function SftpManager(props: SftpManagerProps) {
                       <DropdownMenuContent
                         align="end"
                         className={cn(
-                          "min-w-[180px] rounded-lg backdrop-blur-xl",
-                          isDark
-                            ? "bg-zinc-900/95 border-zinc-700/50"
-                            : "bg-white/95 border-zinc-200/50"
+                          "min-w-[180px] rounded-lg backdrop-blur-xl bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
                         )}
                       >
                         {/* 打开/进入 */}
@@ -1649,9 +1591,7 @@ export function SftpManager(props: SftpManagerProps) {
                             }
                           }}
                           className={cn(
-                            isDark
-                              ? "focus:bg-blue-600 focus:text-white"
-                              : "focus:bg-blue-500 focus:text-white"
+                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
                           )}
                         >
                           <Eye className="h-4 w-4 mr-2" />
@@ -1663,9 +1603,7 @@ export function SftpManager(props: SftpManagerProps) {
                           <DropdownMenuItem
                             onClick={() => onDownload(file.name)}
                             className={cn(
-                              isDark
-                                ? "focus:bg-blue-600 focus:text-white"
-                                : "focus:bg-blue-500 focus:text-white"
+                              "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
                             )}
                           >
                             <Download className="h-4 w-4 mr-2" />
@@ -1674,7 +1612,7 @@ export function SftpManager(props: SftpManagerProps) {
                         )}
 
                         <DropdownMenuSeparator className={cn(
-                          isDark ? "bg-zinc-700/50" : "bg-zinc-200"
+                          "bg-zinc-200 dark:bg-zinc-700/50",
                         )} />
 
                         {/* 重命名 */}
@@ -1683,9 +1621,7 @@ export function SftpManager(props: SftpManagerProps) {
                             startRename(file.name)
                           }}
                           className={cn(
-                            isDark
-                              ? "focus:bg-blue-600 focus:text-white"
-                              : "focus:bg-blue-500 focus:text-white"
+                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
                           )}
                         >
                           <Edit className="h-4 w-4 mr-2" />
@@ -1699,9 +1635,7 @@ export function SftpManager(props: SftpManagerProps) {
                             console.log("复制:", file.name)
                           }}
                           className={cn(
-                            isDark
-                              ? "focus:bg-blue-600 focus:text-white"
-                              : "focus:bg-blue-500 focus:text-white"
+                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
                           )}
                         >
                           <Copy className="h-4 w-4 mr-2" />
@@ -1715,9 +1649,7 @@ export function SftpManager(props: SftpManagerProps) {
                             console.log("粘贴到当前目录:", currentPath)
                           }}
                           className={cn(
-                            isDark
-                              ? "focus:bg-blue-600 focus:text-white"
-                              : "focus:bg-blue-500 focus:text-white"
+                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
                           )}
                         >
                           <FileText className="h-4 w-4 mr-2 rotate-180" />
@@ -1725,15 +1657,14 @@ export function SftpManager(props: SftpManagerProps) {
                         </DropdownMenuItem>
 
                         <DropdownMenuSeparator className={cn(
-                          isDark ? "bg-zinc-700/50" : "bg-zinc-200"
+                          "bg-zinc-200 dark:bg-zinc-700/50",
                         )} />
 
                         {/* 删除 */}
                         <DropdownMenuItem
                           onClick={() => onDelete(file.name)}
                           className={cn(
-                            "focus:bg-red-500 focus:text-white",
-                            isDark ? "text-red-400" : "text-red-600"
+                            "focus:bg-red-500 focus:text-white text-red-600 dark:text-red-400",
                           )}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
@@ -1785,8 +1716,7 @@ export function SftpManager(props: SftpManagerProps) {
               <div
                 key={task.id}
                 className={cn(
-                  "p-2 rounded-lg border",
-                  isDark ? "bg-zinc-900/50 border-zinc-800" : "bg-white border-zinc-200"
+                  "p-2 rounded-lg border bg-white border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
                 )}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -1866,27 +1796,21 @@ export function SftpManager(props: SftpManagerProps) {
         >
           <div
             className={cn(
-              "min-w-[200px] rounded-lg shadow-2xl border backdrop-blur-xl py-1.5",
-              isDark
-                ? "bg-zinc-900/95 border-zinc-700/50"
-                : "bg-white/95 border-zinc-200/50"
+              "min-w-[200px] rounded-lg shadow-2xl border backdrop-blur-xl py-1.5 bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
             )}
             style={{
-              boxShadow: isDark
-                ? "0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.1)"
-                : "0 10px 40px rgba(0, 0, 0, 0.15), 0 0 0 0.5px rgba(0, 0, 0, 0.05)",
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
             }}
           >
             {/* 标题 - 显示选中数量 */}
             {selectedFiles.length > 1 && (
               <>
                 <div className={cn(
-                  "px-3 py-1.5 text-xs font-medium",
-                  isDark ? "text-zinc-400" : "text-zinc-500"
+                  "px-3 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400",
                 )}>
                   已选中 {selectedFiles.length} 项
                 </div>
-                <div className={cn("h-px mx-2 mb-1", isDark ? "bg-zinc-700/50" : "bg-zinc-200")} />
+                <div className={cn("h-px mx-2 mb-1 bg-zinc-200 dark:bg-zinc-700/50")} />
               </>
             )}
 
@@ -1896,10 +1820,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 新建文件夹 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     startCreateNew("folder")
@@ -1909,8 +1830,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <FolderPlus className="h-4 w-4" />
                   <span className="flex-1">新建文件夹</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⌘⇧N
                   </kbd>
@@ -1919,10 +1839,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 新建文件 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     startCreateNew("file")
@@ -1932,8 +1849,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <FileText className="h-4 w-4" />
                   <span className="flex-1">新建文件</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⌘N
                   </kbd>
@@ -1942,10 +1858,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 上传文件 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     fileInputRef.current?.click()
@@ -1955,8 +1868,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <Upload className="h-4 w-4" />
                   <span className="flex-1">上传文件</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⌘U
                   </kbd>
@@ -1967,9 +1879,7 @@ export function SftpManager(props: SftpManagerProps) {
                   className={cn(
                     "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
                     clipboard.length === 0 && "opacity-50 cursor-not-allowed",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     if (onPasteFiles && clipboard.length > 0) {
@@ -1984,22 +1894,18 @@ export function SftpManager(props: SftpManagerProps) {
                     粘贴{clipboard.length > 0 ? ` (${clipboard.length} 项)` : ''}
                   </span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⌘V
                   </kbd>
                 </button>
 
-                <div className={cn("h-px mx-2 my-1", isDark ? "bg-zinc-700/50" : "bg-zinc-200")} />
+                <div className={cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")} />
 
                 {/* 刷新 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     onRefresh()
@@ -2009,8 +1915,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <RefreshCw className="h-4 w-4" />
                   <span className="flex-1">刷新</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⌘R
                   </kbd>
@@ -2021,10 +1926,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 打开/查看 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     if (contextMenu.fileType === "directory" && contextMenu.fileName) {
@@ -2039,8 +1941,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <Eye className="h-4 w-4" />
                   <span className="flex-1">{contextMenu.fileType === "directory" ? "打开" : "编辑"}</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⏎
                   </kbd>
@@ -2050,10 +1951,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {(contextMenu.fileType === "file" || selectedFiles.length > 1) && (
                   <button
                     className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                      isDark
-                        ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                        : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                     )}
                     onClick={() => {
                       if (selectedFiles.length > 1) {
@@ -2069,24 +1967,20 @@ export function SftpManager(props: SftpManagerProps) {
                       {selectedFiles.length > 1 ? `下载 ${selectedFiles.length} 项` : "下载"}
                     </span>
                     <kbd className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                      isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                     )}>
                       ⌘D
                     </kbd>
                   </button>
                 )}
 
-                <div className={cn("h-px mx-2 my-1", isDark ? "bg-zinc-700/50" : "bg-zinc-200")} />
+                <div className={cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")} />
 
                 {/* 重命名 - 仅单选 */}
                 {selectedFiles.length === 1 && (
                   <button
                     className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                      isDark
-                        ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                        : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                     )}
                     onClick={() => {
                       if (contextMenu.fileName) {
@@ -2098,8 +1992,7 @@ export function SftpManager(props: SftpManagerProps) {
                     <Edit className="h-4 w-4" />
                     <span className="flex-1">重命名</span>
                     <kbd className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                      isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                     )}>
                       F2
                     </kbd>
@@ -2109,10 +2002,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 复制 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     const filesToCopy = selectedFiles.length > 1 ? selectedFiles : (contextMenu.fileName ? [contextMenu.fileName] : [])
@@ -2127,8 +2017,7 @@ export function SftpManager(props: SftpManagerProps) {
                     {selectedFiles.length > 1 ? `复制 ${selectedFiles.length} 项` : "复制"}
                   </span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⌘C
                   </kbd>
@@ -2139,9 +2028,7 @@ export function SftpManager(props: SftpManagerProps) {
                   className={cn(
                     "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
                     clipboard.length === 0 && "opacity-50 cursor-not-allowed",
-                    isDark
-                      ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                      : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                    "hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                   )}
                   onClick={() => {
                     if (onPasteFiles && clipboard.length > 0) {
@@ -2156,8 +2043,7 @@ export function SftpManager(props: SftpManagerProps) {
                     粘贴{clipboard.length > 0 ? ` (${clipboard.length} 项)` : ''}
                   </span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
                     ⌘V
                   </kbd>
@@ -2167,10 +2053,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {selectedFiles.length === 1 && (
                   <button
                     className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                      isDark
-                        ? "hover:bg-blue-600 hover:text-white text-zinc-200"
-                        : "hover:bg-blue-500 hover:text-white text-zinc-800"
+                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
                     )}
                     onClick={() => {
                       // TODO: 显示文件详细信息
@@ -2181,23 +2064,19 @@ export function SftpManager(props: SftpManagerProps) {
                     <FileText className="h-4 w-4" />
                     <span className="flex-1">属性</span>
                     <kbd className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                      isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                     )}>
                       ⌘I
                     </kbd>
                   </button>
                 )}
 
-                <div className={cn("h-px mx-2 my-1", isDark ? "bg-zinc-700/50" : "bg-zinc-200")} />
+                <div className={cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")} />
 
                 {/* 删除 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    isDark
-                      ? "hover:bg-red-600 hover:text-white text-red-400"
-                      : "hover:bg-red-500 hover:text-white text-red-600"
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-red-500 hover:text-white text-red-600 dark:hover:bg-red-600 dark:text-red-400",
                   )}
                   onClick={() => {
                     if (selectedFiles.length > 1) {
@@ -2213,8 +2092,7 @@ export function SftpManager(props: SftpManagerProps) {
                     {selectedFiles.length > 1 ? `删除 ${selectedFiles.length} 项` : "删除"}
                   </span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono",
-                    isDark ? "bg-zinc-800/80 text-zinc-400" : "bg-zinc-100 text-zinc-600"
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-400",
                   )}>
                     ⌫
                   </kbd>
