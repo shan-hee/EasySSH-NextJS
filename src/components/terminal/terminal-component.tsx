@@ -284,12 +284,7 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn(
-                      "h-7 w-7 rounded-md transition-colors",
-                      isAiInputOpen
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                        : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                    )}
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                     aria-label="AI 助手"
                     title="AI 助手 (Ctrl+K)"
                     onClick={() => setIsAiInputOpen(!isAiInputOpen)}

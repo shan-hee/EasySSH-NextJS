@@ -65,8 +65,8 @@ export function LoginForm({
                 <img src="/logo.svg" alt="EasySSH Logo" className="size-16" />
               </div>
               <div className="space-y-1">
-                <h1 className="text-2xl font-bold text-white">欢迎使用 EasySSH</h1>
-                <p className="text-sm text-muted-foreground">
+                <h1 className="text-2xl font-bold text-zinc-50">欢迎使用 EasySSH</h1>
+                <p className="text-sm text-zinc-400">
                   安全高效的远程服务器管理平台
                 </p>
               </div>
@@ -78,11 +78,11 @@ export function LoginForm({
             <div className="space-y-4">
               {/* 账号输入 */}
               <Field>
-                <FieldLabel htmlFor="username" className="text-foreground">
+                <FieldLabel htmlFor="username" className="text-zinc-200">
                   账号
                 </FieldLabel>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
                     id="username"
                     type="text"
@@ -91,7 +91,7 @@ export function LoginForm({
                     autoComplete="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
                     required
                   />
                 </div>
@@ -99,11 +99,11 @@ export function LoginForm({
 
               {/* 密码输入 */}
               <Field>
-                <FieldLabel htmlFor="password" className="text-foreground">
+                <FieldLabel htmlFor="password" className="text-zinc-200">
                   密码
                 </FieldLabel>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
@@ -112,13 +112,13 @@ export function LoginForm({
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10"
+                    className="pl-10 pr-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -139,7 +139,7 @@ export function LoginForm({
                   />
                   <Label
                     htmlFor="remember"
-                    className="text-sm text-muted-foreground cursor-pointer"
+                    className="text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors"
                   >
                     记住密码
                   </Label>
@@ -147,7 +147,7 @@ export function LoginForm({
                 <Button
                   type="button"
                   variant="link"
-                  className="text-sm text-muted-foreground hover:text-primary p-0 h-auto no-underline hover:no-underline transition-colors"
+                  className="text-sm text-zinc-400 hover:text-zinc-200 p-0 h-auto no-underline hover:no-underline transition-colors"
                   onClick={() => {
                     toast.info("忘记密码", {
                       description: "请联系管理员重置密码",
@@ -182,18 +182,18 @@ export function LoginForm({
           {/* 底部提示 */}
           <div className="space-y-3">
             {/* 安全提示 */}
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
               <Shield className="h-3 w-3" />
               <span>您的连接已通过 SSL 加密保护</span>
             </div>
 
             {/* 注册提示 */}
-            <div className="text-center text-sm text-muted-foreground">
+            <div className="text-center text-sm text-zinc-400">
               还没有账号？
               <Button
                 type="button"
                 variant="link"
-                className="text-muted-foreground hover:text-primary p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
+                className="text-zinc-400 hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
                 onClick={() => {
                   toast.info("申请开通账号", {
                     description: "请联系管理员开通账号权限",
@@ -205,7 +205,7 @@ export function LoginForm({
             </div>
 
             {/* 版本信息 */}
-            <div className="text-center text-xs text-muted-foreground/60">
+            <div className="text-center text-xs text-zinc-600">
               EasySSH v1.0.0 | © 2025 All rights reserved
             </div>
           </div>

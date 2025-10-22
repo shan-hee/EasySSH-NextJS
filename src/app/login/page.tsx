@@ -3,7 +3,7 @@ import LightRays from "@/components/LightRays"
 
 export default function LoginPage() {
   return (
-    <div className="relative bg-black flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10 overflow-hidden">
+    <div className="relative bg-zinc-950 flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10 overflow-hidden">
       {/* 光线背景 */}
       <div className="absolute inset-0 z-0">
         <LightRays
@@ -22,7 +22,7 @@ export default function LoginPage() {
           className="opacity-60"
         />
       </div>
-      
+
       {/* 登录表单 */}
       <div className="relative z-10 w-full max-w-sm">
         <LoginForm />
