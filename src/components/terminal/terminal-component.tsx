@@ -27,6 +27,7 @@ import {
 import { FileManagerPanel } from "./file-manager-panel"
 import { NetworkLatencyPopover } from "./network-latency-popover"
 import { MonitorPanel } from "./monitor/MonitorPanel"
+import { AiAssistantPanel } from "./ai-assistant-panel"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -66,6 +67,7 @@ export function TerminalComponent({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false)
   const [isMonitorOpen, setIsMonitorOpen] = useState(true) // 默认显示监控面板
+  const [isAiInputOpen, setIsAiInputOpen] = useState(false) // AI 助手输入框状态
 
   // 主题样式全部改为静态类 + dark: 前缀，避免 SSR/CSR 水合不一致
 
@@ -153,7 +155,7 @@ export function TerminalComponent({
   const shouldForceLoading = !!(active && active.type !== 'quick' && !initializedSessionsRef.current.has(active.id))
   const effectiveIsLoading = !!(active && active.type !== 'quick' && (isActiveSessionLoading || shouldForceLoading))
 
-  // 当从“快速连接”升级为“终端”时，立刻设置为加载中，避免工具栏闪烁
+  // 当从"快速连接"升级为"终端"时，立刻设置为加载中，避免工具栏闪烁
   useEffect(() => {
     if (shouldForceLoading && active) {
       // 若还未设置当前加载会话，则设置并进入动画
@@ -163,6 +165,25 @@ export function TerminalComponent({
       }
     }
   }, [shouldForceLoading, active?.id])
+
+  // 键盘快捷键支持
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K 或 Cmd+K 切换 AI 输入框
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setIsAiInputOpen(prev => !prev)
+      }
+      // ESC 关闭 AI 输入框
+      if (e.key === 'Escape' && isAiInputOpen) {
+        e.preventDefault()
+        setIsAiInputOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isAiInputOpen])
 
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-black' : ''}`}>
@@ -263,9 +284,15 @@ export function TerminalComponent({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
+                    className={cn(
+                      "h-7 w-7 rounded-md transition-colors",
+                      isAiInputOpen
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
                     aria-label="AI 助手"
-                    title="AI 助手"
+                    title="AI 助手 (Ctrl+K)"
+                    onClick={() => setIsAiInputOpen(!isAiInputOpen)}
                   >
                     <Bot className="h-3.5 w-3.5" />
                   </Button>
@@ -379,6 +406,14 @@ export function TerminalComponent({
               </div>
             </div>
           </Tabs>
+        )}
+
+        {/* AI 助手悬浮输入框 - 终端内部悬浮 */}
+        {active && active.type !== 'quick' && (
+          <AiAssistantPanel
+            isOpen={isAiInputOpen}
+            onClose={() => setIsAiInputOpen(false)}
+          />
         )}
         </div>
       </div>
