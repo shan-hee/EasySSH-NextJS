@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback, memo } from "react"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bot, User, Sparkles } from "lucide-react"
+import { Bot, User, Sparkles, Loader2 } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -20,10 +20,23 @@ import {
   PromptInputModelSelectItem,
   PromptInputModelSelectValue,
 } from "@/components/ui/shadcn-io/ai/prompt-input"
+// 注意：暂时使用简化的代码块样式，避免 react-syntax-highlighter 的兼容性问题
+// 如果需要完整语法高亮，可以后续使用 shiki（你已安装）
+
+// ========== 常量定义 ==========
+const ANIMATION_DELAY = 300
+const DEFAULT_MESSAGE_HEIGHT = 300
+const MAX_HEIGHT_RATIO = 0.5
+const MIN_DRAG_DISTANCE = 5
+const AUTO_COLLAPSE_HEIGHT = 50
+const AI_RESPONSE_DELAY = 1000
+
+// ========== 类型定义 ==========
+type MessageRole = "user" | "assistant"
 
 interface Message {
   id: string
-  role: "user" | "assistant"
+  role: MessageRole
   content: string
   timestamp: Date
 }
@@ -33,23 +46,36 @@ interface AiAssistantPanelProps {
   onClose: () => void
 }
 
-// 消息内容渲染组件 - 支持代码块和换行
-function MessageContent({ content }: { content: string }) {
-  // 简单处理代码块和换行
+// ========== 消息内容渲染组件 ==========
+// 支持代码块和换行（使用优化的样式）
+const MessageContent = memo(({ content }: { content: string }) => {
+  // 使用正则提取代码块：```language\ncode```
   const parts = content.split(/```(\w+)?\n?([\s\S]*?)```/g)
 
   return (
     <div className="space-y-2">
       {parts.map((part, index) => {
-        // 奇数索引是代码块
+        // index % 3 === 1 是语言标识，index % 3 === 2 是代码内容
         if (index % 3 === 2) {
+          const language = parts[index - 1] || 'text'
           return (
-            <pre key={index} className="bg-black/20 dark:bg-white/10 rounded p-2 text-xs overflow-x-auto">
-              <code>{part.trim()}</code>
-            </pre>
+            <div key={index} className="relative group">
+              {/* 语言标签 */}
+              {language && language !== 'text' && (
+                <div className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-background/80 rounded border border-border">
+                  {language}
+                </div>
+              )}
+              {/* 代码块 */}
+              <pre className="bg-zinc-950 dark:bg-zinc-900/50 rounded-md p-3 overflow-x-auto border border-zinc-800/50">
+                <code className="text-xs font-mono text-zinc-100 dark:text-zinc-300 leading-relaxed">
+                  {part.trim()}
+                </code>
+              </pre>
+            </div>
           )
         } else if (index % 3 === 0 && part) {
-          // 偶数索引是普通文本
+          // 普通文本
           return (
             <div key={index} className="whitespace-pre-wrap">
               {part}
@@ -60,19 +86,85 @@ function MessageContent({ content }: { content: string }) {
       })}
     </div>
   )
-}
+})
+
+MessageContent.displayName = 'MessageContent'
+
+// ========== 消息项组件 ==========
+// 使用 memo 优化，避免所有消息在新消息到来时重新渲染
+const MessageItem = memo(({ message }: { message: Message }) => (
+  <div
+    className={cn(
+      "flex gap-3 items-start",
+      message.role === "user" ? "flex-row-reverse" : "flex-row"
+    )}
+  >
+    {/* 头像 */}
+    <div
+      className={cn(
+        "w-7 h-7 rounded-full flex items-center justify-center shrink-0",
+        message.role === "user"
+          ? "bg-primary text-primary-foreground"
+          : "bg-muted text-muted-foreground"
+      )}
+      aria-hidden="true"
+    >
+      {message.role === "user" ? (
+        <User className="h-3.5 w-3.5" />
+      ) : (
+        <Bot className="h-3.5 w-3.5" />
+      )}
+    </div>
+
+    {/* 消息内容 */}
+    <div
+      className={cn(
+        "flex flex-col gap-1 max-w-[85%]",
+        message.role === "user" ? "items-end" : "items-start"
+      )}
+    >
+      <div
+        className={cn(
+          "px-3 py-2 rounded-lg text-sm",
+          message.role === "user"
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-foreground"
+        )}
+      >
+        <MessageContent content={message.content} />
+      </div>
+      <span className="text-xs text-muted-foreground px-1">
+        {message.timestamp.toLocaleTimeString("zh-CN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </span>
+    </div>
+  </div>
+))
+
+MessageItem.displayName = 'MessageItem'
 
 export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
+  // ========== 状态管理 ==========
   const [input, setInput] = useState("")
   const [model, setModel] = useState("auto")
-  const [isExpanded, setIsExpanded] = useState(false) // 消息列表展开状态
-  const [messageHeight, setMessageHeight] = useState(300) // 消息列表高度
-  const [isDragging, setIsDragging] = useState(false) // 拖拽状态
-  const [dragStartY, setDragStartY] = useState(0) // 拖拽起始Y坐标
-  const [dragStartHeight, setDragStartHeight] = useState(300) // 拖拽起始高度
-  const [hasMoved, setHasMoved] = useState(false) // 是否真正拖拽过
-  const containerRef = useRef<HTMLDivElement>(null) // 容器引用，用于获取终端高度
-  const [shouldAnimate, setShouldAnimate] = useState(false) // 控制是否启用过渡动画
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [messageHeight, setMessageHeight] = useState(DEFAULT_MESSAGE_HEIGHT)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStartY, setDragStartY] = useState(0)
+  const [dragStartHeight, setDragStartHeight] = useState(DEFAULT_MESSAGE_HEIGHT)
+  const [hasMoved, setHasMoved] = useState(false)
+  const [shouldAnimate, setShouldAnimate] = useState(false)
+  const [isLoading, setIsLoading] = useState(false) // 加载状态
+  const [error, setError] = useState<string | null>(null) // 错误状态
+
+  // ========== Refs ==========
+  const containerRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // ========== 消息数据 ==========
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -117,13 +209,15 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       timestamp: new Date(Date.now() - 280000),
     },
   ])
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // 自动滚动到底部
+  // ========== Effects ==========
+  // 自动滚动到底部（平滑滚动）
   useEffect(() => {
     if (scrollRef.current && isExpanded) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      })
     }
   }, [messages, isExpanded])
 
@@ -136,47 +230,63 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     })
   }, [])
 
-  // 打开时聚焦输入框
+  // 打开时聚焦输入框并清除错误
   useEffect(() => {
     if (isOpen) {
+      setError(null)
       const timer = setTimeout(() => {
         inputRef.current?.focus()
-      }, 300)
+      }, ANIMATION_DELAY)
       return () => clearTimeout(timer)
     }
   }, [isOpen])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // ========== 事件处理器 ==========
+  // 使用 useCallback 缓存，避免子组件不必要的重渲染
+  const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim()) return
+    if (!input.trim() || isLoading) return
 
-    // 添加用户消息
+    const userInput = input.trim()
+
+    // 清空输入和错误
+    setInput("")
+    setError(null)
+
+    // 添加用户消息 - 使用 crypto.randomUUID() 生成唯一 ID
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       role: "user",
-      content: input.trim(),
+      content: userInput,
       timestamp: new Date(),
     }
     setMessages((prev) => [...prev, userMessage])
 
+    // 开始加载
+    setIsLoading(true)
+
     // TODO: 调用 AI API
     // 模拟 AI 回复
     setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `收到您的消息："${input.trim()}"。这是一个模拟回复，实际的 AI 功能需要接入后端 API。`,
-        timestamp: new Date(),
+      try {
+        const aiMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `收到您的消息："${userInput}"。这是一个模拟回复，实际的 AI 功能需要接入后端 API。`,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, aiMessage])
+        setIsLoading(false)
+      } catch (err) {
+        setError('发送失败，请重试')
+        setIsLoading(false)
+        console.error('AI response error:', err)
       }
-      setMessages((prev) => [...prev, aiMessage])
-    }, 1000)
+    }, AI_RESPONSE_DELAY)
+  }, [input, isLoading])
 
-    // 清空输入
-    setInput("")
-  }
-
-  // 拖拽处理
-  const handleDragStart = (e: React.MouseEvent) => {
+  // 拖拽开始处理
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault() // 防止选中文本
     e.stopPropagation() // 阻止事件冒泡
 
@@ -190,15 +300,15 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     setIsDragging(true)
     setDragStartY(e.clientY)
     setHasMoved(false) // 重置移动状态
-  }
+  }, [isExpanded, messageHeight])
 
   // 双击展开/收起
-  const handleDoubleClick = () => {
+  const handleDoubleClick = useCallback(() => {
     // 获取终端容器高度
     const terminalContainer = containerRef.current?.closest('.flex.flex-col.overflow-hidden.relative')
     const maxHeight = terminalContainer
-      ? (terminalContainer as HTMLElement).clientHeight * 0.5
-      : 300
+      ? (terminalContainer as HTMLElement).clientHeight * MAX_HEIGHT_RATIO
+      : DEFAULT_MESSAGE_HEIGHT
 
     if (isExpanded) {
       setIsExpanded(false)
@@ -207,8 +317,9 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       setIsExpanded(true)
       setMessageHeight(maxHeight) // 展开到终端高度的50%
     }
-  }
+  }, [isExpanded])
 
+  // 拖拽效果处理
   useEffect(() => {
     if (!isDragging) return
 
@@ -219,19 +330,19 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault() // 防止选中文本
 
-      // 检测是否真的移动了（超过5px才算拖拽）
+      // 检测是否真的移动了（使用常量阈值）
       const deltaY = dragStartY - e.clientY
-      if (Math.abs(deltaY) > 5 && !hasMoved) {
+      if (Math.abs(deltaY) > MIN_DRAG_DISTANCE && !hasMoved) {
         setHasMoved(true)
       }
 
       // 只有真正移动时才调整高度
-      if (Math.abs(deltaY) > 5) {
+      if (Math.abs(deltaY) > MIN_DRAG_DISTANCE) {
         // 获取终端容器高度
         const terminalContainer = containerRef.current?.closest('.flex.flex-col.overflow-hidden.relative')
         const maxHeight = terminalContainer
-          ? (terminalContainer as HTMLElement).clientHeight * 0.5
-          : 600
+          ? (terminalContainer as HTMLElement).clientHeight * MAX_HEIGHT_RATIO
+          : DEFAULT_MESSAGE_HEIGHT * 2
 
         // 计算新高度
         const newHeight = Math.max(0, Math.min(maxHeight, dragStartHeight + deltaY))
@@ -259,7 +370,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       }
 
       // 如果高度很小，自动收起
-      if (messageHeight <= 50) {
+      if (messageHeight <= AUTO_COLLAPSE_HEIGHT) {
         setMessageHeight(0)
         setIsExpanded(false)
       }
@@ -280,13 +391,16 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   return (
     <div
       ref={containerRef}
+      role="dialog"
+      aria-label="AI 助手面板"
+      aria-hidden={!isOpen}
       className={cn(
         "absolute bottom-0 left-0 right-0 z-50",
         shouldAnimate && "transition-all duration-500 ease-out",
         isOpen ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
       )}
       style={{
-        pointerEvents: "auto",
+        pointerEvents: isOpen ? "auto" : "none",
         willChange: isOpen ? "transform, opacity" : "auto"
       }}
     >
@@ -348,57 +462,29 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
               />
 
               <ScrollArea style={{ height: `${messageHeight}px` }}>
-                <div ref={scrollRef} className="px-4 pt-2 pb-4 flex flex-col gap-3">
+                <div
+                  ref={scrollRef}
+                  role="log"
+                  aria-live="polite"
+                  aria-relevant="additions"
+                  aria-label="对话历史"
+                  className="px-4 pt-2 pb-4 flex flex-col gap-3"
+                >
                   {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={cn(
-                        "flex gap-3 items-start",
-                        message.role === "user" ? "flex-row-reverse" : "flex-row"
-                      )}
-                    >
-                      {/* 头像 */}
-                      <div
-                        className={cn(
-                          "w-7 h-7 rounded-full flex items-center justify-center shrink-0",
-                          message.role === "user"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {message.role === "user" ? (
-                          <User className="h-3.5 w-3.5" />
-                        ) : (
-                          <Bot className="h-3.5 w-3.5" />
-                        )}
+                    <MessageItem key={message.id} message={message} />
+                  ))}
+                  {/* 加载指示器 */}
+                  {isLoading && (
+                    <div className="flex gap-3 items-start">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
+                        <Bot className="h-3.5 w-3.5" />
                       </div>
-
-                      {/* 消息内容 */}
-                      <div
-                        className={cn(
-                          "flex flex-col gap-1 max-w-[85%]",
-                          message.role === "user" ? "items-end" : "items-start"
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "px-3 py-2 rounded-lg text-sm",
-                            message.role === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-foreground"
-                          )}
-                        >
-                          <MessageContent content={message.content} />
-                        </div>
-                        <span className="text-xs text-muted-foreground px-1">
-                          {message.timestamp.toLocaleTimeString("zh-CN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
+                      <div className="px-3 py-2 rounded-lg text-sm bg-muted text-foreground flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>正在思考...</span>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               </ScrollArea>
             </div>
@@ -452,13 +538,25 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
 
                     {/* 提交按钮 */}
                     <PromptInputSubmit
-                      disabled={!input.trim()}
+                      disabled={!input.trim() || isLoading}
                       className="h-8 w-8"
+                      aria-label="发送消息"
                     />
                   </div>
                 </PromptInputToolbar>
               </PromptInput>
             </div>
+
+            {/* 错误提示 */}
+            {error && (
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="mt-2 text-center text-xs text-destructive animate-in fade-in slide-in-from-top-1 duration-200"
+              >
+                {error}
+              </div>
+            )}
 
             {/* 提示文本 */}
             <div className="mt-2 text-center text-xs text-muted-foreground">
