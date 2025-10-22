@@ -254,10 +254,10 @@ const SortableSession = React.memo(({ session, children, onCrossSessionDrop }: S
 
   // 使用 useMemo 缓存 cloneElement 结果
   const childrenWithDragHandle = React.useMemo(() =>
-    React.cloneElement(children as React.ReactElement, {
+    React.cloneElement(children as React.ReactElement<any>, {
       dragHandleListeners: listeners,
       dragHandleAttributes: attributes,
-    }), [children, listeners, attributes])
+    } as any), [children, listeners, attributes])
 
   return (
     <div

@@ -208,6 +208,7 @@ export function SftpManager(props: SftpManagerProps) {
   const [tempSessionLabel, setTempSessionLabel] = useState(sessionLabel)
   const [draggedFileName, setDraggedFileName] = useState<string | null>(null)
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [lastClickTime, setLastClickTime] = useState<number>(0)
   const [lastClickFile, setLastClickFile] = useState<string | null>(null)
   const [editorState, setEditorState] = useState<{

@@ -1,15 +1,14 @@
 "use client"
 
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+  Dialog as AlertDialog,
+  DialogContent as AlertDialogContent,
+  DialogDescription as AlertDialogDescription,
+  DialogFooter as AlertDialogFooter,
+  DialogHeader as AlertDialogHeader,
+  DialogTitle as AlertDialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 
 interface ConfirmDialogProps {
   open: boolean
@@ -45,13 +44,13 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{cancelText}</AlertDialogCancel>
-          <AlertDialogAction
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{cancelText}</Button>
+          <Button
             onClick={handleConfirm}
             className={variant === "destructive" ? "bg-red-600 hover:bg-red-700" : ""}
           >
             {confirmText}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
