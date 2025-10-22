@@ -321,7 +321,7 @@ export function TerminalComponent({
                     : "w-0 opacity-0 -translate-x-4"
                 )}
               >
-                {active && active.type !== 'quick' && (
+                {isMonitorOpen && active && active.type !== 'quick' && (
                   <MonitorPanel />
                 )}
               </div>

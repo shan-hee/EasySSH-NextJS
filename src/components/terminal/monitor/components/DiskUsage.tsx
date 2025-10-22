@@ -56,7 +56,10 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data }) => {
       {/* 图表区域 - 固定高度 106px */}
       <div className="h-[106px] w-full">
         <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+          {({ width, height }) => (
           <BarChart
+            width={width}
+            height={height}
             data={chartData}
             layout="vertical"
             margin={{
@@ -143,6 +146,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data }) => {
               opacity={0.3}
             />
           </BarChart>
+          )}
         </ChartContainer>
       </div>
     </div>

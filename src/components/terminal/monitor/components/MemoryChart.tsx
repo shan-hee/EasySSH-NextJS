@@ -69,7 +69,10 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
         {/* 左侧:径向条形图 */}
         <div className="w-[106px] h-[106px] relative flex-shrink-0">
           <ChartContainer config={chartConfig} className="w-full h-full">
+            {({ width, height }) => (
             <RadialBarChart
+              width={width}
+              height={height}
               data={chartData}
               startAngle={90}
               endAngle={450}
@@ -122,6 +125,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
                 cornerRadius={5}
               />
             </RadialBarChart>
+            )}
           </ChartContainer>
 
         </div>

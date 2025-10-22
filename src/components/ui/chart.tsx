@@ -34,37 +34,76 @@ function useChart() {
   return context
 }
 
-const ChartContainer = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentProps<"div"> & {
-    config: ChartConfig
-    children: React.ComponentProps<
-      typeof RechartsPrimitive.ResponsiveContainer
-    >["children"]
-  }
->(({ id, className, children, config, ...props }, ref) => {
+type ChartContainerProps = Omit<React.ComponentProps<"div">, "children"> & {
+  config: ChartConfig
+  children: (size: { width: number; height: number }) => React.ReactNode
+}
+
+const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
+  ({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const [ready, setReady] = React.useState(false)
+
+  // 合并外部 ref 与内部 ref
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      containerRef.current = node
+      if (typeof ref === "function") {
+        ref(node)
+      } else if (ref && typeof ref === "object") {
+        ;(ref as React.MutableRefObject<HTMLDivElement | null>).current = node
+      }
+    },
+    [ref]
+  )
+
+  React.useEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+
+    const measure = () => {
+      const rect = node.getBoundingClientRect()
+      setReady(rect.width > 1 && rect.height > 1)
+    }
+    measure()
+
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      const { width, height } = entry.contentRect
+      setReady(width > 1 && height > 1)
+    })
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [])
 
   return (
     <ChartContext.Provider value={{ config }}>
       <div
         data-chart={chartId}
-        ref={ref}
+        ref={setRefs}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+          "flex justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
           className
         )}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        {ready && containerRef.current ? (
+          children({
+            width: containerRef.current.clientWidth,
+            height: containerRef.current.clientHeight,
+          })
+        ) : (
+          // 预占位以避免布局抖动
+          <div className="w-full h-full" />
+        )}
       </div>
     </ChartContext.Provider>
   )
-})
+}
+)
 ChartContainer.displayName = "ChartContainer"
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {

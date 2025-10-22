@@ -67,7 +67,10 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         </div>
 
         <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+          {({ width, height }) => (
           <AreaChart
+            width={width}
+            height={height}
             data={chartData}
             margin={{
               left: 12,
@@ -157,6 +160,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
               isAnimationActive={true}
             />
           </AreaChart>
+          )}
         </ChartContainer>
       </div>
     </div>

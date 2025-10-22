@@ -102,7 +102,10 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         </div>
 
         <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+          {({ width, height }) => (
           <LineChart
+            width={width}
+            height={height}
             data={chartData}
             margin={{
               left: 12,
@@ -193,6 +196,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
               isAnimationActive={true}
             />
           </LineChart>
+          )}
         </ChartContainer>
       </div>
     </div>
