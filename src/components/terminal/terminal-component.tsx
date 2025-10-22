@@ -233,7 +233,7 @@ export function TerminalComponent({
         <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* 加载动画覆盖层 - 覆盖工具栏和终端内容区 */}
         {effectiveIsLoading && active && active.type !== 'quick' && (
-          <div className="absolute inset-0 z-50">
+          <div className="absolute inset-0 z-[60]">
             <ConnectionLoader
               serverName={`${active.username}@${active.host}`}
               message="正在连接"
@@ -404,7 +404,8 @@ export function TerminalComponent({
         )}
 
         {/* AI 助手悬浮输入框 - 终端内部悬浮 */}
-        {active && active.type !== 'quick' && (
+        {/* 只在非加载状态时渲染，避免与 ConnectionLoader 动画冲突 */}
+        {active && active.type !== 'quick' && !effectiveIsLoading && (
           <AiAssistantPanel
             isOpen={isAiInputOpen}
             onClose={() => setIsAiInputOpen(false)}

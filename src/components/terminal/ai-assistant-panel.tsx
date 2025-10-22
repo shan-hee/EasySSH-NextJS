@@ -72,6 +72,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   const [dragStartHeight, setDragStartHeight] = useState(300) // 拖拽起始高度
   const [hasMoved, setHasMoved] = useState(false) // 是否真正拖拽过
   const containerRef = useRef<HTMLDivElement>(null) // 容器引用，用于获取终端高度
+  const [shouldAnimate, setShouldAnimate] = useState(false) // 控制是否启用过渡动画
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -125,6 +126,15 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages, isExpanded])
+
+  // 延迟启用过渡动画，避免初始渲染时的动画冲突
+  useEffect(() => {
+    // 组件挂载后立即启用动画（父组件已确保不在加载期间渲染）
+    // 使用 requestAnimationFrame 确保在下一帧启用，避免初始渲染闪烁
+    requestAnimationFrame(() => {
+      setShouldAnimate(true)
+    })
+  }, [])
 
   // 打开时聚焦输入框
   useEffect(() => {
@@ -272,10 +282,13 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       ref={containerRef}
       className={cn(
         "absolute bottom-0 left-0 right-0 z-50",
-        "transition-all duration-500 ease-out",
+        shouldAnimate && "transition-all duration-500 ease-out",
         isOpen ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
       )}
-      style={{ pointerEvents: "auto" }}
+      style={{
+        pointerEvents: "auto",
+        willChange: isOpen ? "transform, opacity" : "auto"
+      }}
     >
       <div className="w-full max-w-3xl mx-auto px-4 pointer-events-auto">
         {/* 顶部边框 - 收起时显示在输入框上方 */}
