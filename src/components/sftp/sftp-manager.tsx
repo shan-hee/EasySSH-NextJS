@@ -199,6 +199,7 @@ export function SftpManager(props: SftpManagerProps) {
     fileName?: string
     fileType?: "file" | "directory"
     isBlank?: boolean
+    key?: number
   } | null>(null)
   const [editingFile, setEditingFile] = useState<string | null>(null)
   const [editingFileName, setEditingFileName] = useState("")
@@ -310,6 +311,7 @@ export function SftpManager(props: SftpManagerProps) {
       fileName,
       fileType,
       isBlank: false,
+      key: Date.now(),
     })
     // 如果右键的项目未被选中，则选中它
     if (!selectedFiles.includes(fileName)) {
@@ -496,6 +498,7 @@ export function SftpManager(props: SftpManagerProps) {
       x: e.clientX,
       y: e.clientY,
       isBlank: true,
+      key: Date.now(),
     })
   }
 
@@ -1787,7 +1790,8 @@ export function SftpManager(props: SftpManagerProps) {
       {/* macOS 风格右键菜单 */}
       {contextMenu && (
         <div
-          className="fixed z-[100]"
+          key={contextMenu.key}
+          className="fixed z-[100] animate-in fade-in-0 zoom-in-95 duration-200"
           style={{
             left: `${contextMenu.x}px`,
             top: `${contextMenu.y}px`,
@@ -1796,11 +1800,8 @@ export function SftpManager(props: SftpManagerProps) {
         >
           <div
             className={cn(
-              "min-w-[200px] rounded-lg shadow-2xl border backdrop-blur-xl py-1.5 bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
+              "min-w-[200px] rounded-lg shadow-md border p-1 bg-popover text-popover-foreground border-border",
             )}
-            style={{
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
-            }}
           >
             {/* 标题 - 显示选中数量 */}
             {selectedFiles.length > 1 && (
@@ -1819,9 +1820,7 @@ export function SftpManager(props: SftpManagerProps) {
               <>
                 {/* 新建文件夹 */}
                 <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
-                  )}
+                  className="w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm"
                   onClick={() => {
                     startCreateNew("folder")
                     closeContextMenu()
@@ -1838,9 +1837,7 @@ export function SftpManager(props: SftpManagerProps) {
 
                 {/* 新建文件 */}
                 <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
-                  )}
+                  className="w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm"
                   onClick={() => {
                     startCreateNew("file")
                     closeContextMenu()
@@ -1857,9 +1854,7 @@ export function SftpManager(props: SftpManagerProps) {
 
                 {/* 上传文件 */}
                 <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
-                  )}
+                  className="w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm"
                   onClick={() => {
                     fileInputRef.current?.click()
                     closeContextMenu()
@@ -1877,9 +1872,8 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 粘贴 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
-                    clipboard.length === 0 && "opacity-50 cursor-not-allowed",
-                    "hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
+                    clipboard.length === 0 && "opacity-50 pointer-events-none"
                   )}
                   onClick={() => {
                     if (onPasteFiles && clipboard.length > 0) {
@@ -1904,9 +1898,7 @@ export function SftpManager(props: SftpManagerProps) {
 
                 {/* 刷新 */}
                 <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
-                  )}
+                  className="w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm"
                   onClick={() => {
                     onRefresh()
                     closeContextMenu()
@@ -1926,7 +1918,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 打开/查看 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
                   )}
                   onClick={() => {
                     if (contextMenu.fileType === "directory" && contextMenu.fileName) {
@@ -1951,7 +1943,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {(contextMenu.fileType === "file" || selectedFiles.length > 1) && (
                   <button
                     className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
+                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
                     )}
                     onClick={() => {
                       if (selectedFiles.length > 1) {
@@ -1980,7 +1972,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {selectedFiles.length === 1 && (
                   <button
                     className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
+                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
                     )}
                     onClick={() => {
                       if (contextMenu.fileName) {
@@ -2002,7 +1994,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 复制 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
                   )}
                   onClick={() => {
                     const filesToCopy = selectedFiles.length > 1 ? selectedFiles : (contextMenu.fileName ? [contextMenu.fileName] : [])
@@ -2026,9 +2018,9 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 粘贴 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all",
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all rounded-sm",
                     clipboard.length === 0 && "opacity-50 cursor-not-allowed",
-                    "hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
+                    "hover:bg-accent hover:text-accent-foreground",
                   )}
                   onClick={() => {
                     if (onPasteFiles && clipboard.length > 0) {
@@ -2053,7 +2045,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {selectedFiles.length === 1 && (
                   <button
                     className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-blue-500 hover:text-white text-zinc-800 dark:hover:bg-blue-600 dark:text-zinc-200",
+                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
                     )}
                     onClick={() => {
                       // TODO: 显示文件详细信息
@@ -2076,7 +2068,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 删除 */}
                 <button
                   className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-red-500 hover:text-white text-red-600 dark:hover:bg-red-600 dark:text-red-400",
+                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 hover:text-destructive rounded-sm",
                   )}
                   onClick={() => {
                     if (selectedFiles.length > 1) {
