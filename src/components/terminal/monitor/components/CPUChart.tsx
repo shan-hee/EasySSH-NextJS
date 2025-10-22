@@ -148,7 +148,9 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
               activeDot={{
                 r: 4,
                 strokeWidth: 0,
-                style: { transition: 'cx 300ms ease-out, cy 300ms ease-out' }
+                style: {
+                  transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
+                }
               }}
               animationDuration={300}
               animationEasing="ease-out"

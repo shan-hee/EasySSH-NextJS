@@ -167,7 +167,9 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
               activeDot={{
                 r: 4,
                 strokeWidth: 0,
-                style: { transition: 'cx 300ms ease-out, cy 300ms ease-out' }
+                style: {
+                  transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
+                }
               }}
               animationDuration={300}
               animationEasing="ease-out"
@@ -182,7 +184,9 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
               activeDot={{
                 r: 4,
                 strokeWidth: 0,
-                style: { transition: 'cx 300ms ease-out, cy 300ms ease-out' }
+                style: {
+                  transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
+                }
               }}
               animationDuration={300}
               animationEasing="ease-out"
