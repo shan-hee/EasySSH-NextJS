@@ -13,7 +13,6 @@ import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
 } from "@/components/ui/chart";
 
 interface NetworkChartProps {
@@ -165,8 +164,14 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
               stroke="var(--color-download)"
               strokeWidth={2}
               dot={false}
-              animationDuration={800}
+              activeDot={{
+                r: 4,
+                strokeWidth: 0,
+                style: { transition: 'cx 300ms ease-out, cy 300ms ease-out' }
+              }}
+              animationDuration={300}
               animationEasing="ease-out"
+              isAnimationActive={true}
             />
             <Line
               dataKey="upload"
@@ -174,8 +179,14 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
               stroke="var(--color-upload)"
               strokeWidth={2}
               dot={false}
-              animationDuration={800}
+              activeDot={{
+                r: 4,
+                strokeWidth: 0,
+                style: { transition: 'cx 300ms ease-out, cy 300ms ease-out' }
+              }}
+              animationDuration={300}
               animationEasing="ease-out"
+              isAnimationActive={true}
             />
           </LineChart>
         </ChartContainer>

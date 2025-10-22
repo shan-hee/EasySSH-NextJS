@@ -144,8 +144,15 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
               fillOpacity={0.4}
               stroke="var(--color-usage)"
               strokeWidth={2}
-              animationDuration={800}
+              dot={false}
+              activeDot={{
+                r: 4,
+                strokeWidth: 0,
+                style: { transition: 'cx 300ms ease-out, cy 300ms ease-out' }
+              }}
+              animationDuration={300}
               animationEasing="ease-out"
+              isAnimationActive={true}
             />
           </AreaChart>
         </ChartContainer>
