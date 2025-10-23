@@ -1,35 +1,34 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
-import { useRouter, usePathname } from "next/navigation"
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { authApi, type User, type LoginRequest } from "@/lib/api/auth"
 
-interface AuthContextType {
+interface ClientAuthContextType {
   user: User | null
-  isLoading: boolean
   isAuthenticated: boolean
   login: (credentials: LoginRequest) => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined)
 
 const TOKEN_KEY = "easyssh_access_token"
 const REFRESH_TOKEN_KEY = "easyssh_refresh_token"
 
-// 不需要认证的公开路由
-const PUBLIC_ROUTES = ["/login", "/setup"]
+interface ClientAuthProviderProps {
+  children: ReactNode
+  initialUser: User | null
+}
 
 /**
- * 旧版 AuthProvider - 保留用于登录页等非受保护路由
- * 在 dashboard 中应使用新的 ClientAuthProvider
+ * 客户端认证 Provider
+ * 接收服务端验证的初始用户数据,避免客户端加载闪烁
  */
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(false) // 修改: 登录页不需要loading
+export function ClientAuthProvider({ children, initialUser }: ClientAuthProviderProps) {
+  const [user, setUser] = useState<User | null>(initialUser)
   const router = useRouter()
-  const pathname = usePathname()
 
   const isAuthenticated = !!user
 
@@ -50,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 保存到localStorage
     localStorage.setItem(TOKEN_KEY, accessToken)
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
-    // 同时保存到cookie供middleware使用
+    // 同时保存到cookie供middleware和server components使用
     document.cookie = `${TOKEN_KEY}=${accessToken}; path=/; max-age=3600; SameSite=Lax`
     document.cookie = `${REFRESH_TOKEN_KEY}=${refreshToken}; path=/; max-age=604800; SameSite=Lax`
   }, [])
@@ -66,12 +65,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.cookie = `${REFRESH_TOKEN_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
   }, [])
 
-  // 获取当前用户信息
+  // 刷新用户信息
   const refreshUser = useCallback(async () => {
     const token = getToken()
     if (!token) {
       setUser(null)
-      setIsLoading(false)
       return
     }
 
@@ -93,23 +91,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // 刷新失败,清除令牌并重定向到登录页
           clearTokens()
           setUser(null)
-          // 如果当前在受保护路由,重定向到登录
-          if (pathname && !PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
-            router.replace("/login")
-          }
+          router.replace("/login")
         }
       } else {
         clearTokens()
         setUser(null)
-        // 如果当前在受保护路由,重定向到登录
-        if (pathname && !PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
-          router.replace("/login")
-        }
+        router.replace("/login")
       }
-    } finally {
-      setIsLoading(false)
     }
-  }, [getToken, getRefreshToken, setTokens, clearTokens, pathname, router])
+  }, [getToken, getRefreshToken, setTokens, clearTokens, router])
 
   // 登录
   const login = useCallback(
@@ -142,22 +132,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.replace("/login")
   }, [getToken, clearTokens, router])
 
-  // 初始化时加载用户信息(仅在非公开路由) - 已禁用,改由服务端验证
-  useEffect(() => {
-    // 不再自动加载用户信息,避免全局loading
-    // 公开路由(如登录页)不需要认证检查
-    const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route))
-    if (isPublicRoute) {
-      setIsLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
-
   return (
-    <AuthContext.Provider
+    <ClientAuthContext.Provider
       value={{
         user,
-        isLoading,
         isAuthenticated,
         login,
         logout,
@@ -165,20 +143,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-    </AuthContext.Provider>
+    </ClientAuthContext.Provider>
   )
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext)
+/**
+ * 使用客户端认证上下文
+ */
+export function useClientAuth() {
+  const context = useContext(ClientAuthContext)
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useClientAuth must be used within a ClientAuthProvider")
   }
   return context
-}
-
-// 导出令牌获取函数供 API 调用使用
-export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem(TOKEN_KEY)
 }

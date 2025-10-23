@@ -27,7 +27,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { SettingsDialog } from "@/components/settings-dialog"
-import { useAuth } from "@/contexts/auth-context"
+import { useClientAuth } from "@/components/client-auth-provider"
 
 export const NavUser = React.memo(function NavUser({
   user,
@@ -39,7 +39,7 @@ export const NavUser = React.memo(function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
-  const { logout } = useAuth()
+  const { logout } = useClientAuth()
 
   const handleSettingsSelect = React.useCallback((e: Event) => {
     e.preventDefault()

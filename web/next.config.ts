@@ -18,6 +18,32 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // 静态资源缓存配置
+  async headers() {
+    return [
+      {
+        // 匹配所有静态资源
+        source: "/:all*(svg|jpg|jpeg|png|gif|ico|webp|woff|woff2)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable", // 缓存1年
+          },
+        ],
+      },
+      {
+        // logo 和 favicon 特殊处理
+        source: "/(logo.svg|icon.svg|favicon.ico)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, must-revalidate", // 缓存24小时
+          },
+        ],
+      },
+    ];
+  },
+
   // 生产环境优化
   output: process.env.NODE_ENV === "production" ? "standalone" : undefined,
 
@@ -29,6 +55,10 @@ const nextConfig: NextConfig = {
         hostname: "**",
       },
     ],
+    // 允许优化 SVG
+    dangerouslyAllowSVG: true,
+    contentDispositionType: "attachment",
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
   // 实验性功能

@@ -66,7 +66,14 @@ export function LoginForm({
           <div className="flex flex-col items-center gap-4 text-center">
             <div className="flex flex-col items-center gap-3">
               <div className="flex size-16 items-center justify-center">
-                <img src="/logo.svg" alt="EasySSH Logo" className="size-16" />
+                <img
+                  src="/logo.svg"
+                  alt="EasySSH Logo"
+                  className="size-16"
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
+                />
               </div>
               <div className="space-y-1">
                 <h1 className="text-2xl font-bold text-zinc-50">欢迎使用 EasySSH</h1>
