@@ -15,18 +15,22 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Eye, EyeOff, Lock, User, Shield } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
+import { useAuth } from "@/contexts/auth-context"
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const { login, isLoading: authLoading } = useAuth()
+
   // 预取控制台页面，加速跳转
   useEffect(() => {
     try {
       router.prefetch?.('/dashboard')
     } catch {}
   }, [router])
+
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
@@ -35,23 +39,23 @@ export function LoginForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isLoading) return
+    if (isLoading || authLoading) return
+
     setIsLoading(true)
 
-    // 本地校验（示例）——通过后立即跳转，避免多余等待
-    if (username === "shanhee" && password === "123") {
+    try {
+      await login({ username, password })
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
       })
-      router.replace('/dashboard')
-      return
+    } catch (error: any) {
+      console.error("Login error:", error)
+      toast.error("登录失败", {
+        description: error?.detail?.error || error?.message || "请检查输入信息并重试",
+      })
+    } finally {
+      setIsLoading(false)
     }
-
-    // 失败反馈
-    toast.error("登录失败", {
-      description: "账号或密码错误，请重试",
-    })
-    setIsLoading(false)
   }
 
   return (

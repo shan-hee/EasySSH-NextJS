@@ -11,7 +11,11 @@ type ApiFetchOptions = {
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const url = new URL(path, env.apiBaseUrl)
+  // 修复: 正确处理包含路径的基础URL
+  // 如果path是完整URL则直接使用,否则拼接到baseUrl
+  const url = path.startsWith("http")
+    ? new URL(path)
+    : new URL(`${env.apiBaseUrl}${path}`)
 
   const headers: HeadersInit = {
     Accept: "application/json",
@@ -39,11 +43,17 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   const res = await fetch(url.toString(), init)
   if (!res.ok) {
+    // 修复: 根据Content-Type只读取一次响应体
+    const contentType = res.headers.get("content-type") || ""
     let detail: unknown
     try {
-      detail = await res.json()
+      if (contentType.includes("application/json")) {
+        detail = await res.json()
+      } else {
+        detail = await res.text()
+      }
     } catch {
-      detail = await res.text()
+      detail = "Failed to parse error response"
     }
     throw Object.assign(new Error(`API ${res.status} ${res.statusText}`), {
       status: res.status,
@@ -53,7 +63,12 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   const contentType = res.headers.get("content-type") || ""
   if (contentType.includes("application/json")) {
-    return (await res.json()) as T
+    const json = await res.json()
+    // 如果响应包含data字段,自动解包
+    if (json && typeof json === "object" && "data" in json) {
+      return json.data as T
+    }
+    return json as T
   }
   return (await res.text()) as unknown as T
 }

@@ -27,6 +27,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { SettingsDialog } from "@/components/settings-dialog"
+import { useAuth } from "@/contexts/auth-context"
 
 export const NavUser = React.memo(function NavUser({
   user,
@@ -38,10 +39,19 @@ export const NavUser = React.memo(function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const { logout } = useAuth()
 
   const handleSettingsSelect = React.useCallback((e: Event) => {
     e.preventDefault()
   }, [])
+
+  const handleLogout = React.useCallback(async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error("Logout failed:", error)
+    }
+  }, [logout])
 
   const avatarFallback = React.useMemo(() => {
     return user.name.slice(0, 2).toUpperCase()
@@ -93,7 +103,7 @@ export const NavUser = React.memo(function NavUser({
               </DropdownMenuItem>
             </SettingsDialog>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
               <LogOut />
               退出登录
             </DropdownMenuItem>

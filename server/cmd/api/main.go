@@ -1,30 +1,280 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/easyssh/server/internal/api/middleware"
+	"github.com/easyssh/server/internal/api/rest"
+	"github.com/easyssh/server/internal/api/ws"
+	"github.com/easyssh/server/internal/domain/auditlog"
+	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/easyssh/server/internal/domain/monitoring"
+	"github.com/easyssh/server/internal/domain/server"
+	"github.com/easyssh/server/internal/domain/ssh"
+	"github.com/easyssh/server/internal/infra/cache"
+	"github.com/easyssh/server/internal/infra/config"
+	"github.com/easyssh/server/internal/infra/db"
+	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	r := gin.Default()
+	// 加载 .env 文件
+	if err := godotenv.Load(); err != nil {
+		log.Printf("⚠️ Warning: .env file not found, using environment variables")
+	}
+
+	// 加载配置
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("❌ Failed to load config: %v", err)
+	}
+
+	// 设置 Gin 模式
+	if cfg.Server.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// 初始化数据库
+	database, err := db.NewPostgresDB(&cfg.Database)
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to database: %v", err)
+	}
+	defer db.Close(database)
+
+	// 初始化 Redis
+	redisClient, err := cache.NewRedisClient(&cfg.Redis)
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to Redis: %v", err)
+	}
+	defer redisClient.Close()
+
+	// 数据库迁移（自动迁移）
+	if err := database.AutoMigrate(
+		&auth.User{},
+		&server.Server{},
+		&auditlog.AuditLog{},
+	); err != nil {
+		log.Fatalf("❌ Failed to migrate database: %v", err)
+	}
+	log.Println("✅ Database migrated successfully")
+
+	// 初始化服务层
+	// JWT 服务
+	jwtService := auth.NewJWTService(auth.JWTConfig{
+		SecretKey:            cfg.JWT.Secret,
+		AccessTokenDuration:  time.Duration(cfg.JWT.AccessExpire) * time.Hour,
+		RefreshTokenDuration: time.Duration(cfg.JWT.RefreshExpire) * time.Hour,
+	}, redisClient.GetClient())
+
+	// 认证服务
+	authRepo := auth.NewRepository(database)
+	authService := auth.NewService(authRepo, jwtService)
+
+	// 加密器（用于服务器密码和私钥）
+	encryptor, err := crypto.NewEncryptor(cfg.Server.EncryptionKey)
+	if err != nil {
+		log.Fatalf("❌ Failed to create encryptor: %v", err)
+	}
+
+	// 服务器服务
+	serverRepo := server.NewRepository(database)
+	serverService := server.NewService(serverRepo, encryptor)
+
+	// SSH 会话管理器
+	sessionManager := ssh.NewSessionManager()
+
+	// 审计日志服务
+	auditLogRepo := auditlog.NewRepository(database)
+	auditLogService := auditlog.NewService(auditLogRepo)
+
+	// 监控服务
+	monitoringService := monitoring.NewService(serverService, encryptor)
+
+	// 初始化处理器
+	authHandler := rest.NewAuthHandler(authService, jwtService)
+	serverHandler := rest.NewServerHandler(serverService)
+	sshHandler := rest.NewSSHHandler(sessionManager)
+	sftpHandler := rest.NewSFTPHandler(serverService, encryptor)
+	terminalHandler := ws.NewTerminalHandler(serverService, sessionManager, encryptor)
+	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
+	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
+
+	// 创建 Gin 路由
+	r := gin.New()
+
+	// 全局中间件
+	r.Use(middleware.Recovery())                     // 错误恢复
+	r.Use(middleware.Logger())                        // 日志记录
+	r.Use(middleware.RequestID())                     // 请求 ID
+	r.Use(middleware.CORS())                          // 跨域
+	r.Use(middleware.AuditLogMiddleware(auditLogService)) // 审计日志
 
 	// API v1 路由组
 	v1 := r.Group("/api/v1")
 	{
-		v1.GET("/health", healthCheck)
-		// TODO: 添加其他路由
+		// 健康检查
+		v1.GET("/health", func(c *gin.Context) {
+			// 检查数据库连接
+			dbStatus := "ok"
+			if err := db.HealthCheck(database); err != nil {
+				dbStatus = "error: " + err.Error()
+			}
+
+			// 检查 Redis 连接
+			redisStatus := "ok"
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := redisClient.HealthCheck(ctx); err != nil {
+				redisStatus = "error: " + err.Error()
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "ok",
+				"service": "easyssh-api",
+				"version": "1.0.0",
+				"dependencies": gin.H{
+					"database": dbStatus,
+					"redis":    redisStatus,
+				},
+			})
+		})
+
+		// 认证路由（公开）
+		authRoutes := v1.Group("/auth")
+		{
+			authRoutes.POST("/register", authHandler.Register)
+			authRoutes.POST("/login", authHandler.Login)
+			authRoutes.POST("/logout", authHandler.Logout)
+			authRoutes.POST("/refresh", authHandler.RefreshToken)
+			authRoutes.GET("/admin-status", authHandler.CheckAdminStatus)           // 检查管理员状态
+			authRoutes.POST("/initialize-admin", authHandler.InitializeAdmin)       // 初始化管理员
+		}
+
+		// 用户路由（需要认证）
+		userRoutes := v1.Group("/users")
+		userRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			userRoutes.GET("/me", authHandler.GetCurrentUser)
+			userRoutes.PUT("/me", authHandler.UpdateProfile)
+			userRoutes.PUT("/me/password", authHandler.ChangePassword)
+		}
+
+		// 服务器路由（需要认证）
+		serverRoutes := v1.Group("/servers")
+		serverRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			serverRoutes.GET("", serverHandler.List)                       // 列表
+			serverRoutes.POST("", serverHandler.Create)                    // 创建
+			serverRoutes.GET("/statistics", serverHandler.GetStatistics)   // 统计
+			serverRoutes.GET("/:id", serverHandler.GetByID)                // 详情
+			serverRoutes.PUT("/:id", serverHandler.Update)                 // 更新
+			serverRoutes.DELETE("/:id", serverHandler.Delete)              // 删除
+			serverRoutes.POST("/:id/test", serverHandler.TestConnection)   // 连接测试
+		}
+
+		// SSH 路由（需要认证）
+		sshRoutes := v1.Group("/ssh")
+		sshRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			// WebSocket 终端
+			sshRoutes.GET("/terminal/:server_id", terminalHandler.HandleSSH)
+
+			// 会话管理 REST API
+			sshRoutes.GET("/sessions", sshHandler.ListSessions)            // 会话列表
+			sshRoutes.GET("/sessions/:id", sshHandler.GetSession)          // 会话详情
+			sshRoutes.DELETE("/sessions/:id", sshHandler.CloseSession)     // 关闭会话
+			sshRoutes.GET("/statistics", sshHandler.GetStatistics)         // 统计信息
+		}
+
+		// SFTP 路由（需要认证）
+		sftpRoutes := v1.Group("/sftp/:server_id")
+		sftpRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			// 文件浏览
+			sftpRoutes.GET("/list", sftpHandler.ListDirectory)             // 列出目录
+			sftpRoutes.GET("/stat", sftpHandler.GetFileInfo)               // 文件信息
+			sftpRoutes.GET("/disk-usage", sftpHandler.GetDiskUsage)        // 磁盘使用
+
+			// 文件传输
+			sftpRoutes.POST("/upload", sftpHandler.UploadFile)             // 上传文件
+			sftpRoutes.GET("/download", sftpHandler.DownloadFile)          // 下载文件
+
+			// 文件操作
+			sftpRoutes.POST("/mkdir", sftpHandler.CreateDirectory)         // 创建目录
+			sftpRoutes.DELETE("/delete", sftpHandler.Delete)               // 删除
+			sftpRoutes.POST("/rename", sftpHandler.Rename)                 // 重命名
+			sftpRoutes.POST("/move", sftpHandler.Move)                     // 移动
+			sftpRoutes.POST("/copy", sftpHandler.Copy)                     // 复制
+
+			// 文件内容
+			sftpRoutes.GET("/read", sftpHandler.ReadFile)                  // 读取文件
+			sftpRoutes.POST("/write", sftpHandler.WriteFile)               // 写入文件
+		}
+
+		// 监控路由（需要认证）
+		monitoringRoutes := v1.Group("/monitoring/:server_id")
+		monitoringRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			monitoringRoutes.GET("/system", monitoringHandler.GetSystemInfo)       // 系统综合信息
+			monitoringRoutes.GET("/cpu", monitoringHandler.GetCPUInfo)             // CPU 信息
+			monitoringRoutes.GET("/memory", monitoringHandler.GetMemoryInfo)       // 内存信息
+			monitoringRoutes.GET("/disk", monitoringHandler.GetDiskInfo)           // 磁盘信息
+			monitoringRoutes.GET("/network", monitoringHandler.GetNetworkInfo)     // 网络信息
+			monitoringRoutes.GET("/processes", monitoringHandler.GetTopProcesses)  // 进程列表
+		}
+
+		// 审计日志路由（需要认证）
+		auditLogRoutes := v1.Group("/audit-logs")
+		auditLogRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			auditLogRoutes.GET("", auditLogHandler.List)                          // 查询日志列表
+			auditLogRoutes.GET("/me", auditLogHandler.GetMyLogs)                  // 我的日志
+			auditLogRoutes.GET("/statistics", auditLogHandler.GetStatistics)      // 统计信息
+			auditLogRoutes.GET("/:id", auditLogHandler.GetByID)                   // 日志详情
+			auditLogRoutes.DELETE("/cleanup", auditLogHandler.CleanupOldLogs)     // 清理旧日志（管理员）
+		}
 	}
 
-	// 启动服务器
-	log.Println("Server starting on :8521")
-	if err := r.Run(":8521"); err != nil {
-		log.Fatal("Failed to start server:", err)
+	// 创建 HTTP 服务器
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
 	}
-}
 
-func healthCheck(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"status": "ok",
-		"service": "easyssh-api",
-	})
+	// 启动服务器（在 goroutine 中）
+	go func() {
+		log.Printf("🚀 Server starting on http://localhost%s", addr)
+		log.Printf("📝 Environment: %s", cfg.Server.Env)
+		log.Printf("🔗 Health check: http://localhost%s/api/v1/health", addr)
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("❌ Failed to start server: %v", err)
+		}
+	}()
+
+	// 优雅关闭
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("🛑 Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("❌ Server forced to shutdown:", err)
+	}
+
+	log.Println("✅ Server exited properly")
 }
