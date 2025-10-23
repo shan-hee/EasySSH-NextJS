@@ -1,0 +1,37 @@
+version: '3.8'
+
+# 开发环境配置 - 仅启动基础设施服务
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: easyssh-db-dev
+    environment:
+      POSTGRES_USER: easyssh
+      POSTGRES_PASSWORD: easyssh_dev_password
+      POSTGRES_DB: easyssh
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U easyssh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: easyssh-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:

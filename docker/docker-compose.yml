@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: easyssh-db
+    environment:
+      POSTGRES_USER: easyssh
+      POSTGRES_PASSWORD: easyssh_dev_password
+      POSTGRES_DB: easyssh
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U easyssh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: easyssh-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Go 后端
+  server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    container_name: easyssh-api
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://easyssh:easyssh_dev_password@postgres:5432/easyssh?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - GIN_MODE=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Next.js 前端
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    container_name: easyssh-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

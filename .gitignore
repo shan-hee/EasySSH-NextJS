@@ -1,7 +1,12 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# ========================================
+# Frontend (Next.js)
+# ========================================
+
 # dependencies
 /node_modules
+/web/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -15,14 +20,72 @@
 
 # next.js
 /.next/
+/web/.next/
 /out/
 
 # production
 /build
+/web/build
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# ========================================
+# Backend (Go)
+# ========================================
+
+# Go binaries
+/server/bin/
+/server/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test files
+*.test
+*.out
+
+# Go workspace
+/server/go.work
+/server/go.work.sum
+
+# ========================================
+# Environment & Config
+# ========================================
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+!.env.*.example
+
+# ========================================
+# Docker & Infrastructure
+# ========================================
+
+# Docker volumes
+/docker/volumes/
+
+# ========================================
+# IDE & System
+# ========================================
 
 # misc
 .DS_Store
 *.pem
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ========================================
+# Logs & Debug
+# ========================================
 
 # debug
 npm-debug.log*
@@ -30,14 +93,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-!.env.example
-!.env.*.example
+# logs
+logs/
+*.log
+
+# ========================================
+# Deployment
+# ========================================
 
 # vercel
 .vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts

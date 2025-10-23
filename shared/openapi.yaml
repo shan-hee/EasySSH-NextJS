@@ -1,0 +1,1248 @@
+openapi: 3.1.0
+info:
+  title: EasySSH API
+  description: |
+    EasySSH 后端 API 规范 - 现代化的 SSH 管理平台
+
+    ## 功能模块
+    - 用户认证与授权
+    - 服务器管理（CRUD）
+    - SSH 连接与终端
+    - SFTP 文件传输
+    - 批量操作与脚本执行
+    - 系统监控与日志
+
+  version: 1.0.0
+  contact:
+    name: EasySSH Team
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: 本地开发环境
+  - url: https://api.easyssh.example.com/api/v1
+    description: 生产环境
+
+tags:
+  - name: auth
+    description: 用户认证
+  - name: servers
+    description: 服务器管理
+  - name: ssh
+    description: SSH 连接
+  - name: sftp
+    description: SFTP 文件管理
+  - name: scripts
+    description: 脚本管理
+  - name: batch
+    description: 批量操作
+  - name: monitoring
+    description: 监控与健康检查
+  - name: logs
+    description: 日志管理
+  - name: users
+    description: 用户管理
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT 访问令牌
+
+  schemas:
+    # ========================================
+    # 通��响应
+    # ========================================
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          example: validation_error
+        message:
+          type: string
+          example: Invalid request parameters
+        details:
+          type: object
+          additionalProperties: true
+
+    SuccessResponse:
+      type: object
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation completed successfully
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 100
+        total_pages:
+          type: integer
+          example: 5
+
+    # ========================================
+    # 认证相关
+    # ========================================
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          format: password
+          example: password123
+
+    LoginResponse:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - user
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        expires_in:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
+    # ========================================
+    # 用户
+    # ========================================
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        username:
+          type: string
+          example: admin
+        email:
+          type: string
+          format: email
+          example: admin@example.com
+        role:
+          type: string
+          enum: [admin, user, viewer]
+          example: admin
+        avatar:
+          type: string
+          format: uri
+          example: https://api.example.com/avatars/user.jpg
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ========================================
+    # 服务器
+    # ========================================
+    Server:
+      type: object
+      required:
+        - id
+        - name
+        - host
+        - port
+        - username
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440001
+        name:
+          type: string
+          example: Production Server
+        host:
+          type: string
+          example: 192.168.1.100
+        port:
+          type: integer
+          example: 22
+        username:
+          type: string
+          example: root
+        auth_method:
+          type: string
+          enum: [password, key]
+          example: key
+        group:
+          type: string
+          example: production
+        tags:
+          type: array
+          items:
+            type: string
+          example: [web, nginx, docker]
+        status:
+          type: string
+          enum: [online, offline, error]
+          example: online
+        last_connected:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ServerCreate:
+      type: object
+      required:
+        - name
+        - host
+        - port
+        - username
+        - auth_method
+      properties:
+        name:
+          type: string
+          example: Production Server
+        host:
+          type: string
+          example: 192.168.1.100
+        port:
+          type: integer
+          example: 22
+        username:
+          type: string
+          example: root
+        auth_method:
+          type: string
+          enum: [password, key]
+        password:
+          type: string
+          format: password
+          description: 当 auth_method 为 password 时必填
+        private_key:
+          type: string
+          description: 当 auth_method 为 key 时必填
+        group:
+          type: string
+          example: production
+        tags:
+          type: array
+          items:
+            type: string
+
+    ServerUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        private_key:
+          type: string
+        group:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    ServerList:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Server'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ========================================
+    # SSH 会话
+    # ========================================
+    SSHSession:
+      type: object
+      required:
+        - id
+        - server_id
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440002
+        server_id:
+          type: string
+          format: uuid
+        server_name:
+          type: string
+          example: Production Server
+        status:
+          type: string
+          enum: [connecting, active, closed, error]
+          example: active
+        started_at:
+          type: string
+          format: date-time
+        last_activity:
+          type: string
+          format: date-time
+
+    # ========================================
+    # SFTP 文件
+    # ========================================
+    FileInfo:
+      type: object
+      required:
+        - name
+        - path
+        - type
+        - size
+      properties:
+        name:
+          type: string
+          example: document.pdf
+        path:
+          type: string
+          example: /home/user/documents/document.pdf
+        type:
+          type: string
+          enum: [file, directory, symlink]
+          example: file
+        size:
+          type: integer
+          format: int64
+          example: 1048576
+        permissions:
+          type: string
+          example: "-rw-r--r--"
+        owner:
+          type: string
+          example: root
+        group:
+          type: string
+          example: root
+        modified_at:
+          type: string
+          format: date-time
+
+    FileUploadRequest:
+      type: object
+      required:
+        - server_id
+        - remote_path
+      properties:
+        server_id:
+          type: string
+          format: uuid
+        remote_path:
+          type: string
+          example: /home/user/uploads/
+        overwrite:
+          type: boolean
+          default: false
+
+    # ========================================
+    # 脚本
+    # ========================================
+    Script:
+      type: object
+      required:
+        - id
+        - name
+        - content
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Deploy Script
+        description:
+          type: string
+          example: Automated deployment script
+        content:
+          type: string
+          example: "#!/bin/bash\ncd /var/www\ngit pull"
+        language:
+          type: string
+          enum: [bash, python, nodejs]
+          default: bash
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ScriptExecutionRequest:
+      type: object
+      required:
+        - script_id
+        - server_ids
+      properties:
+        script_id:
+          type: string
+          format: uuid
+        server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        parameters:
+          type: object
+          additionalProperties: true
+
+    ScriptExecutionResult:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              server_id:
+                type: string
+                format: uuid
+              server_name:
+                type: string
+              status:
+                type: string
+                enum: [success, failed]
+              output:
+                type: string
+              error:
+                type: string
+              exit_code:
+                type: integer
+              executed_at:
+                type: string
+                format: date-time
+
+    # ========================================
+    # 监控数据
+    # ========================================
+    SystemMetrics:
+      type: object
+      properties:
+        cpu_usage:
+          type: number
+          format: float
+          example: 45.2
+        memory_usage:
+          type: number
+          format: float
+          example: 68.5
+        disk_usage:
+          type: number
+          format: float
+          example: 72.1
+        network_in:
+          type: integer
+          format: int64
+          example: 1048576
+        network_out:
+          type: integer
+          format: int64
+          example: 2097152
+        uptime:
+          type: integer
+          format: int64
+          example: 86400
+        timestamp:
+          type: string
+          format: date-time
+
+    # ========================================
+    # 日志
+    # ========================================
+    Log:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        level:
+          type: string
+          enum: [debug, info, warning, error, critical]
+        message:
+          type: string
+        source:
+          type: string
+          example: ssh_connection
+        user_id:
+          type: string
+          format: uuid
+        server_id:
+          type: string
+          format: uuid
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+paths:
+  # ========================================
+  # 健康检查
+  # ========================================
+  /health:
+    get:
+      tags:
+        - monitoring
+      summary: 健康检查
+      description: 检查 API 服务状态
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: easyssh-api
+
+  # ========================================
+  # 认证
+  # ========================================
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: 用户登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: 认证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: 用户登出
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/refresh:
+    post:
+      tags:
+        - auth
+      summary: 刷新访问令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  # ========================================
+  # 服务器管理
+  # ========================================
+  /servers:
+    get:
+      tags:
+        - servers
+      summary: 获取服务器列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: group
+          in: query
+          description: 按组筛选
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 按状态筛选
+          schema:
+            type: string
+            enum: [online, offline, error]
+      responses:
+        '200':
+          description: 成功获取服务器列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerList'
+
+    post:
+      tags:
+        - servers
+      summary: 创建服务器
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerCreate'
+      responses:
+        '201':
+          description: 服务器创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Server'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /servers/{id}:
+    get:
+      tags:
+        - servers
+      summary: 获取服务器详情
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Server'
+        '404':
+          description: 服务器不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - servers
+      summary: 更新服务器
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerUpdate'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Server'
+
+    delete:
+      tags:
+        - servers
+      summary: 删除服务器
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /servers/{id}/test:
+    post:
+      tags:
+        - servers
+      summary: 测试服务器连接
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 连接测试成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  latency:
+                    type: integer
+                    description: 连接延迟（毫秒）
+
+  # ========================================
+  # SSH 会话（WebSocket 在实际使用时）
+  # ========================================
+  /ssh/sessions:
+    get:
+      tags:
+        - ssh
+      summary: 获取活动 SSH 会话列表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SSHSession'
+
+  /ssh/sessions/{id}:
+    delete:
+      tags:
+        - ssh
+      summary: 关闭 SSH 会话
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 会话已关闭
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # ========================================
+  # SFTP 文件管理
+  # ========================================
+  /sftp/list:
+    get:
+      tags:
+        - sftp
+      summary: 列出目录内容
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: server_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+            example: /home/user
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FileInfo'
+
+  /sftp/upload:
+    post:
+      tags:
+        - sftp
+      summary: 上传文件
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - server_id
+                - remote_path
+              properties:
+                file:
+                  type: string
+                  format: binary
+                server_id:
+                  type: string
+                  format: uuid
+                remote_path:
+                  type: string
+                overwrite:
+                  type: boolean
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /sftp/download:
+    get:
+      tags:
+        - sftp
+      summary: 下载文件
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: server_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 文件内容
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /sftp/delete:
+    delete:
+      tags:
+        - sftp
+      summary: 删除文件或目录
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: server_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # ========================================
+  # 脚本管理
+  # ========================================
+  /scripts:
+    get:
+      tags:
+        - scripts
+      summary: 获取脚本列表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Script'
+
+    post:
+      tags:
+        - scripts
+      summary: 创建脚本
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - content
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                content:
+                  type: string
+                language:
+                  type: string
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Script'
+
+  /scripts/{id}:
+    get:
+      tags:
+        - scripts
+      summary: 获取脚本详情
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Script'
+
+    put:
+      tags:
+        - scripts
+      summary: 更新脚本
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                content:
+                  type: string
+                language:
+                  type: string
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Script'
+
+    delete:
+      tags:
+        - scripts
+      summary: 删除脚本
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /scripts/execute:
+    post:
+      tags:
+        - scripts
+      summary: 执行脚本
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScriptExecutionRequest'
+      responses:
+        '200':
+          description: 执行已开始
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScriptExecutionResult'
+
+  # ========================================
+  # 系统监控
+  # ========================================
+  /monitoring/servers/{id}/metrics:
+    get:
+      tags:
+        - monitoring
+      summary: 获取服务器监控指标
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: 开始时间
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 结束时间
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SystemMetrics'
+
+  # ========================================
+  # 日志管理
+  # ========================================
+  /logs:
+    get:
+      tags:
+        - logs
+      summary: 获取日志列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [debug, info, warning, error, critical]
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Log'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  # ========================================
+  # 用户管理
+  # ========================================
+  /users:
+    get:
+      tags:
+        - users
+      summary: 获取用户列表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /users/me:
+    get:
+      tags:
+        - users
+      summary: 获取当前用户信息
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
