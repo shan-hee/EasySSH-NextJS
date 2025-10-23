@@ -168,6 +168,61 @@
     background-color: oklch(0.65 0 0 / 60%);
   }
 
+  /* ===== 图片防闪烁优化 ===== */
+
+  /* 所有图片使用固定尺寸避免布局偏移 */
+  img {
+    /* 防止图片加载时的布局偏移 */
+    content-visibility: auto;
+    /* 图片加载期间保持占位 */
+    background: transparent;
+    /* 平滑过渡 */
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  /* Avatar 图片优化 */
+  [data-slot="avatar-image"] {
+    /* 使用 GPU 加速 */
+    transform: translateZ(0);
+    will-change: opacity;
+    /* 防止闪烁 */
+    backface-visibility: hidden;
+    /* 图片加载时的优先级 */
+    z-index: 2;
+    position: relative;
+  }
+
+  /* Avatar Fallback 延迟显示优化 */
+  [data-slot="avatar-fallback"] {
+    /* 初始时隐藏,避免闪烁 */
+    opacity: 0;
+    /* 延迟300ms后淡入 */
+    transition: opacity 0.3s ease-in-out 0.3s;
+  }
+
+  /* 仅当图片加载失败时才显示 Fallback */
+  [data-slot="avatar"][data-state="error"] [data-slot="avatar-fallback"],
+  [data-slot="avatar"]:not([data-state="loaded"]) [data-slot="avatar-fallback"] {
+    animation: delayed-fade-in 0.3s ease-in-out 0.3s forwards;
+  }
+
+  @keyframes delayed-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Logo 和 Icon 优化 */
+  img[src*="logo.svg"],
+  img[src*="icon.svg"] {
+    /* 固定尺寸防止偏移 */
+    display: block;
+    /* GPU 加速 */
+    transform: translateZ(0);
+    /* 抗锯齿 */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+
   /* 连接加载动画 - 从左边滑入 */
   @keyframes slide-in-from-left {
     from {

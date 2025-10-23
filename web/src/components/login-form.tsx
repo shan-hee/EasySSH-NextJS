@@ -69,10 +69,17 @@ export function LoginForm({
                 <img
                   src="/logo.svg"
                   alt="EasySSH Logo"
-                  className="size-16"
+                  className="size-16 transition-opacity duration-200"
                   loading="eager"
                   decoding="async"
                   fetchPriority="high"
+                  style={{
+                    // 防止闪烁: 设置固定尺寸避免布局偏移
+                    width: '64px',
+                    height: '64px',
+                    // 使用 will-change 提示浏览器优化
+                    willChange: 'opacity',
+                  }}
                 />
               </div>
               <div className="space-y-1">
