@@ -70,8 +70,8 @@ pnpm dev
 
 ### 3. 访问应用
 
-- **前端**: http://localhost:3000
-- **后端 API**: http://localhost:8080
+- **前端**: http://localhost:8520
+- **后端 API**: http://localhost:8521
 - **数据库**: postgresql://easyssh:easyssh_dev_password@localhost:5432/easyssh
 - **Redis**: redis://localhost:6379
 
@@ -194,7 +194,7 @@ docker-compose -f docker/docker-compose.dev.yml up -d
 
 ```bash
 # API 地址
-NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+NEXT_PUBLIC_API_URL=http://localhost:8521/api/v1
 
 # AI 配置（可选）
 OPENAI_API_KEY=your_api_key

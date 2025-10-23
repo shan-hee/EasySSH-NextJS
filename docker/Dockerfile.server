@@ -36,6 +36,6 @@ RUN chown -R appuser:appuser /app
 
 USER appuser
 
-EXPOSE 8080
+EXPOSE 8521
 
 CMD ["./easyssh-api"]

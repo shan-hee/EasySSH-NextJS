@@ -76,7 +76,7 @@ OpenAPI 规范定义了以下模块：
 
 ```typescript
 async rewrites() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521";
 
   return [
     {
@@ -97,7 +97,7 @@ async rewrites() {
 
 ```bash
 # 后端 API 地址
-NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_API_URL=http://localhost:8521
 
 # AI 配置（可选）
 OPENAI_API_KEY=your_api_key
@@ -180,7 +180,7 @@ async function login(username: string, password: string) {
 
 ```typescript
 // 连接到 SSH 会话
-const ws = new WebSocket(`ws://localhost:3000/ws/ssh/${serverId}`);
+const ws = new WebSocket(`ws://localhost:8520/ws/ssh/${serverId}`);
 
 ws.onopen = () => {
   console.log('SSH connection established');
@@ -317,22 +317,22 @@ func setupRoutes(r *gin.Engine, handler *rest.Handler) {
 
 ```bash
 # 健康检查
-curl http://localhost:8080/api/v1/health
+curl http://localhost:8521/api/v1/health
 
 # 登录
-curl -X POST http://localhost:8080/api/v1/auth/login \
+curl -X POST http://localhost:8521/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"password123"}'
 
 # 获取服务器列表（需要 token）
-curl http://localhost:8080/api/v1/servers \
+curl http://localhost:8521/api/v1/servers \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### 使用 Postman / Insomnia
 
 1. 导入 `shared/openapi.yaml` 文件
-2. 设置基础 URL: `http://localhost:8080/api/v1`
+2. 设置基础 URL: `http://localhost:8521/api/v1`
 3. 配置认证 token
 4. 开始测试各个端点
 
@@ -380,7 +380,7 @@ func main() {
 
     // CORS 配置
     r.Use(cors.New(cors.Config{
-        AllowOrigins:     []string{"http://localhost:3000"},
+        AllowOrigins:     []string{"http://localhost:8520"},
         AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
         AllowHeaders:     []string{"Authorization", "Content-Type"},
         ExposeHeaders:    []string{"Content-Length"},

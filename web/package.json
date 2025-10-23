@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbopack --port 8520",
     "build": "next build --turbopack",
-    "start": "next start",
+    "start": "next start --port 8520",
     "lint": "eslint",
     "openapi:gen": "openapi-typescript openapi.yaml -o src/types/openapi.ts"
   },

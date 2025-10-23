@@ -40,11 +40,12 @@ services:
       dockerfile: docker/Dockerfile.server
     container_name: easyssh-api
     ports:
-      - "8080:8080"
+      - "8521:8521"
     environment:
       - DATABASE_URL=postgresql://easyssh:easyssh_dev_password@postgres:5432/easyssh?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
       - GIN_MODE=debug
+      - PORT=8521
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,9 +60,10 @@ services:
       dockerfile: docker/Dockerfile.web
     container_name: easyssh-web
     ports:
-      - "3000:3000"
+      - "8520:8520"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+      - NEXT_PUBLIC_API_URL=http://localhost:8521/api/v1
+      - PORT=8520
     depends_on:
       - server
     restart: unless-stopped

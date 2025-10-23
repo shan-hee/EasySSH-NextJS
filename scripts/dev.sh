@@ -27,14 +27,14 @@ echo -e "${BLUE}⏳ 等待数据库就绪...${NC}"
 sleep 5
 
 # 启动后端
-echo -e "${GREEN}🔧 启动 Go 后端服务 (http://localhost:8080)...${NC}"
+echo -e "${GREEN}🔧 启动 Go 后端服务 (http://localhost:8521)...${NC}"
 cd server
 go run cmd/api/main.go &
 SERVER_PID=$!
 cd ..
 
 # 启动前端
-echo -e "${GREEN}⚛️  启动 Next.js 前端 (http://localhost:3000)...${NC}"
+echo -e "${GREEN}⚛️  启动 Next.js 前端 (http://localhost:8520)...${NC}"
 cd web
 pnpm dev &
 WEB_PID=$!
@@ -53,8 +53,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo -e "\n${GREEN}✅ 开发环境启动完成！${NC}"
-echo -e "${BLUE}前端: http://localhost:3000${NC}"
-echo -e "${BLUE}后端: http://localhost:8080${NC}"
+echo -e "${BLUE}前端: http://localhost:8520${NC}"
+echo -e "${BLUE}后端: http://localhost:8521${NC}"
 echo -e "${BLUE}数据库: postgresql://easyssh:easyssh_dev_password@localhost:5432/easyssh${NC}"
 echo -e "${BLUE}Redis: redis://localhost:6379${NC}"
 echo -e "\n${YELLOW}按 Ctrl+C 停止所有服务${NC}\n"
