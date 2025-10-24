@@ -46,6 +46,8 @@ EasySSH-NextJS/
 
 ### 开发环境启动
 
+#### 1. 配置数据库连接
+
 编辑 `server/.env` 配置数据库连接：
 
 ```bash
@@ -97,45 +99,72 @@ pnpm dev
 
 按 `Ctrl+C` 停止所有服务。
 
-### 生产环境部署
-
-使用 Docker Compose 部署（详见 [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)）。
-
-支持多种环境变量注入方式：
-
-#### 方式 1: 使用 .env 文件（推荐）
+### 生产环境部署（Docker）
 
 ```bash
 cd docker
-cp .env.example .env
-vim .env  # 修改密码和密钥
-
-# 应用部署（支持使用外部数据库）
 docker compose up -d
 ```
 
-#### 方式 2: 命令行直接注入（无需 .env 文件）
+**部署后访问**: http://your-server:8520
 
-```bash
-# 适合 CI/CD 和密钥管理系统
-POSTGRES_PASSWORD=xxx \
-JWT_SECRET=xxx \
-ENCRYPTION_KEY=xxx \
-docker-compose --profile all up -d
+#### 自定义配置
+
+编辑 `docker/docker-compose.yml` 修改以下配置：
+
+1. **修改密码和密钥**（生产环境必改）:
+```yaml
+environment:
+  DB_PASSWORD: your-secure-password        # 数据库密码
+  JWT_SECRET: your-long-random-secret      # JWT 密钥
+  ENCRYPTION_KEY: your-32-byte-key         # 加密密钥
 ```
 
-#### 方式 3: 使用不同环境文件
-
-```bash
-# 多环境部署
-docker compose --env-file .env.prod --profile all up -d
+2. **使用外部数据库**（可选）:
+```yaml
+environment:
+  DB_HOST: your-postgres-host              # 外部 PostgreSQL 地址
+  DB_PORT: 5432
+  DB_USER: your-username
+  DB_PASSWORD: your-password
+  DB_NAME: your-database
+  REDIS_HOST: your-redis-host              # 外部 Redis 地址
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: your-redis-password
 ```
 
-**关键特性**：
-- ✅ 环境变量可从 `.env` 文件或命令行注入
-- ✅ 必需变量（密码、密钥）强制检查，防止配置错误
+如果使用外部数据库，可以注释掉 `docker-compose.yml` 中的 `postgres` 和 `redis` 服务。
 
-详细配置和最佳实践请参考 [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)。
+#### 常用命令
+
+```bash
+# 启动服务
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+
+# 停止服务
+docker compose down
+
+# 重启服务
+docker compose restart
+
+# 查看状态
+docker compose ps
+```
+
+#### 数据持久化
+
+数据存储在 `docker/data/` 目录：
+- `data/postgres/` - PostgreSQL 数据
+- `data/redis/` - Redis 数据
+
+**备份数据**:
+```bash
+# 备份整个 data 目录
+tar -czf easyssh-backup-$(date +%Y%m%d).tar.gz data/
+```
 
 ## 项目结构详解
 
@@ -228,29 +257,7 @@ make test
 ./scripts/gen-types.sh
 ```
 
-## Docker 部署
-
-### 生产环境部署
-
-```bash
-# 构建并启动所有服务
-docker-compose -f docker/docker-compose.yml up -d
-
-# 查看日志
-docker-compose -f docker/docker-compose.yml logs -f
-
-# 停止服务
-docker-compose -f docker/docker-compose.yml down
-```
-
-### 仅启动基础设施
-
-```bash
-# 用于本地开发，只启动数据库和 Redis
-docker-compose -f docker/docker-compose.dev.yml up -d
-```
-
-## 环境变量
+## 环境变量配置
 
 ### 前端 (web/.env.local)
 
@@ -265,16 +272,33 @@ OPENAI_API_KEY=your_api_key
 ### 后端 (server/.env)
 
 ```bash
-# 数据库
-DATABASE_URL=postgresql://easyssh:password@localhost:5432/easyssh?sslmode=disable
+# 服务器配置
+PORT=8521
+ENV=development
+ENCRYPTION_KEY=easyssh-encryption-key-32bytes!!
 
-# Redis
-REDIS_URL=redis://localhost:6379/0
+# 数据库配置
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=easyssh
+DB_PASSWORD=easyssh_dev_password
+DB_NAME=easyssh
+DB_SSLMODE=disable
+DB_DEBUG=true
 
-# 服务配置
-GIN_MODE=debug
-PORT=8080
+# Redis 配置
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# JWT 配置
+JWT_SECRET=easyssh-secret-change-in-production
+JWT_ACCESS_EXPIRE_HOURS=1
+JWT_REFRESH_EXPIRE_HOURS=168
 ```
+
+**注意**: 生产环境请务必修改 `JWT_SECRET` 和 `ENCRYPTION_KEY`！
 
 ## 贡献指南
 
