@@ -32,12 +32,12 @@ if ! command_exists pnpm; then
 fi
 
 # 检查后端配置文件
-if [ ! -f "server/.env" ]; then
-    echo -e "${YELLOW}⚠️  server/.env 文件不存在${NC}"
-    if [ -f "server/.env.example" ]; then
-        cp server/.env.example server/.env
-        echo -e "${GREEN}✅ 已从 .env.example 创建 server/.env${NC}"
-        echo -e "${YELLOW}⚠️  请编辑 server/.env 文件，配置您的数据库信息${NC}"
+if [ ! -f ".env" ]; then
+    echo -e "${YELLOW}⚠️  .env 文件不存在${NC}"
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+        echo -e "${GREEN}✅ 已从 .env.example 创建 .env${NC}"
+        echo -e "${YELLOW}⚠️  请编辑 .env 文件，配置您的数据库信息${NC}"
         echo -e "${YELLOW}   配置完成后重新运行此脚本${NC}\n"
         exit 1
     else
@@ -47,6 +47,15 @@ if [ ! -f "server/.env" ]; then
 fi
 
 echo -e "${GREEN}✅ 配置文件检查通过${NC}\n"
+
+# 确保前端环境变量链接存在
+if [ ! -L "web/.env.local" ]; then
+    echo -e "${YELLOW}📎 创建前端环境变量链接...${NC}"
+    cd web
+    ln -sf ../.env .env.local
+    cd ..
+    echo -e "${GREEN}✅ 前端环境变量链接已创建${NC}\n"
+fi
 
 # 检查前端依赖
 if [ ! -d "web/node_modules" ]; then
@@ -107,7 +116,7 @@ echo -e "${GREEN}✅ 开发环境启动完成！${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}前端:${NC}    http://localhost:8520"
 echo -e "${GREEN}后端:${NC}    http://localhost:8521"
-echo -e "${GREEN}配置:${NC}   使用 server/.env 中的数据库配置"
+echo -e "${GREEN}配置:${NC}   使用根目录 .env 中的配置"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "\n${YELLOW}按 Ctrl+C 停止所有服务${NC}\n"
 

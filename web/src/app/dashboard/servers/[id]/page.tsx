@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { use, useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,7 +34,8 @@ import { serversApi, monitoringApi, sshApi, type Server } from "@/lib/api"
 import type { SystemInfo, CPUInfo, MemoryInfo, DiskInfo, NetworkInterface, ProcessInfo } from "@/lib/api"
 import { toast } from "sonner"
 
-export default function ServerDetailPage({ params }: { params: { id: string } }) {
+export default function ServerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("overview")
   const [loading, setLoading] = useState(true)
@@ -53,7 +54,7 @@ export default function ServerDetailPage({ params }: { params: { id: string } })
 
   useEffect(() => {
     loadServerData()
-  }, [params.id])
+  }, [id])
 
   async function loadServerData() {
     try {
@@ -66,7 +67,7 @@ export default function ServerDetailPage({ params }: { params: { id: string } })
       }
 
       // 加载服务器基本信息
-      const serverData = await serversApi.getById(token, params.id)
+      const serverData = await serversApi.getById(token, id)
       setServer(serverData)
 
       // 只有在线的服务器才加载监控数据
@@ -94,12 +95,12 @@ export default function ServerDetailPage({ params }: { params: { id: string } })
     try {
       // 并行加载所有监控数据
       const [system, cpu, memory, disk, network, procs] = await Promise.allSettled([
-        monitoringApi.getSystemInfo(token, params.id),
-        monitoringApi.getCPUInfo(token, params.id),
-        monitoringApi.getMemoryInfo(token, params.id),
-        monitoringApi.getDiskInfo(token, params.id),
-        monitoringApi.getNetworkInfo(token, params.id),
-        monitoringApi.getTopProcesses(token, params.id, 10)
+        monitoringApi.getSystemInfo(token, id),
+        monitoringApi.getCPUInfo(token, id),
+        monitoringApi.getMemoryInfo(token, id),
+        monitoringApi.getDiskInfo(token, id),
+        monitoringApi.getNetworkInfo(token, id),
+        monitoringApi.getTopProcesses(token, id, 10)
       ])
 
       if (system.status === "fulfilled") setSystemInfo(system.value)
@@ -138,10 +139,10 @@ export default function ServerDetailPage({ params }: { params: { id: string } })
       if (!token) return
 
       toast.info("正在测试连接...")
-      const result = await serversApi.testConnection(token, params.id)
+      const result = await serversApi.testConnection(token, id)
 
       if (result.success) {
-        toast.success(`连接成功！延迟: ${result.latency}ms`)
+        toast.success(`连接成功！延迟: ${result.latency_ms}ms`)
       } else {
         toast.error("连接失败: " + result.message)
       }
@@ -151,11 +152,11 @@ export default function ServerDetailPage({ params }: { params: { id: string } })
   }
 
   function handleConnect() {
-    router.push(`/dashboard/terminal?server=${params.id}`)
+    router.push(`/dashboard/terminal?server=${id}`)
   }
 
   function handleEdit() {
-    router.push(`/dashboard/servers/${params.id}/edit`)
+    router.push(`/dashboard/servers/${id}/edit`)
   }
 
   // 格式化字节数

@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-// API基础URL
+// API基础URL - middleware运行在服务端，需要使用完整的后端URL
 const getApiBaseUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
+  // middleware需要直接访问后端，不能用相对路径
+  return process.env.BACKEND_URL
+    ? `${process.env.BACKEND_URL}/api/v1`
+    : "http://localhost:8521/api/v1"
 }
 
 // 公开路由(不需要认证)

@@ -21,11 +21,14 @@ export interface Server {
   port: number
   username: string
   auth_method: AuthMethod
+  password?: string
+  private_key?: string
   group?: string
   tags?: string[]
   status: ServerStatus
   last_connected?: string
   description?: string
+  os?: string
   created_at: string
   updated_at: string
 }
@@ -91,12 +94,8 @@ export interface ServerStatisticsResponse {
 export interface TestConnectionResponse {
   success: boolean
   message: string
-  latency?: number
-  server_info?: {
-    os: string
-    hostname: string
-    kernel: string
-  }
+  latency_ms?: number
+  server_info?: string
 }
 
 /**

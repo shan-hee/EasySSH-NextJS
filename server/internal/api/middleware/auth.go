@@ -12,29 +12,32 @@ import (
 // AuthMiddleware JWT 认证中间件
 func AuthMiddleware(jwtService auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从请求头获取 Authorization
+		var tokenString string
+
+		// 优先从请求头获取 Authorization
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		if authHeader != "" {
+			// 解析 Bearer token
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1]
+			}
+		}
+
+		// 如果 Header 中没有 token，尝试从 Query 参数获取（用于 WebSocket）
+		if tokenString == "" {
+			tokenString = c.Query("token")
+		}
+
+		// 如果都没有，返回未授权
+		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
-				"message": "Missing authorization header",
+				"message": "Missing authorization token",
 			})
 			c.Abort()
 			return
 		}
-
-		// 解析 Bearer token
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "Invalid authorization header format",
-			})
-			c.Abort()
-			return
-		}
-
-		tokenString := parts[1]
 
 		// 验证 token
 		claims, err := jwtService.ValidateToken(tokenString)

@@ -4,7 +4,7 @@ import { Terminal, Server } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 export type QuickServer = {
-  id: number
+  id: number | string  // 支持 UUID 字符串
   name: string
   host: string
   port: number

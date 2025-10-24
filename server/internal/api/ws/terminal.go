@@ -48,6 +48,12 @@ type Message struct {
 	Data json.RawMessage `json:"data"`
 }
 
+// MessageType 定义消息类型常量
+const (
+	MessageTypeText   = 1 // 文本消息（JSON）
+	MessageTypeBinary = 2 // 二进制消息（原始输出）
+)
+
 // InputMessage 输入消息
 type InputMessage struct {
 	Data string `json:"data"`
@@ -188,9 +194,9 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	// 创建停止通道
 	done := make(chan struct{})
 
-	// 从 SSH 读取并发送到 WebSocket（stdout）
+	// 从 SSH 读取并发送到 WebSocket（stdout）- 使用二进制传输
 	go func() {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 32768) // 增大缓冲区以提高性能
 		for {
 			n, err := stdout.Read(buf)
 			if err != nil {
@@ -202,14 +208,19 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			}
 
 			if n > 0 {
-				h.sendOutput(wsConn, "stdout", string(buf[:n]))
+				// 直接发送二进制数据，不使用 JSON 包装
+				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+					log.Printf("Error sending output: %v", err)
+					close(done)
+					return
+				}
 			}
 		}
 	}()
 
-	// 从 SSH 读取并发送到 WebSocket（stderr）
+	// 从 SSH 读取并发送到 WebSocket（stderr）- 也使用二进制传输
 	go func() {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 32768)
 		for {
 			n, err := stderr.Read(buf)
 			if err != nil {
@@ -220,7 +231,11 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			}
 
 			if n > 0 {
-				h.sendOutput(wsConn, "stderr", string(buf[:n]))
+				// stderr 也直接发送二进制数据
+				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+					log.Printf("Error sending stderr: %v", err)
+					return
+				}
 			}
 		}
 	}()
@@ -228,8 +243,8 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	// 从 WebSocket 读取并发送到 SSH
 	go func() {
 		for {
-			var msg Message
-			if err := wsConn.ReadJSON(&msg); err != nil {
+			messageType, message, err := wsConn.ReadMessage()
+			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					log.Printf("WebSocket error: %v", err)
 				}
@@ -237,31 +252,49 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 				return
 			}
 
-			switch msg.Type {
-			case "input":
-				var input InputMessage
-				if err := json.Unmarshal(msg.Data, &input); err != nil {
-					log.Printf("Error parsing input: %v", err)
+			switch messageType {
+			case websocket.TextMessage:
+				// JSON 格式的控制消息
+				var msg Message
+				if err := json.Unmarshal(message, &msg); err != nil {
+					log.Printf("Error parsing message: %v", err)
 					continue
 				}
-				if _, err := stdin.Write([]byte(input.Data)); err != nil {
-					log.Printf("Error writing to stdin: %v", err)
+
+				switch msg.Type {
+				case "input":
+					var input InputMessage
+					if err := json.Unmarshal(msg.Data, &input); err != nil {
+						log.Printf("Error parsing input: %v", err)
+						continue
+					}
+					if _, err := stdin.Write([]byte(input.Data)); err != nil {
+						log.Printf("Error writing to stdin: %v", err)
+						close(done)
+						return
+					}
+
+				case "resize":
+					var resize ResizeMessage
+					if err := json.Unmarshal(msg.Data, &resize); err != nil {
+						log.Printf("Error parsing resize: %v", err)
+						continue
+					}
+					if err := session.ResizeTerminal(resize.Cols, resize.Rows); err != nil {
+						log.Printf("Error resizing terminal: %v", err)
+					}
+
+				case "ping":
+					h.sendMessage(wsConn, Message{Type: "pong"})
+				}
+
+			case websocket.BinaryMessage:
+				// 二进制数据直接作为输入发送到 SSH
+				if _, err := stdin.Write(message); err != nil {
+					log.Printf("Error writing binary to stdin: %v", err)
 					close(done)
 					return
 				}
-
-			case "resize":
-				var resize ResizeMessage
-				if err := json.Unmarshal(msg.Data, &resize); err != nil {
-					log.Printf("Error parsing resize: %v", err)
-					continue
-				}
-				if err := session.ResizeTerminal(resize.Cols, resize.Rows); err != nil {
-					log.Printf("Error resizing terminal: %v", err)
-				}
-
-			case "ping":
-				h.sendMessage(wsConn, Message{Type: "pong"})
 			}
 		}
 	}()

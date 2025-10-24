@@ -32,8 +32,8 @@ import (
 )
 
 func main() {
-	// 加载 .env 文件
-	if err := godotenv.Load(); err != nil {
+	// 加载根目录的 .env 文件
+	if err := godotenv.Load("../.env"); err != nil {
 		log.Printf("⚠️ Warning: .env file not found, using environment variables")
 	}
 

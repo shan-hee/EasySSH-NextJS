@@ -362,6 +362,7 @@ export function TerminalComponent({
                     <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
                       <WebTerminal
                         sessionId={active.id}
+                        serverId={typeof active.serverId === 'string' ? active.serverId : undefined}
                         serverName={active.serverName}
                         host={active.host}
                         username={active.username}
@@ -382,6 +383,7 @@ export function TerminalComponent({
                     <TabsContent key={session.id} value={session.id} className="flex-1 flex flex-col m-0 absolute inset-0">
                       <WebTerminal
                         sessionId={session.id}
+                        serverId={typeof session.serverId === 'string' ? session.serverId : undefined}
                         serverName={session.serverName}
                         host={session.host}
                         username={session.username}

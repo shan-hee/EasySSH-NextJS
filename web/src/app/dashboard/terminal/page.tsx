@@ -105,9 +105,9 @@ export default function TerminalPage() {
         ? response
         : (response?.data || [])
 
-      // 将Server类型转换为QuickServer类型
+      // 将Server类型转换为QuickServer类型，保留 UUID
       const quickServers: QuickServer[] = servers.map((server: Server) => ({
-        id: parseInt(server.id),
+        id: server.id,  // 保留 UUID 字符串
         name: server.name,
         host: server.host,
         port: server.port,

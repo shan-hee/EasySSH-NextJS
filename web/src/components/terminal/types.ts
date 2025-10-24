@@ -2,7 +2,7 @@ export type SessionStatus = "connected" | "disconnected" | "reconnecting"
 
 export interface TerminalSession {
   id: string
-  serverId: number
+  serverId: number | string  // 支持数字和 UUID 字符串
   serverName: string
   host: string
   port?: number

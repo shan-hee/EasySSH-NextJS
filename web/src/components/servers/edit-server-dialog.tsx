@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -26,10 +26,11 @@ import {
 import { X, Plus } from "lucide-react"
 import { PrivateKeyInput } from "@/components/servers/private-key-input"
 
-interface AddServerDialogProps {
+interface EditServerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit?: (data: ServerFormData) => void
+  initialData?: Partial<ServerFormData>
 }
 
 export interface ServerFormData {
@@ -43,12 +44,13 @@ export interface ServerFormData {
   rememberPassword: boolean
   tags: string[]
   description: string
+  group: string
   jumpServer: string
   autoConnect: boolean
   keepAlive: boolean
 }
 
-export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialogProps) {
+export function EditServerDialog({ open, onOpenChange, onSubmit, initialData }: EditServerDialogProps) {
   // 认证方式切换改为使用 shadcn Tabs，统一以 formData.authMethod 为单一数据源
   const [formData, setFormData] = useState<ServerFormData>({
     name: "",
@@ -61,10 +63,33 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
     rememberPassword: false,
     tags: [],
     description: "",
+    group: "",
     jumpServer: "",
     autoConnect: false,
     keepAlive: true,
   })
+
+  // 当initialData变化时更新表单
+  useEffect(() => {
+    if (initialData && open) {
+      setFormData({
+        name: initialData.name || "",
+        host: initialData.host || "",
+        port: initialData.port || "22",
+        username: initialData.username || "",
+        authMethod: initialData.authMethod || "password",
+        password: initialData.password || "",
+        privateKey: initialData.privateKey || "",
+        rememberPassword: initialData.rememberPassword || false,
+        tags: initialData.tags || [],
+        description: initialData.description || "",
+        group: initialData.group || "",
+        jumpServer: initialData.jumpServer || "",
+        autoConnect: initialData.autoConnect || false,
+        keepAlive: initialData.keepAlive !== undefined ? initialData.keepAlive : true,
+      })
+    }
+  }, [initialData, open])
 
   const [newTag, setNewTag] = useState("")
 
@@ -132,47 +157,6 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
     onOpenChange(false)
   }
 
-  const handleSaveAndConnect = () => {
-    // 验证必填字段
-    if (!formData.name.trim()) {
-      alert("请输入服务器名称（备注）")
-      return
-    }
-    if (!formData.host.trim()) {
-      alert("请输入服务器地址")
-      return
-    }
-    if (!formData.username.trim()) {
-      alert("请输入用户名")
-      return
-    }
-
-    // 验证端口号
-    const port = parseInt(formData.port)
-    if (isNaN(port) || port < 1 || port > 65535) {
-      alert("端口号必须是1-65535之间的数字")
-      return
-    }
-
-    // 验证认证方式
-    if (formData.authMethod === "password" && !formData.password) {
-      alert("密码验证方式需要填写密码")
-      return
-    }
-    if (formData.authMethod === "privateKey" && !formData.privateKey.trim()) {
-      alert("私钥验证方式需要填写私钥")
-      return
-    }
-
-    const normalized = {
-      ...formData,
-      jumpServer: formData.jumpServer === "none" ? "" : formData.jumpServer,
-    }
-    onSubmit?.(normalized)
-    // 这里可以添加连接逻辑
-    onOpenChange(false)
-  }
-
   const handleCancel = () => {
     onOpenChange(false)
     // 重置表单
@@ -198,10 +182,10 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
-          <DialogTitle>新建连接</DialogTitle>
+          <DialogTitle>编辑服务器</DialogTitle>
           {/* 为无障碍提供描述，避免控制台警告 */}
           <DialogDescription className="sr-only">
-            填写服务器连接信息（主机、端口、用户名与认证方式），并选择是否自动连接与保持连接。
+            编辑服务器连接信息（主机、端口、用户名与认证方式），并选择是否自动连接与保持连接。
           </DialogDescription>
         </DialogHeader>
 
@@ -421,11 +405,8 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
           <Button variant="outline" onClick={handleCancel}>
             取消
           </Button>
-          <Button variant="outline" onClick={handleSave}>
+          <Button onClick={handleSave}>
             保存
-          </Button>
-          <Button onClick={handleSaveAndConnect}>
-            保存并连接
           </Button>
         </div>
       </DialogContent>

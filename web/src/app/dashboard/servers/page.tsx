@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { ServerList } from "@/components/servers/server-card"
 import { ServerFilters } from "@/components/servers/server-filters"
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
+import { EditServerDialog } from "@/components/servers/edit-server-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
 import { serversApi, type Server } from "@/lib/api"
 import {
@@ -26,6 +27,8 @@ export default function ServersPage() {
   const [filteredServers, setFilteredServers] = useState<Server[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingServer, setEditingServer] = useState<Server | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [loading, setLoading] = useState(true)
   const [statistics, setStatistics] = useState({
@@ -118,8 +121,12 @@ export default function ServersPage() {
   }
 
   const handleEdit = (serverId: string) => {
-    // 跳转到编辑页面
-    router.push(`/dashboard/servers/${serverId}/edit`)
+    // 找到要编辑的服务器
+    const server = servers.find(s => s.id === serverId)
+    if (server) {
+      setEditingServer(server)
+      setIsEditDialogOpen(true)
+    }
   }
 
   const handleDelete = async (serverId: string) => {
@@ -161,9 +168,9 @@ export default function ServersPage() {
       await serversApi.create(token, {
         name: data.name,
         host: data.host,
-        port: data.port,
+        port: parseInt(data.port) || 22,
         username: data.username,
-        auth_method: data.authMethod as "password" | "key",
+        auth_method: data.authMethod === "privateKey" ? "key" : "password",
         password: data.password,
         private_key: data.privateKey,
         group: data.group,
@@ -179,7 +186,73 @@ export default function ServersPage() {
       await loadStatistics()
     } catch (error: any) {
       console.error("Failed to add server:", error)
-      toast.error("添加失败: " + (error?.message || "未知错误"))
+
+      // 提取详细错误信息
+      let errorMessage = "未知错误"
+      if (error?.detail) {
+        // 如果detail是对象，尝试提取message
+        if (typeof error.detail === 'object' && error.detail.message) {
+          errorMessage = error.detail.message
+        } else if (typeof error.detail === 'string') {
+          errorMessage = error.detail
+        }
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+
+      toast.error(`添加服务器失败: ${errorMessage}`)
+    }
+  }
+
+  const handleEditServer = async (data: ServerFormData) => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      if (!editingServer) {
+        toast.error("未找到要编辑的服务器")
+        return
+      }
+
+      await serversApi.update(token, editingServer.id, {
+        name: data.name,
+        host: data.host,
+        port: parseInt(data.port) || 22,
+        username: data.username,
+        auth_method: data.authMethod === "privateKey" ? "key" : "password",
+        password: data.password,
+        private_key: data.privateKey,
+        group: data.group,
+        tags: data.tags,
+        description: data.description,
+      })
+
+      toast.success("服务器更新成功")
+      setIsEditDialogOpen(false)
+      setEditingServer(null)
+
+      // 刷新列表
+      await loadServers()
+      await loadStatistics()
+    } catch (error: any) {
+      console.error("Failed to update server:", error)
+
+      // 提取详细错误信息
+      let errorMessage = "未知错误"
+      if (error?.detail) {
+        if (typeof error.detail === 'object' && error.detail.message) {
+          errorMessage = error.detail.message
+        } else if (typeof error.detail === 'string') {
+          errorMessage = error.detail
+        }
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+
+      toast.error(`更新服务器失败: ${errorMessage}`)
     }
   }
 
@@ -331,6 +404,29 @@ export default function ServersPage() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         onSubmit={handleAddServer}
+      />
+
+      {/* 编辑服务器弹窗 */}
+      <EditServerDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onSubmit={handleEditServer}
+        initialData={editingServer ? {
+          name: editingServer.name,
+          host: editingServer.host,
+          port: editingServer.port?.toString() || "22",
+          username: editingServer.username,
+          authMethod: editingServer.auth_method === "key" ? "privateKey" : "password",
+          password: editingServer.password || "",
+          privateKey: editingServer.private_key || "",
+          rememberPassword: false,
+          tags: editingServer.tags || [],
+          description: editingServer.description || "",
+          group: editingServer.group || "",
+          jumpServer: "",
+          autoConnect: false,
+          keepAlive: true,
+        } : undefined}
       />
     </>
   )

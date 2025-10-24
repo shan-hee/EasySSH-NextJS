@@ -11,11 +11,20 @@ type ApiFetchOptions = {
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  // 修复: 正确处理包含路径的基础URL
-  // 如果path是完整URL则直接使用,否则拼接到baseUrl
-  const url = path.startsWith("http")
-    ? new URL(path)
-    : new URL(`${env.apiBaseUrl}${path}`)
+  // 构建请求URL
+  // 如果path是完整URL则直接使用
+  // 如果apiBaseUrl是相对路径,直接拼接(用于反向代理)
+  // 如果apiBaseUrl是完整URL,使用URL构造器拼接
+  let url: string
+  if (path.startsWith("http")) {
+    url = path
+  } else if (env.apiBaseUrl.startsWith("http")) {
+    // 完整URL: http://localhost:8521/api/v1
+    url = new URL(`${env.apiBaseUrl}${path}`).toString()
+  } else {
+    // 相对路径: /api/v1
+    url = `${env.apiBaseUrl}${path}`
+  }
 
   const headers: HeadersInit = {
     Accept: "application/json",
@@ -41,7 +50,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     }
   }
 
-  const res = await fetch(url.toString(), init)
+  const res = await fetch(url, init)
   if (!res.ok) {
     // 修复: 根据Content-Type只读取一次响应体
     const contentType = res.headers.get("content-type") || ""

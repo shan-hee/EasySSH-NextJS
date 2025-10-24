@@ -4,11 +4,13 @@ import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react
 import { useTheme } from "next-themes"
 import { ConnectionLoader } from "./connection-loader"
 import { getTerminalTheme } from "./terminal-themes"
+import { TerminalWebSocket } from "@/lib/websocket-terminal"
 import type { Terminal } from "xterm"
 import type { FitAddon } from "@xterm/addon-fit"
 
 interface WebTerminalProps {
   sessionId: string
+  serverId?: string  // 添加服务器 ID 用于 WebSocket 连接
   serverName: string
   host: string
   username: string
@@ -26,6 +28,7 @@ interface WebTerminalProps {
 
 export function WebTerminal({
   sessionId,
+  serverId,
   serverName,
   host,
   username,
@@ -43,8 +46,7 @@ export function WebTerminal({
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstanceRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
-  const [currentLine, setCurrentLine] = useState("")
-  const [cursorPosition, setCursorPosition] = useState(0)
+  const wsRef = useRef<TerminalWebSocket | null>(null)
   const [isClient, setIsClient] = useState(false)
 
   // 使用 next-themes 获取应用主题
@@ -162,77 +164,89 @@ export function WebTerminal({
         terminalInstanceRef.current = terminal
         fitAddonRef.current = fitAddon
 
-        // 终端准备完成，隐藏加载动画
-        if (isMounted) {
-          onLoadingChange?.(false)
-        }
+        // 如果有 serverId 且已连接，建立 WebSocket 连接
+        if (serverId && isConnected) {
+          try {
+            const ws = new TerminalWebSocket({
+              serverId,
+              cols: terminal.cols,
+              rows: terminal.rows,
+              onData: (data) => {
+                // 将接收到的数据写入终端
+                if (terminal) {
+                  terminal.write(data)
+                }
+              },
+              onConnected: () => {
+                console.log("[WebTerminal] WebSocket 已连接")
+                if (isMounted) {
+                  onLoadingChange?.(false)
+                }
+                // 显示欢迎信息
+                if (terminal) {
+                  terminal.writeln(`\x1b[1;32m✓\x1b[0m \x1b[2mConnected to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
+                  terminal.writeln(`\x1b[2m┌─ User:\x1b[0m \x1b[36m${username}\x1b[0m`)
+                  terminal.writeln(`\x1b[2m└─ Session:\x1b[0m \x1b[33m${sessionId}\x1b[0m`)
+                  terminal.writeln("")
+                }
+              },
+              onDisconnected: () => {
+                console.log("[WebTerminal] WebSocket 已断开")
+                if (terminal) {
+                  terminal.writeln("\r\n\x1b[1;31m✗ Connection closed\x1b[0m")
+                }
+              },
+              onError: (error) => {
+                console.error("[WebTerminal] WebSocket 错误:", error)
+                if (terminal) {
+                  terminal.writeln(`\r\n\x1b[1;31m✗ Error: ${error.message}\x1b[0m`)
+                }
+              }
+            })
 
-        // 显示欢迎信息 - 现代化样式
-        if (isConnected) {
-          terminal.writeln(`\x1b[1;32m✓\x1b[0m \x1b[2mConnected to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
-          terminal.writeln(`\x1b[2m┌─ User:\x1b[0m \x1b[36m${username}\x1b[0m`)
-          terminal.writeln(`\x1b[2m└─ Session:\x1b[0m \x1b[33m${sessionId}\x1b[0m`)
-          terminal.writeln("")
-          writePrompt(terminal)
-        } else {
-          terminal.writeln(`\x1b[1;31m✗\x1b[0m \x1b[2mConnection failed to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
-          terminal.writeln(`\x1b[2m└─\x1b[0m \x1b[33mPlease check server status or network connection\x1b[0m`)
-        }
-
-        // 处理用户输入
-        terminal.onData((data: string) => {
-          if (!terminal || !isConnected) return
-
-          const char = data.charCodeAt(0)
-
-          if (char === 13) { // Enter
-            if (currentLine.trim()) {
-              terminal!.writeln("")
-              onCommand(currentLine.trim())
-
-              // 模拟命令执行
-              setTimeout(() => {
-                // 这里应该显示真实的命令输出
-                terminal!.writeln(`模拟输出: ${currentLine}`)
-                terminal!.writeln(`时间: ${new Date().toLocaleTimeString()}`)
-                writePrompt(terminal!)
-              }, 100)
-            } else {
-              terminal!.writeln("")
-              writePrompt(terminal!)
-            }
-            setCurrentLine("")
-            setCursorPosition(0)
-          } else if (char === 127) { // Backspace
-            if (cursorPosition > 0) {
-              const newLine = currentLine.slice(0, cursorPosition - 1) + currentLine.slice(cursorPosition)
-              setCurrentLine(newLine)
-              setCursorPosition(cursorPosition - 1)
-              terminal!.write("\b \b")
-            }
-          } else if (char >= 32) { // 可打印字符
-            const newLine = currentLine.slice(0, cursorPosition) + data + currentLine.slice(cursorPosition)
-            setCurrentLine(newLine)
-            setCursorPosition(cursorPosition + 1)
-            terminal!.write(data)
-          } else if (char === 27) { // ESC序列（方向键等）
-            const sequence = data.slice(1)
-            if (sequence === "[D" && cursorPosition > 0) { // 左箭头
-              setCursorPosition(cursorPosition - 1)
-              terminal!.write("\x1b[D")
-            } else if (sequence === "[C" && cursorPosition < currentLine.length) { // 右箭头
-              setCursorPosition(cursorPosition + 1)
-              terminal!.write("\x1b[C")
-            }
-            // 可以添加更多方向键和快捷键处理
+            ws.connect()
+            wsRef.current = ws
+          } catch (error) {
+            console.error("[WebTerminal] 创建 WebSocket 失败:", error)
           }
+        } else {
+          // 没有 serverId，显示离线状态
+          if (isMounted) {
+            onLoadingChange?.(false)
+          }
+          if (!isConnected) {
+            terminal.writeln(`\x1b[1;31m✗\x1b[0m \x1b[2mConnection failed to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
+            terminal.writeln(`\x1b[2m└─\x1b[0m \x1b[33mPlease check server status or network connection\x1b[0m`)
+          }
+        }
+
+        // 处理用户输入 - 直接发送到 WebSocket
+        terminal.onData((data: string) => {
+          if (!isConnected || !wsRef.current) return
+
+          // 发送用户输入到 WebSocket
+          wsRef.current.sendInput(data)
+
+          // 通知父组件（用于日志记录等）
+          onCommand(data)
         })
 
         // 窗口大小变化时重新适配
         const handleResize = () => {
           fitAddon!.fit()
-          if (onResize && terminal) {
-            onResize(terminal.cols, terminal.rows)
+          if (terminal) {
+            const newCols = terminal.cols
+            const newRows = terminal.rows
+
+            // 通知 WebSocket 调整大小
+            if (wsRef.current) {
+              wsRef.current.resize(newCols, newRows)
+            }
+
+            // 通知父组件
+            if (onResize) {
+              onResize(newCols, newRows)
+            }
           }
         }
 
@@ -240,6 +254,11 @@ export function WebTerminal({
 
         return () => {
           window.removeEventListener("resize", handleResize)
+          // 断开 WebSocket
+          if (wsRef.current) {
+            wsRef.current.disconnect()
+            wsRef.current = null
+          }
           terminal!.dispose()
         }
       } catch (error) {
