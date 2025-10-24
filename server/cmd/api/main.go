@@ -15,9 +15,14 @@ import (
 	"github.com/easyssh/server/internal/api/ws"
 	"github.com/easyssh/server/internal/domain/auditlog"
 	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/easyssh/server/internal/domain/batchtask"
 	"github.com/easyssh/server/internal/domain/monitoring"
+	"github.com/easyssh/server/internal/domain/scheduledtask"
+	"github.com/easyssh/server/internal/domain/script"
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/ssh"
+	"github.com/easyssh/server/internal/domain/sshsession"
+	"github.com/easyssh/server/internal/domain/user"
 	"github.com/easyssh/server/internal/infra/cache"
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/easyssh/server/internal/infra/db"
@@ -62,6 +67,10 @@ func main() {
 		&auth.User{},
 		&server.Server{},
 		&auditlog.AuditLog{},
+		&script.Script{},             // 脚本表
+		&batchtask.BatchTask{},       // 批量任务表
+		&scheduledtask.ScheduledTask{}, // 定时任务表
+		&sshsession.SSHSession{},     // SSH会话表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -99,6 +108,26 @@ func main() {
 	// 监控服务
 	monitoringService := monitoring.NewService(serverService, encryptor)
 
+	// 脚本服务
+	scriptRepo := script.NewRepository(database)
+	scriptService := script.NewService(scriptRepo)
+
+	// 批量任务服务
+	batchTaskRepo := batchtask.NewRepository(database)
+	batchTaskService := batchtask.NewService(batchTaskRepo)
+
+	// 定时任务服务
+	scheduledTaskRepo := scheduledtask.NewRepository(database)
+	scheduledTaskService := scheduledtask.NewService(scheduledTaskRepo)
+
+	// SSH会话服务
+	sshSessionRepo := sshsession.NewRepository(database)
+	sshSessionService := sshsession.NewService(sshSessionRepo)
+
+	// 用户管理服务
+	userRepo := user.NewRepository(database)
+	userService := user.NewService(userRepo)
+
 	// 初始化处理器
 	authHandler := rest.NewAuthHandler(authService, jwtService)
 	serverHandler := rest.NewServerHandler(serverService)
@@ -107,6 +136,11 @@ func main() {
 	terminalHandler := ws.NewTerminalHandler(serverService, sessionManager, encryptor)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
+	scriptHandler := rest.NewScriptHandler(scriptService)
+	batchTaskHandler := rest.NewBatchTaskHandler(batchTaskService)
+	scheduledTaskHandler := rest.NewScheduledTaskHandler(scheduledTaskService)
+	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
+	userHandler := rest.NewUserHandler(userService)
 
 	// 创建 Gin 路由
 	r := gin.New()
@@ -166,6 +200,19 @@ func main() {
 			userRoutes.GET("/me", authHandler.GetCurrentUser)
 			userRoutes.PUT("/me", authHandler.UpdateProfile)
 			userRoutes.PUT("/me/password", authHandler.ChangePassword)
+		}
+
+		// 用户管理路由（需要认证）
+		userManagementRoutes := v1.Group("/users")
+		userManagementRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			userManagementRoutes.GET("", userHandler.ListUsers)                     // 获取用户列表
+			userManagementRoutes.GET("/statistics", userHandler.GetStatistics)      // 获取统计信息
+			userManagementRoutes.GET("/:id", userHandler.GetUser)                   // 获取用户详情
+			userManagementRoutes.POST("", userHandler.CreateUser)                   // 创建用户
+			userManagementRoutes.PUT("/:id", userHandler.UpdateUser)                // 更新用户
+			userManagementRoutes.DELETE("/:id", userHandler.DeleteUser)             // 删除用户
+			userManagementRoutes.POST("/:id/password", userHandler.ChangePassword)  // 修改密码
 		}
 
 		// 服务器路由（需要认证）
@@ -241,6 +288,56 @@ func main() {
 			auditLogRoutes.GET("/statistics", auditLogHandler.GetStatistics)      // 统计信息
 			auditLogRoutes.GET("/:id", auditLogHandler.GetByID)                   // 日志详情
 			auditLogRoutes.DELETE("/cleanup", auditLogHandler.CleanupOldLogs)     // 清理旧日志（管理员）
+		}
+
+		// 脚本管理路由（需要认证）
+		scriptRoutes := v1.Group("/scripts")
+		scriptRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			scriptRoutes.GET("", scriptHandler.List)                    // 脚本列表
+			scriptRoutes.POST("", scriptHandler.Create)                 // 创建脚本
+			scriptRoutes.GET("/:id", scriptHandler.GetByID)             // 脚本详情
+			scriptRoutes.PUT("/:id", scriptHandler.Update)              // 更新脚本
+			scriptRoutes.DELETE("/:id", scriptHandler.Delete)           // 删除脚本
+			scriptRoutes.POST("/:id/execute", scriptHandler.Execute)    // 执行脚本
+		}
+
+		// 批量任务路由（需要认证）
+		batchTaskRoutes := v1.Group("/batch-tasks")
+		batchTaskRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			batchTaskRoutes.GET("", batchTaskHandler.List)                     // 任务列表
+			batchTaskRoutes.POST("", batchTaskHandler.Create)                  // 创建任务
+			batchTaskRoutes.GET("/statistics", batchTaskHandler.GetStatistics) // 统计信息
+			batchTaskRoutes.GET("/:id", batchTaskHandler.GetByID)              // 任务详情
+			batchTaskRoutes.PUT("/:id", batchTaskHandler.Update)               // 更新任务
+			batchTaskRoutes.DELETE("/:id", batchTaskHandler.Delete)            // 删除任务
+			batchTaskRoutes.POST("/:id/start", batchTaskHandler.Start)         // 启动任务
+		}
+
+		// 定时任务路由（需要认证）
+		scheduledTaskRoutes := v1.Group("/scheduled-tasks")
+		scheduledTaskRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			scheduledTaskRoutes.GET("", scheduledTaskHandler.List)                     // 任务列表
+			scheduledTaskRoutes.POST("", scheduledTaskHandler.Create)                  // 创建任务
+			scheduledTaskRoutes.GET("/statistics", scheduledTaskHandler.GetStatistics) // 统计信息
+			scheduledTaskRoutes.GET("/:id", scheduledTaskHandler.GetByID)              // 任务详情
+			scheduledTaskRoutes.PUT("/:id", scheduledTaskHandler.Update)               // 更新任务
+			scheduledTaskRoutes.DELETE("/:id", scheduledTaskHandler.Delete)            // 删除任务
+			scheduledTaskRoutes.POST("/:id/toggle", scheduledTaskHandler.Toggle)       // 启用/禁用
+			scheduledTaskRoutes.POST("/:id/trigger", scheduledTaskHandler.Trigger)     // 手动触发
+		}
+
+		// SSH会话路由（需要认证）
+		sshSessionRoutes := v1.Group("/ssh-sessions")
+		sshSessionRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			sshSessionRoutes.GET("", sshSessionHandler.List)                     // 会话列表
+			sshSessionRoutes.GET("/statistics", sshSessionHandler.GetStatistics) // 统计信息
+			sshSessionRoutes.GET("/:id", sshSessionHandler.GetByID)              // 会话详情
+			sshSessionRoutes.DELETE("/:id", sshSessionHandler.Delete)            // 删除会话
+			sshSessionRoutes.POST("/:id/close", sshSessionHandler.Close)         // 关闭会话
 		}
 	}
 

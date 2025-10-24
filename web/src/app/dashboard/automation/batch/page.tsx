@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -40,11 +42,9 @@ import {
 } from "@/components/ui/tabs"
 import {
   Play,
-  Pause,
   Server,
   Terminal,
   FileText,
-  Upload,
   CheckCircle,
   Clock,
   AlertTriangle,
@@ -52,144 +52,119 @@ import {
   Download,
   Zap,
   Library,
-  Code2
+  Code2,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  XCircle
 } from "lucide-react"
-
-// 模拟服务器数据
-const mockServers = [
-  { id: 1, name: "Web Server 01", host: "192.168.1.100", status: "在线", group: "Web服务器" },
-  { id: 2, name: "Web Server 02", host: "192.168.1.101", status: "在线", group: "Web服务器" },
-  { id: 3, name: "Database Server", host: "192.168.1.102", status: "在线", group: "数据库" },
-  { id: 4, name: "Cache Server", host: "192.168.1.103", status: "在线", group: "缓存" },
-  { id: 5, name: "App Server 01", host: "192.168.1.104", status: "离线", group: "应用服务器" },
-  { id: 6, name: "App Server 02", host: "192.168.1.105", status: "在线", group: "应用服务器" },
-]
-
-// 模拟脚本库数据
-const mockScripts = [
-  {
-    id: 1,
-    name: "系统监控脚本",
-    description: "监控CPU、内存、磁盘使用情况",
-    content: "#!/bin/bash\ntop -bn1 | grep 'Cpu(s)'\nfree -h\ndf -h",
-    tags: ["监控", "系统"],
-    author: "管理员",
-    updatedAt: "2024-01-15",
-  },
-  {
-    id: 2,
-    name: "备份数据库",
-    description: "自动备份MySQL数据库",
-    content: "#!/bin/bash\nmysqldump -u $USER -p$PASS $DB > backup_$(date +%Y%m%d).sql",
-    tags: ["备份", "数据库"],
-    author: "管理员",
-    updatedAt: "2024-01-15",
-  },
-  {
-    id: 3,
-    name: "清理日志文件",
-    description: "清理超过7天的日志文件",
-    content: "#!/bin/bash\nfind /var/log -name '*.log' -mtime +7 -delete",
-    tags: ["清理", "日志"],
-    author: "管理员",
-    updatedAt: "2024-01-14",
-  },
-  {
-    id: 4,
-    name: "Docker容器管理",
-    description: "批量重启Docker容器",
-    content: "#!/bin/bash\ndocker container ls -q | xargs docker restart",
-    tags: ["Docker", "容器"],
-    author: "管理员",
-    updatedAt: "2024-01-13",
-  },
-  {
-    id: 5,
-    name: "Nginx配置检查",
-    description: "检查Nginx配置并重载",
-    content: "#!/bin/bash\nnginx -t && systemctl reload nginx",
-    tags: ["Nginx", "配置"],
-    author: "运维工程师",
-    updatedAt: "2024-01-12",
-  },
-]
-
-// 模拟执行历史
-const mockExecutionHistory = [
-  {
-    id: 1,
-    task: "系统更新",
-    type: "命令",
-    servers: 5,
-    status: "completed",
-    success: 5,
-    failed: 0,
-    startTime: "2024-01-15 14:30:00",
-    duration: "2分35秒"
-  },
-  {
-    id: 2,
-    task: "部署配置文件",
-    type: "文件",
-    servers: 3,
-    status: "completed",
-    success: 3,
-    failed: 0,
-    startTime: "2024-01-15 13:15:00",
-    duration: "1分12秒"
-  },
-  {
-    id: 3,
-    task: "重启服务",
-    type: "命令",
-    servers: 6,
-    status: "failed",
-    success: 5,
-    failed: 1,
-    startTime: "2024-01-15 12:00:00",
-    duration: "45秒"
-  },
-  {
-    id: 4,
-    task: "日志收集",
-    type: "脚本",
-    servers: 8,
-    status: "running",
-    success: 6,
-    failed: 0,
-    startTime: "2024-01-15 11:30:00",
-    duration: "进行中"
-  }
-]
+import { batchTasksApi, scriptsApi, serversApi, type BatchTask, type Script, type Server } from "@/lib/api"
 
 export default function AutomationBatchPage() {
-  const [selectedServers, setSelectedServers] = useState<number[]>([])
+  const router = useRouter()
+
+  // 数据状态
+  const [tasks, setTasks] = useState<BatchTask[]>([])
+  const [servers, setServers] = useState<Server[]>([])
+  const [scripts, setScripts] = useState<Script[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  // 统计状态
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    running: 0,
+    completed: 0,
+    failed: 0,
+  })
+
+  // UI状态
+  const [selectedServers, setSelectedServers] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [taskName, setTaskName] = useState("")
   const [command, setCommand] = useState("")
   const [scriptContent, setScriptContent] = useState("")
+  const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null)
   const [filePath, setFilePath] = useState("")
   const [targetPath, setTargetPath] = useState("")
-  const [executionMode, setExecutionMode] = useState("parallel")
+  const [executionMode, setExecutionMode] = useState<"parallel" | "sequential">("parallel")
   const [isExecuting, setIsExecuting] = useState(false)
   const [isScriptLibraryOpen, setIsScriptLibraryOpen] = useState(false)
   const [scriptSearchTerm, setScriptSearchTerm] = useState("")
 
+  // 加载所有数据
+  const loadData = async () => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      // 并行加载所有数据
+      const [tasksRes, serversRes, scriptsRes, statsRes] = await Promise.all([
+        batchTasksApi.list(token, { page: 1, limit: 100 }),
+        serversApi.list(token),
+        scriptsApi.list(token, { page: 1, limit: 100 }),
+        batchTasksApi.getStatistics(token),
+      ])
+
+      setTasks(tasksRes.data)
+      setServers(serversRes.data)
+      setScripts(scriptsRes.data)
+      setStatistics({
+        total: statsRes.total || 0,
+        running: statsRes.running || 0,
+        completed: statsRes.completed || 0,
+        failed: statsRes.failed || 0,
+      })
+    } catch (error: any) {
+      console.error("加载数据失败:", error)
+      if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+        toast.error("登录已过期，请重新登录")
+        router.push("/login")
+      } else {
+        toast.error(`加载数据失败: ${error.message}`)
+      }
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  // 刷新数据
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await loadData()
+  }
+
+  // 初始加载
+  useEffect(() => {
+    loadData()
+  }, [])
+
   // 过滤服务器
-  const filteredServers = mockServers.filter(server =>
+  const filteredServers = servers.filter(server =>
     server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    server.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    server.group.toLowerCase().includes(searchTerm.toLowerCase())
+    server.host.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   // 过滤脚本
-  const filteredScripts = mockScripts.filter(script =>
+  const filteredScripts = scripts.filter(script =>
     script.name.toLowerCase().includes(scriptSearchTerm.toLowerCase()) ||
-    script.description.toLowerCase().includes(scriptSearchTerm.toLowerCase()) ||
+    (script.description && script.description.toLowerCase().includes(scriptSearchTerm.toLowerCase())) ||
     script.tags.some(tag => tag.toLowerCase().includes(scriptSearchTerm.toLowerCase()))
   )
 
   // 切换服务器选择
-  const toggleServer = (serverId: number) => {
+  const toggleServer = (serverId: string) => {
+    const server = servers.find(s => s.id === serverId)
+    if (server && server.status !== "online") {
+      toast.warning("只能选择在线的服务器")
+      return
+    }
+
     setSelectedServers(prev =>
       prev.includes(serverId)
         ? prev.filter(id => id !== serverId)
@@ -197,67 +172,226 @@ export default function AutomationBatchPage() {
     )
   }
 
-  // 全选/取消全选
+  // 全选/取消全选（只选择在线服务器）
   const toggleSelectAll = () => {
-    if (selectedServers.length === filteredServers.length) {
+    const onlineServers = filteredServers.filter(s => s.status === "online")
+    if (selectedServers.length === onlineServers.length) {
       setSelectedServers([])
     } else {
-      setSelectedServers(filteredServers.map(s => s.id))
+      setSelectedServers(onlineServers.map(s => s.id))
     }
   }
 
   // 执行批量命令
-  const handleExecuteCommand = () => {
-    if (selectedServers.length === 0 || !command.trim()) {
+  const handleExecuteCommand = async () => {
+    if (selectedServers.length === 0) {
+      toast.error("请选择至少一个服务器")
       return
     }
+    if (!command.trim()) {
+      toast.error("请输入要执行的命令")
+      return
+    }
+    if (!taskName.trim()) {
+      toast.error("请输入任务名称")
+      return
+    }
+
     setIsExecuting(true)
-    console.log("执行命令:", { command, servers: selectedServers, mode: executionMode })
-    // 模拟执行
-    setTimeout(() => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      await batchTasksApi.create(token, {
+        task_name: taskName,
+        task_type: "command",
+        content: command,
+        server_ids: selectedServers,
+        execution_mode: executionMode,
+      })
+
+      toast.success("批量命令任务已创建")
+
+      // 重置表单
+      setCommand("")
+      setTaskName("")
+      setSelectedServers([])
+
+      // 重新加载任务列表
+      await loadData()
+    } catch (error: any) {
+      console.error("创建任务失败:", error)
+      toast.error(`创建任务失败: ${error.message}`)
+    } finally {
       setIsExecuting(false)
-    }, 3000)
+    }
   }
 
   // 执行批量脚本
-  const handleExecuteScript = () => {
-    if (selectedServers.length === 0 || !scriptContent.trim()) {
+  const handleExecuteScript = async () => {
+    if (selectedServers.length === 0) {
+      toast.error("请选择至少一个服务器")
       return
     }
+    if (!scriptContent.trim() && !selectedScriptId) {
+      toast.error("请输入脚本内容或选择脚本库中的脚本")
+      return
+    }
+    if (!taskName.trim()) {
+      toast.error("请输入任务名称")
+      return
+    }
+
     setIsExecuting(true)
-    console.log("执行脚本:", { script: scriptContent, servers: selectedServers, mode: executionMode })
-    setTimeout(() => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      await batchTasksApi.create(token, {
+        task_name: taskName,
+        task_type: "script",
+        content: scriptContent,
+        script_id: selectedScriptId || undefined,
+        server_ids: selectedServers,
+        execution_mode: executionMode,
+      })
+
+      toast.success("批量脚本任务已创建")
+
+      // 重置表单
+      setScriptContent("")
+      setSelectedScriptId(null)
+      setTaskName("")
+      setSelectedServers([])
+
+      // 重新加载任务列表
+      await loadData()
+    } catch (error: any) {
+      console.error("创建任务失败:", error)
+      toast.error(`创建任务失败: ${error.message}`)
+    } finally {
       setIsExecuting(false)
-    }, 3000)
+    }
   }
 
   // 执行文件分发
-  const handleDistributeFile = () => {
-    if (selectedServers.length === 0 || !filePath.trim() || !targetPath.trim()) {
+  const handleDistributeFile = async () => {
+    if (selectedServers.length === 0) {
+      toast.error("请选择至少一个服务器")
       return
     }
+    if (!filePath.trim() || !targetPath.trim()) {
+      toast.error("请输入源文件路径和目标路径")
+      return
+    }
+    if (!taskName.trim()) {
+      toast.error("请输入任务名称")
+      return
+    }
+
     setIsExecuting(true)
-    console.log("分发文件:", { from: filePath, to: targetPath, servers: selectedServers })
-    setTimeout(() => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      await batchTasksApi.create(token, {
+        task_name: taskName,
+        task_type: "file",
+        content: `${filePath} -> ${targetPath}`,
+        server_ids: selectedServers,
+        execution_mode: executionMode,
+      })
+
+      toast.success("文件分发任务已创建")
+
+      // 重置表单
+      setFilePath("")
+      setTargetPath("")
+      setTaskName("")
+      setSelectedServers([])
+
+      // 重新加载任务列表
+      await loadData()
+    } catch (error: any) {
+      console.error("创建任务失败:", error)
+      toast.error(`创建任务失败: ${error.message}`)
+    } finally {
       setIsExecuting(false)
-    }, 3000)
+    }
   }
 
   // 选择脚本库中的脚本
-  const handleSelectScript = (script: typeof mockScripts[0]) => {
+  const handleSelectScript = (script: Script) => {
     setScriptContent(script.content)
+    setSelectedScriptId(script.id)
     setIsScriptLibraryOpen(false)
     setScriptSearchTerm("")
+  }
+
+  // 删除任务
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("确定要删除这个任务吗？")) {
+      return
+    }
+
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      await batchTasksApi.delete(token, taskId)
+      toast.success("任务删除成功")
+      await loadData()
+    } catch (error: any) {
+      console.error("删除任务失败:", error)
+      toast.error(`删除任务失败: ${error.message}`)
+    }
+  }
+
+  // 启动任务
+  const handleStartTask = async (taskId: string) => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      await batchTasksApi.start(token, taskId)
+      toast.success("任务已启动")
+      await loadData()
+    } catch (error: any) {
+      console.error("启动任务失败:", error)
+      toast.error(`启动任务失败: ${error.message}`)
+    }
   }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-        return <Badge className="bg-green-100 text-green-800">已完成</Badge>
+        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">已完成</Badge>
       case "running":
-        return <Badge className="bg-blue-100 text-blue-800">执行中</Badge>
+        return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">执行中</Badge>
       case "failed":
-        return <Badge className="bg-red-100 text-red-800">失败</Badge>
+        return <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100">失败</Badge>
+      case "pending":
+        return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">等待中</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
@@ -265,15 +399,58 @@ export default function AutomationBatchPage() {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case "命令":
+      case "command":
         return <Terminal className="h-4 w-4" />
-      case "文件":
+      case "file":
         return <FileText className="h-4 w-4" />
-      case "脚本":
+      case "script":
         return <Zap className="h-4 w-4" />
       default:
         return <Server className="h-4 w-4" />
     }
+  }
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return "-"
+    try {
+      return new Date(dateString).toLocaleString("zh-CN")
+    } catch {
+      return dateString
+    }
+  }
+
+  const formatDuration = (started: string | undefined, completed: string | undefined) => {
+    if (!started) return "-"
+    if (!completed) return "进行中"
+
+    try {
+      const start = new Date(started).getTime()
+      const end = new Date(completed).getTime()
+      const seconds = Math.floor((end - start) / 1000)
+
+      if (seconds < 60) return `${seconds}秒`
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`
+      return `${Math.floor(seconds / 3600)}小时${Math.floor((seconds % 3600) / 60)}分`
+    } catch {
+      return "-"
+    }
+  }
+
+  if (loading) {
+    return (
+      <>
+        <PageHeader
+          title="批量操作"
+          breadcrumbs={[
+            { title: "自动化", href: "#" },
+            { title: "批量操作" }
+          ]}
+        />
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </>
+    )
   }
 
   return (
@@ -285,496 +462,649 @@ export default function AutomationBatchPage() {
           { title: "批量操作" }
         ]}
       >
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => console.log("导出执行报告")}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          导出报告
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            刷新
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toast.info("导出功能即将推出")}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            导出报告
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         {/* 统计卡片 */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">在线服务器</CardTitle>
+              <CardTitle className="text-sm font-medium">总任务数</CardTitle>
               <Server className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {mockServers.filter(s => s.status === "在线").length}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                共 {mockServers.length} 台服务器
-              </p>
+              <div className="text-2xl font-bold">{statistics.total}</div>
+              <p className="text-xs text-muted-foreground">历史执行任务总数</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">已选服务器</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">执行中</CardTitle>
+              <Clock className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {selectedServers.length}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                准备执行批量任务
-              </p>
+              <div className="text-2xl font-bold text-blue-600">{statistics.running}</div>
+              <p className="text-xs text-muted-foreground">正在执行的任务</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">今日任务</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">已完成</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockExecutionHistory.length}</div>
-              <p className="text-xs text-muted-foreground">
-                成功率 75%
-              </p>
+              <div className="text-2xl font-bold text-green-600">{statistics.completed}</div>
+              <p className="text-xs text-muted-foreground">成功完成的任务</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">执行中任务</CardTitle>
-              <Play className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">失败</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">
-                {mockExecutionHistory.filter(h => h.status === "running").length}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                正在进行的任务
-              </p>
+              <div className="text-2xl font-bold text-red-600">{statistics.failed}</div>
+              <p className="text-xs text-muted-foreground">执行失败的任务</p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          {/* 左侧：服务器选择 */}
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-lg">选择服务器</CardTitle>
-              <CardDescription>
-                已选择 {selectedServers.length} 台服务器
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* 搜索框 */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="搜索服务器..."
-                  className="pl-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+        {/* 主要内容区域 */}
+        <Tabs defaultValue="command" className="flex-1">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="command">
+              <Terminal className="mr-2 h-4 w-4" />
+              批量命令
+            </TabsTrigger>
+            <TabsTrigger value="script">
+              <Code2 className="mr-2 h-4 w-4" />
+              批量脚本
+            </TabsTrigger>
+            <TabsTrigger value="file">
+              <FileText className="mr-2 h-4 w-4" />
+              文件分发
+            </TabsTrigger>
+          </TabsList>
 
-              {/* 全选按钮 */}
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleSelectAll}
-                >
-                  {selectedServers.length === filteredServers.length ? "取消全选" : "全选"}
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  {filteredServers.length} 台服务器
-                </span>
-              </div>
+          {/* 批量命令Tab */}
+          <TabsContent value="command" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>批量执行命令</CardTitle>
+                <CardDescription>
+                  在多台服务器上同时执行Shell命令
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="task-name-cmd">
+                    任务名称 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="task-name-cmd"
+                    placeholder="例如：系统更新"
+                    value={taskName}
+                    onChange={(e) => setTaskName(e.target.value)}
+                  />
+                </div>
 
-              {/* 服务器列表 */}
-              <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-custom">
-                {filteredServers.map(server => (
-                  <div
-                    key={server.id}
-                    className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-accent cursor-pointer"
-                    onClick={() => toggleServer(server.id)}
-                  >
-                    <Checkbox
-                      checked={selectedServers.includes(server.id)}
-                      onCheckedChange={() => toggleServer(server.id)}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium text-sm">{server.name}</div>
-                        <Badge
-                          variant="outline"
-                          className={server.status === "在线" ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-700"}
-                        >
-                          {server.status}
-                        </Badge>
+                <div className="space-y-2">
+                  <Label htmlFor="command">
+                    命令内容 <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    id="command"
+                    placeholder="输入要执行的Shell命令，例如：apt-get update && apt-get upgrade -y"
+                    className="font-mono"
+                    rows={4}
+                    value={command}
+                    onChange={(e) => setCommand(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>执行模式</Label>
+                  <Select value={executionMode} onValueChange={(value: "parallel" | "sequential") => setExecutionMode(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="parallel">并行执行（同时执行）</SelectItem>
+                      <SelectItem value="sequential">顺序执行（逐个执行）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>选择目标服务器</Label>
+                    <div className="text-sm text-muted-foreground">
+                      已选择 {selectedServers.length} / {filteredServers.filter(s => s.status === "online").length} 台在线服务器
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                      <Input
+                        placeholder="搜索服务器..."
+                        className="pl-10"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                    <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                      {selectedServers.length === filteredServers.filter(s => s.status === "online").length ? "取消全选" : "全选"}
+                    </Button>
+                  </div>
+
+                  <div className="border rounded-md max-h-[200px] overflow-y-auto">
+                    {filteredServers.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        没有找到服务器
                       </div>
-                      <div className="text-xs text-muted-foreground">{server.host}</div>
-                      <div className="text-xs text-muted-foreground">{server.group}</div>
+                    ) : (
+                      <div className="p-2 space-y-1">
+                        {filteredServers.map((server) => (
+                          <div
+                            key={server.id}
+                            className={`flex items-center space-x-2 p-2 rounded-sm hover:bg-accent cursor-pointer ${
+                              server.status !== "online" ? "opacity-50" : ""
+                            }`}
+                            onClick={() => toggleServer(server.id)}
+                          >
+                            <Checkbox
+                              id={server.id}
+                              checked={selectedServers.includes(server.id)}
+                              disabled={server.status !== "online"}
+                              onCheckedChange={() => toggleServer(server.id)}
+                            />
+                            <label
+                              htmlFor={server.id}
+                              className="flex-1 flex items-center justify-between cursor-pointer"
+                            >
+                              <div>
+                                <div className="font-medium">{server.name}</div>
+                                <div className="text-sm text-muted-foreground">{server.host}</div>
+                              </div>
+                              <Badge variant={server.status === "online" ? "default" : "secondary"}>
+                                {server.status === "online" ? "在线" : "离线"}
+                              </Badge>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleExecuteCommand}
+                  disabled={isExecuting || selectedServers.length === 0 || !command.trim() || !taskName.trim()}
+                  className="w-full"
+                >
+                  {isExecuting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      创建中...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" />
+                      创建任务
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 批量脚本Tab */}
+          <TabsContent value="script" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>批量执行脚本</CardTitle>
+                <CardDescription>
+                  在多台服务器上执行自定义脚本
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="task-name-script">
+                    任务名称 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="task-name-script"
+                    placeholder="例如：部署应用"
+                    value={taskName}
+                    onChange={(e) => setTaskName(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="script-content">
+                      脚本内容 <span className="text-destructive">*</span>
+                    </Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsScriptLibraryOpen(true)}
+                    >
+                      <Library className="mr-2 h-4 w-4" />
+                      从脚本库选择
+                    </Button>
+                  </div>
+                  <Textarea
+                    id="script-content"
+                    placeholder="输入脚本内容或从脚本库选择..."
+                    className="font-mono"
+                    rows={8}
+                    value={scriptContent}
+                    onChange={(e) => setScriptContent(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>执行模式</Label>
+                  <Select value={executionMode} onValueChange={(value: "parallel" | "sequential") => setExecutionMode(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="parallel">并行执行（同时执行）</SelectItem>
+                      <SelectItem value="sequential">顺序执行（逐个执行）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>选择目标服务器</Label>
+                    <div className="text-sm text-muted-foreground">
+                      已选择 {selectedServers.length} / {filteredServers.filter(s => s.status === "online").length} 台在线服务器
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* 右侧：操作面板 */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg">批量操作</CardTitle>
-              <CardDescription>
-                在选定的服务器上执行批量命令、脚本或文件分发
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="command" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="command">
-                    <Terminal className="mr-2 h-4 w-4" />
-                    批量命令
-                  </TabsTrigger>
-                  <TabsTrigger value="script">
-                    <Zap className="mr-2 h-4 w-4" />
-                    批量脚本
-                  </TabsTrigger>
-                  <TabsTrigger value="file">
-                    <Upload className="mr-2 h-4 w-4" />
-                    文件分发
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* 批量命令 */}
-                <TabsContent value="command" className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="command">命令内容</Label>
-                    <Textarea
-                      id="command"
-                      placeholder="输入要执行的命令，例如：systemctl status nginx"
-                      value={command}
-                      onChange={(e) => setCommand(e.target.value)}
-                      rows={6}
-                      className="font-mono text-sm"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="exec-mode">执行模式</Label>
-                    <Select value={executionMode} onValueChange={setExecutionMode}>
-                      <SelectTrigger id="exec-mode">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="parallel">并行执行（同时执行）</SelectItem>
-                        <SelectItem value="sequential">串行执行（按顺序执行）</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                    <span className="text-sm text-yellow-800">
-                      请确认命令安全性，批量操作可能影响多台服务器
-                    </span>
-                  </div>
-
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    disabled={selectedServers.length === 0 || !command.trim() || isExecuting}
-                    onClick={handleExecuteCommand}
-                  >
-                    {isExecuting ? (
-                      <>
-                        <Pause className="mr-2 h-4 w-4 animate-spin" />
-                        执行中...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="mr-2 h-4 w-4" />
-                        执行命令（{selectedServers.length} 台服务器）
-                      </>
-                    )}
-                  </Button>
-                </TabsContent>
-
-                {/* 批量脚本 */}
-                <TabsContent value="script" className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="script">脚本内容</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsScriptLibraryOpen(true)}
-                      >
-                        <Library className="mr-2 h-4 w-4" />
-                        从脚本库选择
-                      </Button>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                      <Input
+                        placeholder="搜索服务器..."
+                        className="pl-10"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
                     </div>
-                    <Textarea
-                      id="script"
-                      placeholder="输入Shell脚本内容，或从脚本库选择..."
-                      value={scriptContent}
-                      onChange={(e) => setScriptContent(e.target.value)}
-                      rows={10}
-                      className="font-mono text-sm"
-                    />
+                    <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                      {selectedServers.length === filteredServers.filter(s => s.status === "online").length ? "取消全选" : "全选"}
+                    </Button>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="script-mode">执行模式</Label>
-                    <Select value={executionMode} onValueChange={setExecutionMode}>
-                      <SelectTrigger id="script-mode">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="parallel">并行执行（同时执行）</SelectItem>
-                        <SelectItem value="sequential">串行执行（按顺序执行）</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    disabled={selectedServers.length === 0 || !scriptContent.trim() || isExecuting}
-                    onClick={handleExecuteScript}
-                  >
-                    {isExecuting ? (
-                      <>
-                        <Pause className="mr-2 h-4 w-4 animate-spin" />
-                        执行中...
-                      </>
+                  <div className="border rounded-md max-h-[200px] overflow-y-auto">
+                    {filteredServers.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        没有找到服务器
+                      </div>
                     ) : (
-                      <>
-                        <Play className="mr-2 h-4 w-4" />
-                        执行脚本（{selectedServers.length} 台服务器）
-                      </>
+                      <div className="p-2 space-y-1">
+                        {filteredServers.map((server) => (
+                          <div
+                            key={server.id}
+                            className={`flex items-center space-x-2 p-2 rounded-sm hover:bg-accent cursor-pointer ${
+                              server.status !== "online" ? "opacity-50" : ""
+                            }`}
+                            onClick={() => toggleServer(server.id)}
+                          >
+                            <Checkbox
+                              id={`script-${server.id}`}
+                              checked={selectedServers.includes(server.id)}
+                              disabled={server.status !== "online"}
+                              onCheckedChange={() => toggleServer(server.id)}
+                            />
+                            <label
+                              htmlFor={`script-${server.id}`}
+                              className="flex-1 flex items-center justify-between cursor-pointer"
+                            >
+                              <div>
+                                <div className="font-medium">{server.name}</div>
+                                <div className="text-sm text-muted-foreground">{server.host}</div>
+                              </div>
+                              <Badge variant={server.status === "online" ? "default" : "secondary"}>
+                                {server.status === "online" ? "在线" : "离线"}
+                              </Badge>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </Button>
-                </TabsContent>
+                  </div>
+                </div>
 
-                {/* 文件分发 */}
-                <TabsContent value="file" className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="file-path">源文件路径</Label>
-                    <Input
-                      id="file-path"
-                      placeholder="/path/to/local/file"
-                      value={filePath}
-                      onChange={(e) => setFilePath(e.target.value)}
-                      className="font-mono"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      本地文件或目录的绝对路径
-                    </p>
+                <Button
+                  onClick={handleExecuteScript}
+                  disabled={isExecuting || selectedServers.length === 0 || !scriptContent.trim() || !taskName.trim()}
+                  className="w-full"
+                >
+                  {isExecuting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      创建中...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" />
+                      创建任务
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 文件分发Tab */}
+          <TabsContent value="file" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>文件分发</CardTitle>
+                <CardDescription>
+                  向多台服务器分发文件
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="task-name-file">
+                    任务名称 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="task-name-file"
+                    placeholder="例如：配置文件分发"
+                    value={taskName}
+                    onChange={(e) => setTaskName(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="file-path">
+                    源文件路径 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="file-path"
+                    placeholder="/path/to/local/file"
+                    value={filePath}
+                    onChange={(e) => setFilePath(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="target-path">
+                    目标路径 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="target-path"
+                    placeholder="/path/to/remote/destination"
+                    value={targetPath}
+                    onChange={(e) => setTargetPath(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>选择目标服务器</Label>
+                    <div className="text-sm text-muted-foreground">
+                      已选择 {selectedServers.length} / {filteredServers.filter(s => s.status === "online").length} 台在线服务器
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="target-path">目标路径</Label>
-                    <Input
-                      id="target-path"
-                      placeholder="/path/to/remote/destination"
-                      value={targetPath}
-                      onChange={(e) => setTargetPath(e.target.value)}
-                      className="font-mono"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      远程服务器上的目标路径
-                    </p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                      <Input
+                        placeholder="搜索服务器..."
+                        className="pl-10"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                    <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                      {selectedServers.length === filteredServers.filter(s => s.status === "online").length ? "取消全选" : "全选"}
+                    </Button>
                   </div>
 
-                  <div className="flex items-center space-x-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <Upload className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm text-blue-800">
-                      文件将使用SFTP协议传输到所有选定的服务器
-                    </span>
-                  </div>
-
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    disabled={selectedServers.length === 0 || !filePath.trim() || !targetPath.trim() || isExecuting}
-                    onClick={handleDistributeFile}
-                  >
-                    {isExecuting ? (
-                      <>
-                        <Pause className="mr-2 h-4 w-4 animate-spin" />
-                        分发中...
-                      </>
+                  <div className="border rounded-md max-h-[200px] overflow-y-auto">
+                    {filteredServers.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        没有找到服务器
+                      </div>
                     ) : (
-                      <>
-                        <Upload className="mr-2 h-4 w-4" />
-                        分发文件（{selectedServers.length} 台服务器）
-                      </>
+                      <div className="p-2 space-y-1">
+                        {filteredServers.map((server) => (
+                          <div
+                            key={server.id}
+                            className={`flex items-center space-x-2 p-2 rounded-sm hover:bg-accent cursor-pointer ${
+                              server.status !== "online" ? "opacity-50" : ""
+                            }`}
+                            onClick={() => toggleServer(server.id)}
+                          >
+                            <Checkbox
+                              id={`file-${server.id}`}
+                              checked={selectedServers.includes(server.id)}
+                              disabled={server.status !== "online"}
+                              onCheckedChange={() => toggleServer(server.id)}
+                            />
+                            <label
+                              htmlFor={`file-${server.id}`}
+                              className="flex-1 flex items-center justify-between cursor-pointer"
+                            >
+                              <div>
+                                <div className="font-medium">{server.name}</div>
+                                <div className="text-sm text-muted-foreground">{server.host}</div>
+                              </div>
+                              <Badge variant={server.status === "online" ? "default" : "secondary"}>
+                                {server.status === "online" ? "在线" : "离线"}
+                              </Badge>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </Button>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </div>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleDistributeFile}
+                  disabled={isExecuting || selectedServers.length === 0 || !filePath.trim() || !targetPath.trim() || !taskName.trim()}
+                  className="w-full"
+                >
+                  {isExecuting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      创建中...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" />
+                      创建任务
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* 执行历史 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">执行历史</CardTitle>
+            <CardTitle>执行历史</CardTitle>
             <CardDescription>
-              最近的批量操作任务记录
+              查看所有批量任务的执行历史和状态
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">任务名称</TableHead>
+                  <TableHead className="w-[100px]">类型</TableHead>
+                  <TableHead className="w-[100px]">服务器数</TableHead>
+                  <TableHead className="w-[120px]">状态</TableHead>
+                  <TableHead className="w-[100px]">成功/失败</TableHead>
+                  <TableHead className="w-[180px]">开始时间</TableHead>
+                  <TableHead className="w-[120px]">耗时</TableHead>
+                  <TableHead className="w-[100px] text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tasks.length === 0 ? (
                   <TableRow>
-                    <TableHead>任务名称</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead>服务器数</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>成功/失败</TableHead>
-                    <TableHead>开始时间</TableHead>
-                    <TableHead>耗时</TableHead>
+                    <TableCell colSpan={8} className="h-32 text-center">
+                      <div className="flex flex-col items-center justify-center text-muted-foreground">
+                        <Server className="h-8 w-8 mb-2" />
+                        <p className="text-sm">暂无执行历史</p>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {mockExecutionHistory.map(history => (
-                    <TableRow key={history.id}>
-                      <TableCell className="font-medium">
-                        {history.task}
-                      </TableCell>
+                ) : (
+                  tasks.map((task) => (
+                    <TableRow key={task.id}>
+                      <TableCell className="font-medium">{task.task_name}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {getTypeIcon(history.type)}
-                          {history.type}
+                          {getTypeIcon(task.task_type)}
+                          <span className="capitalize">{task.task_type}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono">
-                        {history.servers} 台
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(history.status)}
-                      </TableCell>
+                      <TableCell>{task.server_ids?.length || 0}</TableCell>
+                      <TableCell>{getStatusBadge(task.status)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span className="text-green-600 font-medium">
-                            {history.success}
-                          </span>
-                          /
-                          <span className="text-red-600 font-medium">
-                            {history.failed}
-                          </span>
+                          <span className="text-green-600">{task.success_count || 0}</span>
+                          <span className="text-muted-foreground">/</span>
+                          <span className="text-red-600">{task.failed_count || 0}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {history.startTime}
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(task.started_at)}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {history.duration}
+                      <TableCell>{formatDuration(task.started_at, task.completed_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {task.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartTask(task.id)}
+                              className="h-8 w-8 p-0"
+                              title="启动任务"
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="h-8 w-8 p-0 text-destructive"
+                            title="删除任务"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>
 
-      {/* 脚本库选择对话框 */}
+      {/* 脚本库对话框 */}
       <Dialog open={isScriptLibraryOpen} onOpenChange={setIsScriptLibraryOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto scrollbar-custom">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>选择脚本</DialogTitle>
+            <DialogTitle>脚本库</DialogTitle>
             <DialogDescription>
-              从脚本库中选择一个脚本，将自动填充到脚本内容框
+              从已保存的脚本中选择一个
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* 搜索框 */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="搜索脚本名称、描述或标签..."
+                placeholder="搜索脚本..."
                 className="pl-10"
                 value={scriptSearchTerm}
                 onChange={(e) => setScriptSearchTerm(e.target.value)}
               />
             </div>
 
-            {/* 脚本列表 */}
-            <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-custom">
+            <div className="space-y-2">
               {filteredScripts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <FileText className="h-12 w-12 mb-4" />
-                  <p>暂无匹配的脚本</p>
+                <div className="p-8 text-center text-muted-foreground">
+                  <FileText className="h-8 w-8 mx-auto mb-2" />
+                  <p className="text-sm">没有找到脚本</p>
                 </div>
               ) : (
-                filteredScripts.map(script => (
-                  <div
+                filteredScripts.map((script) => (
+                  <Card
                     key={script.id}
-                    className="border rounded-lg p-4 hover:bg-accent cursor-pointer transition-colors"
+                    className="cursor-pointer hover:border-primary transition-colors"
                     onClick={() => handleSelectScript(script)}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Code2 className="h-5 w-5 text-primary" />
-                          <h3 className="font-semibold">{script.name}</h3>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-base">{script.name}</CardTitle>
+                          {script.description && (
+                            <CardDescription className="mt-1">
+                              {script.description}
+                            </CardDescription>
+                          )}
                         </div>
-
-                        {script.description && (
-                          <p className="text-sm text-muted-foreground">
-                            {script.description}
-                          </p>
-                        )}
-
-                        <div className="bg-muted rounded-md p-3">
-                          <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap line-clamp-4">
-                            {script.content}
-                          </pre>
+                        <div className="flex flex-wrap gap-1 ml-4">
+                          {script.tags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
                         </div>
-
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Server className="h-3 w-3" />
-                            <span>{script.author}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>更新于 {script.updatedAt}</span>
-                          </div>
-                        </div>
-
-                        {script.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {script.tags.map(tag => (
-                              <Badge key={tag} variant="secondary" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
                       </div>
-
-                      <Button
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSelectScript(script)
-                        }}
-                      >
-                        选择
-                      </Button>
-                    </div>
-                  </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="bg-muted rounded-md p-3">
+                        <pre className="text-xs font-mono whitespace-pre-wrap line-clamp-3">
+                          {script.content}
+                        </pre>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                        <span>执行次数: {script.executions}</span>
+                        <span>{script.language}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))
               )}
             </div>

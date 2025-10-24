@@ -1,73 +1,62 @@
 version: '3.8'
 
 services:
-  # PostgreSQL 数据库
-  postgres:
-    image: postgres:16-alpine
-    container_name: easyssh-db
-    environment:
-      POSTGRES_USER: easyssh
-      POSTGRES_PASSWORD: easyssh_dev_password
-      POSTGRES_DB: easyssh
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U easyssh"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis 缓存
-  redis:
-    image: redis:7-alpine
-    container_name: easyssh-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  # Go 后端
-  server:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.server
-    container_name: easyssh-api
-    ports:
-      - "8521:8521"
-    environment:
-      - DATABASE_URL=postgresql://easyssh:easyssh_dev_password@postgres:5432/easyssh?sslmode=disable
-      - REDIS_URL=redis://redis:6379/0
-      - GIN_MODE=debug
-      - PORT=8521
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # Next.js 前端
-  web:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.web
-    container_name: easyssh-web
+  easyssh:
+    image: shanheee/easyssh:latest
+    container_name: easyssh
+    restart: always
     ports:
       - "8520:8520"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8521/api/v1
-      - PORT=8520
-    depends_on:
-      - server
-    restart: unless-stopped
+      DB_HOST: postgres   #your-postgres-host
+      DB_PORT: 5432       #your-postgres-port
+      DB_USER: easyssh    #your-username
+      DB_PASSWORD: easyssh_dev_password #your-password
+      DB_NAME: Easyssh_db  #your-database
+      DB_SSLMODE: disable #disable, require, verify-ca, verify-full
+      REDIS_HOST: redis   #your-redis-host
+      REDIS_PORT: 6379    #your-redis-port
+      REDIS_PASSWORD: ""  #your-redis-password, leave empty if no password
+      REDIS_DB: 0         #redis database index
+      ENV: production
+      GIN_MODE: release
+      # Security Configuration
+      # ⚠️ CRITICAL: Must change these in production!
+      JWT_SECRET: CHANGE-ME-random-secret-at-least-64-chars
+      JWT_ACCESS_EXPIRE_HOURS: 1
+      JWT_REFRESH_EXPIRE_HOURS: 168
+      ENCRYPTION_KEY: CHANGE-ME-32-byte-key-for-encryption
 
-volumes:
-  postgres_data:
-  redis_data:
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - easyssh-network
+
+  postgres:
+    image: postgres:16
+    container_name: Easyssh_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: easyssh
+      POSTGRES_PASSWORD: easyssh_dev_password
+      POSTGRES_DB: Easyssh_db
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - easyssh-network
+
+  redis:
+    image: redis:7
+    container_name: Easyssh_redis
+    restart: always
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    networks:
+      - easyssh-network
+
+networks:
+  easyssh-network:
+    name: easyssh-network
+    driver: bridge

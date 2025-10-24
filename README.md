@@ -33,49 +33,109 @@ EasySSH-NextJS/
 ## 快速开始
 
 ### 前置要求
+
+**开发环境**:
 - Node.js 20+
 - pnpm 9+
-- Go 1.21+ (可选，后端开发需要)
-- Docker & Docker Compose (可选，本地开发推荐)
+- Go 1.21+
+- PostgreSQL 14+ 和 Redis 7+（或通过 Docker 运行）
 
-### 1. 初始化项目
+**生产环境**（Docker 部署）:
+- Docker 20+
+- Docker Compose 2+
+
+### 开发环境启动
+
+编辑 `server/.env` 配置数据库连接：
 
 ```bash
-# 安装依赖并配置环境
-./scripts/setup.sh
+cd server
+cp .env.example .env
+# 编辑 .env 文件，配置数据库信息
 ```
 
-### 2. 启动开发环境
+#### 2. 安装依赖
 
-#### 方式 A: 使用一键脚本（推荐）
 ```bash
-# 同时启动前后端和基础设施服务
+# 安装前端依赖
+cd web
+pnpm install
+
+# 后端依赖会在运行时自动下载
+```
+
+#### 3. 启动服务
+
+```bash
+# 在项目根目录运行
 ./scripts/dev.sh
 ```
 
-#### 方式 B: 手动启动
+脚本会自动：
+- ✅ 检查必需的工具（Go、pnpm）
+- ✅ 检查配置文件是否存在
+- ✅ 安装前端依赖（如果需要）
+- ✅ 启动后端服务（端口 8521）
+- ✅ 启动前端服务（端口 8520）
 
+## 如果脚本无法运行，可以手动启动：
 ```bash
-# 1. 启动基础设施（PostgreSQL + Redis）
-docker-compose -f docker/docker-compose.dev.yml up -d
-
-# 2. 启动后端（支持热重载）
+# 启动后端
 cd server
-./dev.sh          # 开发模式（热重载）
-# 或
-go run cmd/api/main.go  # 普通模式
-
-# 3. 启动前端（新终端）
+make dev # 或者 go run cmd/api/main.go
+```
+```bash
+# 启动前端
 cd web
 pnpm dev
 ```
 
-### 3. 访问应用
+#### 4. 访问应用
 
 - **前端**: http://localhost:8520
 - **后端 API**: http://localhost:8521
-- **数据库**: postgresql://easyssh:easyssh_dev_password@localhost:5432/easyssh
-- **Redis**: redis://localhost:6379
+
+按 `Ctrl+C` 停止所有服务。
+
+### 生产环境部署
+
+使用 Docker Compose 部署（详见 [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)）。
+
+支持多种环境变量注入方式：
+
+#### 方式 1: 使用 .env 文件（推荐）
+
+```bash
+cd docker
+cp .env.example .env
+vim .env  # 修改密码和密钥
+
+# 应用部署（支持使用外部数据库）
+docker compose up -d
+```
+
+#### 方式 2: 命令行直接注入（无需 .env 文件）
+
+```bash
+# 适合 CI/CD 和密钥管理系统
+POSTGRES_PASSWORD=xxx \
+JWT_SECRET=xxx \
+ENCRYPTION_KEY=xxx \
+docker-compose --profile all up -d
+```
+
+#### 方式 3: 使用不同环境文件
+
+```bash
+# 多环境部署
+docker compose --env-file .env.prod --profile all up -d
+```
+
+**关键特性**：
+- ✅ 环境变量可从 `.env` 文件或命令行注入
+- ✅ 必需变量（密码、密钥）强制检查，防止配置错误
+
+详细配置和最佳实践请参考 [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)。
 
 ## 项目结构详解
 

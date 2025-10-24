@@ -103,7 +103,7 @@ interface ClipboardFile {
 }
 
 interface SftpManagerProps {
-  serverId: number
+  serverId: string
   serverName: string
   host: string
   username: string

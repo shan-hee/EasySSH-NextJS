@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Kbd } from "@/components/ui/kbd"
+import { toast } from "sonner"
 import {
   Table,
   TableBody,
@@ -34,7 +36,9 @@ import {
   Trash2,
   X,
   Code2,
-  MoreVertical
+  MoreVertical,
+  Loader2,
+  RefreshCw
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -43,66 +47,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-
-// 模拟脚本数据
-const mockScripts = [
-  {
-    id: 1,
-    name: "系统监控脚本",
-    description: "监控CPU、内存、磁盘使用情况",
-    content: "#!/bin/bash\ntop -bn1 | grep 'Cpu(s)'\nfree -h\ndf -h",
-    language: "bash",
-    tags: ["监控", "系统"],
-    createdAt: "2024-01-15",
-    updatedAt: "2024-01-15",
-    author: "管理员",
-    executions: 24,
-  },
-  {
-    id: 2,
-    name: "备份数据库",
-    description: "自动备份MySQL数据库",
-    content: "#!/bin/bash\nmysqldump -u $USER -p$PASS $DB > backup_$(date +%Y%m%d).sql",
-    language: "bash",
-    tags: ["备份", "数据库"],
-    createdAt: "2024-01-14",
-    updatedAt: "2024-01-15",
-    author: "管理员",
-    executions: 12,
-  },
-  {
-    id: 3,
-    name: "清理日志文件",
-    description: "清理超过7天的日志文件",
-    content: "#!/bin/bash\nfind /var/log -name '*.log' -mtime +7 -delete",
-    language: "bash",
-    tags: ["清理", "日志"],
-    createdAt: "2024-01-13",
-    updatedAt: "2024-01-14",
-    author: "管理员",
-    executions: 8,
-  },
-  {
-    id: 4,
-    name: "Docker容器管理",
-    description: "批量重启Docker容器",
-    content: "#!/bin/bash\ndocker container ls -q | xargs docker restart",
-    language: "bash",
-    tags: ["Docker", "容器"],
-    createdAt: "2024-01-12",
-    updatedAt: "2024-01-13",
-    author: "管理员",
-    executions: 15,
-  },
-]
+import { scriptsApi, type Script } from "@/lib/api"
 
 export default function ScriptsPage() {
-  const [scripts, setScripts] = useState(mockScripts)
+  const router = useRouter()
+  const [scripts, setScripts] = useState<Script[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingScriptId, setEditingScriptId] = useState<number | null>(null)
+  const [editingScriptId, setEditingScriptId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   // 新建脚本表单状态
   const [newScript, setNewScript] = useState({
@@ -129,6 +85,49 @@ export default function ScriptsPage() {
   const [showEditSuggestions, setShowEditSuggestions] = useState(false)
   const [selectedEditSuggestionIndex, setSelectedEditSuggestionIndex] = useState(-1)
   const editSuggestionRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+  // 加载脚本列表
+  const loadScripts = async () => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      const response = await scriptsApi.list(token, {
+        page: 1,
+        limit: 100,
+        search: searchTerm || undefined,
+        tags: selectedTag ? [selectedTag] : undefined,
+      })
+
+      setScripts(response.data)
+    } catch (error: any) {
+      console.error("加载脚本列表失败:", error)
+      if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+        toast.error("登录已过期，请重新登录")
+        router.push("/login")
+      } else {
+        toast.error(`加载脚本失败: ${error.message}`)
+      }
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  // 刷新脚本列表
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await loadScripts()
+  }
+
+  // 初始加载
+  useEffect(() => {
+    loadScripts()
+  }, [])
 
   // 自动滚动选中的建议项到可见区域
   useEffect(() => {
@@ -180,18 +179,19 @@ export default function ScriptsPage() {
     return matchesSearch && matchesTag
   })
 
-  const handleExecute = (scriptId: number) => {
+  const handleExecute = (scriptId: string) => {
     console.log("执行脚本:", scriptId)
-    // 这里应该打开执行对话框
+    toast.info("脚本执行功能即将推出")
+    // TODO: 实现脚本执行对话框和逻辑
   }
 
-  const handleEdit = (scriptId: number) => {
+  const handleEdit = (scriptId: string) => {
     const script = scripts.find(s => s.id === scriptId)
     if (script) {
       setEditingScriptId(scriptId)
       setEditScript({
         name: script.name,
-        description: script.description,
+        description: script.description || "",
         content: script.content,
         tags: [...script.tags],
       })
@@ -199,9 +199,26 @@ export default function ScriptsPage() {
     }
   }
 
-  const handleDelete = (scriptId: number) => {
-    console.log("删除脚本:", scriptId)
-    // 这里应该显示确认对话框
+  const handleDelete = async (scriptId: string) => {
+    if (!confirm("确定要删除这个脚本吗？")) {
+      return
+    }
+
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      await scriptsApi.delete(token, scriptId)
+      toast.success("脚本删除成功")
+      await loadScripts()
+    } catch (error: any) {
+      console.error("删除脚本失败:", error)
+      toast.error(`删除脚本失败: ${error.message}`)
+    }
   }
 
   const handleAddTag = (tag?: string) => {
@@ -317,36 +334,46 @@ export default function ScriptsPage() {
     })
   }
 
-  const handleCreateScript = () => {
+  const handleCreateScript = async () => {
     if (!newScript.name || !newScript.content) {
-      alert("请填写脚本名称和内容")
+      toast.error("请填写脚本名称和内容")
       return
     }
 
-    const script = {
-      id: scripts.length + 1,
-      name: newScript.name,
-      description: newScript.description,
-      content: newScript.content,
-      language: "bash",
-      tags: newScript.tags,
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0],
-      author: "管理员",
-      executions: 0,
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
+      }
+
+      await scriptsApi.create(token, {
+        name: newScript.name,
+        description: newScript.description || "",
+        content: newScript.content,
+        language: "bash",
+        tags: newScript.tags,
+      })
+
+      toast.success("脚本创建成功")
+      setIsDialogOpen(false)
+
+      // 重置表单
+      setNewScript({
+        name: "",
+        description: "",
+        content: "",
+        tags: [],
+      })
+      setTagInput("")
+
+      // 重新加载列表
+      await loadScripts()
+    } catch (error: any) {
+      console.error("创建脚本失败:", error)
+      toast.error(`创建脚本失败: ${error.message}`)
     }
-
-    setScripts([script, ...scripts])
-    setIsDialogOpen(false)
-
-    // 重置表单
-    setNewScript({
-      name: "",
-      description: "",
-      content: "",
-      tags: [],
-    })
-    setTagInput("")
   }
 
   const handleOpenDialog = () => {
@@ -367,39 +394,49 @@ export default function ScriptsPage() {
     }
   }
 
-  const handleUpdateScript = () => {
+  const handleUpdateScript = async () => {
     if (!editScript.name || !editScript.content) {
-      alert("请填写脚本名称和内容")
+      toast.error("请填写脚本名称和内容")
       return
     }
 
     if (editingScriptId === null) return
 
-    setScripts(scripts.map(script => {
-      if (script.id === editingScriptId) {
-        return {
-          ...script,
-          name: editScript.name,
-          description: editScript.description,
-          content: editScript.content,
-          tags: editScript.tags,
-          updatedAt: new Date().toISOString().split('T')[0],
-        }
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        toast.error("未登录，请先登录")
+        router.push("/login")
+        return
       }
-      return script
-    }))
 
-    setIsEditDialogOpen(false)
-    setEditingScriptId(null)
+      await scriptsApi.update(token, editingScriptId, {
+        name: editScript.name,
+        description: editScript.description || "",
+        content: editScript.content,
+        language: "bash",
+        tags: editScript.tags,
+      })
 
-    // 重置表单
-    setEditScript({
-      name: "",
-      description: "",
-      content: "",
-      tags: [],
-    })
-    setEditTagInput("")
+      toast.success("脚本更新成功")
+      setIsEditDialogOpen(false)
+      setEditingScriptId(null)
+
+      // 重置表单
+      setEditScript({
+        name: "",
+        description: "",
+        content: "",
+        tags: [],
+      })
+      setEditTagInput("")
+
+      // 重新加载列表
+      await loadScripts()
+    } catch (error: any) {
+      console.error("更新脚本失败:", error)
+      toast.error(`更新脚本失败: ${error.message}`)
+    }
   }
 
   const handleCloseEditDialog = (open: boolean) => {
@@ -426,13 +463,29 @@ export default function ScriptsPage() {
           { title: "脚本管理" }
         ]}
       >
-        <Button onClick={handleOpenDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          新建脚本
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            刷新
+          </Button>
+          <Button onClick={handleOpenDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            新建脚本
+          </Button>
+        </div>
       </PageHeader>
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         {/* 搜索和筛选 */}
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-4">
@@ -580,7 +633,8 @@ export default function ScriptsPage() {
             </TableBody>
           </Table>
         </Card>
-      </div>
+        </div>
+      )}
 
       {/* 新建脚本弹窗 */}
       <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>

@@ -5,44 +5,15 @@ import { toast } from "@/components/ui/sonner"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import { TerminalSession } from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"
-import { useRouter } from "next/navigation"
-
-// 模拟服务器数据
-const servers: QuickServer[] = [
-  {
-    id: 1,
-    name: "Web Server 01",
-    host: "192.168.1.100",
-    port: 22,
-    username: "root",
-    status: "online" as const,
-    group: "生产",
-    tags: ["web"],
-  },
-  {
-    id: 2,
-    name: "Database Server",
-    host: "192.168.1.101",
-    port: 22,
-    username: "admin",
-    status: "online" as const,
-    group: "生产",
-    tags: ["db"],
-  },
-  {
-    id: 3,
-    name: "Dev Server",
-    host: "192.168.1.102",
-    port: 2222,
-    username: "developer",
-    status: "offline" as const,
-    group: "开发",
-    tags: ["dev"],
-  },
-]
+import { useRouter, useSearchParams } from "next/navigation"
+import { serversApi, type Server } from "@/lib/api"
+import { Loader2 } from "lucide-react"
 
 export default function TerminalPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [servers, setServers] = useState<QuickServer[]>([])
+  const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState<TerminalSession[]>(() => {
     // 使用稳定常量 id，避免 SSR/CSR 时间差导致的 hydration mismatch
     const now = Date.now()
@@ -67,6 +38,40 @@ export default function TerminalPage() {
   const [inactiveMinutes, setInactiveMinutes] = useState(60)
   const inactivityNotifiedRef = useRef<Set<string>>(new Set())
 
+  // 加载服务器列表
+  useEffect(() => {
+    loadServers()
+  }, [])
+
+  // 处理URL参数中的server参数（从服务器列表跳转过来）
+  useEffect(() => {
+    const serverId = searchParams.get("server")
+    if (serverId && servers.length > 0) {
+      const server = servers.find(s => s.id.toString() === serverId)
+      if (server && server.status === "online") {
+        // 自动创建该服务器的终端会话
+        const now = Date.now()
+        const sessionId = `auto-${now}`
+        const newSession: TerminalSession = {
+          id: sessionId,
+          serverId: server.id,
+          serverName: server.name,
+          host: server.host,
+          port: server.port,
+          username: server.username,
+          isConnected: true,
+          status: "connected",
+          lastActivity: now,
+          group: server.group,
+          tags: server.tags,
+          pinned: false,
+          type: "terminal",
+        }
+        setSessions(prev => [...prev, newSession])
+      }
+    }
+  }, [searchParams, servers])
+
   // 读取通用设置（仅使用本地存储集成）
   useEffect(() => {
     try {
@@ -78,6 +83,49 @@ export default function TerminalPage() {
       if (hb != null) setHibernateBackground(hb === "true")
     } catch {}
   }, [])
+
+  // 加载服务器列表
+  async function loadServers() {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem("easyssh_access_token")
+
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await serversApi.list(token, {
+        page: 1,
+        limit: 100, // 加载所有服务器
+      })
+
+      // 将Server类型转换为QuickServer类型
+      const quickServers: QuickServer[] = response.data.map((server: Server) => ({
+        id: parseInt(server.id),
+        name: server.name,
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        status: server.status === "online" ? "online" : "offline",
+        group: server.group,
+        tags: server.tags,
+      }))
+
+      setServers(quickServers)
+    } catch (error: any) {
+      console.error("Failed to load servers:", error)
+
+      if (error?.status === 401) {
+        toast.error("登录已过期，请重新登录")
+        router.push("/login")
+      } else {
+        toast.error("加载服务器列表失败: " + (error?.message || "未知错误"))
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // 创建“快速连接”页签
   const handleNewSession = (): string | void => {
@@ -190,7 +238,7 @@ export default function TerminalPage() {
         if (!s) return
         if (now - s.lastActivity >= threshold && !inactivityNotifiedRef.current.has(s.id)) {
           inactivityNotifiedRef.current.add(s.id)
-          toast(`会话“${s.serverName}”长时间未活动`, {
+          toast(`会话"${s.serverName}"长时间未活动`, {
             description: `已超过 ${inactiveMinutes} 分钟未活动，是否断开？`,
             action: { label: "断开", onClick: () => handleCloseSession(s.id) },
           })
@@ -199,6 +247,18 @@ export default function TerminalPage() {
     }, 60 * 1000)
     return () => clearInterval(t)
   }, [sessions, inactiveMinutes])
+
+  // 加载中状态
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">加载服务器列表...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

@@ -1,26 +1,129 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import Link from "next/link"
+import { serversApi, auditLogsApi, type AuditLogStatisticsResponse } from "@/lib/api"
+import { Loader2, Server, Activity, History } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { toast } from "@/components/ui/sonner"
+
+interface DashboardStats {
+  totalServers: number
+  onlineServers: number
+  offlineServers: number
+  todayConnections: number
+  recentLogsCount: number
+}
 
 export default function Page() {
+  const router = useRouter()
+  const [stats, setStats] = useState<DashboardStats>({
+    totalServers: 0,
+    onlineServers: 0,
+    offlineServers: 0,
+    todayConnections: 0,
+    recentLogsCount: 0,
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
+  async function loadDashboardData() {
+    try {
+      setLoading(true)
+      const accessToken = localStorage.getItem("easyssh_access_token")
+
+      if (!accessToken) {
+        router.push("/login")
+        return
+      }
+
+      // 并行加载服务器列表和审计日志统计
+      const [serversResponse, logsStats] = await Promise.all([
+        serversApi.list(accessToken, { page: 1, limit: 1000 }),
+        auditLogsApi.getStatistics(accessToken).catch(() => null), // 如果失败，返回 null
+      ])
+
+      const onlineCount = serversResponse.data.filter(s => s.status === "online").length
+      const offlineCount = serversResponse.data.filter(s => s.status === "offline").length
+
+      // 统计今日连接（根据操作日志中的登录操作）
+      const todayConnections = logsStats
+        ? Object.values(logsStats.by_action).reduce((sum, count) => sum + count, 0)
+        : 0
+
+      // 最近日志数量
+      const recentLogsCount = logsStats?.total || 0
+
+      setStats({
+        totalServers: serversResponse.total,
+        onlineServers: onlineCount,
+        offlineServers: offlineCount,
+        todayConnections,
+        recentLogsCount,
+      })
+    } catch (error: any) {
+      console.error("Failed to load dashboard data:", error)
+
+      if (error?.status === 401) {
+        toast.error("登录已过期，请重新登录")
+        router.push("/login")
+      } else {
+        toast.error("加载仪表盘数据失败: " + (error?.message || "未知错误"))
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 加载状态
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="仪表盘" showTitleInBreadcrumb={false} />
+        <div className="flex flex-1 items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">加载仪表盘数据...</p>
+          </div>
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       <PageHeader title="仪表盘" showTitleInBreadcrumb={false} />
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         <div className="grid auto-rows-min gap-4 md:grid-cols-3">
           <div className="bg-card border rounded-xl p-6">
-            <h3 className="text-lg font-semibold mb-2">服务器总数</h3>
-            <p className="text-3xl font-bold text-primary">12</p>
-            <p className="text-sm text-muted-foreground">在线: 10 | 离线: 2</p>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">服务器总数</h3>
+              <Server className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="text-3xl font-bold text-primary">{stats.totalServers}</p>
+            <p className="text-sm text-muted-foreground">
+              在线: {stats.onlineServers} | 离线: {stats.offlineServers}
+            </p>
           </div>
           <div className="bg-card border rounded-xl p-6">
-            <h3 className="text-lg font-semibold mb-2">活跃连接</h3>
-            <p className="text-3xl font-bold text-green-600">5</p>
-            <p className="text-sm text-muted-foreground">当前正在使用的连接</p>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">操作总数</h3>
+              <Activity className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="text-3xl font-bold text-green-600">{stats.todayConnections}</p>
+            <p className="text-sm text-muted-foreground">所有审计日志记录</p>
           </div>
           <div className="bg-card border rounded-xl p-6">
-            <h3 className="text-lg font-semibold mb-2">今日连接</h3>
-            <p className="text-3xl font-bold text-blue-600">28</p>
-            <p className="text-sm text-muted-foreground">比昨日增加 15%</p>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">历史记录</h3>
+              <History className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="text-3xl font-bold text-blue-600">{stats.recentLogsCount}</p>
+            <p className="text-sm text-muted-foreground">系统操作记录</p>
           </div>
         </div>
         <div className="bg-card border rounded-xl p-6 flex-1">

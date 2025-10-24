@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -14,75 +14,187 @@ import {
   Server,
   Activity,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from "lucide-react"
+import { serversApi, monitoringApi, type Server as ApiServer, type SystemInfo, type CPUInfo, type MemoryInfo, type DiskInfo, type NetworkInterface } from "@/lib/api"
+import { toast } from "@/components/ui/sonner"
+import { useRouter } from "next/navigation"
 
-// 模拟服务器资源数据
-const mockServerResources = [
-  {
-    id: 1,
-    name: "Web Server 01",
-    host: "192.168.1.100",
-    status: "online",
-    cpu: { usage: 45, cores: 4, temperature: 62 },
-    memory: { used: 6.2, total: 16, usage: 39 },
-    disk: { used: 120, total: 500, usage: 24 },
-    network: { rx: 1.2, tx: 0.8, unit: "MB/s" },
-    uptime: "15天 6小时",
-    lastUpdate: "30秒前"
-  },
-  {
-    id: 2,
-    name: "Database Server",
-    host: "192.168.1.101",
-    status: "online",
-    cpu: { usage: 78, cores: 8, temperature: 71 },
-    memory: { used: 28.5, total: 32, usage: 89 },
-    disk: { used: 180, total: 200, usage: 90 },
-    network: { rx: 2.5, tx: 1.8, unit: "MB/s" },
-    uptime: "30天 12小时",
-    lastUpdate: "45秒前"
-  },
-  {
-    id: 3,
-    name: "Dev Server",
-    host: "192.168.1.102",
-    status: "offline",
-    cpu: { usage: 0, cores: 2, temperature: 0 },
-    memory: { used: 0, total: 8, usage: 0 },
-    disk: { used: 25, total: 100, usage: 25 },
-    network: { rx: 0, tx: 0, unit: "MB/s" },
-    uptime: "0天 0小时",
-    lastUpdate: "5分钟前"
-  },
-  {
-    id: 4,
-    name: "Load Balancer",
-    host: "192.168.1.103",
-    status: "warning",
-    cpu: { usage: 92, cores: 4, temperature: 85 },
-    memory: { used: 1.8, total: 4, usage: 45 },
-    disk: { used: 35, total: 80, usage: 44 },
-    network: { rx: 5.2, tx: 3.8, unit: "MB/s" },
-    uptime: "5天 8小时",
-    lastUpdate: "1分钟前"
+// 服务器资源数据接口
+interface ServerResource {
+  id: string
+  name: string
+  host: string
+  status: "online" | "warning" | "offline" | "error"
+  cpu: { usage: number; cores: number; temperature?: number }
+  memory: { used: number; total: number; usage: number }
+  disk: { used: number; total: number; usage: number }
+  network: { rx: number; tx: number; unit: string }
+  uptime: string
+  lastUpdate: string
+}
+
+function formatBytes(bytes: number): number {
+  return Number((bytes / (1024 * 1024 * 1024)).toFixed(1))
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  return `${days}天 ${hours}小时`
+}
+
+function formatNetworkSpeed(bytesPerSec: number): { value: number; unit: string } {
+  const mbps = bytesPerSec / (1024 * 1024)
+  if (mbps >= 1) {
+    return { value: Number(mbps.toFixed(1)), unit: "MB/s" }
   }
-]
+  const kbps = bytesPerSec / 1024
+  return { value: Number(kbps.toFixed(1)), unit: "KB/s" }
+}
 
 export default function MonitoringResourcesPage() {
-  const [servers, setServers] = useState(mockServerResources)
+  const router = useRouter()
+  const [servers, setServers] = useState<ServerResource[]>([])
+  const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [token, setToken] = useState<string>("")
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
+    try {
+      setLoading(true)
+      const accessToken = localStorage.getItem("easyssh_access_token")
+
+      if (!accessToken) {
+        router.push("/login")
+        return
+      }
+
+      setToken(accessToken)
+
+      // 加载服务器列表
+      const serverListResponse = await serversApi.list(accessToken, {
+        page: 1,
+        limit: 100,
+      })
+
+      // 并行加载所有在线服务器的监控数据
+      const resourcesPromises = serverListResponse.data.map(async (server: ApiServer) => {
+        if (server.status !== "online") {
+          // 离线服务器返回默认数据
+          return {
+            id: server.id,
+            name: server.name,
+            host: server.host,
+            status: "offline" as const,
+            cpu: { usage: 0, cores: 0 },
+            memory: { used: 0, total: 0, usage: 0 },
+            disk: { used: 0, total: 0, usage: 0 },
+            network: { rx: 0, tx: 0, unit: "MB/s" },
+            uptime: "0天 0小时",
+            lastUpdate: new Date().toLocaleTimeString("zh-CN"),
+          }
+        }
+
+        try {
+          // 并行获取所有监控数据
+          const [systemInfo, cpuInfo, memoryInfo, diskInfo, networkInfo] = await Promise.all([
+            monitoringApi.getSystemInfo(accessToken, server.id),
+            monitoringApi.getCPUInfo(accessToken, server.id),
+            monitoringApi.getMemoryInfo(accessToken, server.id),
+            monitoringApi.getDiskInfo(accessToken, server.id),
+            monitoringApi.getNetworkInfo(accessToken, server.id),
+          ])
+
+          // 计算总磁盘使用情况
+          const totalDiskUsed = diskInfo.disks.reduce((sum, disk) => sum + disk.used, 0)
+          const totalDiskSize = diskInfo.disks.reduce((sum, disk) => sum + disk.total, 0)
+          const diskUsagePercent = totalDiskSize > 0 ? Math.round((totalDiskUsed / totalDiskSize) * 100) : 0
+
+          // 计算网络速度（假设取第一个网卡，或者所有网卡的总和）
+          const rxSpeed = networkInfo.interfaces.reduce((sum, iface) => sum + (iface.bytes_recv || 0), 0)
+          const txSpeed = networkInfo.interfaces.reduce((sum, iface) => sum + (iface.bytes_sent || 0), 0)
+          const rxFormatted = formatNetworkSpeed(rxSpeed / 60) // 假设是每分钟的数据，除以60得到每秒
+          const txFormatted = formatNetworkSpeed(txSpeed / 60)
+
+          // 判断状态
+          let status: "online" | "warning" | "offline" | "error" = "online"
+          if (cpuInfo.usage_percent >= 90 || memoryInfo.usage_percent >= 90 || diskUsagePercent >= 90) {
+            status = "warning"
+          }
+
+          return {
+            id: server.id,
+            name: server.name,
+            host: server.host,
+            status,
+            cpu: {
+              usage: Math.round(cpuInfo.usage_percent),
+              cores: cpuInfo.cores,
+              temperature: undefined, // 后端API暂未提供温度数据
+            },
+            memory: {
+              used: formatBytes(memoryInfo.used),
+              total: formatBytes(memoryInfo.total),
+              usage: Math.round(memoryInfo.usage_percent),
+            },
+            disk: {
+              used: formatBytes(totalDiskUsed),
+              total: formatBytes(totalDiskSize),
+              usage: diskUsagePercent,
+            },
+            network: {
+              rx: rxFormatted.value,
+              tx: txFormatted.value,
+              unit: rxFormatted.unit,
+            },
+            uptime: formatUptime(systemInfo.uptime),
+            lastUpdate: new Date().toLocaleTimeString("zh-CN"),
+          }
+        } catch (error) {
+          console.error(`Failed to load monitoring data for ${server.name}:`, error)
+          // 监控数据加载失败，返回错误状态
+          return {
+            id: server.id,
+            name: server.name,
+            host: server.host,
+            status: "error" as const,
+            cpu: { usage: 0, cores: 0 },
+            memory: { used: 0, total: 0, usage: 0 },
+            disk: { used: 0, total: 0, usage: 0 },
+            network: { rx: 0, tx: 0, unit: "MB/s" },
+            uptime: "未知",
+            lastUpdate: new Date().toLocaleTimeString("zh-CN"),
+          }
+        }
+      })
+
+      const resourcesData = await Promise.all(resourcesPromises)
+      setServers(resourcesData)
+    } catch (error: any) {
+      console.error("Failed to load monitoring data:", error)
+
+      if (error?.status === 401) {
+        toast.error("登录已过期，请重新登录")
+        router.push("/login")
+      } else {
+        toast.error("加载监控数据失败: " + (error?.message || "未知错误"))
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    // 模拟刷新数据
-    setTimeout(() => {
-      setServers(prev => prev.map(server => ({
-        ...server,
-        lastUpdate: "刚刚"
-      })))
-      setIsRefreshing(false)
-    }, 1000)
+    await loadData()
+    setIsRefreshing(false)
+    toast.success("数据已刷新")
   }
 
   const getStatusColor = (status: string) => {
@@ -90,6 +202,7 @@ export default function MonitoringResourcesPage() {
       case "online": return "text-green-600"
       case "warning": return "text-yellow-600"
       case "offline": return "text-red-600"
+      case "error": return "text-orange-600"
       default: return "text-gray-600"
     }
   }
@@ -99,6 +212,7 @@ export default function MonitoringResourcesPage() {
       case "online": return <Badge className="bg-green-100 text-green-800">在线</Badge>
       case "warning": return <Badge className="bg-yellow-100 text-yellow-800">警告</Badge>
       case "offline": return <Badge className="bg-red-100 text-red-800">离线</Badge>
+      case "error": return <Badge className="bg-orange-100 text-orange-800">错误</Badge>
       default: return <Badge variant="secondary">未知</Badge>
     }
   }
@@ -107,6 +221,27 @@ export default function MonitoringResourcesPage() {
     if (usage >= 90) return "bg-red-500"
     if (usage >= 70) return "bg-yellow-500"
     return "bg-green-500"
+  }
+
+  // 加载状态
+  if (loading) {
+    return (
+      <>
+        <PageHeader
+          title="资源监控"
+          breadcrumbs={[
+            { title: "监控与审计", href: "#" },
+            { title: "资源监控" }
+          ]}
+        />
+        <div className="flex flex-1 items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">加载监控数据...</p>
+          </div>
+        </div>
+      </>
+    )
   }
 
   return (
@@ -219,7 +354,7 @@ export default function MonitoringResourcesPage() {
                       <span>CPU</span>
                     </div>
                     <span className="font-mono">
-                      {server.cpu.usage}% ({server.cpu.cores} 核心, {server.cpu.temperature}°C)
+                      {server.cpu.usage}% ({server.cpu.cores} 核心{server.cpu.temperature ? `, ${server.cpu.temperature}°C` : ''})
                     </span>
                   </div>
                   <Progress

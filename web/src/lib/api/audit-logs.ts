@@ -1,0 +1,131 @@
+import { apiFetch } from "@/lib/api-client"
+
+/**
+ * 审计日志信息
+ */
+export interface AuditLog {
+  id: string
+  user_id: string
+  username: string
+  server_id?: string
+  action: string
+  resource: string
+  status: "success" | "failure"
+  ip: string
+  user_agent: string
+  details?: string
+  error_msg?: string
+  duration?: number
+  created_at: string
+}
+
+/**
+ * 审计日志列表响应
+ */
+export interface AuditLogListResponse {
+  data: AuditLog[]
+  total: number
+  page: number
+  limit: number
+}
+
+/**
+ * 审计日志统计响应
+ */
+export interface AuditLogStatisticsResponse {
+  total: number
+  success: number
+  failure: number
+  by_action: Record<string, number>
+  by_resource: Record<string, number>
+  by_user: Record<string, number>
+  recent_failures: AuditLog[]
+}
+
+/**
+ * 审计日志 API 服务
+ */
+export const auditLogsApi = {
+  /**
+   * 获取审计日志列表
+   */
+  async list(token: string, params?: {
+    page?: number
+    limit?: number
+    user_id?: string
+    server_id?: string
+    action?: string
+    resource?: string
+    status?: string
+    start_date?: string
+    end_date?: string
+  }): Promise<AuditLogListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.page) queryParams.set("page", params.page.toString())
+    if (params?.limit) queryParams.set("limit", params.limit.toString())
+    if (params?.user_id) queryParams.set("user_id", params.user_id)
+    if (params?.server_id) queryParams.set("server_id", params.server_id)
+    if (params?.action) queryParams.set("action", params.action)
+    if (params?.resource) queryParams.set("resource", params.resource)
+    if (params?.status) queryParams.set("status", params.status)
+    if (params?.start_date) queryParams.set("start_date", params.start_date)
+    if (params?.end_date) queryParams.set("end_date", params.end_date)
+
+    const url = `/audit-logs${queryParams.toString() ? `?${queryParams}` : ""}`
+    return apiFetch<AuditLogListResponse>(url, { token })
+  },
+
+  /**
+   * 获取当前用户的审计日志
+   */
+  async getMyLogs(token: string, params?: {
+    page?: number
+    limit?: number
+    action?: string
+    start_date?: string
+    end_date?: string
+  }): Promise<AuditLogListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.page) queryParams.set("page", params.page.toString())
+    if (params?.limit) queryParams.set("limit", params.limit.toString())
+    if (params?.action) queryParams.set("action", params.action)
+    if (params?.start_date) queryParams.set("start_date", params.start_date)
+    if (params?.end_date) queryParams.set("end_date", params.end_date)
+
+    const url = `/audit-logs/me${queryParams.toString() ? `?${queryParams}` : ""}`
+    return apiFetch<AuditLogListResponse>(url, { token })
+  },
+
+  /**
+   * 获取审计日志详情
+   */
+  async getById(token: string, id: string): Promise<AuditLog> {
+    return apiFetch<AuditLog>(`/audit-logs/${id}`, { token })
+  },
+
+  /**
+   * 获取审计日志统计信息
+   */
+  async getStatistics(token: string, params?: {
+    start_date?: string
+    end_date?: string
+  }): Promise<AuditLogStatisticsResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.start_date) queryParams.set("start_date", params.start_date)
+    if (params?.end_date) queryParams.set("end_date", params.end_date)
+
+    const url = `/audit-logs/statistics${queryParams.toString() ? `?${queryParams}` : ""}`
+    return apiFetch<AuditLogStatisticsResponse>(url, { token })
+  },
+
+  /**
+   * 清理旧日志
+   */
+  async cleanup(token: string, beforeDate: string): Promise<{ deleted: number }> {
+    return apiFetch<{ deleted: number }>(`/audit-logs/cleanup`, {
+      method: "DELETE",
+      token,
+      body: { before_date: beforeDate },
+    })
+  },
+}

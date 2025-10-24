@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { PageHeader } from "@/components/page-header"
 import { SftpManager } from "@/components/sftp/sftp-manager"
-import { FolderOpen, Server, Plus, ChevronDown, GripVertical } from "lucide-react"
+import { FolderOpen, Server, Plus, ChevronDown, GripVertical, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -35,114 +35,53 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { createPortal } from 'react-dom'
+import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
+import { toast } from "@/components/ui/sonner"
+import { useRouter } from "next/navigation"
 
-// 模拟服务器数据
-const servers = [
-  {
-    id: 1,
-    name: "Web Server 01",
-    host: "192.168.1.100",
-    status: "online" as const,
-  },
-  {
-    id: 2,
-    name: "Database Server",
-    host: "192.168.1.101",
-    status: "online" as const,
-  },
-  {
-    id: 3,
-    name: "Dev Server",
-    host: "192.168.1.102",
-    status: "offline" as const,
-  },
-]
+// 将后端FileInfo转换为组件使用的文件格式
+type ComponentFile = {
+  name: string
+  type: "directory" | "file"
+  size: string
+  modified: string
+  permissions: string
+  owner: string
+  group: string
+}
 
-// 模拟文件数据
-const mockFiles = [
-  {
-    name: "..",
-    type: "directory" as const,
-    size: "-",
-    modified: "2024-01-15 10:30",
-    permissions: "drwxr-xr-x",
-    owner: "root",
-    group: "root",
-  },
-  {
-    name: "var",
-    type: "directory" as const,
-    size: "-",
-    modified: "2024-01-15 09:45",
-    permissions: "drwxr-xr-x",
-    owner: "root",
-    group: "root",
-  },
-  {
-    name: "etc",
-    type: "directory" as const,
-    size: "-",
-    modified: "2024-01-14 16:20",
-    permissions: "drwxr-xr-x",
-    owner: "root",
-    group: "root",
-  },
-  {
-    name: "home",
-    type: "directory" as const,
-    size: "-",
-    modified: "2024-01-13 14:30",
-    permissions: "drwxr-xr-x",
-    owner: "root",
-    group: "root",
-  },
-  {
-    name: "config.txt",
-    type: "file" as const,
-    size: "2.4 KB",
-    modified: "2024-01-15 11:22",
-    permissions: "-rw-r--r--",
-    owner: "root",
-    group: "root",
-  },
-  {
-    name: "script.sh",
-    type: "file" as const,
-    size: "856 B",
-    modified: "2024-01-14 15:45",
-    permissions: "-rwxr-xr-x",
-    owner: "root",
-    group: "root",
-  },
-  {
-    name: "data.json",
-    type: "file" as const,
-    size: "15.6 MB",
-    modified: "2024-01-13 18:30",
-    permissions: "-rw-r--r--",
-    owner: "admin",
-    group: "admin",
-  },
-  {
-    name: "backup.tar.gz",
-    type: "file" as const,
-    size: "245.8 MB",
-    modified: "2024-01-12 22:15",
-    permissions: "-rw-r--r--",
-    owner: "root",
-    group: "root",
-  },
-]
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "-"
+  const k = 1024
+  const sizes = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
+}
+
+function convertFileInfo(file: FileInfo): ComponentFile {
+  return {
+    name: file.name,
+    type: file.is_dir ? "directory" : "file",
+    size: file.is_dir ? "-" : formatFileSize(file.size),
+    modified: new Date(file.mod_time).toLocaleString("sv-SE", {
+      timeZone: "Asia/Shanghai",
+      hour12: false
+    }).replace("T", " ").slice(0, 19),
+    permissions: file.permissions || file.mode,
+    owner: file.owner || "unknown",
+    group: file.group || "unknown",
+  }
+}
 
 // 定义连接会话接口
 interface SftpSession {
   id: string
-  serverId: number | null
+  serverId: string
   serverName: string
   host: string
   username: string
   currentPath: string
-  files: typeof mockFiles
+  files: ComponentFile[]
   isConnected: boolean
   label: string  // 会话自定义标签
   color?: string  // 会话标识颜色
@@ -283,6 +222,11 @@ DragPreviewToolbar.displayName = "DragPreviewToolbar"
 SortableSession.displayName = "SortableSession"
 
 export default function SftpPage() {
+  const router = useRouter()
+  const [servers, setServers] = useState<ApiServer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState<string>("")
+
   // 改用会话数组管理多个连接
   const [sessions, setSessions] = useState<SftpSession[]>([])
   const [nextSessionId, setNextSessionId] = useState(1)
@@ -300,6 +244,43 @@ export default function SftpPage() {
     "#8B5CF6", // violet
     "#EC4899", // pink
   ]
+
+  // 加载服务器列表
+  useEffect(() => {
+    loadServers()
+  }, [])
+
+  async function loadServers() {
+    try {
+      setLoading(true)
+      const accessToken = localStorage.getItem("easyssh_access_token")
+
+      if (!accessToken) {
+        router.push("/login")
+        return
+      }
+
+      setToken(accessToken)
+
+      const response = await serversApi.list(accessToken, {
+        page: 1,
+        limit: 100,
+      })
+
+      setServers(response.data)
+    } catch (error: any) {
+      console.error("Failed to load servers:", error)
+
+      if (error?.status === 401) {
+        toast.error("登录已过期，请重新登录")
+        router.push("/login")
+      } else {
+        toast.error("加载服务器列表失败: " + (error?.message || "未知错误"))
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // 配置拖拽传感器 - 最小化激活约束
   const sensors = useSensors(
@@ -438,56 +419,150 @@ export default function SftpPage() {
   }
 
   // 快速创建并连接到服务器
-  const handleQuickConnect = (serverId: number) => {
+  const handleQuickConnect = async (serverId: string) => {
     const server = servers.find(s => s.id === serverId)
     if (!server) return
+
+    if (server.status !== "online") {
+      toast.error("服务器离线，无法连接")
+      return
+    }
 
     const sessionId = `session-${nextSessionId}`
     const newSession: SftpSession = {
       id: sessionId,
-      serverId,
+      serverId: server.id,
       serverName: server.name,
       host: server.host,
-      username: "root",
+      username: server.username,
       currentPath: "/",
-      files: mockFiles,
-      isConnected: true, // 直接连接
+      files: [],
+      isConnected: false,
       label: `${server.name}`,
       color: sessionColors[(nextSessionId - 1) % sessionColors.length],
     }
     setSessions(prev => [...prev, newSession])
     setNextSessionId(prev => prev + 1)
+
+    // 连接并加载文件列表
+    try {
+      const dirResponse = await sftpApi.listDirectory(token, serverId, "/")
+      const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
+
+      // 添加父目录项
+      const filesWithParent: ComponentFile[] = dirResponse.parent
+        ? [
+            {
+              name: "..",
+              type: "directory" as const,
+              size: "-",
+              modified: "",
+              permissions: "drwxr-xr-x",
+              owner: "root",
+              group: "root",
+            },
+            ...convertedFiles,
+          ]
+        : convertedFiles
+
+      setSessions(prev =>
+        prev.map(s =>
+          s.id === sessionId
+            ? { ...s, isConnected: true, files: filesWithParent }
+            : s
+        )
+      )
+    } catch (error: any) {
+      console.error("Failed to load directory:", error)
+      toast.error(`加载目录失败: ${error?.message || "未知错误"}`)
+
+      // 连接失败，移除会话
+      setSessions(prev => prev.filter(s => s.id !== sessionId))
+    }
   }
 
   // 连接到服务器
-  const handleConnectToServer = (sessionId: string, serverId: number) => {
+  const handleConnectToServer = async (sessionId: string, serverId: string) => {
     const server = servers.find(s => s.id === serverId)
     if (!server) return
 
-    setSessions(prev => prev.map(session =>
-      session.id === sessionId
-        ? {
-            ...session,
-            serverId,
-            serverName: server.name,
-            host: server.host,
-            isConnected: true,
-            files: mockFiles, // 在实际应用中，这里应该触发文件列表加载
-          }
-        : session
-    ))
+    if (server.status !== "online") {
+      toast.error("服务器离线，无法连接")
+      return
+    }
+
+    try {
+      const dirResponse = await sftpApi.listDirectory(token, serverId, "/")
+      const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
+
+      const filesWithParent: ComponentFile[] = dirResponse.parent
+        ? [
+            {
+              name: "..",
+              type: "directory" as const,
+              size: "-",
+              modified: "",
+              permissions: "drwxr-xr-x",
+              owner: "root",
+              group: "root",
+            },
+            ...convertedFiles,
+          ]
+        : convertedFiles
+
+      setSessions(prev =>
+        prev.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                serverId,
+                serverName: server.name,
+                host: server.host,
+                isConnected: true,
+                files: filesWithParent,
+              }
+            : session
+        )
+      )
+    } catch (error: any) {
+      console.error("Failed to connect:", error)
+      toast.error(`连接失败: ${error?.message || "未知错误"}`)
+    }
   }
 
   // 刷新会话文件列表
-  const handleRefreshSession = (sessionId: string) => {
-    setSessions(prev => prev.map(session =>
-      session.id === sessionId && session.isConnected
-        ? {
-            ...session,
-            files: mockFiles, // 在实际应用中，这里应该从服务器重新加载文件列表
-          }
-        : session
-    ))
+  const handleRefreshSession = async (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) return
+
+    try {
+      const dirResponse = await sftpApi.listDirectory(token, session.serverId, session.currentPath)
+      const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
+
+      const filesWithParent: ComponentFile[] = dirResponse.parent
+        ? [
+            {
+              name: "..",
+              type: "directory" as const,
+              size: "-",
+              modified: "",
+              permissions: "drwxr-xr-x",
+              owner: "root",
+              group: "root",
+            },
+            ...convertedFiles,
+          ]
+        : convertedFiles
+
+      setSessions(prev =>
+        prev.map(s => (s.id === sessionId ? { ...s, files: filesWithParent } : s))
+      )
+
+      toast.success("刷新成功")
+    } catch (error: any) {
+      console.error("Failed to refresh:", error)
+      toast.error(`刷新失败: ${error?.message || "未知错误"}`)
+    }
   }
 
   // 断开连接
@@ -505,78 +580,188 @@ export default function SftpPage() {
   }
 
   // 导航到目录
-  const handleNavigate = (sessionId: string, path: string) => {
-    setSessions(prev => prev.map(session =>
-      session.id === sessionId
-        ? { ...session, currentPath: path }
-        : session
-    ))
+  const handleNavigate = async (sessionId: string, path: string) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) return
+
+    try {
+      const dirResponse = await sftpApi.listDirectory(token, session.serverId, path)
+      const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
+
+      const filesWithParent: ComponentFile[] = dirResponse.parent
+        ? [
+            {
+              name: "..",
+              type: "directory" as const,
+              size: "-",
+              modified: "",
+              permissions: "drwxr-xr-x",
+              owner: "root",
+              group: "root",
+            },
+            ...convertedFiles,
+          ]
+        : convertedFiles
+
+      setSessions(prev =>
+        prev.map(s =>
+          s.id === sessionId
+            ? { ...s, currentPath: path, files: filesWithParent }
+            : s
+        )
+      )
+    } catch (error: any) {
+      console.error("Failed to navigate:", error)
+      toast.error(`打开目录失败: ${error?.message || "未知错误"}`)
+    }
   }
 
   // 上传文件
-  const handleUpload = (sessionId: string, uploadFiles: FileList) => {
-    console.log("上传文件:", Array.from(uploadFiles).map(f => f.name))
+  const handleUpload = async (sessionId: string, uploadFiles: FileList) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) return
+
+    const files = Array.from(uploadFiles)
+    let successCount = 0
+    let failCount = 0
+
+    for (const file of files) {
+      try {
+        await sftpApi.uploadFile(token, session.serverId, session.currentPath, file)
+        successCount++
+      } catch (error: any) {
+        console.error(`Failed to upload ${file.name}:`, error)
+        failCount++
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`成功上传 ${successCount} 个文件`)
+      // 刷新文件列表
+      await handleRefreshSession(sessionId)
+    }
+
+    if (failCount > 0) {
+      toast.error(`${failCount} 个文件上传失败`)
+    }
   }
 
   // 下载文件
   const handleDownload = (sessionId: string, fileName: string) => {
-    console.log("下载文件:", fileName)
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) return
+
+    const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
+    const downloadUrl = sftpApi.getDownloadUrl(session.serverId, filePath, token)
+
+    // 创建隐藏的下载链接并触发下载
+    const link = document.createElement("a")
+    link.href = downloadUrl
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast.success(`开始下载: ${fileName}`)
   }
 
   // 删除文件
-  const handleDelete = (sessionId: string, fileName: string) => {
-    setSessions(prev => prev.map(session =>
-      session.id === sessionId
-        ? { ...session, files: session.files.filter(f => f.name !== fileName) }
-        : session
-    ))
+  const handleDelete = async (sessionId: string, fileName: string) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) return
+
+    const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
+
+    try {
+      await sftpApi.delete(token, session.serverId, filePath)
+      toast.success(`删除成功: ${fileName}`)
+
+      // 刷新文件列表
+      await handleRefreshSession(sessionId)
+    } catch (error: any) {
+      console.error("Failed to delete:", error)
+      toast.error(`删除失败: ${error?.message || "未知错误"}`)
+    }
   }
 
   // 创建文件夹
-  const handleCreateFolder = (sessionId: string, name: string) => {
-    const newFolder = {
-      name,
-      type: "directory" as const,
-      size: "-",
-      modified: new Date().toLocaleString("sv-SE", {
-        timeZone: "Asia/Shanghai",
-        hour12: false
-      }).replace("T", " ").slice(0, 19),
-      permissions: "drwxr-xr-x",
-      owner: "root",
-      group: "root",
+  const handleCreateFolder = async (sessionId: string, name: string) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) return
+
+    const folderPath = `${session.currentPath}/${name}`.replace("//", "/")
+
+    try {
+      await sftpApi.createDirectory(token, session.serverId, folderPath)
+      toast.success(`创建文件夹成功: ${name}`)
+
+      // 刷新文件列表
+      await handleRefreshSession(sessionId)
+    } catch (error: any) {
+      console.error("Failed to create folder:", error)
+      toast.error(`创建文件夹失败: ${error?.message || "未知错误"}`)
     }
-    setSessions(prev => prev.map(session =>
-      session.id === sessionId
-        ? { ...session, files: [newFolder, ...session.files] }
-        : session
-    ))
   }
 
   // 重命名
-  const handleRename = (sessionId: string, oldName: string, newName: string) => {
-    setSessions(prev => prev.map(session =>
-      session.id === sessionId
-        ? {
-            ...session,
-            files: session.files.map(f =>
-              f.name === oldName ? { ...f, name: newName } : f
-            )
-          }
-        : session
-    ))
+  const handleRename = async (sessionId: string, oldName: string, newName: string) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) return
+
+    const oldPath = `${session.currentPath}/${oldName}`.replace("//", "/")
+    const newPath = `${session.currentPath}/${newName}`.replace("//", "/")
+
+    try {
+      await sftpApi.rename(token, session.serverId, oldPath, newPath)
+      toast.success(`重命名成功: ${oldName} → ${newName}`)
+
+      // 刷新文件列表
+      await handleRefreshSession(sessionId)
+    } catch (error: any) {
+      console.error("Failed to rename:", error)
+      toast.error(`重命名失败: ${error?.message || "未知错误"}`)
+    }
   }
 
   // 读取文件
   const handleReadFile = async (sessionId: string, fileName: string): Promise<string> => {
     const session = sessions.find(s => s.id === sessionId)
-    return `// 文件: ${fileName}\n// 路径: ${session?.currentPath}/${fileName}\n\n// 这是一个示例文件内容\nconsole.log("Hello from ${fileName}");`
+    if (!session || !session.isConnected) {
+      throw new Error("会话未连接")
+    }
+
+    const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
+
+    try {
+      const content = await sftpApi.readFile(token, session.serverId, filePath)
+      return content
+    } catch (error: any) {
+      console.error("Failed to read file:", error)
+      toast.error(`读取文件失败: ${error?.message || "未知错误"}`)
+      throw error
+    }
   }
 
   // 保存文件
   const handleSaveFile = async (sessionId: string, fileName: string, content: string): Promise<void> => {
-    console.log("保存文件:", fileName, "内容长度:", content.length)
-    await new Promise(resolve => setTimeout(resolve, 500))
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session || !session.isConnected) {
+      throw new Error("会话未连接")
+    }
+
+    const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
+
+    try {
+      await sftpApi.writeFile(token, session.serverId, filePath, content)
+      toast.success(`保存成功: ${fileName}`)
+
+      // 刷新文件列表（文件大小可能变化）
+      await handleRefreshSession(sessionId)
+    } catch (error: any) {
+      console.error("Failed to save file:", error)
+      toast.error(`保存文件失败: ${error?.message || "未知错误"}`)
+      throw error
+    }
   }
 
   // 获取网格布局类名
@@ -616,6 +801,21 @@ export default function SftpPage() {
       </div>
     </div>
   )
+
+  // 加载状态
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="文件传输" />
+        <div className="flex flex-1 items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">加载服务器列表...</p>
+          </div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

@@ -8,126 +8,38 @@ import { ServerList } from "@/components/servers/server-card"
 import { ServerFilters } from "@/components/servers/server-filters"
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
+import { serversApi, type Server } from "@/lib/api"
 import {
   Search,
   Plus,
-  Server
+  Server as ServerIcon,
+  Loader2
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-
-// 定义服务器数据类型
-interface ServerData {
-  id: number
-  name: string
-  host: string
-  port: number
-  username: string
-  status: 'online' | 'offline' | 'warning'
-  os: string
-  cpu: string
-  memory: string
-  disk: string
-  lastConnected: string
-  uptime: string
-  tags: string[]
-}
-
-// 模拟数据
-const defaultServers: ServerData[] = [
-  {
-    id: 1,
-    name: "Web Server 01",
-    host: "192.168.1.100",
-    port: 22,
-    username: "root",
-    status: "online" as const,
-    os: "Ubuntu 22.04",
-    cpu: "2 cores",
-    memory: "4GB",
-    disk: "80GB",
-    lastConnected: "2024-01-15 14:30",
-    uptime: "15天 6小时",
-    tags: ["生产环境", "Web服务器"]
-  },
-  {
-    id: 2,
-    name: "Database Server",
-    host: "192.168.1.101",
-    port: 22,
-    username: "admin",
-    status: "online" as const,
-    os: "CentOS 8",
-    cpu: "4 cores",
-    memory: "8GB",
-    disk: "200GB",
-    lastConnected: "2024-01-15 13:45",
-    uptime: "30天 12小时",
-    tags: ["生产环境", "数据库"]
-  },
-  {
-    id: 3,
-    name: "Dev Server",
-    host: "192.168.1.102",
-    port: 2222,
-    username: "developer",
-    status: "offline" as const,
-    os: "Ubuntu 20.04",
-    cpu: "2 cores",
-    memory: "4GB",
-    disk: "50GB",
-    lastConnected: "2024-01-14 18:20",
-    uptime: "0天 0小时",
-    tags: ["开发环境", "测试"]
-  },
-  {
-    id: 4,
-    name: "Load Balancer",
-    host: "192.168.1.103",
-    port: 22,
-    username: "root",
-    status: "warning" as const,
-    os: "RHEL 8",
-    cpu: "2 cores",
-    memory: "2GB",
-    disk: "40GB",
-    lastConnected: "2024-01-15 12:00",
-    uptime: "5天 8小时",
-    tags: ["生产环境", "负载均衡"]
-  }
-]
+import { toast } from "sonner"
 
 const STORAGE_KEY = 'servers-order'
 
 export default function ServersPage() {
   const router = useRouter()
-  const [servers, setServers] = useState<ServerData[]>(defaultServers)
-  const [filteredServers, setFilteredServers] = useState<ServerData[]>(defaultServers)
+  const [servers, setServers] = useState<Server[]>([])
+  const [filteredServers, setFilteredServers] = useState<Server[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [loading, setLoading] = useState(true)
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    online: 0,
+    offline: 0,
+    error: 0,
+    unknown: 0
+  })
 
-  // 从 localStorage 加载服务器顺序和视图模式
+  // 加载服务器列表
   useEffect(() => {
-    const savedOrder = localStorage.getItem(STORAGE_KEY)
-    if (savedOrder) {
-      try {
-        const orderIds = JSON.parse(savedOrder) as number[]
-        const orderedServers = orderIds
-          .map(id => defaultServers.find(s => s.id === id))
-          .filter((s): s is ServerData => s !== undefined)
-
-        // 添加任何新的服务器（不在保存的顺序中）
-        const newServers = defaultServers.filter(
-          s => !orderIds.includes(s.id)
-        )
-
-        const finalOrder = [...orderedServers, ...newServers]
-        setServers(finalOrder)
-        setFilteredServers(finalOrder)
-      } catch (error) {
-        console.error('Failed to load server order:', error)
-      }
-    }
+    loadServers()
+    loadStatistics()
 
     // 加载视图模式
     const savedViewMode = localStorage.getItem('servers-view-mode')
@@ -136,8 +48,51 @@ export default function ServersPage() {
     }
   }, [])
 
+  async function loadServers() {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem("easyssh_access_token")
+
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await serversApi.list(token, {
+        page: 1,
+        limit: 100  // 加载所有服务器
+      })
+
+      setServers(response.data)
+      setFilteredServers(response.data)
+    } catch (error: any) {
+      console.error("Failed to load servers:", error)
+
+      if (error?.status === 401) {
+        toast.error("登录已过期，请重新登录")
+        router.push("/login")
+      } else {
+        toast.error("加载服务器列表失败: " + (error?.message || "未知错误"))
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadStatistics() {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) return
+
+      const stats = await serversApi.getStatistics(token)
+      setStatistics(stats)
+    } catch (error) {
+      console.error("Failed to load statistics:", error)
+    }
+  }
+
   // 处理拖拽重新排序
-  const handleReorder = (newOrder: ServerData[]) => {
+  const handleReorder = (newOrder: Server[]) => {
     setServers(newOrder)
     setFilteredServers(newOrder)
 
@@ -152,30 +107,75 @@ export default function ServersPage() {
     localStorage.setItem('servers-view-mode', mode)
   }
 
-  const handleConnect = (serverId: number) => {
-    console.log("连接服务器:", serverId)
-    // 这里应该处理连接逻辑
+  const handleConnect = (serverId: string) => {
+    // 跳转到SSH终端页面
+    router.push(`/dashboard/terminal?server=${serverId}`)
   }
 
-  const handleEdit = (serverId: number) => {
-    console.log("编辑服务器:", serverId)
-    // 这里应该跳转到编辑页面
+  const handleEdit = (serverId: string) => {
+    // 跳转到编辑页面
+    router.push(`/dashboard/servers/${serverId}/edit`)
   }
 
-  const handleDelete = (serverId: number) => {
-    console.log("删除服务器:", serverId)
-    // 这里应该处理删除逻辑
+  const handleDelete = async (serverId: string) => {
+    if (!confirm("确定要删除这台服务器吗？此操作不可恢复。")) {
+      return
+    }
+
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      await serversApi.delete(token, serverId)
+      toast.success("服务器已删除")
+
+      // 刷新列表
+      await loadServers()
+      await loadStatistics()
+    } catch (error: any) {
+      console.error("Failed to delete server:", error)
+      toast.error("删除失败: " + (error?.message || "未知错误"))
+    }
   }
 
-  const handleViewDetails = (serverId: number) => {
-    console.log("查看详情:", serverId)
-    // 使用客户端路由避免整页刷新
+  const handleViewDetails = (serverId: string) => {
     router.push(`/dashboard/servers/${serverId}`)
   }
 
-  const handleAddServer = (data: ServerFormData) => {
-    console.log("添加服务器:", data)
-    // 这里应该处理添加服务器逻辑
+  const handleAddServer = async (data: ServerFormData) => {
+    try {
+      const token = localStorage.getItem("easyssh_access_token")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      await serversApi.create(token, {
+        name: data.name,
+        host: data.host,
+        port: data.port,
+        username: data.username,
+        auth_method: data.authMethod as "password" | "key",
+        password: data.password,
+        private_key: data.privateKey,
+        group: data.group,
+        tags: data.tags,
+        description: data.description,
+      })
+
+      toast.success("服务器添加成功")
+      setIsAddDialogOpen(false)
+
+      // 刷新列表
+      await loadServers()
+      await loadStatistics()
+    } catch (error: any) {
+      console.error("Failed to add server:", error)
+      toast.error("添加失败: " + (error?.message || "未知错误"))
+    }
   }
 
   const handleFiltersChange = (filters: {
@@ -203,12 +203,9 @@ export default function ServersPage() {
 
     // 标签过滤
     if (filters.tag !== 'all') {
-      filtered = filtered.filter(server => server.tags.includes(filters.tag))
-    }
-
-    // 操作系统过滤
-    if (filters.os !== 'all') {
-      filtered = filtered.filter(server => server.os === filters.os)
+      filtered = filtered.filter(server =>
+        server.tags && server.tags.includes(filters.tag)
+      )
     }
 
     // 排序
@@ -229,92 +226,107 @@ export default function ServersPage() {
     setFilteredServers(filtered)
   }
 
+  // 加载中状态
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="服务器列表" />
+        <div className="flex flex-1 items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">加载服务器列表...</p>
+          </div>
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       <PageHeader title="服务器列表" />
 
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-          {/* 操作栏 */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="搜索服务器..."
-                  className="pl-10 w-64"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm">
-                  全部 ({servers.length})
-                </Button>
-                <Button variant="outline" size="sm">
-                  在线 ({servers.filter(s => s.status === 'online').length})
-                </Button>
-                <Button variant="outline" size="sm">
-                  离线 ({servers.filter(s => s.status === 'offline').length})
-                </Button>
-                <Button variant="outline" size="sm">
-                  警告 ({servers.filter(s => s.status === 'warning').length})
-                </Button>
-              </div>
+      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+        {/* 操作栏 */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="搜索服务器..."
+                className="pl-10 w-64"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm">
+                全部 ({statistics.total})
+              </Button>
+              <Button variant="outline" size="sm">
+                在线 ({statistics.online})
+              </Button>
+              <Button variant="outline" size="sm">
+                离线 ({statistics.offline})
+              </Button>
+              <Button variant="outline" size="sm">
+                异常 ({statistics.error})
+              </Button>
+            </div>
+          </div>
+          <Button onClick={() => setIsAddDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            添加服务器
+          </Button>
+        </div>
+
+        {/* 筛选器 */}
+        <ServerFilters
+          servers={servers}
+          onFiltersChange={handleFiltersChange}
+          onViewModeChange={handleViewModeChange}
+          viewMode={viewMode}
+        />
+
+        {/* 服务器列表 */}
+        <ServerList
+          servers={filteredServers}
+          onConnect={handleConnect}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onViewDetails={handleViewDetails}
+          onReorder={handleReorder}
+          viewMode={viewMode}
+        />
+
+        {/* 空状态 */}
+        {filteredServers.length === 0 && servers.length > 0 && (
+          <div className="flex flex-col items-center justify-center py-12">
+            <ServerIcon className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">未找到匹配的服务器</h3>
+            <p className="text-muted-foreground mb-4">请尝试调整筛选条件</p>
+          </div>
+        )}
+
+        {/* 完全空状态 */}
+        {servers.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12">
+            <ServerIcon className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">暂无服务器</h3>
+            <p className="text-muted-foreground mb-4">开始添加您的第一台服务器</p>
             <Button onClick={() => setIsAddDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               添加服务器
             </Button>
           </div>
+        )}
+      </div>
 
-          {/* 筛选器 */}
-          <ServerFilters
-            servers={servers}
-            onFiltersChange={handleFiltersChange}
-            onViewModeChange={handleViewModeChange}
-            viewMode={viewMode}
-          />
-
-          {/* 服务器列表 */}
-          <ServerList
-            servers={filteredServers}
-            onConnect={handleConnect}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onViewDetails={handleViewDetails}
-            onReorder={handleReorder}
-            viewMode={viewMode}
-          />
-
-          {/* 空状态 */}
-          {filteredServers.length === 0 && servers.length > 0 && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Server className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">未找到匹配的服务器</h3>
-              <p className="text-muted-foreground mb-4">请尝试调整筛选条件</p>
-            </div>
-          )}
-
-          {/* 完全空状态 */}
-          {servers.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Server className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">暂无服务器</h3>
-              <p className="text-muted-foreground mb-4">开始添加您的第一台服务器</p>
-              <Button onClick={() => setIsAddDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                添加服务器
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* 添加服务器弹窗 */}
-        <AddServerDialog
-          open={isAddDialogOpen}
-          onOpenChange={setIsAddDialogOpen}
-          onSubmit={handleAddServer}
-        />
+      {/* 添加服务器弹窗 */}
+      <AddServerDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        onSubmit={handleAddServer}
+      />
     </>
   )
 }
