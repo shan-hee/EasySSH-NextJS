@@ -47,7 +47,7 @@ export interface ListBatchTasksResponse {
   data: BatchTask[]
   total: number
   page: number
-  page_size: number
+  limit: number
   total_pages: number
 }
 

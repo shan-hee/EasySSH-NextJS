@@ -57,7 +57,7 @@ export interface ListScheduledTasksResponse {
   data: ScheduledTask[]
   total: number
   page: number
-  page_size: number
+  limit: number
   total_pages: number
 }
 

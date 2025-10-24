@@ -100,8 +100,13 @@ export default function TerminalPage() {
         limit: 100, // 加载所有服务器
       })
 
+      // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
+      const servers = Array.isArray(response)
+        ? response
+        : (response?.data || [])
+
       // 将Server类型转换为QuickServer类型
-      const quickServers: QuickServer[] = response.data.map((server: Server) => ({
+      const quickServers: QuickServer[] = servers.map((server: Server) => ({
         id: parseInt(server.id),
         name: server.name,
         host: server.host,

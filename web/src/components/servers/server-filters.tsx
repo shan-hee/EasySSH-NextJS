@@ -80,9 +80,9 @@ export function ServerFilters({
     new Set(servers.flatMap(server => server.tags || []))
   )
 
-  // 获取唯一的操作系统列表
+  // 获取唯一的操作系统列表（过滤空值）
   const uniqueOS = Array.from(
-    new Set(servers.map(server => server.os))
+    new Set(servers.map(server => server.os).filter(os => os && os.trim()))
   )
 
   // 获取状态统计

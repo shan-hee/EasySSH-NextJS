@@ -33,7 +33,7 @@ export interface ListSSHSessionsResponse {
   data: SSHSession[]
   total: number
   page: number
-  page_size: number
+  limit: number
   total_pages: number
 }
 

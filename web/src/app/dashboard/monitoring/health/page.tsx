@@ -77,8 +77,13 @@ export default function MonitoringHealthPage() {
       // 获取服务器列表
       const serversRes = await serversApi.list(token, { page: 1, limit: 100 })
 
+      // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
+      const serverList = Array.isArray(serversRes)
+        ? serversRes
+        : (serversRes?.data || [])
+
       // 并行加载所有服务器的健康检查数据
-      const healthChecksPromises = serversRes.data.map(async (server: ApiServer) => {
+      const healthChecksPromises = serverList.map(async (server: ApiServer) => {
         if (server.status !== "online") {
           return {
             id: server.id,

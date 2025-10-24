@@ -38,7 +38,7 @@ export interface UserListResponse {
   data: User[]
   total: number
   page: number
-  page_size: number
+  limit: number
   total_pages: number
 }
 

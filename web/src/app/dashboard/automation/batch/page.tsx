@@ -110,17 +110,35 @@ export default function AutomationBatchPage() {
         batchTasksApi.getStatistics(token),
       ])
 
-      setTasks(tasksRes.data)
-      setServers(serversRes.data)
-      setScripts(scriptsRes.data)
+      // 防御性检查：处理apiFetch自动解包，确保始终返回数组
+      const tasksList = Array.isArray(tasksRes)
+        ? tasksRes
+        : (Array.isArray(tasksRes?.data) ? tasksRes.data : [])
+      const serversList = Array.isArray(serversRes)
+        ? serversRes
+        : (Array.isArray(serversRes?.data) ? serversRes.data : [])
+      const scriptsList = Array.isArray(scriptsRes)
+        ? scriptsRes
+        : (Array.isArray(scriptsRes?.data) ? scriptsRes.data : [])
+      const statsData = statsRes?.data || statsRes || {}
+
+      setTasks(Array.isArray(tasksList) ? tasksList : [])
+      setServers(Array.isArray(serversList) ? serversList : [])
+      setScripts(Array.isArray(scriptsList) ? scriptsList : [])
       setStatistics({
-        total: statsRes.total || 0,
-        running: statsRes.running || 0,
-        completed: statsRes.completed || 0,
-        failed: statsRes.failed || 0,
+        total: statsData.total_tasks || statsData.total || 0,
+        running: statsData.running_tasks || statsData.running || 0,
+        completed: statsData.completed_tasks || statsData.completed || 0,
+        failed: statsData.failed_tasks || statsData.failed || 0,
       })
     } catch (error: any) {
       console.error("加载数据失败:", error)
+
+      // 确保状态为空数组，避免undefined错误
+      setTasks([])
+      setServers([])
+      setScripts([])
+
       if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
         toast.error("登录已过期，请重新登录")
         router.push("/login")

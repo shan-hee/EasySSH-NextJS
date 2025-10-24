@@ -83,8 +83,13 @@ export default function MonitoringResourcesPage() {
         limit: 100,
       })
 
+      // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
+      const serverList = Array.isArray(serverListResponse)
+        ? serverListResponse
+        : (serverListResponse?.data || [])
+
       // 并行加载所有在线服务器的监控数据
-      const resourcesPromises = serverListResponse.data.map(async (server: ApiServer) => {
+      const resourcesPromises = serverList.map(async (server: ApiServer) => {
         if (server.status !== "online") {
           // 离线服务器返回默认数据
           return {

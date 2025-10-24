@@ -267,7 +267,12 @@ export default function SftpPage() {
         limit: 100,
       })
 
-      setServers(response.data)
+      // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
+      const serverList = Array.isArray(response)
+        ? response
+        : (response?.data || [])
+
+      setServers(serverList)
     } catch (error: any) {
       console.error("Failed to load servers:", error)
 

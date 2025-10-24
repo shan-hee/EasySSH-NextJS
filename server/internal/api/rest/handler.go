@@ -24,7 +24,7 @@ type PaginatedResponse struct {
 	Data       interface{} `json:"data"`
 	Total      int64       `json:"total"`
 	Page       int         `json:"page"`
-	PageSize   int         `json:"page_size"`
+	Limit      int         `json:"limit"`
 	TotalPages int         `json:"total_pages"`
 }
 
@@ -64,9 +64,9 @@ func RespondNoContent(c *gin.Context) {
 }
 
 // RespondPaginated 返回分页响应
-func RespondPaginated(c *gin.Context, data interface{}, total int64, page, pageSize int) {
-	totalPages := int(total) / pageSize
-	if int(total)%pageSize > 0 {
+func RespondPaginated(c *gin.Context, data interface{}, total int64, page, limit int) {
+	totalPages := int(total) / limit
+	if int(total)%limit > 0 {
 		totalPages++
 	}
 
@@ -74,7 +74,7 @@ func RespondPaginated(c *gin.Context, data interface{}, total int64, page, pageS
 		Data:       data,
 		Total:      total,
 		Page:       page,
-		PageSize:   pageSize,
+		Limit:      limit,
 		TotalPages: totalPages,
 	})
 }
@@ -82,7 +82,7 @@ func RespondPaginated(c *gin.Context, data interface{}, total int64, page, pageS
 // GetPaginationParams 获取分页参数
 func GetPaginationParams(c *gin.Context) (limit, offset int) {
 	page := 1
-	pageSize := 20
+	limitVal := 20
 
 	// 从查询参数获取分页信息
 	if p, ok := c.GetQuery("page"); ok && p != "" {
@@ -93,16 +93,23 @@ func GetPaginationParams(c *gin.Context) (limit, offset int) {
 		}
 	}
 
-	if ps, ok := c.GetQuery("page_size"); ok && ps != "" {
+	// 支持 limit 参数（优先）和 page_size 参数（向后兼容）
+	if l, ok := c.GetQuery("limit"); ok && l != "" {
+		if val, err := c.GetQuery("limit"); err == false {
+			if v := parseInt(val, 20); v > 0 && v <= 100 {
+				limitVal = v
+			}
+		}
+	} else if ps, ok := c.GetQuery("page_size"); ok && ps != "" {
 		if val, err := c.GetQuery("page_size"); err == false {
 			if v := parseInt(val, 20); v > 0 && v <= 100 {
-				pageSize = v
+				limitVal = v
 			}
 		}
 	}
 
-	offset = (page - 1) * pageSize
-	limit = pageSize
+	offset = (page - 1) * limitVal
+	limit = limitVal
 
 	return limit, offset
 }

@@ -47,7 +47,7 @@ export interface ListScriptsResponse {
   data: Script[]
   total: number
   page: number
-  page_size: number
+  limit: number
   total_pages: number
 }
 

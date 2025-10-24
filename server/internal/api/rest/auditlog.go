@@ -61,7 +61,7 @@ func (h *AuditLogHandler) List(c *gin.Context) {
 	}
 
 	// 获取当前用户角色
-	role, exists := c.Get("user_role")
+	role, exists := c.Get("role")
 	if !exists {
 		RespondError(c, http.StatusUnauthorized, "unauthorized", "User role not found")
 		return
@@ -117,7 +117,7 @@ func (h *AuditLogHandler) GetByID(c *gin.Context) {
 	}
 
 	// 检查权限：非管理员只能查看自己的日志
-	role, _ := c.Get("user_role")
+	role, _ := c.Get("role")
 	if role != "admin" {
 		userID, err := getUserIDFromContext(c)
 		if err != nil {
@@ -151,7 +151,7 @@ func (h *AuditLogHandler) GetStatistics(c *gin.Context) {
 	}
 
 	// 检查角色：管理员可以查看全局统计，普通用户只能查看自己的
-	role, _ := c.Get("user_role")
+	role, _ := c.Get("role")
 	var userIDPtr *uuid.UUID
 	if role != "admin" {
 		userIDPtr = &userID
@@ -171,7 +171,7 @@ func (h *AuditLogHandler) GetStatistics(c *gin.Context) {
 // DELETE /api/v1/audit-logs/cleanup?retention_days=90
 func (h *AuditLogHandler) CleanupOldLogs(c *gin.Context) {
 	// 检查管理员权限
-	role, _ := c.Get("user_role")
+	role, _ := c.Get("role")
 	if role != "admin" {
 		RespondError(c, http.StatusForbidden, "forbidden", "Admin permission required")
 		return

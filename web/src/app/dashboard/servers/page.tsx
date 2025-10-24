@@ -63,8 +63,13 @@ export default function ServersPage() {
         limit: 100  // 加载所有服务器
       })
 
-      setServers(response.data)
-      setFilteredServers(response.data)
+      // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
+      const serverList = Array.isArray(response)
+        ? response
+        : (response?.data || [])
+
+      setServers(serverList)
+      setFilteredServers(serverList)
     } catch (error: any) {
       console.error("Failed to load servers:", error)
 

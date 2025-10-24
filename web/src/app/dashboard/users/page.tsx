@@ -114,15 +114,25 @@ export default function UsersPage() {
         usersApi.getStatistics(token),
       ])
 
-      setUsers(usersRes.data)
+      // 防御性检查：处理apiFetch自动解包
+      const usersList = Array.isArray(usersRes)
+        ? usersRes
+        : (Array.isArray(usersRes?.data) ? usersRes.data : [])
+      const statsData = statsRes?.data || statsRes || {}
+
+      setUsers(usersList)
       setStatistics({
-        totalUsers: statsRes.data.total_users,
-        adminUsers: statsRes.data.by_role.admin || 0,
-        normalUsers: statsRes.data.by_role.user || 0,
-        viewerUsers: statsRes.data.by_role.viewer || 0,
+        totalUsers: statsData.total_users || 0,
+        adminUsers: statsData.by_role?.admin || 0,
+        normalUsers: statsData.by_role?.user || 0,
+        viewerUsers: statsData.by_role?.viewer || 0,
       })
     } catch (error: any) {
       console.error("加载用户列表失败:", error)
+
+      // 确保状态为空数组
+      setUsers([])
+
       if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
         toast.error("登录已过期，请重新登录")
         router.push("/login")
