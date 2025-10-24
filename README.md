@@ -59,9 +59,11 @@ EasySSH-NextJS/
 # 1. 启动基础设施（PostgreSQL + Redis）
 docker-compose -f docker/docker-compose.dev.yml up -d
 
-# 2. 启动后端
+# 2. 启动后端（支持热重载）
 cd server
-go run cmd/api/main.go
+./dev.sh          # 开发模式（热重载）
+# 或
+go run cmd/api/main.go  # 普通模式
 
 # 3. 启动前端（新终端）
 cd web

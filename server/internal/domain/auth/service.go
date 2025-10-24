@@ -42,7 +42,7 @@ type Service interface {
 	HasAdmin(ctx context.Context) (bool, error)
 
 	// InitializeAdmin 初始化管理员账户（仅在没有管理员时）
-	InitializeAdmin(ctx context.Context, username, email, password string) (*User, string, string, error)
+	InitializeAdmin(ctx context.Context, username, email, password, runMode string) (*User, string, string, error)
 }
 
 // authService 认证服务实现
@@ -189,7 +189,7 @@ func (s *authService) HasAdmin(ctx context.Context) (bool, error) {
 }
 
 // InitializeAdmin 初始化管理员账户（仅在没有管理员时）
-func (s *authService) InitializeAdmin(ctx context.Context, username, email, password string) (*User, string, string, error) {
+func (s *authService) InitializeAdmin(ctx context.Context, username, email, password, runMode string) (*User, string, string, error) {
 	// 检查是否已存在管理员
 	hasAdmin, err := s.repo.HasAdmin(ctx)
 	if err != nil {
@@ -227,6 +227,12 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 		return nil, "", "", fmt.Errorf("failed to create admin: %w", err)
 	}
 
+	// 根据运行模式执行不同的初始化逻辑
+	if err := s.initializeByRunMode(ctx, runMode); err != nil {
+		// 记录错误但不阻止管理员创建
+		fmt.Printf("Warning: failed to initialize with run mode %s: %v\n", runMode, err)
+	}
+
 	// 生成令牌
 	accessToken, refreshToken, err := s.jwtService.GenerateTokens(user)
 	if err != nil {
@@ -234,4 +240,27 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 	}
 
 	return user, accessToken, refreshToken, nil
+}
+
+// initializeByRunMode 根据运行模式执行不同的初始化逻辑
+func (s *authService) initializeByRunMode(ctx context.Context, runMode string) error {
+	switch runMode {
+	case "demo":
+		// TODO: 演示模式 - 创建示例数据
+		// 例如: 创建示例服务器、示例脚本等
+		fmt.Println("Initializing in DEMO mode - sample data will be created")
+		return nil
+	case "development":
+		// TODO: 开发模式 - 启用调试功能
+		fmt.Println("Initializing in DEVELOPMENT mode - debug features enabled")
+		return nil
+	case "production":
+		// 生产模式 - 无特殊操作
+		fmt.Println("Initializing in PRODUCTION mode")
+		return nil
+	default:
+		// 未知模式，默认按生产模式处理
+		fmt.Printf("Unknown run mode: %s, treating as production\n", runMode)
+		return nil
+	}
 }

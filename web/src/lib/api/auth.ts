@@ -37,6 +37,7 @@ export interface RegisterRequest {
   username: string
   email: string
   password: string
+  run_mode?: "demo" | "development" | "production"
 }
 
 /**

@@ -2,6 +2,7 @@ package rest
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -24,11 +25,21 @@ func NewAuthHandler(authService auth.Service, jwtService auth.JWTService) *AuthH
 	}
 }
 
+// RunMode 运行模式类型
+type RunMode string
+
+const (
+	RunModeDemo        RunMode = "demo"
+	RunModeDevelopment RunMode = "development"
+	RunModeProduction  RunMode = "production"
+)
+
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
+	Username string  `json:"username" binding:"required,min=3,max=50"`
+	Email    string  `json:"email" binding:"required,email"`
+	Password string  `json:"password" binding:"required,min=6"`
+	RunMode  RunMode `json:"run_mode,omitempty"` // 运行模式（可选，仅用于初始化管理员）
 }
 
 // LoginRequest 登录请求
@@ -299,12 +310,19 @@ func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
 		return
 	}
 
+	// 如果未指定运行模式，默认使用生产模式
+	runMode := req.RunMode
+	if runMode == "" {
+		runMode = RunModeProduction
+	}
+
 	// 初始化管理员
 	user, accessToken, refreshToken, err := h.authService.InitializeAdmin(
 		c.Request.Context(),
 		req.Username,
 		req.Email,
 		req.Password,
+		string(runMode),
 	)
 	if err != nil {
 		if err.Error() == "admin already exists" {

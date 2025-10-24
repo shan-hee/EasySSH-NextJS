@@ -4,6 +4,7 @@
  */
 
 import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 import { type User } from "@/lib/api/auth"
 
 const TOKEN_KEY = "easyssh_access_token"
@@ -59,10 +60,9 @@ export async function verifyAuth(): Promise<User | null> {
           const user = await getCurrentUser(newTokens.access_token)
           return user
         } catch (refreshError) {
-          // Refresh token 也失败,清除 cookies
-          const cookieStore = await cookies()
-          cookieStore.delete(TOKEN_KEY)
-          cookieStore.delete(REFRESH_TOKEN_KEY)
+          // Refresh token 也失败,不要在这里删除 cookies
+          // 返回 null,让调用方处理重定向
+          console.warn("[Auth Server] Refresh token failed, auth required")
           return null
         }
       }

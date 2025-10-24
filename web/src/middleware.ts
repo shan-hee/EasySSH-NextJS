@@ -20,10 +20,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url))
   }
 
-  // 2. 检查是否需要初始化管理员(对所有非公开路由)
-  const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route))
-
-  if (!isPublicRoute && !pathname.startsWith("/_next") && !pathname.startsWith("/api")) {
+  // 2. 检查是否需要初始化管理员(对所有路由,包括登录页)
+  // 跳过静态资源和API路由
+  if (!pathname.startsWith("/_next") && !pathname.startsWith("/api")) {
     try {
       const apiUrl = `${getApiBaseUrl()}/auth/admin-status`
       const response = await fetch(apiUrl, {
@@ -42,6 +41,11 @@ export async function middleware(request: NextRequest) {
         if (data.need_init && pathname !== "/setup") {
           return NextResponse.redirect(new URL("/setup", request.url))
         }
+
+        // 如果已有管理员且在setup页面,重定向到登录页
+        if (!data.need_init && pathname === "/setup") {
+          return NextResponse.redirect(new URL("/login", request.url))
+        }
       }
     } catch (error) {
       console.error("Middleware: Failed to check admin status:", error)
@@ -49,37 +53,43 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 3. 如果访问setup但已有管理员,重定向到登录页
-  if (pathname === "/setup") {
-    try {
-      const apiUrl = `${getApiBaseUrl()}/auth/admin-status`
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        const data = result.data || result
-
-        // 已有管理员,重定向到登录页
-        if (!data.need_init) {
-          return NextResponse.redirect(new URL("/login", request.url))
-        }
-      }
-    } catch (error) {
-      console.error("Middleware: Failed to check admin status on /setup:", error)
-    }
-  }
-
   // 4. 已登录用户访问登录页,重定向到dashboard
+  // 注意: 仅检查 cookie 存在性,不验证有效性
+  // 如果 token 无效,dashboard layout 会处理重定向
   if (pathname === "/login") {
     const accessToken = request.cookies.get("easyssh_access_token")?.value
     if (accessToken) {
-      return NextResponse.redirect(new URL("/dashboard", request.url))
+      // 验证 token 是否有效
+      try {
+        const apiUrl = `${getApiBaseUrl()}/users/me`
+        const response = await fetch(apiUrl, {
+          method: "GET",
+          headers: {
+            "Accept": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        })
+
+        // Token 有效,重定向到 dashboard
+        if (response.ok) {
+          return NextResponse.redirect(new URL("/dashboard", request.url))
+        }
+        // Token 无效,清除 cookie,留在登录页
+        else {
+          const response = NextResponse.next()
+          response.cookies.delete("easyssh_access_token")
+          response.cookies.delete("easyssh_refresh_token")
+          return response
+        }
+      } catch (error) {
+        console.error("Middleware: Failed to verify token:", error)
+        // 验证失败,清除 cookie
+        const response = NextResponse.next()
+        response.cookies.delete("easyssh_access_token")
+        response.cookies.delete("easyssh_refresh_token")
+        return response
+      }
     }
   }
 
