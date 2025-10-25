@@ -360,6 +360,7 @@ type SystemMetrics struct {
 	Disks            []*DiskMetrics         `protobuf:"bytes,5,rep,name=disks,proto3" json:"disks,omitempty"`                                                   // 磁盘列表
 	Timestamp        int64                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                          // 时间戳（Unix 秒）
 	DiskTotalPercent float64                `protobuf:"fixed64,7,opt,name=disk_total_percent,json=diskTotalPercent,proto3" json:"disk_total_percent,omitempty"` // 磁盘总使用率 0-100
+	SshLatencyMs     int64                  `protobuf:"varint,8,opt,name=ssh_latency_ms,json=sshLatencyMs,proto3" json:"ssh_latency_ms,omitempty"`              // SSH 命令延迟（毫秒）
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -443,6 +444,13 @@ func (x *SystemMetrics) GetDiskTotalPercent() float64 {
 	return 0
 }
 
+func (x *SystemMetrics) GetSshLatencyMs() int64 {
+	if x != nil {
+		return x.SshLatencyMs
+	}
+	return 0
+}
+
 var File_internal_proto_metrics_proto protoreflect.FileDescriptor
 
 const file_internal_proto_metrics_proto_rawDesc = "" +
@@ -476,7 +484,7 @@ const file_internal_proto_metrics_proto_rawDesc = "" +
 	"\n" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
-	"totalBytes\"\xc7\x02\n" +
+	"totalBytes\"\xed\x02\n" +
 	"\rSystemMetrics\x124\n" +
 	"\vsystem_info\x18\x01 \x01(\v2\x13.monitor.SystemInfoR\n" +
 	"systemInfo\x12%\n" +
@@ -485,7 +493,8 @@ const file_internal_proto_metrics_proto_rawDesc = "" +
 	"\anetwork\x18\x04 \x01(\v2\x17.monitor.NetworkMetricsR\anetwork\x12*\n" +
 	"\x05disks\x18\x05 \x03(\v2\x14.monitor.DiskMetricsR\x05disks\x12\x1c\n" +
 	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp\x12,\n" +
-	"\x12disk_total_percent\x18\a \x01(\x01R\x10diskTotalPercentB0Z.github.com/easyssh/server/internal/proto;protob\x06proto3"
+	"\x12disk_total_percent\x18\a \x01(\x01R\x10diskTotalPercent\x12$\n" +
+	"\x0essh_latency_ms\x18\b \x01(\x03R\fsshLatencyMsB0Z.github.com/easyssh/server/internal/proto;protob\x06proto3"
 
 var (
 	file_internal_proto_metrics_proto_rawDescOnce sync.Once

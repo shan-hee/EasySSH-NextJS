@@ -1486,6 +1486,7 @@ $root.monitor = (function() {
          * @property {Array.<monitor.IDiskMetrics>|null} [disks] SystemMetrics disks
          * @property {number|Long|null} [timestamp] SystemMetrics timestamp
          * @property {number|null} [diskTotalPercent] SystemMetrics diskTotalPercent
+         * @property {number|Long|null} [sshLatencyMs] SystemMetrics sshLatencyMs
          */
 
         /**
@@ -1561,6 +1562,14 @@ $root.monitor = (function() {
         SystemMetrics.prototype.diskTotalPercent = 0;
 
         /**
+         * SystemMetrics sshLatencyMs.
+         * @member {number|Long} sshLatencyMs
+         * @memberof monitor.SystemMetrics
+         * @instance
+         */
+        SystemMetrics.prototype.sshLatencyMs = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
          * Creates a new SystemMetrics instance using the specified properties.
          * @function create
          * @memberof monitor.SystemMetrics
@@ -1599,6 +1608,8 @@ $root.monitor = (function() {
                 writer.uint32(/* id 6, wireType 0 =*/48).int64(message.timestamp);
             if (message.diskTotalPercent != null && Object.hasOwnProperty.call(message, "diskTotalPercent"))
                 writer.uint32(/* id 7, wireType 1 =*/57).double(message.diskTotalPercent);
+            if (message.sshLatencyMs != null && Object.hasOwnProperty.call(message, "sshLatencyMs"))
+                writer.uint32(/* id 8, wireType 0 =*/64).int64(message.sshLatencyMs);
             return writer;
         };
 
@@ -1663,6 +1674,10 @@ $root.monitor = (function() {
                     }
                 case 7: {
                         message.diskTotalPercent = reader.double();
+                        break;
+                    }
+                case 8: {
+                        message.sshLatencyMs = reader.int64();
                         break;
                     }
                 default:
@@ -1735,6 +1750,9 @@ $root.monitor = (function() {
             if (message.diskTotalPercent != null && message.hasOwnProperty("diskTotalPercent"))
                 if (typeof message.diskTotalPercent !== "number")
                     return "diskTotalPercent: number expected";
+            if (message.sshLatencyMs != null && message.hasOwnProperty("sshLatencyMs"))
+                if (!$util.isInteger(message.sshLatencyMs) && !(message.sshLatencyMs && $util.isInteger(message.sshLatencyMs.low) && $util.isInteger(message.sshLatencyMs.high)))
+                    return "sshLatencyMs: integer|Long expected";
             return null;
         };
 
@@ -1791,6 +1809,15 @@ $root.monitor = (function() {
                     message.timestamp = new $util.LongBits(object.timestamp.low >>> 0, object.timestamp.high >>> 0).toNumber();
             if (object.diskTotalPercent != null)
                 message.diskTotalPercent = Number(object.diskTotalPercent);
+            if (object.sshLatencyMs != null)
+                if ($util.Long)
+                    (message.sshLatencyMs = $util.Long.fromValue(object.sshLatencyMs)).unsigned = false;
+                else if (typeof object.sshLatencyMs === "string")
+                    message.sshLatencyMs = parseInt(object.sshLatencyMs, 10);
+                else if (typeof object.sshLatencyMs === "number")
+                    message.sshLatencyMs = object.sshLatencyMs;
+                else if (typeof object.sshLatencyMs === "object")
+                    message.sshLatencyMs = new $util.LongBits(object.sshLatencyMs.low >>> 0, object.sshLatencyMs.high >>> 0).toNumber();
             return message;
         };
 
@@ -1820,6 +1847,11 @@ $root.monitor = (function() {
                 } else
                     object.timestamp = options.longs === String ? "0" : 0;
                 object.diskTotalPercent = 0;
+                if ($util.Long) {
+                    var long = new $util.Long(0, 0, false);
+                    object.sshLatencyMs = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.sshLatencyMs = options.longs === String ? "0" : 0;
             }
             if (message.systemInfo != null && message.hasOwnProperty("systemInfo"))
                 object.systemInfo = $root.monitor.SystemInfo.toObject(message.systemInfo, options);
@@ -1841,6 +1873,11 @@ $root.monitor = (function() {
                     object.timestamp = options.longs === String ? $util.Long.prototype.toString.call(message.timestamp) : options.longs === Number ? new $util.LongBits(message.timestamp.low >>> 0, message.timestamp.high >>> 0).toNumber() : message.timestamp;
             if (message.diskTotalPercent != null && message.hasOwnProperty("diskTotalPercent"))
                 object.diskTotalPercent = options.json && !isFinite(message.diskTotalPercent) ? String(message.diskTotalPercent) : message.diskTotalPercent;
+            if (message.sshLatencyMs != null && message.hasOwnProperty("sshLatencyMs"))
+                if (typeof message.sshLatencyMs === "number")
+                    object.sshLatencyMs = options.longs === String ? String(message.sshLatencyMs) : message.sshLatencyMs;
+                else
+                    object.sshLatencyMs = options.longs === String ? $util.Long.prototype.toString.call(message.sshLatencyMs) : options.longs === Number ? new $util.LongBits(message.sshLatencyMs.low >>> 0, message.sshLatencyMs.high >>> 0).toNumber() : message.sshLatencyMs;
             return object;
         };
 

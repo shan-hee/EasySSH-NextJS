@@ -46,6 +46,7 @@ export interface MonitorMetrics {
     totalBytes: number;
   }>;
   diskTotalPercent: number;
+  sshLatencyMs: number;
   timestamp: number;
 }
 
@@ -159,6 +160,7 @@ export function useMonitorWebSocket({
                 totalBytes: Number(disk.totalBytes || 0),
               })),
               diskTotalPercent: metricsData.diskTotalPercent || 0,
+              sshLatencyMs: Number(metricsData.sshLatencyMs || 0),
               timestamp: Number(metricsData.timestamp || 0),
             };
 

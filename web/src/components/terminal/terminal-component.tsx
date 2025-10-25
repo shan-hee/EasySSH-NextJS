@@ -28,6 +28,8 @@ import { FileManagerPanel } from "./file-manager-panel"
 import { NetworkLatencyPopover } from "./network-latency-popover"
 import { MonitorPanel } from "./monitor/MonitorPanel"
 import { AiAssistantPanel } from "./ai-assistant-panel"
+import { useMonitorWebSocket } from "./monitor/hooks/useMonitorWebSocket"
+import { useNetworkLatency } from "@/hooks/useNetworkLatency"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -107,6 +109,24 @@ export function TerminalComponent({
       clearShortcut: 'Ctrl+L',
     }
   })
+
+  // 获取当前活跃会话
+  const active = sessions.find((s) => s.id === activeSession)
+
+  // 监控 WebSocket 连接（获取 SSH 延迟）
+  const { metrics } = useMonitorWebSocket({
+    serverId: active && active.type !== 'quick' && active.isConnected
+      ? String(active.serverId)
+      : '',
+    enabled: !!(active && active.type !== 'quick' && active.isConnected),
+    interval: settings.monitorInterval || 2,
+  })
+
+  // 综合网络延迟测量
+  const latency = useNetworkLatency({
+    sshLatencyMs: metrics?.sshLatencyMs,
+    enabled: !!(active && active.type !== 'quick' && active.isConnected),
+  })
   // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
   const initializedSessionsRef = useRef<Set<string>>(new Set())
 
@@ -125,8 +145,6 @@ export function TerminalComponent({
   const handleCommand = (sessionId: string, command: string) => {
     onSendCommand(sessionId, command)
   }
-
-  const active = sessions.find(s => s.id === activeSession) || sessions[0]
 
   const handleNewSessionClick = () => {
     const id = onNewSession()
@@ -269,7 +287,10 @@ export function TerminalComponent({
                     <FolderOpen className="h-3.5 w-3.5" />
                   </Button>
 
-                  <NetworkLatencyPopover currentLatency={2} />
+                  <NetworkLatencyPopover
+                    currentLatency={latency.total}
+                    nodes={latency.nodes}
+                  />
 
                   <Button
                     variant="ghost"

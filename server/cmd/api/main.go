@@ -183,6 +183,14 @@ func main() {
 			})
 		})
 
+		// Ping 端点（用于延迟测量）
+		v1.HEAD("/ping", func(c *gin.Context) {
+			c.Status(http.StatusOK)
+		})
+		v1.GET("/ping", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"pong": time.Now().UnixMilli()})
+		})
+
 		// 认证路由（公开）
 		authRoutes := v1.Group("/auth")
 		{

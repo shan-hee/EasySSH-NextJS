@@ -51,4 +51,5 @@ message SystemMetrics {
   repeated DiskMetrics disks = 5; // 磁盘列表
   int64 timestamp = 6;            // 时间戳（Unix 秒）
   double disk_total_percent = 7;  // 磁盘总使用率 0-100
+  int64 ssh_latency_ms = 8;       // SSH 命令延迟（毫秒）
 }

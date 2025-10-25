@@ -58,13 +58,6 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
 	session := h.sessionManager.GetActiveByUserAndServer(userID, serverID)
 	if session == nil {
 		log.Printf("[Monitor] 未找到活跃会话: userID=%s, serverID=%s", userID, serverID)
-		// 打印所有活跃会话用于调试
-		allSessions := h.sessionManager.GetAllActive()
-		log.Printf("[Monitor] 当前活跃会话数: %d", len(allSessions))
-		for _, s := range allSessions {
-			log.Printf("[Monitor] 会话: ID=%s, UserID=%s, ServerID=%s, Active=%v",
-				s.ID, s.UserID, s.ServerID, s.IsActive())
-		}
 		c.JSON(http.StatusNotFound, gin.H{"error": "no active session for this server"})
 		return
 	}

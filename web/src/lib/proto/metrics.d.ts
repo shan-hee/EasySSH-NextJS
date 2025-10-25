@@ -589,6 +589,9 @@ export namespace monitor {
 
         /** SystemMetrics diskTotalPercent */
         diskTotalPercent?: (number|null);
+
+        /** SystemMetrics sshLatencyMs */
+        sshLatencyMs?: (number|Long|null);
     }
 
     /** Represents a SystemMetrics. */
@@ -620,6 +623,9 @@ export namespace monitor {
 
         /** SystemMetrics diskTotalPercent. */
         public diskTotalPercent: number;
+
+        /** SystemMetrics sshLatencyMs. */
+        public sshLatencyMs: (number|Long);
 
         /**
          * Creates a new SystemMetrics instance using the specified properties.

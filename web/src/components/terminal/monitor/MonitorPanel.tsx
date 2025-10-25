@@ -16,7 +16,9 @@ import { CPUChart } from './components/CPUChart';
 import { MemoryChart } from './components/MemoryChart';
 import { NetworkChart } from './components/NetworkChart';
 import { DiskUsage } from './components/DiskUsage';
-import { Loader2, WifiOff, AlertCircle } from 'lucide-react';
+import { WifiOff, AlertCircle } from 'lucide-react';
+import { MonitorSkeleton, MinimalLoader, ErrorState } from './components/MonitorSkeleton';
+import { Button } from '@/components/ui/button';
 
 interface MonitorPanelProps {
   className?: string;
@@ -130,30 +132,35 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({ className, serverId,
   const renderStatusHint = () => {
     if (!serverId) {
       return (
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-          <AlertCircle className="w-12 h-12 mb-4 opacity-50" />
-          <p className="text-sm">未选择服务器</p>
-          <p className="text-xs mt-1">请先连接到服务器</p>
-        </div>
+        <ErrorState
+          icon={<AlertCircle className="w-12 h-12" />}
+          title="未选择服务器"
+          description="请先连接到服务器以查看监控数据"
+        />
       );
     }
 
     if (status === WSStatus.CONNECTING) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-          <Loader2 className="w-12 h-12 mb-4 animate-spin opacity-50" />
-          <p className="text-sm">正在连接监控服务...</p>
-        </div>
-      );
+      // 首次连接显示骨架屏
+      return <MonitorSkeleton />;
     }
 
     if (status === WSStatus.ERROR || status === WSStatus.DISCONNECTED) {
       return (
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-          <WifiOff className="w-12 h-12 mb-4 opacity-50" />
-          <p className="text-sm">监控连接已断开</p>
-          <p className="text-xs mt-1">正在尝试重新连接...</p>
-        </div>
+        <ErrorState
+          icon={<WifiOff className="w-12 h-12" />}
+          title="监控连接已断开"
+          description="正在尝试重新连接，请稍候..."
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.reload()}
+            >
+              刷新页面
+            </Button>
+          }
+        />
       );
     }
 

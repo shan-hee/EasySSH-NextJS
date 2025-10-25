@@ -12,10 +12,11 @@ import (
 
 // Collector 系统指标采集器
 type Collector struct {
-	session  *sshDomain.Session
-	prevCPU    *CPUStat
-	prevNet    map[string]NetStat
-	prevTime   time.Time
+	session      *sshDomain.Session
+	prevCPU      *CPUStat
+	prevNet      map[string]NetStat
+	prevTime     time.Time
+	sshLatencyMs int64 // SSH 命令延迟（毫秒）
 }
 
 // NewCollector 创建采集器
@@ -56,6 +57,8 @@ type NetStat struct {
 
 // sshExec 执行 SSH 命令
 func (c *Collector) sshExec(cmd string) (string, error) {
+	start := time.Now()
+
 	// 通过 SSH Client 创建新会话执行命令
 	session, err := c.session.Client.NewSession()
 	if err != nil {
@@ -64,6 +67,10 @@ func (c *Collector) sshExec(cmd string) (string, error) {
 	defer session.Close()
 
 	output, err := session.CombinedOutput(cmd)
+
+	// 记录 SSH 命令延迟
+	c.sshLatencyMs = time.Since(start).Milliseconds()
+
 	if err != nil {
 		return "", fmt.Errorf("failed to execute command: %w", err)
 	}
@@ -137,6 +144,9 @@ cat /proc/cpuinfo | grep "^processor" | wc -l
 		uptimeData := sections["UPTIME"]
 		metrics.SystemInfo = c.parseSystemInfo(sysData, loadData, uptimeData)
 	}
+
+	// 设置 SSH 延迟
+	metrics.SshLatencyMs = c.sshLatencyMs
 
 	return metrics, nil
 }
