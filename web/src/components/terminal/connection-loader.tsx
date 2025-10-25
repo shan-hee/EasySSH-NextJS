@@ -59,12 +59,12 @@ export function ConnectionLoader({
 
   return (
     <div className={`h-full w-full overflow-hidden relative transition-colors bg-background [--loader-color:oklch(0.145_0_0)] dark:[--loader-color:oklch(1_0_0)]`}>
-      {/* 动画背景线条 */}
-      <div className="longfazers absolute inset-0">
-        <span className="longfazer-1" />
-        <span className="longfazer-2" />
-        <span className="longfazer-3" />
-        <span className="longfazer-4" />
+      {/* 动画背景线条：所有阶段都显示。为避免首帧闪线，给每条线加内联 transform 初始在屏外 */}
+      <div className="longfazers absolute inset-0" data-state={animationState}>
+        <span className="longfazer-1" style={{ transform: 'translateX(120vw)' }} />
+        <span className="longfazer-2" style={{ transform: 'translateX(120vw)' }} />
+        <span className="longfazer-3" style={{ transform: 'translateX(120vw)' }} />
+        <span className="longfazer-4" style={{ transform: 'translateX(120vw)' }} />
       </div>
 
       {/* 飞船动画 - 绝对定位，独立移动 */}
@@ -346,6 +346,13 @@ export function ConnectionLoader({
           width: 20%;
           background: var(--loader-color);
           box-shadow: 0 0 10px color-mix(in oklch, var(--loader-color) 50%, transparent);
+          /* 首帧就在屏幕外：用 transform 而不是 left，通常更稳定且更早生效 */
+          left: 0;
+          /* 使用视口单位，确保一定在屏幕外开始 */
+          transform: translateX(120vw);
+          animation-fill-mode: both;
+          will-change: transform, opacity;
+          pointer-events: none;
         }
 
         .longfazer-1 {
@@ -371,42 +378,48 @@ export function ConnectionLoader({
           animation-delay: -3s;
         }
 
+        /* 退出阶段：速度线加速（动画时长缩短约一半） */
+        .longfazers[data-state='exiting'] .longfazer-1 { animation-duration: 0.35s; }
+        .longfazers[data-state='exiting'] .longfazer-2 { animation-duration: 0.40s; }
+        .longfazers[data-state='exiting'] .longfazer-3 { animation-duration: 0.35s; }
+        .longfazers[data-state='exiting'] .longfazer-4 { animation-duration: 0.25s; }
+
         @keyframes lf {
           0% {
-            left: 200%;
+            transform: translateX(120vw);
           }
           100% {
-            left: -200%;
+            transform: translateX(-120vw);
             opacity: 0;
           }
         }
 
         @keyframes lf2 {
           0% {
-            left: 200%;
+            transform: translateX(120vw);
           }
           100% {
-            left: -200%;
+            transform: translateX(-120vw);
             opacity: 0;
           }
         }
 
         @keyframes lf3 {
           0% {
-            left: 200%;
+            transform: translateX(120vw);
           }
           100% {
-            left: -100%;
+            transform: translateX(-120vw);
             opacity: 0;
           }
         }
 
         @keyframes lf4 {
           0% {
-            left: 200%;
+            transform: translateX(120vw);
           }
           100% {
-            left: -100%;
+            transform: translateX(-120vw);
             opacity: 0;
           }
         }
