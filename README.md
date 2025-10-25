@@ -77,14 +77,16 @@ pnpm install
 - ✅ 检查必需的工具（Go、pnpm）
 - ✅ 检查配置文件是否存在
 - ✅ 安装前端依赖（如果需要）
-- ✅ 启动后端服务（端口 8521）
+- ✅ 启动后端服务（端口 8521,支持热重载）
 - ✅ 启动前端服务（端口 8520）
 
 ## 如果脚本无法运行，可以手动启动：
 ```bash
-# 启动后端
+# 启动后端（热重载模式）
 cd server
-make dev # 或者 go run cmd/api/main.go
+make dev  # 推荐: 自动使用 Air 热重载,未安装时降级为普通模式
+# 或者直接: /root/go/bin/air
+# 或者无热重载: go run cmd/api/main.go
 ```
 ```bash
 # 启动前端

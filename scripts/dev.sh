@@ -31,6 +31,29 @@ if ! command_exists pnpm; then
     exit 1
 fi
 
+# 检查 Air 是否存在
+AIR_PATH=""
+if command_exists air; then
+    AIR_PATH="air"
+elif [ -f "/root/go/bin/air" ]; then
+    AIR_PATH="/root/go/bin/air"
+elif [ -f "$HOME/go/bin/air" ]; then
+    AIR_PATH="$HOME/go/bin/air"
+else
+    echo -e "${YELLOW}⚠️  Air 未安装，将自动安装热重载工具${NC}"
+    go install github.com/cosmtrek/air@latest
+    if [ -f "/root/go/bin/air" ]; then
+        AIR_PATH="/root/go/bin/air"
+    elif [ -f "$HOME/go/bin/air" ]; then
+        AIR_PATH="$HOME/go/bin/air"
+    else
+        echo -e "${RED}❌ 错误: Air 安装失败${NC}"
+        echo -e "${YELLOW}   请手动运行: go install github.com/cosmtrek/air@latest${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ Air 安装成功${NC}"
+fi
+
 # 检查后端配置文件
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}⚠️  .env 文件不存在${NC}"
@@ -67,9 +90,9 @@ if [ ! -d "web/node_modules" ]; then
 fi
 
 # 启动后端
-echo -e "${GREEN}🔧 启动 Go 后端服务...${NC}"
+echo -e "${GREEN}🔧 启动 Go 后端服务 (热重载模式)...${NC}"
 cd server
-go run cmd/api/main.go &
+$AIR_PATH &
 SERVER_PID=$!
 cd ..
 

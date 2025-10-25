@@ -1,7 +1,35 @@
-.PHONY: dev build test clean
+.PHONY: dev dev-simple build test clean deps mock migrate-up migrate-down help
 
-# 开发模式运行
+# 默认目标 - 显示帮助
+.DEFAULT_GOAL := help
+
+# 显示帮助信息
+help:
+	@echo "EasySSH 服务端 Makefile 命令:"
+	@echo ""
+	@echo "  make dev         - 开发模式运行 (支持热重载)"
+	@echo "  make dev-simple  - 开发模式运行 (无热重载)"
+	@echo "  make build       - 构建二进制文件"
+	@echo "  make test        - 运行测试"
+	@echo "  make clean       - 清理构建文件"
+	@echo "  make deps        - 安装依赖"
+	@echo "  make mock        - 生成 mock 文件"
+	@echo ""
+
+# 开发模式运行 - 支持热重载
 dev:
+	@if [ -f /root/go/bin/air ]; then \
+		/root/go/bin/air; \
+	elif command -v air >/dev/null 2>&1; then \
+		air; \
+	else \
+		echo "⚠️  Air 未安装,使用普通模式 (无热重载)"; \
+		echo "💡 安装 Air: go install github.com/cosmtrek/air@latest"; \
+		go run cmd/api/main.go; \
+	fi
+
+# 开发模式运行 - 无热重载
+dev-simple:
 	go run cmd/api/main.go
 
 # 构建
