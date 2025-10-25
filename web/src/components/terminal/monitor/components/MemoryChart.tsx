@@ -56,18 +56,13 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-medium">内存</span>
-        <span className={`text-xs font-mono tabular-nums ${
-          data.ram.percent > 85 ? 'text-red-500' : data.ram.percent > 70 ? 'text-yellow-500' : 'text-muted-foreground'
-        }`}>
-          {data.ram.percent}%
-        </span>
+        <span className="text-xs font-semibold">内存</span>
       </div>
 
       {/* 图表区域 - 固定高度 106px,左图右文 */}
       <div className="h-[106px] flex items-center gap-3">
         {/* 左侧:径向条形图 */}
-        <div className="w-[106px] h-[106px] relative flex-shrink-0">
+        <div className="w-[100px] h-[100px] relative flex-shrink-0">
           <ChartContainer config={chartConfig} className="w-full h-full">
             {({ width, height }) => (
             <RadialBarChart
@@ -76,8 +71,8 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
               data={chartData}
               startAngle={90}
               endAngle={450}
-              innerRadius={25}
-              outerRadius={55}
+              innerRadius={22}
+              outerRadius={50}
             >
               <PolarAngleAxis
                 type="number"
@@ -112,7 +107,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
                           {memData.percent}%
                         </div>
                         <div className="text-muted-foreground">
-                          {memData.used.toFixed(1)}G / {memData.total}G
+                          {memData.value} {memData.unit} / {memData.total} {memData.totalUnit}
                         </div>
                       </div>
                     </div>
@@ -144,7 +139,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
               {data.ram.percent}%
             </div>
             <div className="text-muted-foreground font-mono tabular-nums text-[11px] pl-3.5">
-              {data.ram.used.toFixed(1)}G / {data.ram.total}G
+              {data.ram.value} {data.ram.unit} / {data.ram.total} {data.ram.totalUnit}
             </div>
           </div>
 
@@ -160,7 +155,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
               {data.swap.percent}%
             </div>
             <div className="text-muted-foreground font-mono tabular-nums text-[11px] pl-3.5">
-              {data.swap.used.toFixed(1)}G / {data.swap.total}G
+              {data.swap.value} {data.swap.unit} / {data.swap.total} {data.swap.totalUnit}
             </div>
           </div>
         </div>

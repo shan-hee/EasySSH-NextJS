@@ -27,7 +27,8 @@ import {
   Palette,
   Keyboard,
   Clock,
-  Layers
+  Layers,
+  Activity,
 } from "lucide-react"
 import { KeyboardShortcutInput } from "./keyboard-shortcut-input"
 
@@ -53,6 +54,7 @@ export interface TerminalSettings {
   hibernateBackground: boolean
   autoReconnect: boolean
   confirmBeforeClose: boolean
+  monitorInterval: number // 监控数据采集间隔（秒）
 
   // 快捷键设置
   copyShortcut: string
@@ -84,6 +86,7 @@ const defaultSettings: TerminalSettings = {
   hibernateBackground: true,
   autoReconnect: true,
   confirmBeforeClose: true,
+  monitorInterval: 2, // 默认 2 秒采集一次
   copyShortcut: 'Ctrl+Shift+C',
   pasteShortcut: 'Ctrl+Shift+V',
   clearShortcut: 'Ctrl+L',
@@ -445,6 +448,32 @@ export function TerminalSettingsDialog({
                 checked={localSettings.confirmBeforeClose}
                 onCheckedChange={(checked) => updateSetting('confirmBeforeClose', checked)}
               />
+            </div>
+
+            <div className="border-t pt-4 space-y-2">
+              <Label htmlFor="monitorInterval">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  监控数据采集间隔
+                </div>
+              </Label>
+              <div className="flex items-center gap-4">
+                <Slider
+                  id="monitorInterval"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={[localSettings.monitorInterval]}
+                  onValueChange={(value) => updateSetting('monitorInterval', value[0])}
+                  className="flex-1"
+                />
+                <span className="w-14 text-sm text-muted-foreground">
+                  {localSettings.monitorInterval} 秒
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                调整系统监控面板的数据采集频率。间隔越短，数据越实时，但可能增加系统负载
+              </p>
             </div>
           </TabsContent>
 

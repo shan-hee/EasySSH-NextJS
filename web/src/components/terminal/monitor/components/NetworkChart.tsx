@@ -79,12 +79,20 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
     return `${value}K`;
   };
 
+  // 计算 X 轴刻度间隔 - 根据数据点数量动态调整
+  const getXAxisInterval = () => {
+    const dataLength = chartData.length;
+    if (dataLength <= 2) return 0; // 显示所有刻度
+    if (dataLength <= 5) return 1; // 每隔 1 个显示
+    return 'preserveStartEnd'; // 只显示首尾
+  };
+
   return (
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-medium">网络</span>
-        <div className="text-xs font-mono tabular-nums flex items-center gap-2">
+        <span className="text-xs font-semibold">网络</span>
+        <div className="text-xs font-mono font-semibold tabular-nums flex items-center gap-2">
           <span style={{ color: 'var(--chart-3)' }}>↓ {formatSpeed(currentDownload)}</span>
           <span style={{ color: 'var(--chart-5)' }}>↑ {formatSpeed(currentUpload)}</span>
         </div>
@@ -101,103 +109,110 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           ))}
         </div>
 
-        <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
-          {({ width, height }) => (
-          <LineChart
-            width={width}
-            height={height}
-            data={chartData}
-            margin={{
-              left: 12,
-              right: 12,
-              top: 8,
-              bottom: 0,
-            }}
-          >
-            <CartesianGrid
-              vertical={false}
-              strokeDasharray="3 3"
-              stroke="hsl(var(--border))"
-              opacity={0.3}
-            />
-            <XAxis
-              dataKey="time"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              interval="preserveStartEnd"
-            />
-            <YAxis hide />
-            <ChartTooltip
-              cursor={false}
-              content={({ active, payload, label }) => {
-                if (!active || !payload || payload.length === 0) {
-                  return null;
-                }
+        {/* 当数据为空时显示提示 */}
+        {chartData.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+            等待数据...
+          </div>
+        ) : (
+          <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+            {({ width, height }) => (
+            <LineChart
+              width={width}
+              height={height}
+              data={chartData}
+              margin={{
+                left: 12,
+                right: 12,
+                top: 8,
+                bottom: 0,
+              }}
+            >
+              <CartesianGrid
+                vertical={false}
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                opacity={0.3}
+              />
+              <XAxis
+                dataKey="time"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                interval={getXAxisInterval()}
+              />
+              <YAxis hide />
+              <ChartTooltip
+                cursor={false}
+                content={({ active, payload, label }) => {
+                  if (!active || !payload || payload.length === 0) {
+                    return null;
+                  }
 
-                return (
-                  <div className="rounded-lg border bg-background px-3 py-2 shadow-xl">
-                    <div className="mb-1.5 text-xs font-medium text-foreground">
-                      时间: {label}
+                  return (
+                    <div className="rounded-lg border bg-background px-3 py-2 shadow-xl">
+                      <div className="mb-1.5 text-xs font-medium text-foreground">
+                        时间: {label}
+                      </div>
+                      <div className="space-y-1">
+                        {payload.map((item, index) => (
+                          <div key={index} className="flex items-center gap-2 text-xs">
+                            <div
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-muted-foreground">
+                              {item.name === 'download' ? '下载' : '上传'}:
+                            </span>
+                            <span className="font-mono font-medium text-foreground">
+                              {formatSpeed(item.value as number)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      {payload.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2 text-xs">
-                          <div
-                            className="h-2 w-2 rounded-full"
-                            style={{ backgroundColor: item.color }}
-                          />
-                          <span className="text-muted-foreground">
-                            {item.name === 'download' ? '下载' : '上传'}:
-                          </span>
-                          <span className="font-mono font-medium text-foreground">
-                            {formatSpeed(item.value as number)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              }}
-            />
-            <Line
-              dataKey="download"
-              type="natural"
-              stroke="var(--color-download)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{
-                r: 4,
-                strokeWidth: 0,
-                style: {
-                  transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
-                }
-              }}
-              animationDuration={300}
-              animationEasing="ease-out"
-              isAnimationActive={true}
-            />
-            <Line
-              dataKey="upload"
-              type="natural"
-              stroke="var(--color-upload)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{
-                r: 4,
-                strokeWidth: 0,
-                style: {
-                  transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
-                }
-              }}
-              animationDuration={300}
-              animationEasing="ease-out"
-              isAnimationActive={true}
-            />
-          </LineChart>
-          )}
-        </ChartContainer>
+                  );
+                }}
+              />
+              <Line
+                dataKey="download"
+                type="natural"
+                stroke="var(--color-download)"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{
+                  r: 4,
+                  strokeWidth: 0,
+                  style: {
+                    transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
+                  }
+                }}
+                animationDuration={300}
+                animationEasing="ease-out"
+                isAnimationActive={true}
+              />
+              <Line
+                dataKey="upload"
+                type="natural"
+                stroke="var(--color-upload)"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{
+                  r: 4,
+                  strokeWidth: 0,
+                  style: {
+                    transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
+                  }
+                }}
+                animationDuration={300}
+                animationEasing="ease-out"
+                isAnimationActive={true}
+              />
+            </LineChart>
+            )}
+          </ChartContainer>
+        )}
       </div>
     </div>
   );

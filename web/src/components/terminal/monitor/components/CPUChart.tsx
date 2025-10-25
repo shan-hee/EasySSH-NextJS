@@ -43,12 +43,21 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
   // Y 轴刻度值
   const yAxisTicks = [0, 25, 50, 75, 100];
 
+  // 计算 X 轴刻度间隔 - 根据数据点数量动态调整
+  // 数据点少时显示更多刻度，数据点多时显示更少刻度
+  const getXAxisInterval = () => {
+    const dataLength = chartData.length;
+    if (dataLength <= 2) return 0; // 显示所有刻度
+    if (dataLength <= 5) return 1; // 每隔 1 个显示
+    return 'preserveStartEnd'; // 只显示首尾
+  };
+
   return (
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-medium">CPU</span>
-        <span className={`text-xs font-mono tabular-nums ${
+        <span className="text-xs font-semibold">CPU</span>
+        <span className={`text-xs font-mono font-semibold tabular-nums ${
           currentUsage > 80 ? 'text-red-500' : currentUsage > 60 ? 'text-yellow-500' : 'text-muted-foreground'
         }`}>
           {currentUsage}%
@@ -66,102 +75,109 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
           ))}
         </div>
 
-        <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
-          {({ width, height }) => (
-          <AreaChart
-            width={width}
-            height={height}
-            data={chartData}
-            margin={{
-              left: 12,
-              right: 12,
-              top: 8,
-              bottom: 0,
-            }}
-          >
-            <defs>
-              <linearGradient id="fillCPU" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="var(--color-usage)"
-                  stopOpacity={0.8}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="var(--color-usage)"
-                  stopOpacity={0.1}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              vertical={false}
-              strokeDasharray="3 3"
-              stroke="hsl(var(--border))"
-              opacity={0.3}
-            />
-            <XAxis
-              dataKey="time"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              interval="preserveStartEnd"
-            />
-            <YAxis hide domain={[0, 100]} />
-            <ChartTooltip
-              cursor={false}
-              content={({ active, payload, label }) => {
-                if (!active || !payload || payload.length === 0) {
-                  return null;
-                }
+        {/* 当数据为空时显示提示 */}
+        {chartData.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+            等待数据...
+          </div>
+        ) : (
+          <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+            {({ width, height }) => (
+            <AreaChart
+              width={width}
+              height={height}
+              data={chartData}
+              margin={{
+                left: 12,
+                right: 12,
+                top: 8,
+                bottom: 0,
+              }}
+            >
+              <defs>
+                <linearGradient id="fillCPU" x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="5%"
+                    stopColor="var(--color-usage)"
+                    stopOpacity={0.8}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="var(--color-usage)"
+                    stopOpacity={0.1}
+                  />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                vertical={false}
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                opacity={0.3}
+              />
+              <XAxis
+                dataKey="time"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                interval={getXAxisInterval()}
+              />
+              <YAxis hide domain={[0, 100]} />
+              <ChartTooltip
+                cursor={false}
+                content={({ active, payload, label }) => {
+                  if (!active || !payload || payload.length === 0) {
+                    return null;
+                  }
 
-                const usage = payload[0].value as number;
+                  const usage = payload[0].value as number;
 
-                return (
-                  <div className="rounded-lg border bg-background px-2.5 py-2 shadow-xl">
-                    <div className="mb-1.5 text-xs font-medium text-foreground">
-                      时间: {label}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-medium mb-1">
-                      <div
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: 'var(--chart-1)' }}
-                      />
-                      <span>CPU</span>
-                    </div>
-                    <div className="text-xs font-mono pl-3.5">
-                      <div className={`font-medium ${
-                        usage > 80 ? 'text-red-500' : usage > 60 ? 'text-yellow-500' : ''
-                      }`}>
-                        {usage}%
+                  return (
+                    <div className="rounded-lg border bg-background px-2.5 py-2 shadow-xl">
+                      <div className="mb-1.5 text-xs font-medium text-foreground">
+                        时间: {label}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-medium mb-1">
+                        <div
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: 'var(--chart-1)' }}
+                        />
+                        <span>CPU</span>
+                      </div>
+                      <div className="text-xs font-mono pl-3.5">
+                        <div className={`font-medium ${
+                          usage > 80 ? 'text-red-500' : usage > 60 ? 'text-yellow-500' : ''
+                        }`}>
+                          {usage}%
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              }}
-            />
-            <Area
-              dataKey="usage"
-              type="natural"
-              fill="url(#fillCPU)"
-              fillOpacity={0.4}
-              stroke="var(--color-usage)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{
-                r: 4,
-                strokeWidth: 0,
-                style: {
-                  transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
-                }
-              }}
-              animationDuration={300}
-              animationEasing="ease-out"
-              isAnimationActive={true}
-            />
-          </AreaChart>
-          )}
-        </ChartContainer>
+                  );
+                }}
+              />
+              <Area
+                dataKey="usage"
+                type="natural"
+                fill="url(#fillCPU)"
+                fillOpacity={0.4}
+                stroke="var(--color-usage)"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{
+                  r: 4,
+                  strokeWidth: 0,
+                  style: {
+                    transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
+                  }
+                }}
+                animationDuration={300}
+                animationEasing="ease-out"
+                isAnimationActive={true}
+              />
+            </AreaChart>
+            )}
+          </ChartContainer>
+        )}
       </div>
     </div>
   );

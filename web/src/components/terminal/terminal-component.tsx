@@ -101,6 +101,7 @@ export function TerminalComponent({
       hibernateBackground: true,
       autoReconnect: true,
       confirmBeforeClose: true,
+      monitorInterval: 2, // 默认 2 秒
       copyShortcut: 'Ctrl+Shift+C',
       pasteShortcut: 'Ctrl+Shift+V',
       clearShortcut: 'Ctrl+L',
@@ -332,19 +333,24 @@ export function TerminalComponent({
 
             {/* 内容区域：监控面板 + 终端/快速连接 */}
             <div className="flex-1 min-h-0 relative flex">
-              {/* 监控面板 - 左侧固定 250px，带优雅的滑入/滑出动画 */}
+              {/* 监控面板 - 左侧固定 280px，带优雅的滑入/滑出动画 */}
               <div
                 className={cn(
                   "transition-all duration-300 ease-out overflow-hidden",
                   "border-r border-zinc-200 dark:border-zinc-800/30", // 右边框与工具栏一致
                   "bg-white dark:bg-black", // 背景色与终端一致
                   isMonitorOpen && active && active.type !== 'quick'
-                    ? "w-[250px] opacity-100 translate-x-0"
+                    ? "w-[280px] opacity-100 translate-x-0"
                     : "w-0 opacity-0 -translate-x-4"
                 )}
               >
-                {isMonitorOpen && active && active.type !== 'quick' && (
-                  <MonitorPanel />
+                {/* 在 SSH 连接建立后才渲染监控面板 */}
+                {/* 注意: isConnected 变化会导致组件重新挂载,这是预期行为 */}
+                {isMonitorOpen && active && active.type !== 'quick' && active.isConnected && (
+                  <MonitorPanel
+                    serverId={String(active.serverId)}
+                    interval={settings.monitorInterval}
+                  />
                 )}
               </div>
 

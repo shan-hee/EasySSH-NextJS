@@ -3,6 +3,8 @@
  * 支持二进制协议以提高性能
  */
 
+import { getWsUrl } from './config'
+
 export interface TerminalWebSocketOptions {
   serverId: string
   cols: number
@@ -49,19 +51,11 @@ export class TerminalWebSocket {
       }
 
       // 构建 WebSocket URL
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-      const host = window.location.hostname
-      // 后端 API 在 8521 端口
-      const port = "8521"
-      const wsUrl = `${protocol}//${host}:${port}/api/v1/ssh/terminal/${this.serverId}?cols=${this.cols}&rows=${this.rows}`
+      const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?cols=${this.cols}&rows=${this.rows}&token=${token}`)
 
       console.log("[TerminalWS] 正在连接:", wsUrl)
 
-      // WebSocket 不支持自定义 Header，需要在 URL 中传递 token 或使用子协议
-      // 这里我们使用 URL 参数方式（后端需要支持从 query 读取 token）
-      const wsUrlWithToken = `${wsUrl}&token=${token}`
-
-      this.ws = new WebSocket(wsUrlWithToken)
+      this.ws = new WebSocket(wsUrl)
       this.ws.binaryType = "arraybuffer" // 设置为二进制模式
 
       this.ws.onopen = () => {

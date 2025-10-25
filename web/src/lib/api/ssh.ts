@@ -85,7 +85,7 @@ export const sshApi = {
    */
   getTerminalUrl(serverId: string, token: string): string {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-    const wsHost = process.env.NEXT_PUBLIC_WS_URL || window.location.host.replace("8520", "8521")
+    const wsHost = process.env.NEXT_PUBLIC_WS_HOST || window.location.host.replace("8520", "8521")
     return `${wsProtocol}//${wsHost}/api/v1/ssh/terminal/${serverId}?token=${token}`
   },
 }

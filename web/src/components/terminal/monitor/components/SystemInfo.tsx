@@ -62,7 +62,7 @@ export const SystemInfo: React.FC<SystemInfoProps> = React.memo(({ data }) => {
     <div className="space-y-1">
       {/* 模块标题 - 高度 28px */}
       <div className="h-7 flex items-center">
-        <span className="text-xs font-medium">系统信息</span>
+        <span className="text-xs font-semibold">系统信息</span>
       </div>
 
       {/* 信息列表 - 6行×20px = 120px */}

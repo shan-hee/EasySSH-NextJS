@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package monitor;
+
+option go_package = "github.com/easyssh/server/internal/proto;proto";
+
+// 系统基础信息
+message SystemInfo {
+  string os = 1;              // 操作系统 "Ubuntu 22.04 LTS"
+  string hostname = 2;        // 主机名 "web-server-01"
+  string cpu_model = 3;       // CPU型号 "Intel Core i7-9700K"
+  string arch = 4;            // 架构 "x86_64"
+  string load_avg = 5;        // 系统负载 "0.45, 0.32, 0.28"
+  uint64 uptime_seconds = 6;  // 运行时间（秒）
+  uint32 cpu_cores = 7;       // CPU 核心数
+}
+
+// CPU 指标
+message CPUMetrics {
+  double usage_percent = 1;   // CPU 使用率 0-100
+  uint32 core_count = 2;      // 核心数
+}
+
+// 内存指标
+message MemoryMetrics {
+  uint64 ram_used_bytes = 1;  // RAM 已使用字节数
+  uint64 ram_total_bytes = 2; // RAM 总字节数
+  uint64 swap_used_bytes = 3; // Swap 已使用字节数
+  uint64 swap_total_bytes = 4;// Swap 总字节数
+}
+
+// 网络指标
+message NetworkMetrics {
+  uint64 bytes_recv_per_sec = 1; // 接收速率 字节/秒
+  uint64 bytes_sent_per_sec = 2; // 发送速率 字节/秒
+}
+
+// 单个磁盘指标
+message DiskMetrics {
+  string mount_point = 1;     // 挂载点 "/" 或 "/home"
+  uint64 used_bytes = 2;      // 已使用字节数
+  uint64 total_bytes = 3;     // 总字节数
+}
+
+// 完整的系统指标数据
+message SystemMetrics {
+  SystemInfo system_info = 1;     // 系统信息
+  CPUMetrics cpu = 2;             // CPU 指标
+  MemoryMetrics memory = 3;       // 内存指标
+  NetworkMetrics network = 4;     // 网络指标
+  repeated DiskMetrics disks = 5; // 磁盘列表
+  int64 timestamp = 6;            // 时间戳（Unix 秒）
+  double disk_total_percent = 7;  // 磁盘总使用率 0-100
+}

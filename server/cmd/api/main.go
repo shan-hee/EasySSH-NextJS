@@ -134,6 +134,7 @@ func main() {
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, encryptor)
 	terminalHandler := ws.NewTerminalHandler(serverService, sessionManager, encryptor)
+	monitorHandler := ws.NewMonitorHandler(sessionManager)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
 	scriptHandler := rest.NewScriptHandler(scriptService)
@@ -240,6 +241,14 @@ func main() {
 			sshRoutes.GET("/sessions/:id", sshHandler.GetSession)          // 会话详情
 			sshRoutes.DELETE("/sessions/:id", sshHandler.CloseSession)     // 关闭会话
 			sshRoutes.GET("/statistics", sshHandler.GetStatistics)         // 统计信息
+		}
+
+		// 监控 WebSocket 路由（需要认证）
+		monitorRoutes := v1.Group("/monitor")
+		monitorRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			// WebSocket 实时监控 - 使用 server_id 查找活跃会话
+			monitorRoutes.GET("/server/:server_id", monitorHandler.HandleMonitor) // 实时监控 WebSocket
 		}
 
 		// SFTP 路由（需要认证）

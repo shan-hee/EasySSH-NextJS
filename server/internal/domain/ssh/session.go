@@ -185,6 +185,20 @@ func (m *SessionManager) GetByServerID(serverID string) []*Session {
 	return sessions
 }
 
+// GetActiveByUserAndServer 获取用户在指定服务器上的活跃会话（返回第一个匹配的）
+func (m *SessionManager) GetActiveByUserAndServer(userID, serverID string) *Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, session := range m.sessions {
+		if session.UserID == userID && session.ServerID == serverID && session.IsActive() {
+			return session
+		}
+	}
+
+	return nil
+}
+
 // Remove 移除会话
 func (m *SessionManager) Remove(sessionID string) error {
 	m.mu.Lock()

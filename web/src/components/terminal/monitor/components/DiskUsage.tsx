@@ -17,6 +17,7 @@ import {
 
 interface DiskUsageProps {
   data: DiskData[];
+  totalPercent: number;
 }
 
 /**
@@ -36,21 +37,28 @@ const chartConfig = {
 /**
  * 磁盘使用组件
  */
-export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data }) => {
+export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPercent }) => {
   // 转换数据格式为 recharts 需要的格式
   const chartData = data.map(disk => ({
     name: disk.name,
-    used: disk.used,
-    free: disk.total - disk.used,
+    used: disk.value,
+    free: disk.total - disk.value,
     total: disk.total,
     percent: disk.percent,
+    unit: disk.unit,
+    totalUnit: disk.totalUnit,
   }));
 
   return (
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-medium">磁盘</span>
+        <span className="text-xs font-semibold">磁盘</span>
+        <span className={`text-xs font-mono font-semibold tabular-nums ${
+          totalPercent > 90 ? 'text-red-500' : totalPercent > 80 ? 'text-yellow-500' : 'text-muted-foreground'
+        }`}>
+          {totalPercent}%
+        </span>
       </div>
 
       {/* 图表区域 - 固定高度 106px */}
@@ -81,7 +89,11 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data }) => {
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", opacity: 0.7 }}
-              tickFormatter={(value) => `${value}G`}
+              tickFormatter={(value) => {
+                // 使用第一个磁盘的单位（通常所有磁盘单位相同）
+                const unit = chartData[0]?.unit || 'GB';
+                return `${value}${unit}`;
+              }}
             />
             <YAxis
               dataKey="name"
@@ -112,7 +124,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data }) => {
                           style={{ backgroundColor: 'var(--chart-1)' }}
                         />
                         <span className="text-muted-foreground">已使用:</span>
-                        <span className="font-mono font-medium">{data.used}G</span>
+                        <span className="font-mono font-medium">{data.used} {data.unit}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div
@@ -120,7 +132,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data }) => {
                           style={{ backgroundColor: 'var(--chart-2)' }}
                         />
                         <span className="text-muted-foreground">剩余:</span>
-                        <span className="font-mono font-medium">{data.free.toFixed(0)}G</span>
+                        <span className="font-mono font-medium">{data.free.toFixed(1)} {data.unit}</span>
                       </div>
                       <div className={`font-medium pl-3.5 ${
                         data.percent > 90 ? 'text-red-500' : data.percent > 80 ? 'text-yellow-500' : ''

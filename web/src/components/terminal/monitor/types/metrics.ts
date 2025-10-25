@@ -27,14 +27,20 @@ export interface CPUData {
  */
 export interface MemoryData {
   ram: {
-    used: number;      // 已使用 GB
-    total: number;     // 总容量 GB
-    percent: number;   // 使用率 0-100
+    value: number;       // 数值（根据 unit 决定单位）
+    unit: string;        // 单位 "B" | "KB" | "MB" | "GB"
+    formatted: string;   // 格式化字符串 "3.28 GB"
+    total: number;       // 总容量（数值）
+    totalUnit: string;   // 总容量单位
+    percent: number;     // 使用率 0-100
   };
   swap: {
-    used: number;      // 已使用 GB
-    total: number;     // 总容量 GB
-    percent: number;   // 使用率 0-100
+    value: number;       // 数值（根据 unit 决定单位）
+    unit: string;        // 单位 "B" | "KB" | "MB" | "GB"
+    formatted: string;   // 格式化字符串 "768 MB"
+    total: number;       // 总容量（数值）
+    totalUnit: string;   // 总容量单位
+    percent: number;     // 使用率 0-100
   };
 }
 
@@ -52,8 +58,11 @@ export interface NetworkData {
  */
 export interface DiskData {
   name: string;        // 挂载点名称 "/" 或 "/home"
-  used: number;        // 已使用 GB
-  total: number;       // 总容量 GB
+  value: number;       // 数值（根据 unit 决定单位）
+  unit: string;        // 单位 "B" | "KB" | "MB" | "GB"
+  formatted: string;   // 格式化字符串 "45.2 GB"
+  total: number;       // 总容量（数值）
+  totalUnit: string;   // 总容量单位
   percent: number;     // 使用率 0-100
 }
 
