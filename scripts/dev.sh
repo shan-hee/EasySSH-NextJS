@@ -71,15 +71,6 @@ fi
 
 echo -e "${GREEN}✅ 配置文件检查通过${NC}\n"
 
-# 确保前端环境变量链接存在
-if [ ! -L "web/.env.local" ]; then
-    echo -e "${YELLOW}📎 创建前端环境变量链接...${NC}"
-    cd web
-    ln -sf ../.env .env.local
-    cd ..
-    echo -e "${GREEN}✅ 前端环境变量链接已创建${NC}\n"
-fi
-
 # 检查前端依赖
 if [ ! -d "web/node_modules" ]; then
     echo -e "${YELLOW}📦 安装前端依赖...${NC}"
