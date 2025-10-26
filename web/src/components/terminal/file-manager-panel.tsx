@@ -25,16 +25,23 @@ interface FileManagerPanelProps {
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
   onCreateFolder: (name: string) => void
+  onCreateFile?: (name: string) => void
   onRename: (oldName: string, newName: string) => void
   onDisconnect: () => void
   onRefresh: () => void
   onReadFile?: (fileName: string) => Promise<string>
   onSaveFile?: (fileName: string, content: string) => Promise<void>
+  // 将文件管理器渲染到指定容器（例如终端内部），而非整个页面
+  mountContainer?: HTMLElement | null
+  // 面板顶部锚点（用于位于工具栏下方）
+  anchorTop?: number
 }
 
 export function FileManagerPanel({
   isOpen,
   onClose,
+  mountContainer,
+  anchorTop,
   ...sftpProps
 }: FileManagerPanelProps) {
   const [width, setWidth] = useState(600) // 默认宽度
@@ -42,6 +49,8 @@ export function FileManagerPanel({
   const [isMounted, setIsMounted] = useState(false)
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
+  const internalContainer = mountContainer || null
+  const topOffset = anchorTop ?? 0
 
   // 处理客户端挂载
   useEffect(() => {
@@ -115,45 +124,40 @@ export function FileManagerPanel({
     }
   }, [isResizing, handleResizeMove, handleResizeEnd])
 
-  // 响应式检测
+  // 响应式检测（仅在挂载到 body 时使用遮罩）；内部挂载一律悬浮且无遮罩
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
+    if (!internalContainer) {
+      const checkMobile = () => {
+        setIsMobile(window.innerWidth < 768)
+      }
+      checkMobile()
+      window.addEventListener('resize', checkMobile)
+      return () => window.removeEventListener('resize', checkMobile)
     }
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+  }, [internalContainer])
 
   if (!isMounted) return null
 
   const panelContent = (
     <>
-      {/* 遮罩层 - 仅移动端 */}
-      {isOpen && isMobile && (
-        <div
-          className={cn(
-            "fixed inset-0 bg-black/50 backdrop-blur-sm z-[998] transition-opacity duration-300",
-            isOpen ? "opacity-100" : "opacity-0"
-          )}
-          onClick={onClose}
-        />
-      )}
-
       {/* 面板 */}
       <div
         className={cn(
-          "fixed top-0 right-0 h-full z-[999] flex transition-transform duration-300 ease-out",
+          // 如果挂载到内部容器，则使用 absolute 并且位于工具栏下方
+          internalContainer
+            ? "absolute right-0 z-[55] flex transition-transform duration-300 ease-out pointer-events-auto"
+            : "fixed top-0 right-0 h-full z-[999] flex transition-transform duration-300 ease-out",
           isOpen ? "translate-x-0" : "translate-x-full",
-          isMobile && "w-full"
         )}
         style={{
-          width: isMobile ? '100%' : `${width}px`,
+          width: `${width}px`,
+          top: internalContainer ? `${topOffset}px` : 0,
+          height: internalContainer ? `calc(100% - ${topOffset}px)` : '100%',
         }}
       >
         {/* 调整大小手柄 - 仅桌面端，左侧圆角 */}
-        {!isMobile && (
+        {(!isMobile || internalContainer) && (
           <div
             className={cn(
               "w-1 cursor-col-resize group hover:bg-blue-500/50 transition-colors relative flex items-center justify-center bg-transparent rounded-l-xl",
@@ -206,5 +210,10 @@ export function FileManagerPanel({
     </>
   )
 
+  // 如果提供了内部挂载容器，则挂载到该容器内（终端内部悬浮，位于工具栏下方）
+  if (internalContainer) {
+    return createPortal(panelContent, internalContainer)
+  }
+  // 否则回退到页面级（保持兼容）
   return createPortal(panelContent, document.body)
 }

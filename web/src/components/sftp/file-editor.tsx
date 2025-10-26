@@ -43,9 +43,17 @@ export function FileEditor({
   onSave,
   onDownload,
 }: FileEditorProps) {
+  console.log('[FileEditor] 组件渲染,接收到的props:', {
+    fileName,
+    filePath,
+    fileContentLength: fileContent?.length || 0,
+    fileContentPreview: fileContent?.substring(0, 50) || '(空)',
+    isOpen,
+  })
+
   const { resolvedTheme } = useTheme()
   const monacoTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'light'
-  const [content, setContent] = useState(fileContent)
+  const [content, setContent] = useState(fileContent || '')
   const [isModified, setIsModified] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -56,7 +64,11 @@ export function FileEditor({
 
   // 当文件内容变化时更新编辑器内容
   useEffect(() => {
-    setContent(fileContent)
+    console.log('[FileEditor] useEffect触发,更新content:', {
+      fileContentLength: fileContent?.length || 0,
+      fileName,
+    })
+    setContent(fileContent || '')
     setIsModified(false)
   }, [fileContent, fileName])
 
@@ -109,7 +121,7 @@ export function FileEditor({
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await onSave(content)
+      await onSave(content || '')
       setIsModified(false)
     } finally {
       setIsSaving(false)
@@ -118,7 +130,7 @@ export function FileEditor({
 
   // 重置内容
   const handleReset = () => {
-    setContent(fileContent)
+    setContent(fileContent || '')
     setIsModified(false)
   }
 
@@ -425,8 +437,8 @@ export function FileEditor({
               <span>LF</span>
             </div>
             <div className="flex items-center gap-3">
-              <span>行 {content.split('\n').length}</span>
-              <span>字符 {content.length}</span>
+              <span>行 {content ? content.split('\n').length : 0}</span>
+              <span>字符 {content ? content.length : 0}</span>
               {isModified && (
                 <span className={"text-yellow-600 dark:text-yellow-400"}>
                   • 已修改

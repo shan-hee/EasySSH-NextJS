@@ -118,10 +118,22 @@ export const sftpApi = {
    * 读取文件内容
    */
   async readFile(token: string, serverId: string, path: string): Promise<string> {
-    const response = await apiFetch<{ content: string }>(`/sftp/${serverId}/read?path=${encodeURIComponent(path)}`, {
-      token,
+    // 注意: 后端返回的是纯文本(text/plain),不是JSON
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
+    const response = await fetch(`${apiUrl}/sftp/${serverId}/read?path=${encodeURIComponent(path)}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     })
-    return response.content
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Read failed" }))
+      throw new Error(error.message || "Read failed")
+    }
+
+    // 直接返回文本内容
+    return await response.text()
   },
 
   /**

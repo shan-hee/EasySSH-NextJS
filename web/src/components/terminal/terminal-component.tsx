@@ -29,6 +29,7 @@ import { NetworkLatencyPopover } from "./network-latency-popover"
 import { MonitorPanel } from "./monitor/MonitorPanel"
 import { AiAssistantPanel } from "./ai-assistant-panel"
 import { MonitorWebSocketProvider } from "./monitor/contexts/MonitorWebSocketContext"
+import { useSftpSession } from "@/hooks/useSftpSession"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -69,6 +70,10 @@ export function TerminalComponent({
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false)
   const [isMonitorOpen, setIsMonitorOpen] = useState(true) // 默认显示监控面板
   const [isAiInputOpen, setIsAiInputOpen] = useState(false) // AI 助手输入框状态
+  // 文件管理器挂载容器与锚点（终端内部悬浮、位于工具栏下方）
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const floatingPanelRootRef = useRef<HTMLDivElement>(null)
+  const [toolbarHeight, setToolbarHeight] = useState(0)
 
   // 主题样式全部改为静态类 + dark: 前缀，避免 SSR/CSR 水合不一致
 
@@ -195,6 +200,27 @@ export function TerminalComponent({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isAiInputOpen])
 
+  // SFTP 会话管理 - 为当前激活的终端会话
+  const sftpSession = useSftpSession(
+    active && active.type !== 'quick' ? String(active.serverId) : '',
+    '/'
+  )
+
+  // 监听工具栏高度变化，确保文件管理器面板紧贴其下方
+  useEffect(() => {
+    const el = toolbarRef.current
+    if (!el) return
+    const update = () => setToolbarHeight(el.offsetHeight || 0)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [toolbarRef])
+
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-black' : ''}`}>
       {/* 全屏时隐藏面包屑头部 */}
@@ -267,7 +293,7 @@ export function TerminalComponent({
             <Tabs value={active?.id} className="flex-1 flex flex-col gap-0">
               {/* 工具栏（会话信息条）- 现代化设计 */}
               {active && active.type !== 'quick' && !effectiveIsLoading && (
-                <div className={cn(
+                <div ref={toolbarRef} className={cn(
                   "border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors",
                   "bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30"
                 )}>
@@ -368,6 +394,8 @@ export function TerminalComponent({
 
               {/* 终端区域 - flex-1 占据剩余空间 */}
               <div className="flex-1 min-w-0 relative">
+                {/* 文件管理器悬浮挂载根，位于终端容器内部 */}
+                <div ref={floatingPanelRootRef} className="absolute inset-0 pointer-events-none" />
                 {active?.type === 'quick' ? (
                   <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
                     <QuickConnect
@@ -448,23 +476,28 @@ export function TerminalComponent({
         <FileManagerPanel
           isOpen={isFileManagerOpen}
           onClose={() => setIsFileManagerOpen(false)}
-          serverId={0}
+          mountContainer={floatingPanelRootRef.current || undefined}
+          anchorTop={toolbarHeight}
+          serverId={Number(active.serverId)}
           serverName={active.serverName || ''}
           host={active.host || ''}
           username={active.username || ''}
           isConnected={active.isConnected || false}
-          currentPath="/home"
-          files={[]}
+          currentPath={sftpSession.currentPath}
+          files={sftpSession.files}
           sessionId={active.id}
           sessionLabel={active.serverName || ''}
-          onNavigate={(path) => console.log('Navigate to:', path)}
-          onUpload={(files) => console.log('Upload files:', files)}
-          onDownload={(fileName) => console.log('Download file:', fileName)}
-          onDelete={(fileName) => console.log('Delete file:', fileName)}
-          onCreateFolder={(name) => console.log('Create folder:', name)}
-          onRename={(oldName, newName) => console.log('Rename:', oldName, '->', newName)}
+          onNavigate={sftpSession.navigate}
+          onUpload={sftpSession.uploadFiles}
+          onDownload={sftpSession.downloadFile}
+          onDelete={sftpSession.deleteFile}
+          onCreateFolder={sftpSession.createFolder}
+          onCreateFile={sftpSession.createFile}
+          onRename={sftpSession.renameFile}
           onDisconnect={() => setIsFileManagerOpen(false)}
-          onRefresh={() => console.log('Refresh')}
+          onRefresh={sftpSession.refresh}
+          onReadFile={sftpSession.readFile}
+          onSaveFile={sftpSession.saveFile}
         />
       )}
     </div>

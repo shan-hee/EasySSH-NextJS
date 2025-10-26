@@ -55,3 +55,70 @@ export function formatSpeed(bytesPerSec: number, decimals: number = 1): string {
 
   return `${value} ${sizes[i]}`;
 }
+
+/**
+ * 解析文件大小字符串为字节数
+ * @param sizeStr 大小字符串，例如 "1.5 MB", "500 KB"
+ * @returns 字节数，解析失败返回 0
+ */
+export function parseFileSize(sizeStr: string): number {
+  if (!sizeStr || typeof sizeStr !== 'string') return 0;
+
+  // 移除前后空格并转换为大写
+  const str = sizeStr.trim().toUpperCase();
+
+  // 匹配数字和单位
+  const match = str.match(/^([\d.]+)\s*([KMGTP]?B?)$/);
+  if (!match) return 0;
+
+  const value = parseFloat(match[1]);
+  const unit = match[2] || 'B';
+
+  // 单位转换表
+  const multipliers: Record<string, number> = {
+    'B': 1,
+    'KB': 1024,
+    'K': 1024,
+    'MB': 1024 ** 2,
+    'M': 1024 ** 2,
+    'GB': 1024 ** 3,
+    'G': 1024 ** 3,
+    'TB': 1024 ** 4,
+    'T': 1024 ** 4,
+    'PB': 1024 ** 5,
+    'P': 1024 ** 5,
+  };
+
+  const multiplier = multipliers[unit] || 1;
+  return Math.floor(value * multiplier);
+}
+
+/**
+ * 比较两个文件大小字符串
+ * @param sizeA 大小字符串A
+ * @param sizeB 大小字符串B
+ * @returns 负数表示A<B，0表示相等，正数表示A>B
+ */
+export function compareFileSizes(sizeA: string, sizeB: string): number {
+  const bytesA = parseFileSize(sizeA);
+  const bytesB = parseFileSize(sizeB);
+  return bytesA - bytesB;
+}
+
+/**
+ * 格式化剩余时间
+ * @param seconds 秒数
+ * @returns 格式化后的字符串，例如 "00:15", "01:23:45"
+ */
+export function formatRemainingTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return '--:--';
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}

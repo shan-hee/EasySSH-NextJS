@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, DragEvent } from "react"
+import { useState, useRef, useEffect, DragEvent, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
@@ -68,6 +68,7 @@ import {
   Database,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { compareFileSizes } from "@/lib/format-utils"
 import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
 import { FileEditor } from "@/components/sftp/file-editor"
@@ -119,6 +120,7 @@ interface SftpManagerProps {
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
   onCreateFolder: (name: string) => void
+  onCreateFile?: (name: string) => void
   onRename: (oldName: string, newName: string) => void
   onDisconnect: () => void
   onRefresh: () => void
@@ -152,6 +154,7 @@ export function SftpManager(props: SftpManagerProps) {
     onDownload,
     onDelete,
     onCreateFolder,
+    onCreateFile,
     onRename,
     onDisconnect,
     onRefresh,
@@ -191,7 +194,7 @@ export function SftpManager(props: SftpManagerProps) {
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [isDragging, setIsDragging] = useState(false)
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid") // 默认图标视图
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list") // 默认列表视图
   const [showHidden, setShowHidden] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -209,8 +212,6 @@ export function SftpManager(props: SftpManagerProps) {
   const [draggedFileName, setDraggedFileName] = useState<string | null>(null)
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-  const [lastClickTime, setLastClickTime] = useState<number>(0)
-  const [lastClickFile, setLastClickFile] = useState<string | null>(null)
   const [editorState, setEditorState] = useState<{
     isOpen: boolean
     fileName: string
@@ -227,50 +228,40 @@ export function SftpManager(props: SftpManagerProps) {
   const editInputRef = useRef<HTMLInputElement>(null)
   const sessionLabelInputRef = useRef<HTMLInputElement>(null)
 
-  // 处理单击/双击文件
-  const handleFileClick = (fileName: string, fileType: "file" | "directory", event: React.MouseEvent) => {
-    const now = Date.now()
-    const timeSinceLastClick = now - lastClickTime
+  // 过滤和排序文件 - 使用 useMemo 优化性能
+  const filteredFiles = useMemo(() => {
+    return sortedFiles
+      .filter(file => {
+        // 如果不显示隐藏文件，过滤掉以 . 开头的文件（但保留 .. 父目录）
+        if (!showHidden && file.name.startsWith('.') && file.name !== '..') {
+          return false
+        }
+        // 搜索过滤
+        return file.name.toLowerCase().includes(searchTerm.toLowerCase())
+      })
+      .sort((a, b) => {
+        // 特殊处理:目录始终排在文件前面
+        if (a.type !== b.type) {
+          return a.type === "directory" ? -1 : 1
+        }
 
-    // 检测双击 (300ms 内且点击同一文件)
-    if (timeSinceLastClick < 300 && lastClickFile === fileName) {
-      // 双击 - 打开文件或进入目录
-      if (fileType === "directory") {
-        const next = (currentPath.endsWith("/") ? currentPath : currentPath + "/") + fileName
-        onNavigate(next)
-      } else {
-        handleOpenEditor(fileName)
-      }
-      // 重置双击检测
-      setLastClickTime(0)
-      setLastClickFile(null)
-    } else {
-      // 单击 - 选中文件
-      handleFileSelect(fileName, event)
-      setLastClickTime(now)
-      setLastClickFile(fileName)
-    }
-  }
+        // 根据排序字段进行排序
+        let comparison = 0
+        if (sortBy === "size") {
+          // 使用新的文件大小比较函数
+          comparison = compareFileSizes(a.size, b.size)
+        } else {
+          const aValue = a[sortBy] as string
+          const bValue = b[sortBy] as string
+          comparison = aValue.localeCompare(bValue)
+        }
 
-  // 过滤和排序文件
-  const filteredFiles = sortedFiles
-    .filter(file => {
-      // 如果不显示隐藏文件，过滤掉以 . 开头的文件（但保留 .. 父目录）
-      if (!showHidden && file.name.startsWith('.') && file.name !== '..') {
-        return false
-      }
-      // 搜索过滤
-      return file.name.toLowerCase().includes(searchTerm.toLowerCase())
-    })
-    .sort((a, b) => {
-      const aValue = a[sortBy] as string
-      const bValue = b[sortBy] as string
-      const comparison = aValue.localeCompare(bValue)
-      return sortOrder === "asc" ? comparison : -comparison
-    })
+        return sortOrder === "asc" ? comparison : -comparison
+      })
+  }, [sortedFiles, showHidden, searchTerm, sortBy, sortOrder])
 
-  // 文件选择处理
-  const handleFileSelect = (fileName: string, event: React.MouseEvent) => {
+  // 文件选择处理 - 使用 useCallback 优化
+  const handleFileSelect = useCallback((fileName: string, event: React.MouseEvent) => {
     if (event.shiftKey && selectedFiles.length > 0) {
       // Shift多选
       const lastIndex = filteredFiles.findIndex(f => f.name === selectedFiles[selectedFiles.length - 1])
@@ -292,7 +283,52 @@ export function SftpManager(props: SftpManagerProps) {
         setSelectedFiles([fileName])
       }
     }
-  }
+  }, [selectedFiles, filteredFiles])
+
+  // 打开文件编辑器 - 使用 useCallback 优化
+  const handleOpenEditor = useCallback(async (fileName: string) => {
+    if (!onReadFile) {
+      console.warn("onReadFile 回调未提供")
+      return
+    }
+
+    try {
+      console.log('[SftpManager] 打开文件编辑器:', fileName)
+      const content = await onReadFile(fileName)
+      console.log('[SftpManager] 获取到的内容长度:', content?.length || 0)
+      const fullPath = `${currentPath}/${fileName}`.replace(/\/+/g, "/")
+      setEditorState({
+        isOpen: true,
+        fileName,
+        filePath: fullPath,
+        content,
+      })
+      console.log('[SftpManager] EditorState已设置:', {
+        fileName,
+        filePath: fullPath,
+        contentLength: content?.length || 0,
+      })
+    } catch (error) {
+      console.error("读取文件失败:", error)
+    }
+  }, [currentPath, onReadFile])
+
+  // 处理单击文件 - 选中
+  const handleFileClick = useCallback((fileName: string, event: React.MouseEvent) => {
+    // 阻止冒泡
+    event.stopPropagation()
+    handleFileSelect(fileName, event)
+  }, [handleFileSelect])
+
+  // 处理双击文件 - 打开
+  const handleFileDoubleClick = useCallback((fileName: string, fileType: "file" | "directory") => {
+    if (fileType === "directory") {
+      const next = (currentPath.endsWith("/") ? currentPath : currentPath + "/") + fileName
+      onNavigate(next)
+    } else {
+      handleOpenEditor(fileName)
+    }
+  }, [currentPath, onNavigate, handleOpenEditor])
 
   const handleSelectAll = () => {
     if (selectedFiles.length === filteredFiles.length) {
@@ -656,13 +692,23 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 完成创建
-  const finishCreate = () => {
+  const finishCreate = async () => {
     if (editingFileName.trim()) {
       if (creatingNew === "folder") {
         onCreateFolder(editingFileName.trim())
       } else if (creatingNew === "file") {
-        // TODO: 实现创建文件功能
-        console.log("创建文件:", editingFileName.trim())
+        // 创建空文件
+        if (onCreateFile) {
+          onCreateFile(editingFileName.trim())
+        } else if (onSaveFile) {
+          // 回退方案:使用saveFile创建空文件
+          try {
+            await onSaveFile(editingFileName.trim(), "")
+            onRefresh()
+          } catch (error) {
+            console.error("创建文件失败:", error)
+          }
+        }
       }
     }
     setCreatingNew(null)
@@ -697,27 +743,6 @@ export function SftpManager(props: SftpManagerProps) {
   const cancelEditSessionLabel = () => {
     setEditingSessionLabel(false)
     setTempSessionLabel(sessionLabel)
-  }
-
-  // 打开文件编辑器
-  const handleOpenEditor = async (fileName: string) => {
-    if (!onReadFile) {
-      console.warn("onReadFile 回调未提供")
-      return
-    }
-
-    try {
-      const content = await onReadFile(fileName)
-      const fullPath = `${currentPath}/${fileName}`.replace(/\/+/g, "/")
-      setEditorState({
-        isOpen: true,
-        fileName,
-        filePath: fullPath,
-        content,
-      })
-    } catch (error) {
-      console.error("读取文件失败:", error)
-    }
   }
 
   // 关闭文件编辑器
@@ -782,6 +807,103 @@ export function SftpManager(props: SftpManagerProps) {
   const handleClearCompleted = () => {
     setTransferTasks(prev => prev.filter(task => task.status !== "completed"))
   }
+
+  // 键盘快捷键支持
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 如果正在编辑,不处理快捷键
+      if (editingFile || creatingNew || editingSessionLabel || editorState.isOpen) return
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey
+
+      // Ctrl/Cmd + A: 全选
+      if (cmdOrCtrl && e.key === 'a') {
+        e.preventDefault()
+        handleSelectAll()
+      }
+
+      // Delete/Backspace: 删除选中文件
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFiles.length > 0) {
+        e.preventDefault()
+        handleBatchDelete()
+      }
+
+      // F2: 重命名 (仅单选时)
+      if (e.key === 'F2' && selectedFiles.length === 1) {
+        e.preventDefault()
+        startRename(selectedFiles[0])
+      }
+
+      // Ctrl/Cmd + C: 复制
+      if (cmdOrCtrl && e.key === 'c' && selectedFiles.length > 0) {
+        e.preventDefault()
+        if (onCopyFiles) {
+          onCopyFiles(selectedFiles)
+        }
+      }
+
+      // Ctrl/Cmd + V: 粘贴
+      if (cmdOrCtrl && e.key === 'v' && clipboard && clipboard.length > 0) {
+        e.preventDefault()
+        if (onPasteFiles) {
+          onPasteFiles()
+        }
+      }
+
+      // Ctrl/Cmd + D: 下载选中文件
+      if (cmdOrCtrl && e.key === 'd' && selectedFiles.length > 0) {
+        e.preventDefault()
+        handleBatchDownload()
+      }
+
+      // Ctrl/Cmd + R: 刷新
+      if (cmdOrCtrl && e.key === 'r') {
+        e.preventDefault()
+        onRefresh()
+      }
+
+      // Ctrl/Cmd + Shift + N: 新建文件夹
+      if (cmdOrCtrl && e.shiftKey && e.key === 'N') {
+        e.preventDefault()
+        startCreateNew('folder')
+      }
+
+      // Ctrl/Cmd + N: 新建文件
+      if (cmdOrCtrl && !e.shiftKey && e.key === 'n') {
+        e.preventDefault()
+        startCreateNew('file')
+      }
+
+      // Ctrl/Cmd + U: 上传文件
+      if (cmdOrCtrl && e.key === 'u') {
+        e.preventDefault()
+        fileInputRef.current?.click()
+      }
+
+      // ESC: 取消选择 / 关闭编辑器
+      if (e.key === 'Escape') {
+        if (selectedFiles.length > 0) {
+          setSelectedFiles([])
+        } else if (editorState.isOpen) {
+          handleCloseEditor()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    selectedFiles,
+    editingFile,
+    creatingNew,
+    editingSessionLabel,
+    editorState.isOpen,
+    clipboard,
+    onCopyFiles,
+    onPasteFiles,
+    onRefresh,
+  ])
 
   // 获取文件类型信息（用于 3D File 组件）
   const getFileTypeInfo = (fileName: string) => {
@@ -922,6 +1044,8 @@ export function SftpManager(props: SftpManagerProps) {
     onPasteFiles,
     onToggleFullscreen,
   }
+
+  const stickyHeaderCellClass = "sticky top-0 z-20 bg-background/95 dark:bg-zinc-950/95 supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
 
   // 主界面内容
   const managerContent = (
@@ -1177,7 +1301,8 @@ export function SftpManager(props: SftpManagerProps) {
       <div
         ref={dropZoneRef}
         className={cn(
-          "flex-1 overflow-auto relative",
+          "flex-1 relative min-h-0",
+          viewMode === "grid" ? "overflow-auto scrollbar-custom" : "",
           isDragging && "bg-blue-500/10"
         )}
         onDragEnter={handleDragEnter}
@@ -1292,9 +1417,13 @@ export function SftpManager(props: SftpManagerProps) {
                   }}
                   onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
                   onClick={(e) => {
-                    e.stopPropagation()
                     if (!isEditing) {
-                      handleFileClick(file.name, file.type, e)
+                      handleFileClick(file.name, e)
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    if (!isEditing) {
+                      handleFileDoubleClick(file.name, file.type)
                     }
                   }}
                   onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
@@ -1356,12 +1485,17 @@ export function SftpManager(props: SftpManagerProps) {
             })}
           </div>
         ) : (
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
+          <Table
+            wrapperClassName="overflow-auto h-full"
+            className="sftp-table text-xs [&_th]:h-9 [&_th]:px-3 [&_th]:text-xs [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle"
+          >
+            <TableHeader className="sticky top-0 z-20 bg-background/95 dark:bg-zinc-950/95 supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
               <TableRow className={cn(
-                "border-zinc-200 dark:border-zinc-800/50",
+                "border-b border-zinc-200 dark:border-zinc-800/50 text-xs",
               )}>
-                <TableHead className="w-12">
+                <TableHead
+                  className={cn(stickyHeaderCellClass, "w-10")}
+                >
                   <input
                     type="checkbox"
                     checked={
@@ -1373,7 +1507,7 @@ export function SftpManager(props: SftpManagerProps) {
                   />
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer hover:text-foreground"
+                  className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
                   onClick={() => {
                     setSortBy("name")
                     setSortOrder(prev => prev === "asc" ? "desc" : "asc")
@@ -1382,7 +1516,7 @@ export function SftpManager(props: SftpManagerProps) {
                   名称 {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer hover:text-foreground"
+                  className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
                   onClick={() => {
                     setSortBy("size")
                     setSortOrder(prev => prev === "asc" ? "desc" : "asc")
@@ -1391,7 +1525,7 @@ export function SftpManager(props: SftpManagerProps) {
                   大小 {sortBy === "size" && (sortOrder === "asc" ? "↑" : "↓")}
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer hover:text-foreground"
+                  className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
                   onClick={() => {
                     setSortBy("modified")
                     setSortOrder(prev => prev === "asc" ? "desc" : "asc")
@@ -1399,9 +1533,15 @@ export function SftpManager(props: SftpManagerProps) {
                 >
                   修改时间 {sortBy === "modified" && (sortOrder === "asc" ? "↑" : "↓")}
                 </TableHead>
-                <TableHead>权限</TableHead>
-                <TableHead>所有者</TableHead>
-                <TableHead className="text-right">操作</TableHead>
+                <TableHead className={cn(stickyHeaderCellClass)}>
+                  权限
+                </TableHead>
+                <TableHead className={cn(stickyHeaderCellClass)}>
+                  所有者
+                </TableHead>
+                <TableHead className={cn(stickyHeaderCellClass, "text-right")}>
+                  操作
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1494,8 +1634,10 @@ export function SftpManager(props: SftpManagerProps) {
                       draggedFileName === file.name && "opacity-50"
                     )}
                     onClick={e => {
-                      e.stopPropagation()
-                      handleFileClick(file.name, file.type, e)
+                      handleFileClick(file.name, e)
+                    }}
+                    onDoubleClick={() => {
+                      handleFileDoubleClick(file.name, file.type)
                     }}
                     onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
                   >
