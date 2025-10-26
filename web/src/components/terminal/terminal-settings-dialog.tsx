@@ -118,18 +118,20 @@ export function TerminalSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            终端设置
-          </DialogTitle>
-          <DialogDescription>
-            配置终端外观、行为和快捷键设置
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-3xl h-[680px] flex flex-col p-0">
+        <div className="px-6 pt-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              终端设置
+            </DialogTitle>
+            <DialogDescription>
+              配置终端外观、行为和快捷键设置
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
-        <Tabs defaultValue="terminal" className="w-full">
+        <Tabs defaultValue="terminal" className="w-full flex-1 flex flex-col overflow-hidden px-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="terminal" className="flex items-center gap-2">
               <Terminal className="h-4 w-4" />
@@ -150,7 +152,7 @@ export function TerminalSettingsDialog({
           </TabsList>
 
           {/* 终端设置 */}
-          <TabsContent value="terminal" className="space-y-4">
+          <TabsContent value="terminal" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
               <Label htmlFor="fontSize">字体大小</Label>
               <div className="flex items-center gap-4">
@@ -268,7 +270,7 @@ export function TerminalSettingsDialog({
           </TabsContent>
 
           {/* 外观设置 */}
-          <TabsContent value="appearance" className="space-y-4">
+          <TabsContent value="appearance" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
               <Label htmlFor="theme">终端主题</Label>
               <Select
@@ -366,7 +368,7 @@ export function TerminalSettingsDialog({
           </TabsContent>
 
           {/* 行为设置 */}
-          <TabsContent value="behavior" className="space-y-4">
+          <TabsContent value="behavior" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
               <Label htmlFor="maxTabs">最大标签页数量</Label>
               <div className="flex items-center gap-4">
@@ -478,7 +480,7 @@ export function TerminalSettingsDialog({
           </TabsContent>
 
           {/* 快捷键设置 */}
-          <TabsContent value="shortcuts" className="space-y-4">
+          <TabsContent value="shortcuts" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
               <Label htmlFor="copyShortcut">复制</Label>
               <KeyboardShortcutInput
@@ -520,7 +522,7 @@ export function TerminalSettingsDialog({
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-between pt-4 border-t">
+        <div className="flex justify-between pt-4 pb-6 px-6 border-t shrink-0">
           <Button variant="outline" onClick={handleReset}>
             恢复默认
           </Button>

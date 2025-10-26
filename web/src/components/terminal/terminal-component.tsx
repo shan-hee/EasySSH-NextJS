@@ -114,17 +114,20 @@ export function TerminalComponent({
   const active = sessions.find((s) => s.id === activeSession)
 
   // 监控 WebSocket 连接（获取 SSH 延迟）
-  const { metrics } = useMonitorWebSocket({
+  const { metrics, localLatencyMs, localLatencySmoothedMs, localLatencyUpMs, localLatencyDownMs, clockOffsetMs } = useMonitorWebSocket({
     serverId: active && active.type !== 'quick' && active.isConnected
       ? String(active.serverId)
       : '',
     enabled: !!(active && active.type !== 'quick' && active.isConnected),
     interval: settings.monitorInterval || 2,
+    latencyIntervalMs: 5000,
   })
 
   // 综合网络延迟测量
   const latency = useNetworkLatency({
     sshLatencyMs: metrics?.sshLatencyMs,
+    // 使用平滑后的 RTT 作为展示/汇总
+    localLatencyMsOverride: localLatencySmoothedMs || localLatencyMs,
     enabled: !!(active && active.type !== 'quick' && active.isConnected),
   })
   // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发

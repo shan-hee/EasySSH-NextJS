@@ -16,15 +16,18 @@ func Logger() gin.HandlerFunc {
 		// 处理请求
 		c.Next()
 
+		// 过滤健康检查和ping请求，避免日志污染
+		reqURI := c.Request.RequestURI
+		if reqURI == "/api/v1/ping" || reqURI == "/api/v1/health" {
+			return
+		}
+
 		// 结束时间
 		endTime := time.Now()
 		latencyTime := endTime.Sub(startTime)
 
 		// 请求方式
 		reqMethod := c.Request.Method
-
-		// 请求路由
-		reqURI := c.Request.RequestURI
 
 		// 状态码
 		statusCode := c.Writer.Status()

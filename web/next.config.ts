@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
+        destination: `${backendUrl}/api/v1/:path*`,
       },
       // WebSocket 连接（用于 SSH 终端）
       {

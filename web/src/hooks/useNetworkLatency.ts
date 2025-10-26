@@ -26,6 +26,8 @@ interface NetworkLatency {
 interface UseNetworkLatencyOptions {
   /** SSH 延迟（来自监控数据） */
   sshLatencyMs?: number;
+  /** 若提供，则直接使用基于 WS 的本地 RTT，跳过 HTTP ping */
+  localLatencyMsOverride?: number;
   /** 是否启用本地延迟测量 */
   enabled?: boolean;
   /** 本地延迟测量间隔（毫秒），默认 5000ms (5秒) */
@@ -45,10 +47,12 @@ interface UseNetworkLatencyOptions {
  * />
  */
 export function useNetworkLatency(options: UseNetworkLatencyOptions = {}): NetworkLatency {
-  const { sshLatencyMs = 0, enabled = true, interval = 5000 } = options;
+  const { sshLatencyMs = 0, enabled = true, interval = 5000, localLatencyMsOverride } = options;
 
-  // 测量本地到 EasySSH 的延迟
-  const localLatency = useServerLatency({ interval, enabled });
+  // 优先使用来自 WS 的 RTT；否则回退到 HTTP HEAD /ping
+  const localLatency = typeof localLatencyMsOverride === 'number'
+    ? localLatencyMsOverride
+    : useServerLatency({ interval, enabled });
 
   // 计算并生成节点数据
   return useMemo(() => {

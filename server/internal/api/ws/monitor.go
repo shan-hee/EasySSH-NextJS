@@ -1,17 +1,26 @@
 package ws
 
 import (
-	"fmt"
-	"log"
-	"net/http"
-	"time"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "sync"
+    "time"
 
-	"github.com/easyssh/server/internal/domain/monitor"
-	sshDomain "github.com/easyssh/server/internal/domain/ssh"
-	pb "github.com/easyssh/server/internal/proto"
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
-	"google.golang.org/protobuf/proto"
+    "github.com/easyssh/server/internal/domain/monitor"
+    sshDomain "github.com/easyssh/server/internal/domain/ssh"
+    pb "github.com/easyssh/server/internal/proto"
+    "github.com/gin-gonic/gin"
+    "github.com/gorilla/websocket"
+    "google.golang.org/protobuf/proto"
+)
+
+const (
+    // 控制帧心跳/超时设置
+    wsPongWait  = 60 * time.Second
+    wsPingEvery = 50 * time.Second
+    wsWriteWait = 10 * time.Second
 )
 
 // MonitorHandler WebSocket 监控处理器
@@ -69,55 +78,109 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
 		return
 	}
 
-	// 升级到 WebSocket
-	wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		log.Printf("Failed to upgrade to WebSocket: %v", err)
-		return
-	}
-	defer wsConn.Close()
+    // 升级到 WebSocket
+    wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+    if err != nil {
+        log.Printf("Failed to upgrade to WebSocket: %v", err)
+        return
+    }
+    defer wsConn.Close()
 
-	log.Printf("Monitor WebSocket connected for server: %s, session: %s", serverID, session.ID)
+    log.Printf("Monitor WebSocket connected for server: %s, session: %s", serverID, session.ID)
+
+    // 配置 read deadline 与 pong 处理，便于断线检测
+    _ = wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
+    // 设置读取大小限制，防止异常消息导致内存压力
+    wsConn.SetReadLimit(1 << 20) // 1 MiB
+    wsConn.SetPongHandler(func(appData string) error {
+        return wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
+    })
 
 	// 创建采集器
 	collector := monitor.NewCollector(session)
 
-	// 创建停止通道
-	done := make(chan struct{})
-	stopMonitoring := make(chan struct{})
+    // 创建停止通道
+    done := make(chan struct{})
+    stopMonitoring := make(chan struct{})
+
+    // 统一写锁，避免并发写导致报错
+    var writeMu sync.Mutex
 
 	// 监听客户端消息 (处理 ping/close)
-	go func() {
-		for {
-			_, _, err := wsConn.ReadMessage()
-			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					log.Printf("Monitor WebSocket error: %v", err)
-				}
-				close(done)
-				return
-			}
-		}
-	}()
+    go func() {
+        type pingMsg struct {
+            Type string `json:"type"`
+            Ts   int64  `json:"ts"`
+        }
 
-	// 定期采集和推送指标
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+        for {
+            msgType, payload, err := wsConn.ReadMessage()
+            if err != nil {
+                if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+                    log.Printf("Monitor WebSocket error: %v", err)
+                }
+                close(done)
+                return
+            }
+
+            // 仅在 TextMessage 时尝试解析应用层 ping
+            if msgType == websocket.TextMessage {
+                var m pingMsg
+                if err := json.Unmarshal(payload, &m); err == nil && m.Type == "ping" {
+                    serverRecvTs := time.Now().UnixMilli()
+                    // 构造 NTP 风格 4 时间戳响应
+                    resp := map[string]any{
+                        "type":         "pong",
+                        "ts":           m.Ts,           // t0 客户端发送时间
+                        "serverRecvTs": serverRecvTs,   // t1 服务器接收时间
+                        // t2 服务器发送时间（下方写前设置）
+                    }
+                    // 写入前更新发送时间并设置写超时
+                    writeMu.Lock()
+                    _ = wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+                    resp["serverSendTs"] = time.Now().UnixMilli() // t2
+                    b, _ := json.Marshal(resp)
+                    _ = wsConn.WriteMessage(websocket.TextMessage, b)
+                    writeMu.Unlock()
+                }
+            }
+        }
+    }()
+
+    // 定期采集和推送指标
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+    // 定期发送 WS 控制帧 Ping（浏览器自动回 Pong）
+    pingTicker := time.NewTicker(wsPingEvery)
+    defer pingTicker.Stop()
 
 	// 立即发送第一次数据
-	if err := h.sendMetrics(wsConn, collector); err != nil {
-		log.Printf("Failed to send initial metrics: %v", err)
-		return
-	}
+    if err := h.sendMetrics(wsConn, collector, &writeMu); err != nil {
+        log.Printf("Failed to send initial metrics: %v", err)
+        return
+    }
 
 	for {
 		select {
-		case <-ticker.C:
-			if err := h.sendMetrics(wsConn, collector); err != nil {
-				log.Printf("Failed to send metrics: %v", err)
-				close(stopMonitoring)
-				return
-			}
+        case <-ticker.C:
+            if err := h.sendMetrics(wsConn, collector, &writeMu); err != nil {
+                log.Printf("Failed to send metrics: %v", err)
+                close(stopMonitoring)
+                return
+            }
+
+        case <-pingTicker.C:
+            // 发送控制帧 Ping
+            writeMu.Lock()
+            // 使用 WriteControl 的 deadline，另设置全局写超时
+            _ = wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+            err := wsConn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second))
+            writeMu.Unlock()
+            if err != nil {
+                log.Printf("Failed to send ws ping: %v", err)
+                close(stopMonitoring)
+                return
+            }
 
 		case <-done:
 			log.Printf("Monitor WebSocket closed for session: %s", session.ID)
@@ -130,7 +193,7 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
 }
 
 // sendMetrics 采集并发送指标
-func (h *MonitorHandler) sendMetrics(conn *websocket.Conn, collector *monitor.Collector) error {
+func (h *MonitorHandler) sendMetrics(conn *websocket.Conn, collector *monitor.Collector, writeMu *sync.Mutex) error {
 	// 采集指标
 	metrics, err := collector.Collect()
 	if err != nil {
@@ -144,23 +207,27 @@ func (h *MonitorHandler) sendMetrics(conn *websocket.Conn, collector *monitor.Co
 	}
 
 	// 发送二进制数据
-	if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-		return fmt.Errorf("failed to send metrics: %w", err)
-	}
+    writeMu.Lock()
+    defer writeMu.Unlock()
+    _ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+    if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+        return fmt.Errorf("failed to send metrics: %w", err)
+    }
 
 	return nil
 }
 
 // sendErrorMessage 发送错误消息 (JSON 格式)
 func (h *MonitorHandler) sendErrorMessage(conn *websocket.Conn, errorCode, message string) {
-	errMsg := &pb.SystemMetrics{
-		Timestamp: time.Now().Unix(),
-		// 可以添加错误字段到 proto 定义中
-	}
+    errMsg := &pb.SystemMetrics{
+        Timestamp: time.Now().Unix(),
+        // 可以添加错误字段到 proto 定义中
+    }
 
-	data, _ := proto.Marshal(errMsg)
-	conn.WriteMessage(websocket.BinaryMessage, data)
+    data, _ := proto.Marshal(errMsg)
+    _ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+    conn.WriteMessage(websocket.BinaryMessage, data)
 
-	time.Sleep(100 * time.Millisecond)
-	conn.Close()
+    time.Sleep(100 * time.Millisecond)
+    conn.Close()
 }

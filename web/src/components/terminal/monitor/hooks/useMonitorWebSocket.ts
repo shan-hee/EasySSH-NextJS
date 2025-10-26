@@ -56,6 +56,8 @@ interface UseMonitorWebSocketOptions {
   interval?: number; // 采集间隔（秒），默认 2 秒
   onError?: (error: Error) => void;
   onStatusChange?: (status: WSStatus) => void;
+  // 本地延迟测量间隔（毫秒），默认 5000ms。若为 0 则关闭。
+  latencyIntervalMs?: number;
 }
 
 /**
@@ -70,6 +72,7 @@ export function useMonitorWebSocket({
   interval = 2,
   onError,
   onStatusChange,
+  latencyIntervalMs = 5000,
 }: UseMonitorWebSocketOptions) {
   const [metrics, setMetrics] = useState<MonitorMetrics | null>(null);
   const [status, setStatus] = useState<WSStatus>(WSStatus.DISCONNECTED);
@@ -79,6 +82,16 @@ export function useMonitorWebSocket({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
+  // 本地延迟测量
+  const [localLatencyMs, setLocalLatencyMs] = useState<number>(0);
+  const [localLatencyUpMs, setLocalLatencyUpMs] = useState<number>(0);
+  const [localLatencyDownMs, setLocalLatencyDownMs] = useState<number>(0);
+  const [clockOffsetMs, setClockOffsetMs] = useState<number>(0);
+  // RTT 平滑（EWMA）与抖动（偏差）
+  const [localLatencySmoothedMs, setLocalLatencySmoothedMs] = useState<number>(0);
+  const [localLatencyDevMs, setLocalLatencyDevMs] = useState<number>(0);
+  const latencyTimerRef = useRef<NodeJS.Timer | null>(null);
+  const visibilityHandlerRef = useRef<(() => void) | null>(null);
 
   // 连接 WebSocket
   const connect = useCallback(() => {
@@ -119,6 +132,33 @@ export function useMonitorWebSocket({
         setStatus(WSStatus.CONNECTED);
         onStatusChange?.(WSStatus.CONNECTED);
         reconnectAttempts.current = 0;
+
+        // 启动基于 WS 的本地 RTT 测量
+        if (latencyIntervalMs > 0) {
+          if (latencyTimerRef.current) clearInterval(latencyTimerRef.current);
+          const sendPing = () => {
+            try {
+              ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+            } catch {}
+          };
+          // 立即首 ping
+          sendPing();
+          // 根据可见性自适应间隔（前台：latencyIntervalMs；后台：max(30000, latencyIntervalMs)）
+          const startOrRestartTimer = () => {
+            if (latencyTimerRef.current) clearInterval(latencyTimerRef.current);
+            const interval = typeof document !== 'undefined' && document.hidden
+              ? Math.max(30000, latencyIntervalMs)
+              : latencyIntervalMs;
+            latencyTimerRef.current = setInterval(sendPing, interval);
+          };
+          startOrRestartTimer();
+          // 注册可见性变化监听
+          if (typeof document !== 'undefined') {
+            const handler = () => startOrRestartTimer();
+            document.addEventListener('visibilitychange', handler);
+            visibilityHandlerRef.current = () => document.removeEventListener('visibilitychange', handler);
+          }
+        }
       };
 
       // 接收消息
@@ -168,6 +208,47 @@ export function useMonitorWebSocket({
             metricsHistoryRef.current = [...metricsHistoryRef.current, formattedMetrics].slice(-10);
 
             setMetrics(formattedMetrics);
+          } else if (typeof event.data === 'string') {
+            // 处理文本消息（pong）
+            try {
+              const msg = JSON.parse(event.data);
+              if (msg && msg.type === 'pong' && typeof msg.ts === 'number') {
+                const t0 = Number(msg.ts);
+                const t3 = Date.now();
+                const t1 = typeof msg.serverRecvTs === 'number' ? Number(msg.serverRecvTs) : undefined;
+                const t2 = typeof msg.serverSendTs === 'number' ? Number(msg.serverSendTs) : undefined;
+
+                const rtt = Math.max(0, Math.round(t3 - t0));
+                setLocalLatencyMs(rtt);
+                // EWMA 平滑与偏差估计（TCP 类似参数）
+                const ALPHA = 1/8; // 0.125
+                const BETA = 1/4;  // 0.25
+                setLocalLatencySmoothedMs((prev) => {
+                  if (!prev || prev <= 0) {
+                    // 首次样本直接初始化
+                    setLocalLatencyDevMs(0);
+                    return rtt;
+                  }
+                  const s = prev + ALPHA * (rtt - prev);
+                  setLocalLatencyDevMs((prevDev) => {
+                    const d = (isNaN(prevDev) ? 0 : prevDev) + BETA * (Math.abs(rtt - s) - (isNaN(prevDev) ? 0 : prevDev));
+                    return Math.max(0, Math.round(d));
+                  });
+                  return Math.max(0, Math.round(s));
+                });
+
+                if (typeof t1 === 'number' && typeof t2 === 'number') {
+                  // NTP 风格估算
+                  const delay = (t3 - t0) - (t2 - t1);
+                  const offset = ((t1 - t0) + (t2 - t3)) / 2;
+                  const up = t1 - (t0 + offset);
+                  const down = t3 - (t2 + offset);
+                  setClockOffsetMs(Math.round(offset));
+                  setLocalLatencyUpMs(Math.max(0, Math.round(up)));
+                  setLocalLatencyDownMs(Math.max(0, Math.round(down)));
+                }
+              }
+            } catch { /* ignore */ }
           }
         } catch (error) {
           console.error('[Monitor WS] 解析数据失败:', error);
@@ -180,6 +261,16 @@ export function useMonitorWebSocket({
         console.log('[Monitor WS] 连接关闭', event.code, event.reason);
         setStatus(WSStatus.DISCONNECTED);
         onStatusChange?.(WSStatus.DISCONNECTED);
+        // 清理本地 RTT 计时器
+        if (latencyTimerRef.current) {
+          clearInterval(latencyTimerRef.current);
+          latencyTimerRef.current = null;
+        }
+        // 注销可见性监听
+        if (visibilityHandlerRef.current) {
+          visibilityHandlerRef.current();
+          visibilityHandlerRef.current = null;
+        }
 
         // 自动重连
         if (
@@ -212,7 +303,7 @@ export function useMonitorWebSocket({
       onStatusChange?.(WSStatus.ERROR);
       onError?.(error as Error);
     }
-  }, [enabled, serverId, interval, onError, onStatusChange]); // 添加 interval 依赖
+  }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs]); // 添加 interval 依赖
 
   // 断开连接
   const disconnect = useCallback(() => {
@@ -224,6 +315,15 @@ export function useMonitorWebSocket({
     if (wsRef.current) {
       wsRef.current.close(1000, 'Client disconnected');
       wsRef.current = null;
+    }
+
+    if (latencyTimerRef.current) {
+      clearInterval(latencyTimerRef.current);
+      latencyTimerRef.current = null;
+    }
+    if (visibilityHandlerRef.current) {
+      visibilityHandlerRef.current();
+      visibilityHandlerRef.current = null;
     }
 
     // 清空历史数据
@@ -252,6 +352,12 @@ export function useMonitorWebSocket({
   return {
     metrics,
     status,
+    localLatencyMs,
+    localLatencySmoothedMs,
+    localLatencyDevMs,
+    localLatencyUpMs,
+    localLatencyDownMs,
+    clockOffsetMs,
     reconnect: connect,
     disconnect,
     getMetricsHistory,
