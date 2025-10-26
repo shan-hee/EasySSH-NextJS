@@ -118,7 +118,6 @@ export function useMonitorWebSocket({
       // 构建 WebSocket URL
       const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?token=${token}&interval=${interval}`);
 
-      console.log('[Monitor WS] 正在连接...', wsUrl, `采集间隔: ${interval}秒`);
       setStatus(WSStatus.CONNECTING);
       onStatusChange?.(WSStatus.CONNECTING);
 
@@ -128,7 +127,6 @@ export function useMonitorWebSocket({
 
       // 连接成功
       ws.onopen = () => {
-        console.log('[Monitor WS] 连接成功');
         setStatus(WSStatus.CONNECTED);
         onStatusChange?.(WSStatus.CONNECTED);
         reconnectAttempts.current = 0;
@@ -258,7 +256,6 @@ export function useMonitorWebSocket({
 
       // 连接关闭
       ws.onclose = (event) => {
-        console.log('[Monitor WS] 连接关闭', event.code, event.reason);
         setStatus(WSStatus.DISCONNECTED);
         onStatusChange?.(WSStatus.DISCONNECTED);
         // 清理本地 RTT 计时器
@@ -280,7 +277,6 @@ export function useMonitorWebSocket({
         ) {
           reconnectAttempts.current++;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          console.log(`[Monitor WS] ${delay}ms 后重连 (尝试 ${reconnectAttempts.current}/${maxReconnectAttempts})`);
 
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();

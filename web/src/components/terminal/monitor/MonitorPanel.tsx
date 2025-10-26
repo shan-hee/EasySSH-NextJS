@@ -10,7 +10,8 @@
 import React, { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { formatBytes } from '@/lib/format-utils';
-import { useMonitorWebSocket, WSStatus } from './hooks/useMonitorWebSocket';
+import { WSStatus } from './hooks/useMonitorWebSocket';
+import { useMonitoringData } from './contexts/MonitorWebSocketContext';
 import { SystemInfo } from './components/SystemInfo';
 import { CPUChart } from './components/CPUChart';
 import { MemoryChart } from './components/MemoryChart';
@@ -22,12 +23,16 @@ import { Button } from '@/components/ui/button';
 
 interface MonitorPanelProps {
   className?: string;
-  serverId?: string; // 服务器 ID
-  interval?: number; // 采集间隔（秒）
 }
 
 /**
  * 监控面板主组件
+ *
+ * 从 MonitorWebSocketContext 获取监控数据
+ * 必须在 MonitorWebSocketProvider 内部使用
+ *
+ * 性能优化：使用 useMonitoringData() 只订阅监控数据
+ * 避免在延迟数据更新时不必要的重新渲染
  *
  * 宽度: 280px (固定宽度)
  * 高度分配 (总计 720px, 完美适配1080p):
@@ -43,13 +48,11 @@ interface MonitorPanelProps {
  * - 磁盘使用: 134px (标题28px + 图表106px)
  * - 底部内边距: 6px
  */
-export const MonitorPanel: React.FC<MonitorPanelProps> = ({ className, serverId, interval = 2 }) => {
-  // 连接监控 WebSocket
-  const { metrics, status, getMetricsHistory } = useMonitorWebSocket({
-    serverId: serverId || '',
-    enabled: !!serverId,
-    interval: interval,
-  });
+export const MonitorPanel: React.FC<MonitorPanelProps> = ({
+  className,
+}) => {
+  // 【性能优化】只订阅监控数据，不订阅延迟数据
+  const { metrics, status, getMetricsHistory } = useMonitoringData();
 
   // 转换数据格式以适配现有组件
   const formattedMetrics = useMemo(() => {
@@ -130,15 +133,16 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({ className, serverId,
 
   // 渲染状态提示
   const renderStatusHint = () => {
-    if (!serverId) {
-      return (
-        <ErrorState
-          icon={<AlertCircle className="w-12 h-12" />}
-          title="未选择服务器"
-          description="请先连接到服务器以查看监控数据"
-        />
-      );
-    }
+    // serverId 参数已废弃，不再检查
+    // if (!serverId) {
+    //   return (
+    //     <ErrorState
+    //       icon={<AlertCircle className="w-12 h-12" />}
+    //       title="未选择服务器"
+    //       description="请先连接到服务器以查看监控数据"
+    //     />
+    //   );
+    // }
 
     if (status === WSStatus.CONNECTING) {
       // 首次连接显示骨架屏

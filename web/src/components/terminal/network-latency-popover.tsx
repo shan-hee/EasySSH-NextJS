@@ -7,6 +7,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { useLatencyData } from "./monitor/contexts/MonitorWebSocketContext"
+import { useNetworkLatency } from "@/hooks/useNetworkLatency"
 
 interface NetworkNode {
   name: string
@@ -14,21 +16,29 @@ interface NetworkNode {
   icon?: "monitor" | "wifi" | "server"
 }
 
-interface NetworkLatencyPopoverProps {
-  /** 当前延迟(ms) */
-  currentLatency: number
-  /** 节点列表 */
-  nodes?: NetworkNode[]
-}
+/**
+ * 网络延迟展示组件
+ *
+ * 从 MonitorWebSocketContext 获取延迟数据
+ * 必须在 MonitorWebSocketProvider 内部使用
+ *
+ * 性能优化：使用 useLatencyData() 只订阅延迟数据
+ * 避免在监控数据更新时不必要的重新渲染
+ */
+export function NetworkLatencyPopover() {
+  // 【性能优化】只订阅延迟数据，不订阅监控数据
+  const latencyData = useLatencyData();
 
-export function NetworkLatencyPopover({
-  currentLatency,
-  nodes = [
-    { name: "本地", latency: 1, icon: "monitor" },
-    { name: "EasySSH", latency: 2, icon: "wifi" },
-    { name: "服务器", latency: 3, icon: "server" },
-  ],
-}: NetworkLatencyPopoverProps) {
+  // 综合网络延迟测量
+  const latency = useNetworkLatency({
+    sshLatencyMs: latencyData.sshLatencyMs,
+    // 使用平滑后的 RTT 作为展示/汇总
+    localLatencyMsOverride: latencyData.localLatencySmoothedMs || latencyData.localLatencyMs,
+    enabled: true,
+  });
+
+  const currentLatency = latency.total;
+  const nodes = latency.nodes;
   // 获取节点图标
   const getNodeIcon = (icon?: string) => {
     const iconClass = "h-3.5 w-3.5"

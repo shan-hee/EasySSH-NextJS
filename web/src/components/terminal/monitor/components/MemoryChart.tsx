@@ -92,23 +92,18 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
                   const memData = isRAM ? data.ram : data.swap;
 
                   return (
-                    <div className="rounded-lg border bg-background px-2.5 py-2 shadow-xl">
-                      <div className="flex items-center gap-2 text-xs font-medium mb-1.5">
+                    <div className="rounded-lg border bg-background px-2.5 py-1.5 shadow-xl">
+                      <div className="flex items-center gap-2 text-xs">
                         <div
                           className="h-2 w-2 rounded-full"
                           style={{ backgroundColor: item.fill }}
                         />
-                        <span>{isRAM ? 'RAM' : 'Swap'}</span>
-                      </div>
-                      <div className="text-xs font-mono space-y-0.5 pl-3.5">
-                        <div className={`font-medium ${
+                        <span className="font-medium">{isRAM ? 'RAM' : 'Swap'}</span>
+                        <span className={`font-semibold tabular-nums ${
                           memData.percent > 85 ? 'text-red-500' : memData.percent > 70 ? 'text-yellow-500' : ''
                         }`}>
                           {memData.percent}%
-                        </div>
-                        <div className="text-muted-foreground">
-                          {memData.value} {memData.unit} / {memData.total} {memData.totalUnit}
-                        </div>
+                        </span>
                       </div>
                     </div>
                   );

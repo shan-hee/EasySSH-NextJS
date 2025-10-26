@@ -28,8 +28,7 @@ import { FileManagerPanel } from "./file-manager-panel"
 import { NetworkLatencyPopover } from "./network-latency-popover"
 import { MonitorPanel } from "./monitor/MonitorPanel"
 import { AiAssistantPanel } from "./ai-assistant-panel"
-import { useMonitorWebSocket } from "./monitor/hooks/useMonitorWebSocket"
-import { useNetworkLatency } from "@/hooks/useNetworkLatency"
+import { MonitorWebSocketProvider } from "./monitor/contexts/MonitorWebSocketContext"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -113,23 +112,12 @@ export function TerminalComponent({
   // 获取当前活跃会话
   const active = sessions.find((s) => s.id === activeSession)
 
-  // 监控 WebSocket 连接（获取 SSH 延迟）
-  const { metrics, localLatencyMs, localLatencySmoothedMs, localLatencyUpMs, localLatencyDownMs, clockOffsetMs } = useMonitorWebSocket({
-    serverId: active && active.type !== 'quick' && active.isConnected
-      ? String(active.serverId)
-      : '',
-    enabled: !!(active && active.type !== 'quick' && active.isConnected),
-    interval: settings.monitorInterval || 2,
-    latencyIntervalMs: 5000,
-  })
+  // 监控连接参数（将传递给 Provider）
+  const serverId = active && active.type !== 'quick' && active.isConnected
+    ? String(active.serverId)
+    : '';
+  const monitorEnabled = !!(active && active.type !== 'quick' && active.isConnected);
 
-  // 综合网络延迟测量
-  const latency = useNetworkLatency({
-    sshLatencyMs: metrics?.sshLatencyMs,
-    // 使用平滑后的 RTT 作为展示/汇总
-    localLatencyMsOverride: localLatencySmoothedMs || localLatencyMs,
-    enabled: !!(active && active.type !== 'quick' && active.isConnected),
-  })
   // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
   const initializedSessionsRef = useRef<Set<string>>(new Set())
 
@@ -270,30 +258,33 @@ export function TerminalComponent({
             暂无活动会话，使用右上角 + 新建
           </div>
         ) : (
-          <Tabs value={active?.id} className="flex-1 flex flex-col gap-0">
-            {/* 工具栏（会话信息条）- 现代化设计 */}
-            {active && active.type !== 'quick' && !effectiveIsLoading && (
-              <div className={cn(
-                "border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors",
-                "bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30"
-              )}>
-                {/* 左侧工具图标组 */}
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                    aria-label="文件管理器"
-                    title="文件管理器 (Ctrl+E)"
-                    onClick={() => setIsFileManagerOpen(!isFileManagerOpen)}
-                  >
-                    <FolderOpen className="h-3.5 w-3.5" />
-                  </Button>
+          <MonitorWebSocketProvider
+            serverId={serverId}
+            enabled={monitorEnabled}
+            interval={settings.monitorInterval || 2}
+            latencyIntervalMs={5000}
+          >
+            <Tabs value={active?.id} className="flex-1 flex flex-col gap-0">
+              {/* 工具栏（会话信息条）- 现代化设计 */}
+              {active && active.type !== 'quick' && !effectiveIsLoading && (
+                <div className={cn(
+                  "border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors",
+                  "bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30"
+                )}>
+                  {/* 左侧工具图标组 */}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
+                      aria-label="文件管理器"
+                      title="文件管理器 (Ctrl+E)"
+                      onClick={() => setIsFileManagerOpen(!isFileManagerOpen)}
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" />
+                    </Button>
 
-                  <NetworkLatencyPopover
-                    currentLatency={latency.total}
-                    nodes={latency.nodes}
-                  />
+                    <NetworkLatencyPopover />
 
                   <Button
                     variant="ghost"
@@ -371,10 +362,7 @@ export function TerminalComponent({
                 {/* 在 SSH 连接建立后才渲染监控面板 */}
                 {/* 注意: isConnected 变化会导致组件重新挂载,这是预期行为 */}
                 {isMonitorOpen && active && active.type !== 'quick' && active.isConnected && (
-                  <MonitorPanel
-                    serverId={String(active.serverId)}
-                    interval={settings.monitorInterval}
-                  />
+                  <MonitorPanel />
                 )}
               </div>
 
@@ -433,7 +421,8 @@ export function TerminalComponent({
               </div>
             </div>
           </Tabs>
-        )}
+        </MonitorWebSocketProvider>
+      )}
 
         {/* AI 助手悬浮输入框 - 终端内部悬浮 */}
         {/* 只在非加载状态时渲染，避免与 ConnectionLoader 动画冲突 */}

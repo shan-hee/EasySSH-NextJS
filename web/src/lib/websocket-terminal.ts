@@ -53,13 +53,10 @@ export class TerminalWebSocket {
       // 构建 WebSocket URL
       const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?cols=${this.cols}&rows=${this.rows}&token=${token}`)
 
-      console.log("[TerminalWS] 正在连接:", wsUrl)
-
       this.ws = new WebSocket(wsUrl)
       this.ws.binaryType = "arraybuffer" // 设置为二进制模式
 
       this.ws.onopen = () => {
-        console.log("[TerminalWS] 连接已建立")
         this.reconnectAttempts = 0
         this.onConnected?.()
         this.startPing()
@@ -88,13 +85,11 @@ export class TerminalWebSocket {
       }
 
       this.ws.onclose = (event) => {
-        console.log("[TerminalWS] 连接已关闭:", event.code, event.reason)
         this.stopPing()
 
         if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
           // 自动重连
           this.reconnectAttempts++
-          console.log(`[TerminalWS] 尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`)
           setTimeout(() => this.connect(), this.reconnectDelay)
         } else {
           this.onDisconnected?.()
@@ -174,14 +169,14 @@ export class TerminalWebSocket {
   private handleControlMessage(message: any): void {
     switch (message.type) {
       case "connected":
-        console.log("[TerminalWS] 会话已建立:", message.data)
+        // 会话已建立
         break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)
         this.onError?.(new Error(message.data.message || "服务器错误"))
         break
       case "closed":
-        console.log("[TerminalWS] 服务器关闭连接")
+        // 服务器关闭连接
         this.disconnect()
         break
       case "pong":

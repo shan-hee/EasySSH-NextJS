@@ -178,7 +178,6 @@ export function WebTerminal({
                 }
               },
               onConnected: () => {
-                console.log("[WebTerminal] WebSocket 已连接")
                 if (isMounted) {
                   onLoadingChange?.(false)
                 }
@@ -191,7 +190,6 @@ export function WebTerminal({
                 }
               },
               onDisconnected: () => {
-                console.log("[WebTerminal] WebSocket 已断开")
                 if (terminal) {
                   terminal.writeln("\r\n\x1b[1;31m✗ Connection closed\x1b[0m")
                 }
