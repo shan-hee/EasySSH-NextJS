@@ -41,14 +41,14 @@ elif [ -f "$HOME/go/bin/air" ]; then
     AIR_PATH="$HOME/go/bin/air"
 else
     echo -e "${YELLOW}⚠️  Air 未安装，将自动安装热重载工具${NC}"
-    go install github.com/cosmtrek/air@latest
+    go install github.com/air-verse/air@latest
     if [ -f "/root/go/bin/air" ]; then
         AIR_PATH="/root/go/bin/air"
     elif [ -f "$HOME/go/bin/air" ]; then
         AIR_PATH="$HOME/go/bin/air"
     else
         echo -e "${RED}❌ 错误: Air 安装失败${NC}"
-        echo -e "${YELLOW}   请手动运行: go install github.com/cosmtrek/air@latest${NC}"
+        echo -e "${YELLOW}   请手动运行: go install github.com/air-verse/air@latest${NC}"
         exit 1
     fi
     echo -e "${GREEN}✅ Air 安装成功${NC}"

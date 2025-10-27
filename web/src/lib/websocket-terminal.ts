@@ -29,6 +29,9 @@ export class TerminalWebSocket {
   private reconnectDelay = 2000
   private isManualClose = false
   private pingInterval: NodeJS.Timeout | null = null
+  // 复用 TextDecoder/TextEncoder 实例以提升性能
+  private decoder = new TextDecoder("utf-8")
+  private encoder = new TextEncoder()
 
   constructor(options: TerminalWebSocketOptions) {
     this.serverId = options.serverId
@@ -65,8 +68,8 @@ export class TerminalWebSocket {
       this.ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
           // 二进制数据 - SSH 输出
-          const decoder = new TextDecoder("utf-8")
-          const text = decoder.decode(event.data)
+          // 复用 decoder 实例，避免每次创建新的 TextDecoder
+          const text = this.decoder.decode(event.data)
           this.onData(text)
         } else if (typeof event.data === "string") {
           // JSON 控制消息
@@ -111,9 +114,8 @@ export class TerminalWebSocket {
     }
 
     try {
-      // 使用二进制传输以提高性能
-      const encoder = new TextEncoder()
-      const binaryData = encoder.encode(data)
+      // 使用二进制传输以提高性能，复用 encoder 实例
+      const binaryData = this.encoder.encode(data)
       this.ws.send(binaryData.buffer)
     } catch (error) {
       console.error("[TerminalWS] 发送数据失败:", error)

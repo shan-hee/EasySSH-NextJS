@@ -1486,7 +1486,7 @@ export function SftpManager(props: SftpManagerProps) {
           </div>
         ) : (
           <Table
-            wrapperClassName="overflow-auto h-full"
+            wrapperClassName="overflow-auto h-full scrollbar-custom"
             className="sftp-table text-xs [&_th]:h-9 [&_th]:px-3 [&_th]:text-xs [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle"
           >
             <TableHeader className="sticky top-0 z-20 bg-background/95 dark:bg-zinc-950/95 supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
@@ -1840,7 +1840,7 @@ export function SftpManager(props: SftpManagerProps) {
 
       {/* 传输任务面板 */}
       {transferTasks.length > 0 && (
-        <div className="border-t max-h-48 overflow-auto">
+        <div className="border-t max-h-48 overflow-auto scrollbar-custom">
           <div className="px-3 py-2 flex items-center justify-between border-b border-zinc-800/30">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-blue-500" />

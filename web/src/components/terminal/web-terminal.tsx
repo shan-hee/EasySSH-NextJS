@@ -49,6 +49,36 @@ export function WebTerminal({
   const wsRef = useRef<TerminalWebSocket | null>(null)
   const [isClient, setIsClient] = useState(false)
 
+  // 优化：批量写入缓冲区，减少重绘次数
+  const writeBufferRef = useRef<string[]>([])
+  const writeScheduledRef = useRef(false)
+
+  // 批量写入函数 - 使用 requestAnimationFrame 合并多次写入
+  const flushWriteBuffer = useCallback(() => {
+    if (!terminalInstanceRef.current || writeBufferRef.current.length === 0) {
+      writeScheduledRef.current = false
+      return
+    }
+
+    // 合并所有待写入的数据
+    const dataToWrite = writeBufferRef.current.join('')
+    writeBufferRef.current = []
+    writeScheduledRef.current = false
+
+    // 一次性写入终端
+    terminalInstanceRef.current.write(dataToWrite)
+  }, [])
+
+  // 调度写入操作
+  const scheduleWrite = useCallback((data: string) => {
+    writeBufferRef.current.push(data)
+
+    if (!writeScheduledRef.current) {
+      writeScheduledRef.current = true
+      requestAnimationFrame(flushWriteBuffer)
+    }
+  }, [flushWriteBuffer])
+
   // 使用 next-themes 获取应用主题
   const { theme: appTheme, resolvedTheme } = useTheme()
 
@@ -91,50 +121,30 @@ export function WebTerminal({
     // 动态导入 xterm.js 及其插件
     const initTerminal = async () => {
       try {
-        // 开始进入动画
+        // 通知开始加载（不阻塞）
         if (isMounted) {
           onLoadingChange?.(true)
         }
 
-        // 进入动画 800ms + 加载延迟 700ms
-        await new Promise(resolve => setTimeout(resolve, 1500))
-
-        const { Terminal: XTermTerminal } = await import("xterm")
-        const { FitAddon: XTermFitAddon } = await import("@xterm/addon-fit")
-        const { WebLinksAddon } = await import("@xterm/addon-web-links")
-
-        // 动态导入样式
-        // @ts-expect-error - CSS import
-        await import("xterm/css/xterm.css")
+        // 并行加载所有依赖，不添加人为延迟
+        const [
+          { Terminal: XTermTerminal },
+          { FitAddon: XTermFitAddon },
+          { WebLinksAddon },
+        ] = await Promise.all([
+          import("xterm"),
+          import("@xterm/addon-fit"),
+          import("@xterm/addon-web-links"),
+          // @ts-expect-error - CSS import
+          import("xterm/css/xterm.css"),
+        ])
 
         // 获取终端主题 - 使用应用主题
         const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
 
         // 创建终端实例 - 使用配置的主题
         terminal = new XTermTerminal({
-          theme: {
-            background: terminalTheme.background,
-            foreground: terminalTheme.foreground,
-            cursor: terminalTheme.cursor,
-            cursorAccent: terminalTheme.cursorAccent,
-            selectionBackground: terminalTheme.selectionBackground,
-            black: terminalTheme.black,
-            red: terminalTheme.red,
-            green: terminalTheme.green,
-            yellow: terminalTheme.yellow,
-            blue: terminalTheme.blue,
-            magenta: terminalTheme.magenta,
-            cyan: terminalTheme.cyan,
-            white: terminalTheme.white,
-            brightBlack: terminalTheme.brightBlack,
-            brightRed: terminalTheme.brightRed,
-            brightGreen: terminalTheme.brightGreen,
-            brightYellow: terminalTheme.brightYellow,
-            brightBlue: terminalTheme.brightBlue,
-            brightMagenta: terminalTheme.brightMagenta,
-            brightCyan: terminalTheme.brightCyan,
-            brightWhite: terminalTheme.brightWhite,
-          },
+          theme: terminalTheme,
           fontSize: fontSize,
           fontFamily: `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`,
           fontWeight: "400",
@@ -147,6 +157,14 @@ export function WebTerminal({
           rows: 24,
           lineHeight: 1.2,
           letterSpacing: 0,
+          // 性能优化选项
+          allowProposedApi: true,
+          allowTransparency: false,
+          disableStdin: false,
+          fastScrollModifier: 'shift',
+          fastScrollSensitivity: 5,
+          scrollSensitivity: 3,
+          windowOptions: {},
         })
 
         // 添加插件
@@ -172,10 +190,8 @@ export function WebTerminal({
               cols: terminal.cols,
               rows: terminal.rows,
               onData: (data) => {
-                // 将接收到的数据写入终端
-                if (terminal) {
-                  terminal.write(data)
-                }
+                // 使用批量写入优化性能，减少重绘次数
+                scheduleWrite(data)
               },
               onConnected: () => {
                 if (isMounted) {
@@ -229,10 +245,17 @@ export function WebTerminal({
           onCommand(data)
         })
 
-        // 窗口大小变化时重新适配
+        // 窗口大小变化时重新适配 - 使用防抖避免频繁触发
+        let resizeTimeout: NodeJS.Timeout | null = null
         const handleResize = () => {
-          fitAddon!.fit()
-          if (terminal) {
+          if (resizeTimeout) {
+            clearTimeout(resizeTimeout)
+          }
+
+          resizeTimeout = setTimeout(() => {
+            if (!fitAddon || !terminal) return
+
+            fitAddon.fit()
             const newCols = terminal.cols
             const newRows = terminal.rows
 
@@ -245,12 +268,16 @@ export function WebTerminal({
             if (onResize) {
               onResize(newCols, newRows)
             }
-          }
+          }, 100) // 100ms 防抖延迟
         }
 
         window.addEventListener("resize", handleResize)
 
         return () => {
+          // 清理 resize timeout
+          if (resizeTimeout) {
+            clearTimeout(resizeTimeout)
+          }
           window.removeEventListener("resize", handleResize)
           // 断开 WebSocket
           if (wsRef.current) {
@@ -271,6 +298,9 @@ export function WebTerminal({
 
     return () => {
       isMounted = false
+      // 清理批量写入缓冲区
+      writeBufferRef.current = []
+      writeScheduledRef.current = false
       if (terminal) {
         terminal.dispose()
       }

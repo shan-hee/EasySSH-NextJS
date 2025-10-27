@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { createPortal } from "react-dom"
 import Editor from "@monaco-editor/react"
 import { useTheme } from "next-themes"
@@ -43,14 +43,6 @@ export function FileEditor({
   onSave,
   onDownload,
 }: FileEditorProps) {
-  console.log('[FileEditor] 组件渲染,接收到的props:', {
-    fileName,
-    filePath,
-    fileContentLength: fileContent?.length || 0,
-    fileContentPreview: fileContent?.substring(0, 50) || '(空)',
-    isOpen,
-  })
-
   const { resolvedTheme } = useTheme()
   const monacoTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'light'
   const [content, setContent] = useState(fileContent || '')
@@ -59,15 +51,18 @@ export function FileEditor({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [wordWrap, setWordWrap] = useState<'on' | 'off'>('on')
   const [fontSize, setFontSize] = useState(13)
-  const [showMinimap, setShowMinimap] = useState(true)
+  const [showMinimap, setShowMinimap] = useState(false) // 默认关闭小地图提升性能
   const editorRef = useState<unknown | null>(null)
+
+  // 缓存文件统计信息，避免每次渲染都计算
+  const fileStats = useMemo(() => {
+    const lines = content ? content.split('\n').length : 0
+    const chars = content ? content.length : 0
+    return { lines, chars }
+  }, [content])
 
   // 当文件内容变化时更新编辑器内容
   useEffect(() => {
-    console.log('[FileEditor] useEffect触发,更新content:', {
-      fileContentLength: fileContent?.length || 0,
-      fileName,
-    })
     setContent(fileContent || '')
     setIsModified(false)
   }, [fileContent, fileName])
@@ -394,13 +389,13 @@ export function FileEditor({
                 automaticLayout: true,
                 tabSize: 2,
                 wordWrap: wordWrap,
-                formatOnPaste: true,
-                formatOnType: true,
+                formatOnPaste: false, // 关闭粘贴时自动格式化，避免性能问题
+                formatOnType: false, // 关闭输入时自动格式化，避免性能问题
                 renderWhitespace: "selection",
                 bracketPairColorization: { enabled: true },
-                smoothScrolling: true,
+                smoothScrolling: false, // 关闭平滑滚动，减少重绘
                 cursorBlinking: "smooth",
-                cursorSmoothCaretAnimation: "on",
+                cursorSmoothCaretAnimation: "off", // 关闭光标平滑动画，减少重绘
                 padding: { top: 16, bottom: 16 },
                 find: {
                   addExtraSpaceOnTop: false,
@@ -437,8 +432,8 @@ export function FileEditor({
               <span>LF</span>
             </div>
             <div className="flex items-center gap-3">
-              <span>行 {content ? content.split('\n').length : 0}</span>
-              <span>字符 {content ? content.length : 0}</span>
+              <span>行 {fileStats.lines}</span>
+              <span>字符 {fileStats.chars}</span>
               {isModified && (
                 <span className={"text-yellow-600 dark:text-yellow-400"}>
                   • 已修改
@@ -628,13 +623,13 @@ export function FileEditor({
             automaticLayout: true,
             tabSize: 2,
             wordWrap: wordWrap,
-            formatOnPaste: true,
-            formatOnType: true,
+            formatOnPaste: false, // 关闭粘贴时自动格式化，避免性能问题
+            formatOnType: false, // 关闭输入时自动格式化，避免性能问题
             renderWhitespace: "selection",
             bracketPairColorization: { enabled: true },
-            smoothScrolling: true,
+            smoothScrolling: false, // 关闭平滑滚动，减少重绘
             cursorBlinking: "smooth",
-            cursorSmoothCaretAnimation: "on",
+            cursorSmoothCaretAnimation: "off", // 关闭光标平滑动画，减少重绘
             padding: { top: 12, bottom: 12 },
             find: {
               addExtraSpaceOnTop: false,
@@ -671,8 +666,8 @@ export function FileEditor({
           <span>LF</span>
         </div>
         <div className="flex items-center gap-3">
-          <span>行 {content.split('\n').length}</span>
-          <span>字符 {content.length}</span>
+          <span>行 {fileStats.lines}</span>
+          <span>字符 {fileStats.chars}</span>
           {isModified && (
             <span className={"text-yellow-600 dark:text-yellow-400"}>
               • 已修改
