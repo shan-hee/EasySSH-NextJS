@@ -434,13 +434,15 @@ export default function SftpPage() {
     }
 
     const sessionId = `session-${nextSessionId}`
+    // 在SFTP页面使用根目录，在终端页面使用用户主目录
+    const initialPath = "/"
     const newSession: SftpSession = {
       id: sessionId,
       serverId: server.id,
       serverName: server.name,
       host: server.host,
       username: server.username,
-      currentPath: "/",
+      currentPath: initialPath,
       files: [],
       isConnected: false,
       label: `${server.name}`,
@@ -451,7 +453,7 @@ export default function SftpPage() {
 
     // 连接并加载文件列表
     try {
-      const dirResponse = await sftpApi.listDirectory(token, serverId, "/")
+      const dirResponse = await sftpApi.listDirectory(token, serverId, initialPath)
       const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
 
       // 添加父目录项
@@ -1012,6 +1014,7 @@ export default function SftpPage() {
                     sessionLabel={session.label}
                     sessionColor={session.color}
                     isFullscreen={true}
+                    pageContext="sftp"
                     onNavigate={(path) => handleNavigate(session.id, path)}
                     onUpload={(files) => handleUpload(session.id, files)}
                     onDownload={(fileName) => handleDownload(session.id, fileName)}
@@ -1082,6 +1085,7 @@ export default function SftpPage() {
                           sessionLabel={session.label}
                           sessionColor={session.color}
                           isFullscreen={false}
+                          pageContext="sftp"
                           onNavigate={(path) => handleNavigate(session.id, path)}
                           onUpload={(files) => handleUpload(session.id, files)}
                           onDownload={(fileName) => handleDownload(session.id, fileName)}

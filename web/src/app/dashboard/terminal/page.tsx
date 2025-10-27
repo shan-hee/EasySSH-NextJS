@@ -224,7 +224,10 @@ export default function TerminalPage() {
 
   // 发送命令
   const handleSendCommand = (sessionId: string, command: string) => {
-    console.log(`Session ${sessionId}: ${command}`)
+    // 移除频繁的日志输出，只在开发模式下且命令非空时输出
+    if (process.env.NODE_ENV === 'development' && command.trim()) {
+      // console.log(`Session ${sessionId}: ${command}`)
+    }
     // 这里应该处理实际的命令发送逻辑
 
     // 更新最后活动时间

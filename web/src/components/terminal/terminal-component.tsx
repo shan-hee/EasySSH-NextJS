@@ -125,18 +125,36 @@ export function TerminalComponent({
 
   // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
   const initializedSessionsRef = useRef<Set<string>>(new Set())
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // 保存设置到 localStorage
+  // 保存设置到 localStorage（使用防抖优化性能）
   const handleSettingsChange = (newSettings: TerminalSettings) => {
     setSettings(newSettings)
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('terminal-settings', JSON.stringify(newSettings))
-      } catch (error) {
-        console.error('Failed to save terminal settings:', error)
+
+    // 防抖保存到 localStorage，避免频繁写入
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+    }
+
+    saveTimerRef.current = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('terminal-settings', JSON.stringify(newSettings))
+        } catch (error) {
+          console.error('Failed to save terminal settings:', error)
+        }
+      }
+    }, 500) // 500ms 防抖延迟
+  }
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
       }
     }
-  }
+  }, [])
 
   const handleCommand = (sessionId: string, command: string) => {
     onSendCommand(sessionId, command)
@@ -201,9 +219,10 @@ export function TerminalComponent({
   }, [isAiInputOpen])
 
   // SFTP 会话管理 - 为当前激活的终端会话
+  // 在终端页面默认打开 /root 目录
   const sftpSession = useSftpSession(
     active && active.type !== 'quick' ? String(active.serverId) : '',
-    '/'
+    '/root'
   )
 
   // 监听工具栏高度变化，确保文件管理器面板紧贴其下方
@@ -421,6 +440,14 @@ export function TerminalComponent({
                         cursorStyle={settings.cursorStyle}
                         cursorBlink={settings.cursorBlink}
                         scrollback={settings.scrollback}
+                        rightClickPaste={settings.rightClickPaste}
+                        copyOnSelect={settings.copyOnSelect}
+                        opacity={settings.opacity}
+                        backgroundImage={settings.backgroundImage}
+                        backgroundImageOpacity={settings.backgroundImageOpacity}
+                        copyShortcut={settings.copyShortcut}
+                        pasteShortcut={settings.pasteShortcut}
+                        clearShortcut={settings.clearShortcut}
                       />
                     </TabsContent>
                   )
@@ -442,6 +469,14 @@ export function TerminalComponent({
                         cursorStyle={settings.cursorStyle}
                         cursorBlink={settings.cursorBlink}
                         scrollback={settings.scrollback}
+                        rightClickPaste={settings.rightClickPaste}
+                        copyOnSelect={settings.copyOnSelect}
+                        opacity={settings.opacity}
+                        backgroundImage={settings.backgroundImage}
+                        backgroundImageOpacity={settings.backgroundImageOpacity}
+                        copyShortcut={settings.copyShortcut}
+                        pasteShortcut={settings.pasteShortcut}
+                        clearShortcut={settings.clearShortcut}
                       />
                     </TabsContent>
                   ))

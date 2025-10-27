@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, DragEvent, useMemo, useCallback } from "react"
+import { useState, useRef, useEffect, DragEvent, useMemo, useCallback, useDeferredValue } from "react"
 import { createPortal } from "react-dom"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
@@ -68,7 +68,7 @@ import {
   Database,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { compareFileSizes } from "@/lib/format-utils"
+import { parseFileSize } from "@/lib/format-utils"
 import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
 import { FileEditor } from "@/components/sftp/file-editor"
@@ -81,6 +81,10 @@ interface FileItem {
   permissions: string
   owner: string
   group: string
+}
+
+type EnhancedFileItem = FileItem & {
+  sizeBytes: number
 }
 
 interface TransferTask {
@@ -115,6 +119,7 @@ interface SftpManagerProps {
   sessionLabel: string
   sessionColor?: string
   isFullscreen?: boolean
+  pageContext?: 'sftp' | 'terminal' // 页面上下文
   onNavigate: (path: string) => void
   onUpload: (files: FileList) => void
   onDownload: (fileName: string) => void
@@ -149,6 +154,7 @@ export function SftpManager(props: SftpManagerProps) {
     serverId,
     serverName,
     isFullscreen = false,
+    pageContext = 'sftp',
     onNavigate,
     onUpload,
     onDownload,
@@ -170,13 +176,7 @@ export function SftpManager(props: SftpManagerProps) {
   } = props
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [sortedFiles, setSortedFiles] = useState<FileItem[]>(files)
-
-  // 同步files到sortedFiles
-  useEffect(() => {
-    setSortedFiles(files)
-  }, [files])
-
+  const deferredSearchTerm = useDeferredValue(searchTerm)
   // 禁用 dnd-kit 的拖拽排序功能，改用原生拖拽实现 Windows 风格交互
   // const fileSensors = useSensors(
   //   useSensor(PointerSensor, {
@@ -223,67 +223,81 @@ export function SftpManager(props: SftpManagerProps) {
     filePath: "",
     content: "",
   })
+  const [pathInputValue, setPathInputValue] = useState(currentPath)
+  const [isEditingPath, setIsEditingPath] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const sessionLabelInputRef = useRef<HTMLInputElement>(null)
+  const enhancedFiles = useMemo<EnhancedFileItem[]>(() => {
+    return files.map((file) => ({
+      ...file,
+      sizeBytes: parseFileSize(file.size),
+    }))
+  }, [files])
 
   // 过滤和排序文件 - 使用 useMemo 优化性能
-  const filteredFiles = useMemo(() => {
-    return sortedFiles
-      .filter(file => {
-        // 如果不显示隐藏文件，过滤掉以 . 开头的文件（但保留 .. 父目录）
+  const filteredFiles = useMemo<EnhancedFileItem[]>(() => {
+    const keyword = deferredSearchTerm.trim().toLowerCase()
+
+    return enhancedFiles
+      .filter((file) => {
         if (!showHidden && file.name.startsWith('.') && file.name !== '..') {
           return false
         }
-        // 搜索过滤
-        return file.name.toLowerCase().includes(searchTerm.toLowerCase())
+        if (!keyword) {
+          return true
+        }
+        return file.name.toLowerCase().includes(keyword)
       })
       .sort((a, b) => {
-        // 特殊处理:目录始终排在文件前面
         if (a.type !== b.type) {
           return a.type === "directory" ? -1 : 1
         }
 
-        // 根据排序字段进行排序
-        let comparison = 0
         if (sortBy === "size") {
-          // 使用新的文件大小比较函数
-          comparison = compareFileSizes(a.size, b.size)
-        } else {
-          const aValue = a[sortBy] as string
-          const bValue = b[sortBy] as string
-          comparison = aValue.localeCompare(bValue)
+          const comparison = a.sizeBytes - b.sizeBytes
+          return sortOrder === "asc" ? comparison : -comparison
         }
 
+        const aValue = a[sortBy] as string
+        const bValue = b[sortBy] as string
+        const comparison = aValue.localeCompare(bValue)
         return sortOrder === "asc" ? comparison : -comparison
       })
-  }, [sortedFiles, showHidden, searchTerm, sortBy, sortOrder])
+  }, [enhancedFiles, showHidden, deferredSearchTerm, sortBy, sortOrder])
 
   // 文件选择处理 - 使用 useCallback 优化
   const handleFileSelect = useCallback((fileName: string, event: React.MouseEvent) => {
-    if (event.shiftKey && selectedFiles.length > 0) {
-      // Shift多选
-      const lastIndex = filteredFiles.findIndex(f => f.name === selectedFiles[selectedFiles.length - 1])
-      const currentIndex = filteredFiles.findIndex(f => f.name === fileName)
-      const start = Math.min(lastIndex, currentIndex)
-      const end = Math.max(lastIndex, currentIndex)
-      const range = filteredFiles.slice(start, end + 1).map(f => f.name)
-      setSelectedFiles(Array.from(new Set([...selectedFiles, ...range])))
-    } else if (event.ctrlKey || event.metaKey) {
-      // Ctrl/Cmd多选
-      setSelectedFiles(prev =>
-        prev.includes(fileName) ? prev.filter(f => f !== fileName) : [...prev, fileName]
-      )
-    } else {
-      // 单选 - 如果点击已选中的项目，则取消选择
-      if (selectedFiles.length === 1 && selectedFiles[0] === fileName) {
-        setSelectedFiles([])
-      } else {
-        setSelectedFiles([fileName])
+    const isShift = event.shiftKey
+    const isModifier = event.ctrlKey || event.metaKey
+
+    setSelectedFiles((prev) => {
+      if (isShift && prev.length > 0) {
+        const lastIndex = filteredFiles.findIndex((f) => f.name === prev[prev.length - 1])
+        const currentIndex = filteredFiles.findIndex((f) => f.name === fileName)
+        if (lastIndex === -1 || currentIndex === -1) {
+          return prev
+        }
+        const start = Math.min(lastIndex, currentIndex)
+        const end = Math.max(lastIndex, currentIndex)
+        const range = filteredFiles.slice(start, end + 1).map((f) => f.name)
+        return Array.from(new Set([...prev, ...range]))
       }
-    }
-  }, [selectedFiles, filteredFiles])
+
+      if (isModifier) {
+        return prev.includes(fileName)
+          ? prev.filter((f) => f !== fileName)
+          : [...prev, fileName]
+      }
+
+      if (prev.length === 1 && prev[0] === fileName) {
+        return []
+      }
+
+      return [fileName]
+    })
+  }, [filteredFiles])
 
   // 打开文件编辑器 - 使用 useCallback 优化
   const handleOpenEditor = useCallback(async (fileName: string) => {
@@ -330,13 +344,14 @@ export function SftpManager(props: SftpManagerProps) {
     }
   }, [currentPath, onNavigate, handleOpenEditor])
 
-  const handleSelectAll = () => {
-    if (selectedFiles.length === filteredFiles.length) {
-      setSelectedFiles([])
-    } else {
-      setSelectedFiles(filteredFiles.map(f => f.name))
-    }
-  }
+  const handleSelectAll = useCallback(() => {
+    setSelectedFiles((prev) => {
+      if (prev.length === filteredFiles.length) {
+        return []
+      }
+      return filteredFiles.map((f) => f.name)
+    })
+  }, [filteredFiles])
 
   // 右键菜单处理
   const handleContextMenu = (e: React.MouseEvent, fileName: string, fileType: "file" | "directory") => {
@@ -998,7 +1013,14 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 路径分段
-  const pathSegments = currentPath.split("/").filter(Boolean)
+  const pathSegments = useMemo(() => currentPath.split("/").filter(Boolean), [currentPath])
+
+  // 同步路径输入框的值
+  useEffect(() => {
+    if (!isEditingPath) {
+      setPathInputValue(currentPath)
+    }
+  }, [currentPath, isEditingPath])
 
   // 传输状态图标
   const getStatusIcon = (status: TransferTask["status"]) => {
@@ -1015,7 +1037,7 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // Context value for nested components
-  const sessionContextValue = {
+  const sessionContextValue = useMemo(() => ({
     sessionId,
     sessionLabel,
     sessionColor,
@@ -1043,7 +1065,34 @@ export function SftpManager(props: SftpManagerProps) {
     onCutFiles: onPasteFiles, // placeholder
     onPasteFiles,
     onToggleFullscreen,
-  }
+  }), [
+    clipboard,
+    currentPath,
+    files,
+    host,
+    isConnected,
+    isFullscreen,
+    onCreateFolder,
+    onDownload,
+    onNavigate,
+    onPasteFiles,
+    onRefresh,
+    onRename,
+    onRenameSession,
+    onSaveFile,
+    onReadFile,
+    onUpload,
+    onCopyFiles,
+    onDelete,
+    onDisconnect,
+    onToggleFullscreen,
+    serverId,
+    serverName,
+    sessionColor,
+    sessionId,
+    sessionLabel,
+    username,
+  ])
 
   const stickyHeaderCellClass = "sticky top-0 z-20 bg-background/95 dark:bg-zinc-950/95 supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
 
@@ -1059,7 +1108,7 @@ export function SftpManager(props: SftpManagerProps) {
       {/* 工具栏 */}
       <div className="border-b text-sm flex items-center justify-between px-3 py-1.5">
         {/* 左侧: 会话标签 - 带拖拽手柄 */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           {/* 拖拽手柄区域 */}
           <div
             className="flex items-center gap-2 cursor-grab active:cursor-grabbing hover:bg-muted/50 px-1.5 py-0.5 -ml-1.5 rounded transition-colors"
@@ -1134,46 +1183,128 @@ export function SftpManager(props: SftpManagerProps) {
             "h-4 w-px mx-1 bg-zinc-300 dark:bg-zinc-800/50",
           )} />
 
-          {/* 根目录按钮 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
-            )}
-            onClick={() => onNavigate("/")}
-            title="根目录"
-          >
-            <Home className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* 可点击的路径面包屑 */}
-          <div className="flex items-center gap-1 ml-2">
-            <HardDrive className="h-3.5 w-3.5 text-zinc-500" />
-            <button
-              onClick={() => onNavigate("/")}
-              className={cn(
-                "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white",
-              )}
-            >
-              /
-            </button>
-            {pathSegments.map((segment, index) => {
-              const segmentPath = "/" + pathSegments.slice(0, index + 1).join("/")
-              return (
-                <div key={index} className="flex items-center gap-1">
-                  <ChevronRight className="h-3 w-3 text-zinc-500" />
+          {/* 路径导航/编辑框 - 混合模式 */}
+          <div className="flex items-center gap-2 ml-2 flex-1 min-w-0">
+            <div className="relative flex-1 min-w-0">
+              {isEditingPath ? (
+                <>
+                  {/* Home图标按钮 - 编辑模式 */}
                   <button
-                    onClick={() => onNavigate(segmentPath)}
+                    onClick={() => onNavigate("/")}
                     className={cn(
-                      "text-xs font-mono cursor-pointer px-1.5 py-0.5 rounded transition-colors text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                      "absolute left-2 top-1/2 -translate-y-1/2 z-10 p-0.5 rounded-md",
+                      "text-zinc-600 dark:text-zinc-400",
+                      "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                      "transition-all duration-200"
+                    )}
+                    title="根目录"
+                  >
+                    <Home className="h-3.5 w-3.5" />
+                  </button>
+
+                  {/* 路径输入框 - 编辑模式 */}
+                  <Input
+                    value={pathInputValue}
+                    onChange={(e) => setPathInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.currentTarget.blur()
+                        const newPath = e.currentTarget.value.trim()
+                        if (newPath && newPath !== currentPath) {
+                          onNavigate(newPath)
+                        }
+                        setIsEditingPath(false)
+                      } else if (e.key === "Escape") {
+                        setPathInputValue(currentPath)
+                        setIsEditingPath(false)
+                        e.currentTarget.blur()
+                      }
+                    }}
+                    onBlur={(e) => {
+                      setIsEditingPath(false)
+                      const newPath = e.target.value.trim()
+                      if (newPath && newPath !== currentPath) {
+                        onNavigate(newPath)
+                      } else {
+                        setPathInputValue(currentPath)
+                      }
+                    }}
+                    autoFocus
+                    placeholder="输入路径..."
+                    className={cn(
+                      "h-7 text-xs font-mono pl-8 pr-3 py-1 border-0 bg-zinc-100 dark:bg-zinc-900/50",
+                      "placeholder:text-zinc-400 dark:placeholder:text-zinc-600",
+                    )}
+                  />
+                </>
+              ) : (
+                /* 路径面包屑 - 显示模式 */
+                <div
+                  onClick={() => setIsEditingPath(true)}
+                  className={cn(
+                    "h-7 flex items-center gap-1 pl-8 pr-3 py-1 border-0 bg-zinc-100 dark:bg-zinc-900/50",
+                    "text-xs font-mono cursor-text rounded-md overflow-x-auto scrollbar-thin",
+                    "hover:bg-zinc-200 dark:hover:bg-zinc-800/60 transition-colors"
+                  )}
+                  title="点击编辑路径"
+                >
+                  {/* Home图标 - 显示模式 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onNavigate("/")
+                    }}
+                    className={cn(
+                      "absolute left-2 top-1/2 -translate-y-1/2 p-0.5 rounded-md",
+                      "text-zinc-600 dark:text-zinc-400",
+                      "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                      "transition-all duration-200"
+                    )}
+                    title="根目录"
+                  >
+                    <Home className="h-3.5 w-3.5" />
+                  </button>
+
+                  {/* 可点击的路径段 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onNavigate("/")
+                    }}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded-md whitespace-nowrap",
+                      "text-zinc-600 dark:text-zinc-400",
+                      "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                      "transition-all duration-200",
                     )}
                   >
-                    {segment}
+                    /
                   </button>
+                  {pathSegments.map((segment, index) => {
+                    const segmentPath = "/" + pathSegments.slice(0, index + 1).join("/")
+                    return (
+                      <div key={index} className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onNavigate(segmentPath)
+                          }}
+                          className={cn(
+                            "px-1.5 py-0.5 rounded-md whitespace-nowrap",
+                            "text-zinc-600 dark:text-zinc-400",
+                            "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                            "transition-all duration-200",
+                          )}
+                        >
+                          {segment}
+                        </button>
+                        {index < pathSegments.length - 1 && <span className="text-zinc-400">/</span>}
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              )}
+            </div>
           </div>
         </div>
 

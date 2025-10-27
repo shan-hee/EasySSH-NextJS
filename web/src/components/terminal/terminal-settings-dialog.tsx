@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   Dialog,
   DialogContent,
@@ -99,21 +99,54 @@ export function TerminalSettingsDialog({
   onSettingsChange,
 }: TerminalSettingsDialogProps) {
   const [localSettings, setLocalSettings] = useState(settings)
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 当传入的 settings 变化时，同步到 localSettings
+  useEffect(() => {
+    setLocalSettings(settings)
+  }, [settings])
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [])
 
   const handleSave = () => {
+    // 清除防抖定时器
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+    // 立即应用设置
     onSettingsChange(localSettings)
     onOpenChange(false)
   }
 
   const handleReset = () => {
-    setLocalSettings(defaultSettings)
+    const resetSettings = defaultSettings
+    setLocalSettings(resetSettings)
+    // 立即应用重置的设置（不需要防抖）
+    onSettingsChange(resetSettings)
   }
 
   const updateSetting = <K extends keyof TerminalSettings>(
     key: K,
     value: TerminalSettings[K]
   ) => {
-    setLocalSettings(prev => ({ ...prev, [key]: value }))
+    const newSettings = { ...localSettings, [key]: value }
+    setLocalSettings(newSettings)
+
+    // 使用防抖机制，延迟 300ms 后才应用设置（实时预览）
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      onSettingsChange(newSettings)
+    }, 300)
   }
 
   return (

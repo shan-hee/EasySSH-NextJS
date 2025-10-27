@@ -69,7 +69,7 @@ export class TerminalWebSocket {
         if (event.data instanceof ArrayBuffer) {
           // 二进制数据 - SSH 输出
           // 复用 decoder 实例，避免每次创建新的 TextDecoder
-          const text = this.decoder.decode(event.data)
+          const text = this.decoder.decode(event.data, { stream: true })
           this.onData(text)
         } else if (typeof event.data === "string") {
           // JSON 控制消息
@@ -89,6 +89,11 @@ export class TerminalWebSocket {
 
       this.ws.onclose = (event) => {
         this.stopPing()
+
+        const remaining = this.decoder.decode()
+        if (remaining) {
+          this.onData(remaining)
+        }
 
         if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
           // 自动重连

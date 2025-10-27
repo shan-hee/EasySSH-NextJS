@@ -187,6 +187,7 @@ export function FileManagerPanel({
               <SftpManager
                 {...sftpProps}
                 isFullscreen={false}
+                pageContext="terminal"
                 onDisconnect={onClose}
               />
             ) : (

@@ -17,9 +17,7 @@ import { CPUChart } from './components/CPUChart';
 import { MemoryChart } from './components/MemoryChart';
 import { NetworkChart } from './components/NetworkChart';
 import { DiskUsage } from './components/DiskUsage';
-import { WifiOff, AlertCircle } from 'lucide-react';
-import { MonitorSkeleton, MinimalLoader, ErrorState } from './components/MonitorSkeleton';
-import { Button } from '@/components/ui/button';
+import { MonitorSkeleton } from './components/MonitorSkeleton';
 
 interface MonitorPanelProps {
   className?: string;
@@ -133,39 +131,10 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
 
   // 渲染状态提示
   const renderStatusHint = () => {
-    // serverId 参数已废弃，不再检查
-    // if (!serverId) {
-    //   return (
-    //     <ErrorState
-    //       icon={<AlertCircle className="w-12 h-12" />}
-    //       title="未选择服务器"
-    //       description="请先连接到服务器以查看监控数据"
-    //     />
-    //   );
-    // }
-
-    if (status === WSStatus.CONNECTING) {
-      // 首次连接显示骨架屏
+    // 所有非连接状态都显示骨架屏，简化用户体验
+    // 骨架屏提供一致的加载反馈，避免突兀的错误提示
+    if (status !== WSStatus.CONNECTED) {
       return <MonitorSkeleton />;
-    }
-
-    if (status === WSStatus.ERROR || status === WSStatus.DISCONNECTED) {
-      return (
-        <ErrorState
-          icon={<WifiOff className="w-12 h-12" />}
-          title="监控连接已断开"
-          description="正在尝试重新连接，请稍候..."
-          action={
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.location.reload()}
-            >
-              刷新页面
-            </Button>
-          }
-        />
-      );
     }
 
     return null;
