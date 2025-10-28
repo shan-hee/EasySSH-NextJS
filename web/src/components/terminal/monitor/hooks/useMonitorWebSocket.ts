@@ -93,6 +93,18 @@ export function useMonitorWebSocket({
   const latencyTimerRef = useRef<NodeJS.Timer | null>(null);
   const visibilityHandlerRef = useRef<(() => void) | null>(null);
 
+  // React Strict Mode 防护：标记当前组件是否已挂载
+  const isMountedRef = useRef(false);
+  // 存储待处理的延迟更新，批量提交避免频繁重新渲染
+  const pendingLatencyUpdateRef = useRef<{
+    localLatencyMs?: number;
+    localLatencySmoothedMs?: number;
+    localLatencyDevMs?: number;
+    localLatencyUpMs?: number;
+    localLatencyDownMs?: number;
+    clockOffsetMs?: number;
+  } | null>(null);
+
   // 连接 WebSocket
   const connect = useCallback(() => {
     if (!enabled || !serverId) return;
@@ -100,10 +112,13 @@ export function useMonitorWebSocket({
     // 仅在浏览器环境中执行
     if (typeof window === 'undefined') return;
 
-    // 注意: 在开发环境 React Strict Mode 下,这个函数会被调用两次
-    // 第一次连接会立即被清理,第二次连接才是真正的连接
-    // 这是 React 18 的预期行为,用于检测副作用问题
-    // React Strict Mode 的副作用双执行 + Next.js Fast Refresh/HMR 的重挂载，会导致开发环境下连接两次，出现4 条 WS，生产环境不会出现这个问题
+    // React Strict Mode 防护：避免重复连接
+    // 在开发环境下，React 18 Strict Mode 会故意双重执行 effect (mount → cleanup → mount)
+    // 我们通过检查现有连接状态来避免重复创建
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+      console.log('[Monitor WS] 连接已存在，跳过重复连接');
+      return;
+    }
 
     try {
       // 获取 token
@@ -124,6 +139,9 @@ export function useMonitorWebSocket({
       // 创建 WebSocket 连接
       const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
+
+      // 立即保存到 wsRef，以便 disconnect 能够正确处理
+      wsRef.current = ws;
 
       // 连接成功
       ws.onopen = () => {
@@ -163,7 +181,7 @@ export function useMonitorWebSocket({
       ws.onmessage = (event) => {
         try {
           if (event.data instanceof ArrayBuffer) {
-            // Protobuf 反序列化
+            // Protobuf 反序列化（使用 Worker 可进一步优化，但当前优先批量更新）
             const buffer = new Uint8Array(event.data);
             const metricsData = monitor.SystemMetrics.decode(buffer);
 
@@ -205,9 +223,10 @@ export function useMonitorWebSocket({
             // 更新历史数据队列（最多保留 10 个数据点）
             metricsHistoryRef.current = [...metricsHistoryRef.current, formattedMetrics].slice(-10);
 
+            // 批量更新：单次 setState 避免多次重新渲染
             setMetrics(formattedMetrics);
           } else if (typeof event.data === 'string') {
-            // 处理文本消息（pong）
+            // 处理文本消息（pong）- 优化：批量更新延迟状态
             try {
               const msg = JSON.parse(event.data);
               if (msg && msg.type === 'pong' && typeof msg.ts === 'number') {
@@ -217,22 +236,37 @@ export function useMonitorWebSocket({
                 const t2 = typeof msg.serverSendTs === 'number' ? Number(msg.serverSendTs) : undefined;
 
                 const rtt = Math.max(0, Math.round(t3 - t0));
-                setLocalLatencyMs(rtt);
+
+                // 准备批量更新
+                const updates: typeof pendingLatencyUpdateRef.current = {
+                  localLatencyMs: rtt,
+                };
+
                 // EWMA 平滑与偏差估计（TCP 类似参数）
                 const ALPHA = 1/8; // 0.125
                 const BETA = 1/4;  // 0.25
+
+                // 使用函数式更新避免闭包陷阱
                 setLocalLatencySmoothedMs((prev) => {
                   if (!prev || prev <= 0) {
                     // 首次样本直接初始化
-                    setLocalLatencyDevMs(0);
+                    updates.localLatencySmoothedMs = rtt;
+                    updates.localLatencyDevMs = 0;
                     return rtt;
                   }
                   const s = prev + ALPHA * (rtt - prev);
+                  const smoothed = Math.max(0, Math.round(s));
+                  updates.localLatencySmoothedMs = smoothed;
+
+                  // 计算偏差
                   setLocalLatencyDevMs((prevDev) => {
                     const d = (isNaN(prevDev) ? 0 : prevDev) + BETA * (Math.abs(rtt - s) - (isNaN(prevDev) ? 0 : prevDev));
-                    return Math.max(0, Math.round(d));
+                    const dev = Math.max(0, Math.round(d));
+                    updates.localLatencyDevMs = dev;
+                    return dev;
                   });
-                  return Math.max(0, Math.round(s));
+
+                  return smoothed;
                 });
 
                 if (typeof t1 === 'number' && typeof t2 === 'number') {
@@ -241,10 +275,17 @@ export function useMonitorWebSocket({
                   const offset = ((t1 - t0) + (t2 - t3)) / 2;
                   const up = t1 - (t0 + offset);
                   const down = t3 - (t2 + offset);
-                  setClockOffsetMs(Math.round(offset));
-                  setLocalLatencyUpMs(Math.max(0, Math.round(up)));
-                  setLocalLatencyDownMs(Math.max(0, Math.round(down)));
+
+                  updates.clockOffsetMs = Math.round(offset);
+                  updates.localLatencyUpMs = Math.max(0, Math.round(up));
+                  updates.localLatencyDownMs = Math.max(0, Math.round(down));
                 }
+
+                // 批量应用所有更新（使用 React 18 的 automatic batching）
+                setLocalLatencyMs(updates.localLatencyMs!);
+                if (updates.clockOffsetMs !== undefined) setClockOffsetMs(updates.clockOffsetMs);
+                if (updates.localLatencyUpMs !== undefined) setLocalLatencyUpMs(updates.localLatencyUpMs);
+                if (updates.localLatencyDownMs !== undefined) setLocalLatencyDownMs(updates.localLatencyDownMs);
               }
             } catch { /* ignore */ }
           }
@@ -292,7 +333,7 @@ export function useMonitorWebSocket({
         onError?.(new Error('WebSocket 连接错误'));
       };
 
-      wsRef.current = ws;
+      // wsRef.current 已在上方（创建 WebSocket 后）立即设置，这里不需要重复设置
     } catch (error) {
       console.error('[Monitor WS] 创建连接失败:', error);
       setStatus(WSStatus.ERROR);
@@ -308,11 +349,6 @@ export function useMonitorWebSocket({
       reconnectTimeoutRef.current = null;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'Client disconnected');
-      wsRef.current = null;
-    }
-
     if (latencyTimerRef.current) {
       clearInterval(latencyTimerRef.current);
       latencyTimerRef.current = null;
@@ -320,6 +356,23 @@ export function useMonitorWebSocket({
     if (visibilityHandlerRef.current) {
       visibilityHandlerRef.current();
       visibilityHandlerRef.current = null;
+    }
+
+    // 安全关闭 WebSocket：避免竞态条件
+    if (wsRef.current) {
+      const ws = wsRef.current;
+      wsRef.current = null; // 先置空避免重复处理
+
+      // 只在连接未关闭时才执行关闭操作
+      // WebSocket.CLOSING (2) 或 WebSocket.CLOSED (3) 时不需要再调用 close()
+      if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.close(1000, 'Client disconnected');
+        } catch (err) {
+          // 忽略关闭过程中的错误（例如连接已经在关闭中）
+          // 这在 React Strict Mode 的双重调用中很常见
+        }
+      }
     }
 
     // 清空历史数据
@@ -330,11 +383,16 @@ export function useMonitorWebSocket({
 
   // 自动连接和清理
   useEffect(() => {
+    // 标记组件已挂载
+    isMountedRef.current = true;
+
     if (enabled && serverId) {
       connect();
     }
 
     return () => {
+      // 标记组件已卸载
+      isMountedRef.current = false;
       disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -29,14 +29,16 @@ var upgrader = websocket.Upgrader{
 // TerminalHandler WebSocket 终端处理器
 type TerminalHandler struct {
 	serverService  server.Service
+	serverRepo     server.Repository
 	sessionManager *sshDomain.SessionManager
 	encryptor      *crypto.Encryptor
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:  serverService,
+		serverRepo:     serverRepo,
 		sessionManager: sessionManager,
 		encryptor:      encryptor,
 	}
@@ -131,6 +133,13 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	if err := client.Connect(srv.Host, srv.Port); err != nil {
 		h.sendError(wsConn, "connection_failed", err.Error())
 		return
+	}
+
+	// 性能优化：仅更新服务器状态和最后连接时间（避免慢查询）
+	srv.UpdateStatus(server.StatusOnline)
+	if err := h.serverRepo.UpdateStatus(c.Request.Context(), srv.ID, srv.Status, srv.LastConnected); err != nil {
+		log.Printf("Failed to update server status: %v", err)
+		// 不中断连接，只记录错误
 	}
 
 	// 创建 SSH 会话

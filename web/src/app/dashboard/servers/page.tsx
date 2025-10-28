@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
 import { EditServerDialog } from "@/components/servers/edit-server-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
-import { serversApi, type Server } from "@/lib/api"
+import { serversApi, type Server, type AuthMethod } from "@/lib/api"
 import {
   Search,
   Plus,
@@ -187,7 +187,7 @@ export default function ServersPage() {
     }
   }
 
-  const handleAddServer = async (data: ServerFormData) => {
+  const handleAddServer = async (data: ServerFormData, shouldTest = false) => {
     try {
       const token = localStorage.getItem("easyssh_access_token")
       if (!token) {
@@ -195,7 +195,18 @@ export default function ServersPage() {
         return
       }
 
-      await serversApi.create(token, {
+      const serverData: {
+        name: string
+        host: string
+        port: number
+        username: string
+        auth_method: AuthMethod
+        password?: string
+        private_key?: string
+        group?: string
+        tags?: string[]
+        description?: string
+      } = {
         name: data.name,
         host: data.host,
         port: parseInt(data.port) || 22,
@@ -206,13 +217,39 @@ export default function ServersPage() {
         group: data.group,
         tags: data.tags,
         description: data.description,
-      })
+      }
+
+      const createdServer = await serversApi.create(token, serverData)
 
       toast.success("服务器添加成功")
       setIsAddDialogOpen(false)
 
       await loadServers()
       await loadStatistics()
+
+      // 如果需要测试连接
+      if (shouldTest && createdServer?.id) {
+        toast.info("正在测试连接...")
+        try {
+          const result = await serversApi.testConnection(token, createdServer.id)
+          if (result.success) {
+            toast.success(`连接测试成功！延迟: ${result.latency_ms}ms`)
+            // 测试成功后刷新服务器列表和统计信息以更新状态
+            await loadServers()
+            await loadStatistics()
+          } else {
+            toast.error("连接测试失败: " + result.message)
+            // 测试失败也要刷新，因为后端会将状态更新为离线
+            await loadServers()
+            await loadStatistics()
+          }
+        } catch (error: any) {
+          toast.error("测试失败: " + (error?.message || "未知错误"))
+          // 测试失败也要刷新
+          await loadServers()
+          await loadStatistics()
+        }
+      }
     } catch (error: any) {
       console.error("Failed to add server:", error)
 
@@ -231,7 +268,7 @@ export default function ServersPage() {
     }
   }
 
-  const handleEditServer = async (data: ServerFormData) => {
+  const handleEditServer = async (data: ServerFormData, shouldTest = false) => {
     try {
       const token = localStorage.getItem("easyssh_access_token")
       if (!token) {
@@ -259,10 +296,36 @@ export default function ServersPage() {
 
       toast.success("服务器更新成功")
       setIsEditDialogOpen(false)
+
+      const serverId = editingServer.id
       setEditingServer(null)
 
       await loadServers()
       await loadStatistics()
+
+      // 如果需要测试连接
+      if (shouldTest) {
+        toast.info("正在测试连接...")
+        try {
+          const result = await serversApi.testConnection(token, serverId)
+          if (result.success) {
+            toast.success(`连接测试成功！延迟: ${result.latency_ms}ms`)
+            // 测试成功后刷新服务器列表和统计信息以更新状态
+            await loadServers()
+            await loadStatistics()
+          } else {
+            toast.error("连接测试失败: " + result.message)
+            // 测试失败也要刷新，因为后端会将状态更新为离线
+            await loadServers()
+            await loadStatistics()
+          }
+        } catch (error: any) {
+          toast.error("测试失败: " + (error?.message || "未知错误"))
+          // 测试失败也要刷新
+          await loadServers()
+          await loadStatistics()
+        }
+      }
     } catch (error: any) {
       console.error("Failed to update server:", error)
 

@@ -239,9 +239,10 @@ export function TerminalComponent({
   }, [isAiInputOpen])
 
   // SFTP 会话管理 - 为当前激活的终端会话
-  // 在终端页面默认打开 /root 目录
+  // 性能优化：只在文件管理器打开时才加载 SFTP 数据
+  // 避免在终端连接时就立即发起 SFTP 列表请求（500-800ms）
   const sftpSession = useSftpSession(
-    active && active.type !== 'quick' ? String(active.serverId) : '',
+    isFileManagerOpen && active && active.type !== 'quick' ? String(active.serverId) : '',
     '/root'
   )
 

@@ -2,6 +2,7 @@
 
 import { Terminal, Server } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { AnimatedList } from "@/components/ui/animated-list"
 
 export type QuickServer = {
   id: number | string  // 支持 UUID 字符串
@@ -12,6 +13,7 @@ export type QuickServer = {
   status: "online" | "offline"
   group?: string
   tags?: string[]
+  last_connected?: string  // 最后连接时间
 }
 
 interface QuickConnectProps {
@@ -20,8 +22,27 @@ interface QuickConnectProps {
 }
 
 export function QuickConnect({ servers, onSelectServer }: QuickConnectProps) {
+  // 先分离在线和离线服务器
   const onlineServers = servers.filter((s) => s.status === "online")
   const offlineServers = servers.filter((s) => s.status === "offline")
+
+  // 按最后连接时间排序（最近连接的排在前面）
+  const sortedOnlineServers = onlineServers.sort((a, b) => {
+    // 如果两者都有 last_connected，比较时间
+    if (a.last_connected && b.last_connected) {
+      return new Date(b.last_connected).getTime() - new Date(a.last_connected).getTime()
+    }
+    // 如果只有 a 有 last_connected，a 排在前面
+    if (a.last_connected && !b.last_connected) {
+      return -1
+    }
+    // 如果只有 b 有 last_connected，b 排在前面
+    if (!a.last_connected && b.last_connected) {
+      return 1
+    }
+    // 如果两者都没有，保持原顺序
+    return 0
+  })
 
   return (
     <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-white dark:bg-black"}>
@@ -46,12 +67,12 @@ export function QuickConnect({ servers, onSelectServer }: QuickConnectProps) {
           </div>
 
           {/* 服务器列表 */}
-          {onlineServers.length > 0 && (
+          {sortedOnlineServers.length > 0 && (
             <div className="space-y-4">
               <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
 
-              <div className="space-y-2">
-                {onlineServers.map((server) => (
+              <AnimatedList className="space-y-2">
+                {sortedOnlineServers.map((server) => (
                   <div
                     key={server.id}
                     onClick={() => onSelectServer(server)}
@@ -75,12 +96,12 @@ export function QuickConnect({ servers, onSelectServer }: QuickConnectProps) {
                     )}
                   </div>
                 ))}
-              </div>
+              </AnimatedList>
             </div>
           )}
 
           {/* 无服务器提示 */}
-          {onlineServers.length === 0 && (
+          {sortedOnlineServers.length === 0 && (
             <div className="text-center space-y-3 py-8">
               <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}>
                 <Server className={"h-6 w-6 text-zinc-400 dark:text-zinc-600"} />

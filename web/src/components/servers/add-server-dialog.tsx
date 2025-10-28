@@ -29,7 +29,7 @@ import { PrivateKeyInput } from "@/components/servers/private-key-input"
 interface AddServerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit?: (data: ServerFormData) => void
+  onSubmit?: (data: ServerFormData, shouldTest?: boolean) => void
 }
 
 export interface ServerFormData {
@@ -43,6 +43,7 @@ export interface ServerFormData {
   rememberPassword: boolean
   tags: string[]
   description: string
+  group?: string
   jumpServer: string
   autoConnect: boolean
   keepAlive: boolean
@@ -114,11 +115,11 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
       ...formData,
       jumpServer: formData.jumpServer === "none" ? "" : formData.jumpServer,
     }
-    onSubmit?.(normalized)
+    onSubmit?.(normalized, false)
     onOpenChange(false)
   }
 
-  const handleSaveAndConnect = () => {
+  const handleSaveAndTest = () => {
     // 验证必填字段
     if (!formData.host.trim()) {
       alert("请输入服务器地址")
@@ -140,8 +141,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
       ...formData,
       jumpServer: formData.jumpServer === "none" ? "" : formData.jumpServer,
     }
-    onSubmit?.(normalized)
-    // 这里可以添加连接逻辑
+    onSubmit?.(normalized, true)
     onOpenChange(false)
   }
 
@@ -398,8 +398,8 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
           <Button variant="outline" onClick={handleSave}>
             保存
           </Button>
-          <Button onClick={handleSaveAndConnect}>
-            保存并连接
+          <Button onClick={handleSaveAndTest}>
+            保存并测试
           </Button>
         </div>
       </DialogContent>

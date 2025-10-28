@@ -17,13 +17,15 @@ import (
 // SFTPHandler SFTP 处理器
 type SFTPHandler struct {
 	serverService server.Service
+	serverRepo    server.Repository
 	encryptor     *crypto.Encryptor
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
-func NewSFTPHandler(serverService server.Service, encryptor *crypto.Encryptor) *SFTPHandler {
+func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor) *SFTPHandler {
 	return &SFTPHandler{
 		serverService: serverService,
+		serverRepo:    serverRepo,
 		encryptor:     encryptor,
 	}
 }
@@ -51,6 +53,13 @@ func (h *SFTPHandler) createSFTPClient(c *gin.Context, serverID uuid.UUID) (*sft
 	// 连接到服务器
 	if err := sshClient.Connect(srv.Host, srv.Port); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect: %w", err)
+	}
+
+	// 性能优化：仅更新服务器状态和最后连接时间（避免慢查询）
+	srv.UpdateStatus(server.StatusOnline)
+	if err := h.serverRepo.UpdateStatus(c.Request.Context(), srv.ID, srv.Status, srv.LastConnected); err != nil {
+		// 不中断连接，只记录错误
+		fmt.Printf("Failed to update server status: %v\n", err)
 	}
 
 	// 创建 SFTP 客户端

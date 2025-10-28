@@ -29,7 +29,7 @@ import { PrivateKeyInput } from "@/components/servers/private-key-input"
 interface EditServerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit?: (data: ServerFormData) => void
+  onSubmit?: (data: ServerFormData, shouldTest?: boolean) => void
   initialData?: Partial<ServerFormData>
 }
 
@@ -139,7 +139,33 @@ export function EditServerDialog({ open, onOpenChange, onSubmit, initialData }: 
       ...formData,
       jumpServer: formData.jumpServer === "none" ? "" : formData.jumpServer,
     }
-    onSubmit?.(normalized)
+    onSubmit?.(normalized, false)
+    onOpenChange(false)
+  }
+
+  const handleSaveAndTest = () => {
+    // 验证必填字段
+    if (!formData.host.trim()) {
+      alert("请输入服务器地址")
+      return
+    }
+    if (!formData.username.trim()) {
+      alert("请输入用户名")
+      return
+    }
+
+    // 验证端口号
+    const port = parseInt(formData.port)
+    if (isNaN(port) || port < 1 || port > 65535) {
+      alert("端口号必须是1-65535之间的数字")
+      return
+    }
+
+    const normalized = {
+      ...formData,
+      jumpServer: formData.jumpServer === "none" ? "" : formData.jumpServer,
+    }
+    onSubmit?.(normalized, true)
     onOpenChange(false)
   }
 
@@ -157,6 +183,7 @@ export function EditServerDialog({ open, onOpenChange, onSubmit, initialData }: 
       rememberPassword: false,
       tags: [],
       description: "",
+      group: "",
       jumpServer: "",
       autoConnect: false,
       keepAlive: true,
@@ -393,8 +420,11 @@ export function EditServerDialog({ open, onOpenChange, onSubmit, initialData }: 
           <Button variant="outline" onClick={handleCancel}>
             取消
           </Button>
-          <Button onClick={handleSave}>
+          <Button variant="outline" onClick={handleSave}>
             保存
+          </Button>
+          <Button onClick={handleSaveAndTest}>
+            保存并测试
           </Button>
         </div>
       </DialogContent>

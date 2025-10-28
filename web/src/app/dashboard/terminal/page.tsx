@@ -124,6 +124,7 @@ export default function TerminalPage() {
         status: server.status === "online" ? "online" : "offline",
         group: server.group,
         tags: server.tags,
+        last_connected: server.last_connected,  // 传递最后连接时间
       }))
 
       setServers(quickServers)
@@ -141,13 +142,17 @@ export default function TerminalPage() {
     }
   }
 
-  // 创建“快速连接”页签
+  // 创建"快速连接"页签
   const handleNewSession = (): string | void => {
     // 最大页签数限制
     if (sessions.length >= maxTabs) {
       toast.error(`已达到最大页签数限制 (${maxTabs})`)
       return
     }
+
+    // 重新加载服务器列表以获取最新的 last_connected 时间
+    loadServers()
+
     const now = Date.now()
     const id = `quick-${now}`
     const newTab: TerminalSession = {
@@ -166,7 +171,7 @@ export default function TerminalPage() {
     return id
   }
 
-  // 从“快速连接”页签内选择服务器，升级为终端会话
+  // 从"快速连接"页签内选择服务器，升级为终端会话
   const handleStartConnectionFromQuick = (sessionId: string, server: QuickServer) => {
     const now = Date.now()
     setSessions(prev => prev.map(s => s.id === sessionId ? {
@@ -184,6 +189,12 @@ export default function TerminalPage() {
       pinned: false,
       type: "terminal",
     } : s))
+
+    // 连接建立后，稍后重新加载服务器列表以获取更新的 last_connected
+    // 延迟加载，确保后端已经更新完成
+    setTimeout(() => {
+      loadServers()
+    }, 1000)
   }
 
   // 关闭会话
