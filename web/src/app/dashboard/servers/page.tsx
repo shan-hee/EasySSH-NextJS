@@ -4,8 +4,7 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ServerList } from "@/components/servers/server-card"
-import { ServerFilters } from "@/components/servers/server-filters"
+import { Badge } from "@/components/ui/badge"
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
 import { EditServerDialog } from "@/components/servers/edit-server-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
@@ -14,12 +13,19 @@ import {
   Search,
   Plus,
   Server as ServerIcon,
-  Loader2
+  Loader2,
+  Terminal,
+  Edit,
+  Trash2,
+  Settings,
+  Pin,
+  PinOff,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 const STORAGE_KEY = 'servers-order'
+const PINNED_KEY = 'servers-pinned'
 
 export default function ServersPage() {
   const router = useRouter()
@@ -29,8 +35,9 @@ export default function ServersPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingServer, setEditingServer] = useState<Server | null>(null)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'all' | 'online' | 'offline'>('all')
+  const [pinnedServers, setPinnedServers] = useState<Set<string>>(new Set())
   const [statistics, setStatistics] = useState({
     total: 0,
     online: 0,
@@ -44,12 +51,46 @@ export default function ServersPage() {
     loadServers()
     loadStatistics()
 
-    // 加载视图模式
-    const savedViewMode = localStorage.getItem('servers-view-mode')
-    if (savedViewMode === 'grid' || savedViewMode === 'list') {
-      setViewMode(savedViewMode)
+    // 加载置顶状态
+    const savedPinned = localStorage.getItem(PINNED_KEY)
+    if (savedPinned) {
+      try {
+        setPinnedServers(new Set(JSON.parse(savedPinned)))
+      } catch (e) {
+        console.error('Failed to load pinned servers:', e)
+      }
     }
   }, [])
+
+  // 根据搜索词和激活的标签过滤服务器
+  useEffect(() => {
+    let filtered = [...servers]
+
+    // 按标签过滤
+    if (activeTab === 'online') {
+      filtered = filtered.filter(s => s.status === 'online')
+    } else if (activeTab === 'offline') {
+      filtered = filtered.filter(s => s.status === 'offline' || s.status === 'error')
+    }
+
+    // 按搜索词过滤
+    if (searchTerm) {
+      filtered = filtered.filter(server =>
+        server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        server.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        server.username.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+
+    // 置顶的服务器排在前面
+    filtered.sort((a, b) => {
+      const aPin = pinnedServers.has(a.id) ? 1 : 0
+      const bPin = pinnedServers.has(b.id) ? 1 : 0
+      return bPin - aPin
+    })
+
+    setFilteredServers(filtered)
+  }, [servers, searchTerm, activeTab, pinnedServers])
 
   async function loadServers() {
     try {
@@ -63,10 +104,9 @@ export default function ServersPage() {
 
       const response = await serversApi.list(token, {
         page: 1,
-        limit: 100  // 加载所有服务器
+        limit: 100
       })
 
-      // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
       const serverList = Array.isArray(response)
         ? response
         : (response?.data || [])
@@ -99,34 +139,29 @@ export default function ServersPage() {
     }
   }
 
-  // 处理拖拽重新排序
-  const handleReorder = (newOrder: Server[]) => {
-    setServers(newOrder)
-    setFilteredServers(newOrder)
-
-    // 保存到 localStorage
-    const orderIds = newOrder.map(s => s.id)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(orderIds))
-  }
-
-  // 处理视图模式切换
-  const handleViewModeChange = (mode: 'grid' | 'list') => {
-    setViewMode(mode)
-    localStorage.setItem('servers-view-mode', mode)
-  }
-
   const handleConnect = (serverId: string) => {
-    // 跳转到SSH终端页面
     router.push(`/dashboard/terminal?server=${serverId}`)
   }
 
-  const handleEdit = (serverId: string) => {
-    // 找到要编辑的服务器
-    const server = servers.find(s => s.id === serverId)
-    if (server) {
-      setEditingServer(server)
-      setIsEditDialogOpen(true)
-    }
+  const handleEdit = (server: Server) => {
+    setEditingServer(server)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleTogglePin = (serverId: string) => {
+    setPinnedServers(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(serverId)) {
+        newSet.delete(serverId)
+        toast.success("已取消置顶")
+      } else {
+        newSet.add(serverId)
+        toast.success("已置顶")
+      }
+      // 保存到localStorage
+      localStorage.setItem(PINNED_KEY, JSON.stringify(Array.from(newSet)))
+      return newSet
+    })
   }
 
   const handleDelete = async (serverId: string) => {
@@ -144,17 +179,12 @@ export default function ServersPage() {
       await serversApi.delete(token, serverId)
       toast.success("服务器已删除")
 
-      // 刷新列表
       await loadServers()
       await loadStatistics()
     } catch (error: any) {
       console.error("Failed to delete server:", error)
       toast.error("删除失败: " + (error?.message || "未知错误"))
     }
-  }
-
-  const handleViewDetails = (serverId: string) => {
-    router.push(`/dashboard/servers/${serverId}`)
   }
 
   const handleAddServer = async (data: ServerFormData) => {
@@ -181,16 +211,13 @@ export default function ServersPage() {
       toast.success("服务器添加成功")
       setIsAddDialogOpen(false)
 
-      // 刷新列表
       await loadServers()
       await loadStatistics()
     } catch (error: any) {
       console.error("Failed to add server:", error)
 
-      // 提取详细错误信息
       let errorMessage = "未知错误"
       if (error?.detail) {
-        // 如果detail是对象，尝试提取message
         if (typeof error.detail === 'object' && error.detail.message) {
           errorMessage = error.detail.message
         } else if (typeof error.detail === 'string') {
@@ -234,13 +261,11 @@ export default function ServersPage() {
       setIsEditDialogOpen(false)
       setEditingServer(null)
 
-      // 刷新列表
       await loadServers()
       await loadStatistics()
     } catch (error: any) {
       console.error("Failed to update server:", error)
 
-      // 提取详细错误信息
       let errorMessage = "未知错误"
       if (error?.detail) {
         if (typeof error.detail === 'object' && error.detail.message) {
@@ -256,59 +281,11 @@ export default function ServersPage() {
     }
   }
 
-  const handleFiltersChange = (filters: {
-    search: string;
-    status: string;
-    tag: string;
-    os: string;
-    sortBy: string;
-    sortOrder: string;
-  }) => {
-    let filtered = [...servers]
-
-    // 搜索过滤
-    if (filters.search) {
-      filtered = filtered.filter(server =>
-        server.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        server.host.toLowerCase().includes(filters.search.toLowerCase())
-      )
-    }
-
-    // 状态过滤
-    if (filters.status !== 'all') {
-      filtered = filtered.filter(server => server.status === filters.status)
-    }
-
-    // 标签过滤
-    if (filters.tag !== 'all') {
-      filtered = filtered.filter(server =>
-        server.tags && server.tags.includes(filters.tag)
-      )
-    }
-
-    // 排序
-    filtered.sort((a, b) => {
-      let aValue = a[filters.sortBy as keyof typeof a]
-      let bValue = b[filters.sortBy as keyof typeof b]
-
-      if (typeof aValue === 'string') aValue = aValue.toLowerCase()
-      if (typeof bValue === 'string') bValue = bValue.toLowerCase()
-
-      if (filters.sortOrder === 'asc') {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
-      } else {
-        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
-      }
-    })
-
-    setFilteredServers(filtered)
-  }
-
   // 加载中状态
   if (loading) {
     return (
       <>
-        <PageHeader title="服务器列表" />
+        <PageHeader title="连接配置" showTitleInBreadcrumb={false} />
         <div className="flex flex-1 items-center justify-center p-4">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -321,82 +298,218 @@ export default function ServersPage() {
 
   return (
     <>
-      <PageHeader title="服务器列表" />
+      <PageHeader title="连接配置" showTitleInBreadcrumb={false} />
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        {/* 操作栏 */}
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="搜索服务器..."
-                className="pl-10 w-64"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                全部 ({statistics.total})
-              </Button>
-              <Button variant="outline" size="sm">
-                在线 ({statistics.online})
-              </Button>
-              <Button variant="outline" size="sm">
-                离线 ({statistics.offline})
-              </Button>
-              <Button variant="outline" size="sm">
-                异常 ({statistics.error})
-              </Button>
-            </div>
+      <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-white dark:bg-black"}>
+        <div className={"absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent to-transparent via-black/5 dark:via-white/5"} />
+
+        <div className="flex-1 flex flex-col items-center px-8 py-8 overflow-y-auto">
+          <div className="max-w-3xl w-full space-y-6">
+            {/* 搜索栏和添加按钮 */}
+            {servers.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  {/* 左侧：搜索框 */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 dark:text-zinc-600 h-4 w-4" />
+                    <Input
+                      placeholder="搜索服务器名称、地址或用户名..."
+                      className={"pl-10 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+
+                  {/* 右侧：添加按钮 */}
+                  <Button onClick={() => setIsAddDialogOpen(true)} className="shadow-sm flex-shrink-0">
+                    <Plus className="mr-2 h-4 w-4" />
+                    添加服务器
+                  </Button>
+                </div>
+
+                {/* 标签切换 */}
+                <div className="flex gap-2">
+                  <Button
+                    variant={activeTab === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setActiveTab('all')}
+                    className="h-8"
+                  >
+                    全部 ({statistics.total})
+                  </Button>
+                  <Button
+                    variant={activeTab === 'online' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setActiveTab('online')}
+                    className="h-8"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />
+                    在线 ({statistics.online})
+                  </Button>
+                  <Button
+                    variant={activeTab === 'offline' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setActiveTab('offline')}
+                    className="h-8"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 mr-1.5" />
+                    离线 ({statistics.offline})
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* 服务器列表 */}
+            {filteredServers.length > 0 && (
+              <div className="space-y-4">
+                <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
+
+                <div className="space-y-2">
+                  {filteredServers.map((server) => (
+                    <div
+                      key={server.id}
+                      className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40 cursor-pointer"}
+                      onClick={() => {
+                        if (server.status === 'online') {
+                          handleConnect(server.id)
+                        }
+                      }}
+                    >
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          server.status === 'online'
+                            ? 'bg-green-500'
+                            : 'bg-zinc-400 dark:bg-zinc-600'
+                        }`}
+                      />
+
+                      <div className="flex-1 min-w-0">
+                        <div className={"text-sm font-medium transition-colors truncate text-zinc-900 dark:text-white"}>
+                          {server.name || server.host}
+                        </div>
+                        <div className={"text-xs font-mono truncate text-zinc-500 dark:text-zinc-600"}>
+                          {server.username}@{server.host}:{server.port}
+                        </div>
+                      </div>
+
+                      {server.group && (
+                        <Badge variant="secondary" className="text-xs flex-shrink-0">
+                          {server.group}
+                        </Badge>
+                      )}
+
+                      {server.tags && server.tags.length > 0 && (
+                        <Badge variant="outline" className="text-xs flex-shrink-0">
+                          {server.tags[0]}
+                        </Badge>
+                      )}
+
+                      {/* 操作按钮组 */}
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {/* 置顶按钮 */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          onClick={() => handleTogglePin(server.id)}
+                          title={pinnedServers.has(server.id) ? "取消置顶" : "置顶"}
+                        >
+                          {pinnedServers.has(server.id) ? (
+                            <Pin className="h-4 w-4" />
+                          ) : (
+                            <PinOff className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          onClick={() => handleConnect(server.id)}
+                          disabled={server.status !== 'online'}
+                          title="连接终端"
+                        >
+                          <Terminal className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          onClick={() => handleEdit(server)}
+                          title="编辑配置"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-destructive hover:bg-red-50 dark:hover:bg-red-950/20"
+                          onClick={() => handleDelete(server.id)}
+                          title="删除服务器"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 空状态 - 筛选后无结果 */}
+            {filteredServers.length === 0 && servers.length > 0 && (
+              <div className="text-center space-y-3 py-8">
+                <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}>
+                  <Search className={"h-6 w-6 text-zinc-400 dark:text-zinc-600"} />
+                </div>
+                <div className="space-y-1">
+                  <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
+                    未找到匹配的服务器
+                  </p>
+                  <p className={"text-xs text-zinc-500 dark:text-zinc-600"}>
+                    请尝试调整搜索条件或筛选标签
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 空状态 - 完全没有服务器 */}
+            {servers.length === 0 && (
+              <>
+                <div className="flex items-center justify-between gap-4">
+                  {/* 左侧：搜索框（禁用状态） */}
+                  <div className="relative flex-1 max-w-md opacity-50 pointer-events-none">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 dark:text-zinc-600 h-4 w-4" />
+                    <Input
+                      placeholder="搜索服务器名称、地址或用户名..."
+                      className={"pl-10 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}
+                      disabled
+                    />
+                  </div>
+
+                  {/* 右侧：添加按钮 */}
+                  <Button onClick={() => setIsAddDialogOpen(true)} className="shadow-sm flex-shrink-0">
+                    <Plus className="mr-2 h-4 w-4" />
+                    添加服务器
+                  </Button>
+                </div>
+
+                <div className="text-center space-y-3 py-8">
+                  <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}>
+                    <ServerIcon className={"h-6 w-6 text-zinc-400 dark:text-zinc-600"} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
+                      暂无服务器配置
+                    </p>
+                    <p className={"text-xs text-zinc-500 dark:text-zinc-600"}>
+                      点击上方按钮添加您的第一台服务器
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            添加服务器
-          </Button>
         </div>
-
-        {/* 筛选器 */}
-        <ServerFilters
-          servers={servers}
-          onFiltersChange={handleFiltersChange}
-          onViewModeChange={handleViewModeChange}
-          viewMode={viewMode}
-        />
-
-        {/* 服务器列表 */}
-        <ServerList
-          servers={filteredServers}
-          onConnect={handleConnect}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onViewDetails={handleViewDetails}
-          onReorder={handleReorder}
-          viewMode={viewMode}
-        />
-
-        {/* 空状态 */}
-        {filteredServers.length === 0 && servers.length > 0 && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <ServerIcon className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">未找到匹配的服务器</h3>
-            <p className="text-muted-foreground mb-4">请尝试调整筛选条件</p>
-          </div>
-        )}
-
-        {/* 完全空状态 */}
-        {servers.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <ServerIcon className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">暂无服务器</h3>
-            <p className="text-muted-foreground mb-4">开始添加您的第一台服务器</p>
-            <Button onClick={() => setIsAddDialogOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              添加服务器
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* 添加服务器弹窗 */}

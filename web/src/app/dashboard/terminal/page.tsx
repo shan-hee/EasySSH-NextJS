@@ -14,63 +14,72 @@ export default function TerminalPage() {
   const searchParams = useSearchParams()
   const [servers, setServers] = useState<QuickServer[]>([])
   const [loading, setLoading] = useState(true)
-  const [sessions, setSessions] = useState<TerminalSession[]>(() => {
-    // 使用稳定常量 id，避免 SSR/CSR 时间差导致的 hydration mismatch
-    const now = Date.now()
-    return [
-      {
-        id: "quick-initial",
-        serverId: 0,
-        serverName: "快速连接",
-        host: "",
-        port: undefined,
-        username: "",
-        isConnected: false,
-        status: "disconnected",
-        lastActivity: now,
-        type: "quick",
-        pinned: false,
-      },
-    ]
-  })
+  const [sessions, setSessions] = useState<TerminalSession[]>([])
   const [hibernateBackground, setHibernateBackground] = useState(true)
   const [maxTabs, setMaxTabs] = useState(50)
   const [inactiveMinutes, setInactiveMinutes] = useState(60)
   const inactivityNotifiedRef = useRef<Set<string>>(new Set())
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const initializedRef = useRef(false)
+
+  // 初始化会话（在 servers 加载完成后）
+  useEffect(() => {
+    if (!initializedRef.current && !loading && servers.length > 0) {
+      initializedRef.current = true
+
+      const serverId = searchParams.get("server")
+      if (serverId) {
+        // 如果有 server 参数，直接创建该服务器的会话，不创建快速连接
+        const server = servers.find(s => s.id.toString() === serverId)
+        if (server && server.status === "online") {
+          const now = Date.now()
+          const sessionId = `auto-${serverId}-${now}`
+          const newSession: TerminalSession = {
+            id: sessionId,
+            serverId: server.id,
+            serverName: server.name,
+            host: server.host,
+            port: server.port,
+            username: server.username,
+            isConnected: true,
+            status: "connected",
+            lastActivity: now,
+            group: server.group,
+            tags: server.tags,
+            pinned: false,
+            type: "terminal",
+          }
+          setSessions([newSession])
+          setActiveSessionId(sessionId)
+          router.replace("/dashboard/terminal", { scroll: false })
+          return
+        }
+      }
+
+      // 否则创建默认的快速连接会话
+      const now = Date.now()
+      setSessions([
+        {
+          id: "quick-initial",
+          serverId: 0,
+          serverName: "快速连接",
+          host: "",
+          port: undefined,
+          username: "",
+          isConnected: false,
+          status: "disconnected",
+          lastActivity: now,
+          type: "quick",
+          pinned: false,
+        },
+      ])
+    }
+  }, [loading, servers, searchParams])
 
   // 加载服务器列表
   useEffect(() => {
     loadServers()
   }, [])
-
-  // 处理URL参数中的server参数（从服务器列表跳转过来）
-  useEffect(() => {
-    const serverId = searchParams.get("server")
-    if (serverId && servers.length > 0) {
-      const server = servers.find(s => s.id.toString() === serverId)
-      if (server && server.status === "online") {
-        // 自动创建该服务器的终端会话
-        const now = Date.now()
-        const sessionId = `auto-${now}`
-        const newSession: TerminalSession = {
-          id: sessionId,
-          serverId: server.id,
-          serverName: server.name,
-          host: server.host,
-          port: server.port,
-          username: server.username,
-          isConnected: true,
-          status: "connected",
-          lastActivity: now,
-          group: server.group,
-          tags: server.tags,
-          pinned: false,
-          type: "terminal",
-        }
-        setSessions(prev => [...prev, newSession])
-      }
-    }
-  }, [searchParams, servers])
 
   // 读取通用设置（仅使用本地存储集成）
   useEffect(() => {
@@ -179,11 +188,26 @@ export default function TerminalPage() {
 
   // 关闭会话
   const handleCloseSession = (sessionId: string) => {
-    // 若这次关闭会导致页签为空，则立刻跳转上一级，避免出现“无页签”中间态
+    // 若这次关闭会导致页签为空，则立刻跳转上一级，避免出现"无页签"中间态
     if (sessions.length <= 1) {
       router.replace("/dashboard")
       return
     }
+
+    // 如果关闭的是当前激活的标签，需要先切换到其他标签再关闭
+    const currentIndex = sessions.findIndex(s => s.id === sessionId)
+    const isClosingActive = activeSessionId === sessionId
+
+    // 如果关闭的是当前激活的标签，先切换到相邻的标签
+    if (isClosingActive && currentIndex !== -1) {
+      // 优先选择右边的标签，如果没有则选择左边的
+      const nextIndex = currentIndex < sessions.length - 1 ? currentIndex + 1 : currentIndex - 1
+      if (nextIndex >= 0 && sessions[nextIndex]) {
+        setActiveSessionId(sessions[nextIndex].id)
+      }
+    }
+
+    // 然后过滤掉要关闭的会话
     setSessions(prev => prev.filter(s => s.id !== sessionId))
   }
 
@@ -268,6 +292,18 @@ export default function TerminalPage() {
     )
   }
 
+  // 会话初始化中（等待 sessions 被设置）
+  if (sessions.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">初始化终端...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
       <TerminalComponent
@@ -283,6 +319,7 @@ export default function TerminalPage() {
         hibernateBackground={hibernateBackground}
         onStartConnectionFromQuick={handleStartConnectionFromQuick}
         servers={servers}
+        externalActiveSessionId={activeSessionId}
       />
     </div>
   )

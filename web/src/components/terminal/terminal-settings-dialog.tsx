@@ -555,7 +555,7 @@ export function TerminalSettingsDialog({
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-between pt-4 pb-6 px-6 border-t shrink-0">
+        <div className="flex justify-between pt-4 pb-6 px-6 shrink-0">
           <Button variant="outline" onClick={handleReset}>
             恢复默认
           </Button>

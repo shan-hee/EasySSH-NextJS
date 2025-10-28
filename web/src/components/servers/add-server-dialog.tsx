@@ -94,10 +94,6 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
 
   const handleSave = () => {
     // 验证必填字段
-    if (!formData.name.trim()) {
-      alert("请输入服务器名称（备注）")
-      return
-    }
     if (!formData.host.trim()) {
       alert("请输入服务器地址")
       return
@@ -111,16 +107,6 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
     const port = parseInt(formData.port)
     if (isNaN(port) || port < 1 || port > 65535) {
       alert("端口号必须是1-65535之间的数字")
-      return
-    }
-
-    // 验证认证方式
-    if (formData.authMethod === "password" && !formData.password) {
-      alert("密码验证方式需要填写密码")
-      return
-    }
-    if (formData.authMethod === "privateKey" && !formData.privateKey.trim()) {
-      alert("私钥验证方式需要填写私钥")
       return
     }
 
@@ -134,10 +120,6 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
 
   const handleSaveAndConnect = () => {
     // 验证必填字段
-    if (!formData.name.trim()) {
-      alert("请输入服务器名称（备注）")
-      return
-    }
     if (!formData.host.trim()) {
       alert("请输入服务器地址")
       return
@@ -151,16 +133,6 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
     const port = parseInt(formData.port)
     if (isNaN(port) || port < 1 || port > 65535) {
       alert("端口号必须是1-65535之间的数字")
-      return
-    }
-
-    // 验证认证方式
-    if (formData.authMethod === "password" && !formData.password) {
-      alert("密码验证方式需要填写密码")
-      return
-    }
-    if (formData.authMethod === "privateKey" && !formData.privateKey.trim()) {
-      alert("私钥验证方式需要填写私钥")
       return
     }
 
@@ -196,16 +168,18 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
-        <DialogHeader>
-          <DialogTitle>新建连接</DialogTitle>
-          {/* 为无障碍提供描述，避免控制台警告 */}
-          <DialogDescription className="sr-only">
-            填写服务器连接信息（主机、端口、用户名与认证方式），并选择是否自动连接与保持连接。
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-3xl h-[580px] flex flex-col p-0">
+        <div className="px-6 pt-6">
+          <DialogHeader>
+            <DialogTitle>新建连接</DialogTitle>
+            {/* 为无障碍提供描述，避免控制台警告 */}
+            <DialogDescription className="sr-only">
+              填写服务器连接信息（主机、端口、用户名与认证方式），并选择是否自动连接与保持连接。
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
-        <Tabs defaultValue="server" className="w-full">
+        <Tabs defaultValue="server" className="w-full flex-1 flex flex-col overflow-hidden px-6">
           <TabsList className="w-full">
             <TabsTrigger value="server">云服务器</TabsTrigger>
             <TabsTrigger value="advanced">高级配置</TabsTrigger>
@@ -213,7 +187,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
           </TabsList>
 
           {/* 云服务器标签 */}
-          <TabsContent value="server" className="space-y-4 mt-4">
+          <TabsContent value="server" className="space-y-4 mt-4 flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="host">云服务器公网IP或域名</Label>
@@ -323,7 +297,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
           </TabsContent>
 
           {/* 高级配置标签 */}
-          <TabsContent value="advanced" className="space-y-4 mt-4">
+          <TabsContent value="advanced" className="space-y-4 mt-4 flex-1 overflow-y-auto">
             <div className="space-y-2">
               <Label htmlFor="description">服务器描述</Label>
               <Textarea
@@ -385,7 +359,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
           </TabsContent>
 
           {/* 其他设置标签 */}
-          <TabsContent value="settings" className="space-y-4 mt-4">
+          <TabsContent value="settings" className="space-y-4 mt-4 flex-1 overflow-y-auto">
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="space-y-0.5">
@@ -417,7 +391,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
         </Tabs>
 
         {/* 底部按钮 */}
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex justify-end gap-2 p-6">
           <Button variant="outline" onClick={handleCancel}>
             取消
           </Button>

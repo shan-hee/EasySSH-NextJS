@@ -46,6 +46,8 @@ interface TerminalComponentProps {
   // 快速连接：在当前页签中选择服务器以开始终端
   onStartConnectionFromQuick: (sessionId: string, server: QuickServer) => void
   servers: QuickServer[]
+  // 外部控制激活的会话 ID
+  externalActiveSessionId?: string | null
 }
 
 export function TerminalComponent({
@@ -61,6 +63,7 @@ export function TerminalComponent({
   hibernateBackground = true,
   onStartConnectionFromQuick,
   servers,
+  externalActiveSessionId,
 }: TerminalComponentProps) {
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -74,6 +77,13 @@ export function TerminalComponent({
   const toolbarRef = useRef<HTMLDivElement>(null)
   const floatingPanelRootRef = useRef<HTMLDivElement>(null)
   const [toolbarHeight, setToolbarHeight] = useState(0)
+
+  // 当外部传入 activeSessionId 时，切换激活的会话
+  useEffect(() => {
+    if (externalActiveSessionId) {
+      setActiveSession(externalActiveSessionId)
+    }
+  }, [externalActiveSessionId])
 
   // 主题样式全部改为静态类 + dark: 前缀，避免 SSR/CSR 水合不一致
 
@@ -116,6 +126,13 @@ export function TerminalComponent({
 
   // 获取当前活跃会话
   const active = sessions.find((s) => s.id === activeSession)
+
+  // 如果当前激活的会话不存在（被删除），自动切换到第一个会话
+  useEffect(() => {
+    if (!active && sessions.length > 0) {
+      setActiveSession(sessions[0].id)
+    }
+  }, [active, sessions])
 
   // 监控连接参数（将传递给 Provider）
   const serverId = active && active.type !== 'quick' && active.isConnected
@@ -188,7 +205,7 @@ export function TerminalComponent({
   const shouldForceLoading = !!(active && active.type !== 'quick' && !initializedSessionsRef.current.has(active.id))
   const effectiveIsLoading = !!(active && active.type !== 'quick' && (isActiveSessionLoading || shouldForceLoading))
 
-  // 当从"快速连接"升级为"终端"时，立刻设置为加载中，避免工具栏闪烁
+  // 当从"快速连接"升级为"终端"或首次连接新会话时，立刻设置为加载中
   useEffect(() => {
     if (shouldForceLoading && active) {
       // 若还未设置当前加载会话，则设置并进入动画
@@ -196,8 +213,11 @@ export function TerminalComponent({
         setLoadingSessionId(active.id)
         setLoaderState("entering")
       }
+    } else if (!shouldForceLoading && loadingSessionId === active?.id) {
+      // 如果切换到已初始化的会话，清除加载状态
+      setLoadingSessionId(null)
     }
-  }, [shouldForceLoading, active?.id])
+  }, [shouldForceLoading, active?.id, loadingSessionId])
 
   // 键盘快捷键支持
   useEffect(() => {
@@ -309,7 +329,7 @@ export function TerminalComponent({
             interval={settings.monitorInterval || 2}
             latencyIntervalMs={5000}
           >
-            <Tabs value={active?.id} className="flex-1 flex flex-col gap-0">
+            <Tabs value={active?.id || sessions[0]?.id || ''} className="flex-1 flex flex-col gap-0">
               {/* 工具栏（会话信息条）- 现代化设计 */}
               {active && active.type !== 'quick' && !effectiveIsLoading && (
                 <div ref={toolbarRef} className={cn(
