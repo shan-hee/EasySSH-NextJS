@@ -16,6 +16,7 @@ import (
 	"github.com/easyssh/server/internal/domain/auditlog"
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/batchtask"
+	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/monitoring"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
 	"github.com/easyssh/server/internal/domain/script"
@@ -101,6 +102,10 @@ func main() {
 	// SSH 会话管理器
 	sessionManager := ssh.NewSessionManager()
 
+	// 监控连接池（独立于终端会话）
+	monitorConnectionPool := monitor.NewConnectionPool(serverService, encryptor)
+	defer monitorConnectionPool.Close() // 程序退出时关闭连接池
+
 	// 审计日志服务
 	auditLogRepo := auditlog.NewRepository(database)
 	auditLogService := auditlog.NewService(auditLogRepo)
@@ -134,7 +139,7 @@ func main() {
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, encryptor)
 	terminalHandler := ws.NewTerminalHandler(serverService, sessionManager, encryptor)
-	monitorHandler := ws.NewMonitorHandler(sessionManager)
+	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
 	scriptHandler := rest.NewScriptHandler(scriptService)

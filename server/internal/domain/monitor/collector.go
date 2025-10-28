@@ -12,17 +12,17 @@ import (
 
 // Collector 系统指标采集器
 type Collector struct {
-	session      *sshDomain.Session
+	client       *sshDomain.Client  // SSH 客户端（直接使用）
 	prevCPU      *CPUStat
 	prevNet      map[string]NetStat
 	prevTime     time.Time
 	sshLatencyMs int64 // SSH 命令延迟（毫秒）
 }
 
-// NewCollector 创建采集器
-func NewCollector(session *sshDomain.Session) *Collector {
+// NewCollector 创建采集器（使用 SSH Client）
+func NewCollector(client *sshDomain.Client) *Collector {
 	return &Collector{
-		session:  session,
+		client:     client,
 		prevCPU:    nil,
 		prevNet:    make(map[string]NetStat),
 		prevTime:   time.Now(),
@@ -60,7 +60,7 @@ func (c *Collector) sshExec(cmd string) (string, error) {
 	start := time.Now()
 
 	// 通过 SSH Client 创建新会话执行命令
-	session, err := c.session.Client.NewSession()
+	session, err := c.client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
 	}

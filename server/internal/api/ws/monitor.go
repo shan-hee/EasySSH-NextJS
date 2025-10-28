@@ -9,7 +9,6 @@ import (
     "time"
 
     "github.com/easyssh/server/internal/domain/monitor"
-    sshDomain "github.com/easyssh/server/internal/domain/ssh"
     pb "github.com/easyssh/server/internal/proto"
     "github.com/gin-gonic/gin"
     "github.com/gorilla/websocket"
@@ -25,13 +24,13 @@ const (
 
 // MonitorHandler WebSocket 监控处理器
 type MonitorHandler struct {
-	sessionManager *sshDomain.SessionManager
+	connectionPool *monitor.ConnectionPool
 }
 
 // NewMonitorHandler 创建监控处理器
-func NewMonitorHandler(sessionManager *sshDomain.SessionManager) *MonitorHandler {
+func NewMonitorHandler(connectionPool *monitor.ConnectionPool) *MonitorHandler {
 	return &MonitorHandler{
-		sessionManager: sessionManager,
+		connectionPool: connectionPool,
 	}
 }
 
@@ -62,21 +61,21 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
 	}
 	log.Printf("[Monitor] 使用采集间隔: %v", interval)
 
-	// 根据 server_id 和 user_id 查找活跃会话
-	log.Printf("[Monitor] 尝试查找会话: userID=%s, serverID=%s", userID, serverID)
-	session := h.sessionManager.GetActiveByUserAndServer(userID, serverID)
-	if session == nil {
-		log.Printf("[Monitor] 未找到活跃会话: userID=%s, serverID=%s", userID, serverID)
-		c.JSON(http.StatusNotFound, gin.H{"error": "no active session for this server"})
+	// 从连接池获取或创建 SSH 连接
+	log.Printf("[Monitor] 尝试获取连接: userID=%s, serverID=%s", userID, serverID)
+	pooledConn, err := h.connectionPool.GetOrCreate(userID, serverID)
+	if err != nil {
+		log.Printf("[Monitor] 获取连接失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get connection: %v", err)})
 		return
 	}
-	log.Printf("[Monitor] 找到会话: ID=%s, UserID=%s, ServerID=%s", session.ID, session.UserID, session.ServerID)
+	log.Printf("[Monitor] 成功获取连接: userID=%s, serverID=%s, refCount=%d", userID, serverID, pooledConn.GetRefCount())
 
-	// 检查 SSH Client 是否活跃
-	if session.Client == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ssh client not active"})
-		return
-	}
+	// 确保在函数退出时释放连接
+	defer func() {
+		h.connectionPool.Release(userID, serverID)
+		log.Printf("[Monitor] 释放连接: userID=%s, serverID=%s", userID, serverID)
+	}()
 
     // 升级到 WebSocket
     wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -86,7 +85,7 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
     }
     defer wsConn.Close()
 
-    log.Printf("Monitor WebSocket connected for server: %s, session: %s", serverID, session.ID)
+    log.Printf("Monitor WebSocket connected for server: %s, using pooled connection", serverID)
 
     // 配置 read deadline 与 pong 处理，便于断线检测
     _ = wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
@@ -96,8 +95,8 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
         return wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
     })
 
-	// 创建采集器
-	collector := monitor.NewCollector(session)
+	// 创建采集器（使用连接池中的 SSH Client）
+	collector := monitor.NewCollector(pooledConn.Client)
 
     // 创建停止通道
     done := make(chan struct{})
@@ -183,7 +182,7 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
             }
 
 		case <-done:
-			log.Printf("Monitor WebSocket closed for session: %s", session.ID)
+			log.Printf("Monitor WebSocket closed for server: %s", serverID)
 			return
 
 		case <-stopMonitoring:
