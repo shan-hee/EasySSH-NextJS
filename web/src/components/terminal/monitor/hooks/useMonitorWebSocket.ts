@@ -6,14 +6,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { monitor } from '@/lib/proto/metrics';
 import { getWsUrl } from '@/lib/config';
+import { useMonitorStore, WSStatus, type MonitorMetrics as StoreMonitorMetrics } from '@/stores/monitor-store';
 
-// WebSocket 连接状态
-export enum WSStatus {
-  CONNECTING = 'connecting',
-  CONNECTED = 'connected',
-  DISCONNECTED = 'disconnected',
-  ERROR = 'error',
-}
+// 重新导出 WSStatus 供外部使用
+export { WSStatus };
 
 // 监控数据接口
 export interface MonitorMetrics {
@@ -90,7 +86,7 @@ export function useMonitorWebSocket({
   // RTT 平滑（EWMA）与抖动（偏差）
   const [localLatencySmoothedMs, setLocalLatencySmoothedMs] = useState<number>(0);
   const [localLatencyDevMs, setLocalLatencyDevMs] = useState<number>(0);
-  const latencyTimerRef = useRef<NodeJS.Timer | null>(null);
+  const latencyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const visibilityHandlerRef = useRef<(() => void) | null>(null);
 
   // React Strict Mode 防护：标记当前组件是否已挂载
@@ -105,6 +101,100 @@ export function useMonitorWebSocket({
     clockOffsetMs?: number;
   } | null>(null);
 
+  // ==================== 核心改动：从 Store 获取和管理监控连接 ====================
+  const getConnection = useMonitorStore(state => state.getConnection)
+  const setConnection = useMonitorStore(state => state.setConnection)
+  const updateMetrics = useMonitorStore(state => state.updateMetrics)
+  const updateLocalLatency = useMonitorStore(state => state.updateLocalLatency)
+  const updateStatus = useMonitorStore(state => state.updateStatus)
+  const subscribe = useMonitorStore(state => state.subscribe)
+  const notifySubscribers = useMonitorStore(state => state.notifySubscribers)
+
+  // 从 Store 同步现有连接 - 使用订阅模式
+  // 注意：这里不再直接复制 wsRef，而是通过订阅机制接收数据
+  const existingConnection = getConnection(serverId)
+  const shouldUseSubscription = existingConnection?.ws &&
+    (existingConnection.ws.readyState === WebSocket.CONNECTING ||
+     existingConnection.ws.readyState === WebSocket.OPEN)
+
+  // ==================== 订阅监控数据更新 ====================
+  useEffect(() => {
+    if (!enabled || !serverId || !shouldUseSubscription) return
+
+    console.log(`[useMonitorWebSocket] 注册订阅者: ${serverId}`)
+
+    // 注册订阅者，接收监控数据更新
+    const unsubscribe = subscribe(serverId, (newMetrics) => {
+      // 将 Store 的 MonitorMetrics 转换为 Hook 的 MonitorMetrics 格式
+      const hookMetrics: MonitorMetrics = {
+        systemInfo: {
+          os: newMetrics.systemInfo.os,
+          hostname: newMetrics.systemInfo.hostname,
+          cpuModel: newMetrics.systemInfo.cpuModel,
+          arch: newMetrics.systemInfo.arch,
+          loadAvg: newMetrics.systemInfo.loadAvg,
+          uptimeSeconds: newMetrics.systemInfo.uptimeSeconds,
+          cpuCores: newMetrics.systemInfo.cpuCores,
+        },
+        cpu: {
+          usagePercent: newMetrics.cpu.usage,
+          coreCount: newMetrics.cpu.cores,
+        },
+        memory: {
+          ramUsedBytes: newMetrics.memory.used,
+          ramTotalBytes: newMetrics.memory.total,
+          swapUsedBytes: 0,
+          swapTotalBytes: 0,
+        },
+        network: {
+          bytesRecvPerSec: newMetrics.network.bytesIn,
+          bytesSentPerSec: newMetrics.network.bytesOut,
+        },
+        disks: newMetrics.disks,
+        diskTotalPercent: newMetrics.disk.usagePercent,
+        sshLatencyMs: newMetrics.sshLatencyMs,
+        timestamp: newMetrics.timestamp,
+      }
+
+      setMetrics(hookMetrics)
+      metricsHistoryRef.current = [...metricsHistoryRef.current, hookMetrics].slice(-10)
+
+      // ==================== 核心修复：同步本地延迟数据 ====================
+      // 从 Store 中获取延迟数据并更新到本地状态
+      if (newMetrics.localLatencyMs !== undefined) {
+        setLocalLatencyMs(newMetrics.localLatencyMs)
+      }
+      if (newMetrics.localLatencySmoothedMs !== undefined) {
+        setLocalLatencySmoothedMs(newMetrics.localLatencySmoothedMs)
+      }
+      if (newMetrics.localLatencyJitter !== undefined) {
+        setLocalLatencyDevMs(newMetrics.localLatencyJitter)
+      }
+    })
+
+    // 同步现有状态
+    if (existingConnection) {
+      setStatus(existingConnection.status)
+
+      // 直接从 MonitorConnectionState 读取延迟数据（不再依赖 metrics 对象）
+      if (existingConnection.localLatencyMs !== undefined) {
+        setLocalLatencyMs(existingConnection.localLatencyMs)
+      }
+      if (existingConnection.localLatencySmoothedMs !== undefined) {
+        setLocalLatencySmoothedMs(existingConnection.localLatencySmoothedMs)
+      }
+      if (existingConnection.localLatencyJitter !== undefined) {
+        setLocalLatencyDevMs(existingConnection.localLatencyJitter)
+      }
+    }
+
+    // 组件卸载时取消订阅
+    return () => {
+      console.log(`[useMonitorWebSocket] 取消订阅者: ${serverId}`)
+      unsubscribe()
+    }
+  }, [enabled, serverId, shouldUseSubscription, subscribe])
+
   // 连接 WebSocket
   const connect = useCallback(() => {
     if (!enabled || !serverId) return;
@@ -112,11 +202,21 @@ export function useMonitorWebSocket({
     // 仅在浏览器环境中执行
     if (typeof window === 'undefined') return;
 
+    // ==================== 核心修复：检查 Store 中的现有连接 ====================
+    const storeConnection = getConnection(serverId)
+    if (storeConnection?.ws) {
+      const ws = storeConnection.ws
+      if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
+        console.log(`[useMonitorWebSocket] 复用现有连接（订阅模式）: ${serverId}`)
+        // 注意：不再设置 wsRef.current，而是依赖订阅机制接收数据
+        // 订阅逻辑已在上面的 useEffect 中处理
+        return
+      }
+    }
+
     // React Strict Mode 防护：避免重复连接
-    // 在开发环境下，React 18 Strict Mode 会故意双重执行 effect (mount → cleanup → mount)
-    // 我们通过检查现有连接状态来避免重复创建
     if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
-      console.log('[Monitor WS] 连接已存在，跳过重复连接');
+      console.log('[useMonitorWebSocket] 连接已存在，跳过重复连接');
       return;
     }
 
@@ -143,10 +243,22 @@ export function useMonitorWebSocket({
       // 立即保存到 wsRef，以便 disconnect 能够正确处理
       wsRef.current = ws;
 
+      // ==================== 核心改动：保存到 Store ====================
+      setConnection(serverId, {
+        ws,
+        metrics: null,
+        status: WSStatus.CONNECTING,
+        serverId,
+        createdAt: Date.now(),
+        lastUpdateAt: Date.now(),
+      })
+      console.log(`[useMonitorWebSocket] 创建新监控连接并保存到 Store: ${serverId}`)
+
       // 连接成功
       ws.onopen = () => {
         setStatus(WSStatus.CONNECTED);
         onStatusChange?.(WSStatus.CONNECTED);
+        updateStatus(serverId, WSStatus.CONNECTED); // 更新 Store 状态
         reconnectAttempts.current = 0;
 
         // 启动基于 WS 的本地 RTT 测量
@@ -225,6 +337,50 @@ export function useMonitorWebSocket({
 
             // 批量更新：单次 setState 避免多次重新渲染
             setMetrics(formattedMetrics);
+
+            // ==================== 核心改动：通过 Store 分发消息给所有订阅者 ====================
+            const storeMetrics = {
+              systemInfo: {
+                os: formattedMetrics.systemInfo.os,
+                hostname: formattedMetrics.systemInfo.hostname,
+                cpuModel: formattedMetrics.systemInfo.cpuModel,
+                arch: formattedMetrics.systemInfo.arch,
+                loadAvg: formattedMetrics.systemInfo.loadAvg,
+                uptimeSeconds: formattedMetrics.systemInfo.uptimeSeconds,
+                cpuCores: formattedMetrics.systemInfo.cpuCores,
+              },
+              cpu: {
+                usage: formattedMetrics.cpu.usagePercent,
+                cores: formattedMetrics.cpu.coreCount,
+              },
+              memory: {
+                total: formattedMetrics.memory.ramTotalBytes,
+                used: formattedMetrics.memory.ramUsedBytes,
+                free: formattedMetrics.memory.ramTotalBytes - formattedMetrics.memory.ramUsedBytes,
+                usagePercent: (formattedMetrics.memory.ramUsedBytes / formattedMetrics.memory.ramTotalBytes) * 100,
+              },
+              disk: {
+                total: formattedMetrics.disks.reduce((acc, d) => acc + d.totalBytes, 0),
+                used: formattedMetrics.disks.reduce((acc, d) => acc + d.usedBytes, 0),
+                free: formattedMetrics.disks.reduce((acc, d) => acc + (d.totalBytes - d.usedBytes), 0),
+                usagePercent: formattedMetrics.diskTotalPercent,
+              },
+              disks: formattedMetrics.disks,
+              network: {
+                bytesIn: formattedMetrics.network.bytesRecvPerSec,
+                bytesOut: formattedMetrics.network.bytesSentPerSec,
+                packetsIn: 0,
+                packetsOut: 0,
+              },
+              timestamp: formattedMetrics.timestamp,
+              sshLatencyMs: formattedMetrics.sshLatencyMs,
+            }
+
+            // 更新 Store（用于新订阅者获取最新数据）
+            updateMetrics(serverId, storeMetrics)
+
+            // 通知所有订阅者（核心：让所有页签都收到数据）
+            notifySubscribers(serverId, storeMetrics)
           } else if (typeof event.data === 'string') {
             // 处理文本消息（pong）- 优化：批量更新延迟状态
             try {
@@ -286,6 +442,18 @@ export function useMonitorWebSocket({
                 if (updates.clockOffsetMs !== undefined) setClockOffsetMs(updates.clockOffsetMs);
                 if (updates.localLatencyUpMs !== undefined) setLocalLatencyUpMs(updates.localLatencyUpMs);
                 if (updates.localLatencyDownMs !== undefined) setLocalLatencyDownMs(updates.localLatencyDownMs);
+
+                // ==================== 核心修复：同步延迟数据到 Store ====================
+                // 确保所有订阅者都能获取到本地延迟数据
+                if (updates.localLatencyMs !== undefined &&
+                    updates.localLatencySmoothedMs !== undefined &&
+                    updates.localLatencyDevMs !== undefined) {
+                  updateLocalLatency(serverId, {
+                    localLatencyMs: updates.localLatencyMs,
+                    localLatencySmoothedMs: updates.localLatencySmoothedMs,
+                    localLatencyJitter: updates.localLatencyDevMs,
+                  });
+                }
               }
             } catch { /* ignore */ }
           }
@@ -299,6 +467,7 @@ export function useMonitorWebSocket({
       ws.onclose = (event) => {
         setStatus(WSStatus.DISCONNECTED);
         onStatusChange?.(WSStatus.DISCONNECTED);
+        updateStatus(serverId, WSStatus.DISCONNECTED); // 更新 Store 状态
         // 清理本地 RTT 计时器
         if (latencyTimerRef.current) {
           clearInterval(latencyTimerRef.current);
@@ -327,9 +496,10 @@ export function useMonitorWebSocket({
 
       // 连接错误
       ws.onerror = (error) => {
-        console.error('[Monitor WS] 连接错误:', error);
+        console.error('[useMonitorWebSocket] 连接错误:', error);
         setStatus(WSStatus.ERROR);
         onStatusChange?.(WSStatus.ERROR);
+        updateStatus(serverId, WSStatus.ERROR); // 更新 Store 状态
         onError?.(new Error('WebSocket 连接错误'));
       };
 
@@ -340,7 +510,7 @@ export function useMonitorWebSocket({
       onStatusChange?.(WSStatus.ERROR);
       onError?.(error as Error);
     }
-  }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs]); // 添加 interval 依赖
+  }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs, getConnection, setConnection, updateMetrics, updateLocalLatency, updateStatus, notifySubscribers]); // 添加 Store 依赖
 
   // 断开连接
   const disconnect = useCallback(() => {
@@ -393,7 +563,10 @@ export function useMonitorWebSocket({
     return () => {
       // 标记组件已卸载
       isMountedRef.current = false;
-      disconnect();
+
+      // ==================== 核心修复：组件卸载时不断开连接 ====================
+      // 连接会保持活跃，只有在页签关闭时才会通过 Store.destroyConnection() 真正断开
+      console.log(`[useMonitorWebSocket] 组件卸载，保持监控连接: ${serverId}`)
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, serverId, interval]); // 添加 interval 依赖，当间隔改变时重新连接

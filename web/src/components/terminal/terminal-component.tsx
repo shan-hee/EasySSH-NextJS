@@ -11,6 +11,8 @@ import { SessionTabBar } from "@/components/tabs/session-tab-bar"
 import { TerminalSession } from "@/components/terminal/types"
 import { Maximize2, Minimize2, Settings, FolderOpen, Globe, Activity, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTerminalStore } from "@/stores/terminal-store"
+import { useMonitorStore } from "@/stores/monitor-store"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -30,6 +32,8 @@ import { MonitorPanel } from "./monitor/MonitorPanel"
 import { AiAssistantPanel } from "./ai-assistant-panel"
 import { MonitorWebSocketProvider } from "./monitor/contexts/MonitorWebSocketContext"
 import { useSftpSession } from "@/hooks/useSftpSession"
+import { TabTerminalContent } from "./tab-terminal-content"
+import { useTabUIStore } from "@/stores/tab-ui-store"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -42,7 +46,6 @@ interface TerminalComponentProps {
   onCloseAll: () => void
   onTogglePin: (sessionId: string) => void
   onReorderSessions: (newOrderIds: string[]) => void
-  hibernateBackground?: boolean
   // 快速连接：在当前页签中选择服务器以开始终端
   onStartConnectionFromQuick: (sessionId: string, server: QuickServer) => void
   servers: QuickServer[]
@@ -61,7 +64,6 @@ export function TerminalComponent({
   onCloseAll,
   onTogglePin,
   onReorderSessions,
-  hibernateBackground = true,
   onStartConnectionFromQuick,
   servers,
   serversLoading,
@@ -72,13 +74,17 @@ export function TerminalComponent({
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
   const [loaderState, setLoaderState] = useState<"entering" | "loading" | "exiting">("entering")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isFileManagerOpen, setIsFileManagerOpen] = useState(false)
-  const [isMonitorOpen, setIsMonitorOpen] = useState(true) // 默认显示监控面板
-  const [isAiInputOpen, setIsAiInputOpen] = useState(false) // AI 助手输入框状态
   // 文件管理器挂载容器与锚点（终端内部悬浮、位于工具栏下方）
   const toolbarRef = useRef<HTMLDivElement>(null)
   const floatingPanelRootRef = useRef<HTMLDivElement>(null)
   const [toolbarHeight, setToolbarHeight] = useState(0)
+
+  // ==================== 从 Store 获取销毁方法 ====================
+  const destroySession = useTerminalStore(state => state.destroySession)
+  // ==================== P0 修复：移除 destroyMonitorConnection 的引用 ====================
+  // 监控连接现在完全由 useMonitorWebSocket 的引用计数自动管理
+  // const destroyMonitorConnection = useMonitorStore(state => state.destroyConnection) // ❌ 不再需要
+  const deleteTabState = useTabUIStore(state => state.deleteTabState)
 
   // 当外部传入 activeSessionId 时，切换激活的会话
   useEffect(() => {
@@ -142,12 +148,6 @@ export function TerminalComponent({
     }
   }, [active, sessions])
 
-  // 监控连接参数（将传递给 Provider）
-  const serverId = active && active.type !== 'quick' && active.isConnected
-    ? String(active.serverId)
-    : '';
-  const monitorEnabled = !!(active && active.type !== 'quick' && active.isConnected);
-
   // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
   const initializedSessionsRef = useRef<Set<string>>(new Set())
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -190,13 +190,76 @@ export function TerminalComponent({
     if (id) setActiveSession(String(id))
   }
 
+  // ==================== 页签关闭处理：先销毁终端实例，依赖引用计数自动管理监控连接 ====================
+  const handleCloseSession = (sessionId: string) => {
+    console.log(`[TerminalComponent] 关闭页签: ${sessionId}`)
+
+    // 1. 从 Store 中销毁终端实例和 WebSocket
+    destroySession(sessionId)
+
+    // ==================== P0 修复：删除直接销毁调用，依赖 useMonitorWebSocket 的引用计数自动管理 ====================
+    // 注释说明：
+    // - useMonitorWebSocket 的 useEffect 清理函数会自动调用 unsubscribe()
+    // - unsubscribe() 会减少引用计数
+    // - 当引用计数归零时，monitor-store.ts 会自动调用 destroyConnection()
+    // - 这样可以确保：同一服务器的多个页签共享连接，只有最后一个页签关闭时才断开连接
+
+    // ❌ 旧代码（导致BUG）：
+    // if (session?.serverId) {
+    //   destroyMonitorConnection(String(session.serverId))
+    // }
+
+    // 2. 清理页签 UI 状态
+    deleteTabState(sessionId)
+
+    // 3. 通知父组件更新会话列表
+    onCloseSession(sessionId)
+  }
+
+  const handleCloseOthers = (sessionId: string) => {
+    console.log(`[TerminalComponent] 关闭其他页签，保留: ${sessionId}`)
+    // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
+    // 销毁所有其他会话的终端实例，监控连接由引用计数自动管理
+    sessions.forEach((session) => {
+      if (session.id !== sessionId) {
+        destroySession(session.id)
+        // ❌ 旧代码（导致BUG）：
+        // if (session.serverId) {
+        //   destroyMonitorConnection(String(session.serverId))
+        // }
+        deleteTabState(session.id)
+      }
+    })
+    onCloseOthers(sessionId)
+  }
+
+  const handleCloseAll = () => {
+    console.log(`[TerminalComponent] 关闭所有页签`)
+    // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
+    // 销毁所有会话的终端实例，监控连接由引用计数自动管理
+    sessions.forEach((session) => {
+      destroySession(session.id)
+      // ❌ 旧代码（导致BUG）：
+      // if (session.serverId) {
+      //   destroyMonitorConnection(String(session.serverId))
+      // }
+      deleteTabState(session.id)
+    })
+    onCloseAll()
+  }
+
   const handleLoadingChange = (sessionId: string, isLoading: boolean) => {
     if (isLoading) {
       setLoadingSessionId(sessionId)
       setLoaderState("entering")
     } else {
-      // 连接成功，触发退出动画
-      setLoaderState("exiting")
+      // 连接成功，只有当前正在加载的会话匹配时才触发退出动画
+      if (loadingSessionId === sessionId) {
+        setLoaderState("exiting")
+      } else {
+        // 如果 sessionId 不匹配，说明是其他会话的加载完成，直接清除
+        console.log(`[TerminalComponent] 会话 ${sessionId} 加载完成，但当前加载的是 ${loadingSessionId}`)
+      }
     }
   }
 
@@ -228,29 +291,16 @@ export function TerminalComponent({
   }, [shouldForceLoading, active?.id, loadingSessionId])
 
   // 键盘快捷键支持
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+K 或 Cmd+K 切换 AI 输入框
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        setIsAiInputOpen(prev => !prev)
-      }
-      // ESC 关闭 AI 输入框
-      if (e.key === 'Escape' && isAiInputOpen) {
-        e.preventDefault()
-        setIsAiInputOpen(false)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isAiInputOpen])
+  // AI 助手快捷键（Ctrl+K）已移至 TabTerminalContent 组件内部
+  // 每个页签独立管理快捷键
 
   // SFTP 会话管理 - 为当前激活的终端会话
   // 性能优化：只在文件管理器打开时才加载 SFTP 数据
   // 避免在终端连接时就立即发起 SFTP 列表请求（500-800ms）
   const sftpSession = useSftpSession(
-    isFileManagerOpen && active && active.type !== 'quick' ? String(active.serverId) : '',
+    active && active.type !== 'quick' && useTabUIStore.getState().getTabState(active.id).isFileManagerOpen
+      ? String(active.serverId)
+      : '',
     '/root'
   )
 
@@ -303,10 +353,10 @@ export function TerminalComponent({
           activeId={activeSession}
           onChangeActive={setActiveSession}
           onNewSession={handleNewSessionClick}
-          onCloseSession={onCloseSession}
+          onCloseSession={handleCloseSession}
           onDuplicateSession={onDuplicateSession}
-          onCloseOthers={onCloseOthers}
-          onCloseAll={onCloseAll}
+          onCloseOthers={handleCloseOthers}
+          onCloseAll={handleCloseAll}
           onTogglePin={onTogglePin}
           onReorder={onReorderSessions}
           isFullscreen={isFullscreen}
@@ -332,197 +382,47 @@ export function TerminalComponent({
             暂无活动会话，使用右上角 + 新建
           </div>
         ) : (
-          <MonitorWebSocketProvider
-            serverId={serverId}
-            enabled={monitorEnabled}
-            interval={settings.monitorInterval || 2}
-            latencyIntervalMs={5000}
-          >
-            <Tabs value={active?.id || sessions[0]?.id || ''} className="flex-1 flex flex-col gap-0">
-              {/* 工具栏（会话信息条）- 现代化设计 */}
-              {active && active.type !== 'quick' && !effectiveIsLoading && (
-                <div ref={toolbarRef} className={cn(
-                  "border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors",
-                  "bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30"
-                )}>
-                  {/* 左侧工具图标组 */}
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                      aria-label="文件管理器"
-                      title="文件管理器 (Ctrl+E)"
-                      onClick={() => setIsFileManagerOpen(!isFileManagerOpen)}
-                    >
-                      <FolderOpen className="h-3.5 w-3.5" />
-                    </Button>
+          <Tabs value={active?.id || sessions[0]?.id || ''} className="flex-1 flex flex-col gap-0">
+            {/* ==================== 每个页签独立的 Provider 和内容 ==================== */}
+            {sessions.map((session) => {
+              const isActive = session.id === activeSession
 
-                    <NetworkLatencyPopover />
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                    aria-label="监控"
-                    title="系统监控"
-                    onClick={() => setIsMonitorOpen(!isMonitorOpen)}
-                  >
-                    <Activity className="h-3.5 w-3.5" />
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                    aria-label="AI 助手"
-                    title="AI 助手 (Ctrl+K)"
-                    onClick={() => setIsAiInputOpen(!isAiInputOpen)}
-                  >
-                    <Bot className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-
-                {/* 中间：会话信息 */}
-                <div className={cn(
-                  "flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500",
-                )}>
-                  <span className="font-mono">
-                    {active.username}@{active.host}
-                  </span>
-                  <span className={"text-zinc-400 dark:text-zinc-700"}>|</span>
-                  <span className={active.isConnected ? "text-green-400" : "text-red-400"}>
-                    {active.isConnected ? "已连接" : "已断开"}
-                  </span>
-                </div>
-
-                {/* 右侧工具按钮 */}
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => setIsFullscreen(!isFullscreen)}
-                    title={isFullscreen ? "退出全屏" : "全屏"}
-                  >
-                    {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => setIsSettingsOpen(true)}
-                    title="设置"
-                  >
-                    <Settings className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* 内容区域：监控面板 + 终端/快速连接 */}
-            <div className="flex-1 min-h-0 relative flex">
-              {/* 监控面板 - 左侧固定 280px，带优雅的滑入/滑出动画 */}
-              <div
-                className={cn(
-                  "transition-all duration-300 ease-out overflow-hidden",
-                  "border-r border-zinc-200 dark:border-zinc-800/30", // 右边框与工具栏一致
-                  "bg-white dark:bg-black", // 背景色与终端一致
-                  isMonitorOpen && active && active.type !== 'quick'
-                    ? "w-[280px] opacity-100 translate-x-0"
-                    : "w-0 opacity-0 -translate-x-4"
-                )}
-              >
-                {/* 在 SSH 连接建立后才渲染监控面板 */}
-                {/* 注意: isConnected 变化会导致组件重新挂载,这是预期行为 */}
-                {isMonitorOpen && active && active.type !== 'quick' && active.isConnected && (
-                  <MonitorPanel />
-                )}
-              </div>
-
-              {/* 终端区域 - flex-1 占据剩余空间 */}
-              <div className="flex-1 min-w-0 relative">
-                {/* 文件管理器悬浮挂载根，位于终端容器内部 */}
-                <div ref={floatingPanelRootRef} className="absolute inset-0 pointer-events-none" />
-                {active?.type === 'quick' ? (
-                  <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
-                    <QuickConnect
-                      servers={servers}
-                      isLoading={serversLoading}
-                      onSelectServer={(server) => onStartConnectionFromQuick(active.id, server)}
-                    />
-                  </TabsContent>
-                ) : hibernateBackground ? (
-                  active && (
-                    <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
-                      <WebTerminal
-                        sessionId={active.id}
-                        serverId={typeof active.serverId === 'string' ? active.serverId : undefined}
-                        serverName={active.serverName}
-                        host={active.host}
-                        username={active.username}
-                        isConnected={active.isConnected}
-                        onCommand={(command) => handleCommand(active.id, command)}
-                        onLoadingChange={(isLoading) => handleLoadingChange(active.id, isLoading)}
-                        theme={settings.theme}
-                        fontSize={settings.fontSize}
-                        fontFamily={settings.fontFamily}
-                        cursorStyle={settings.cursorStyle}
-                        cursorBlink={settings.cursorBlink}
-                        scrollback={settings.scrollback}
-                        rightClickPaste={settings.rightClickPaste}
-                        copyOnSelect={settings.copyOnSelect}
-                        opacity={settings.opacity}
-                        backgroundImage={settings.backgroundImage}
-                        backgroundImageOpacity={settings.backgroundImageOpacity}
-                        copyShortcut={settings.copyShortcut}
-                        pasteShortcut={settings.pasteShortcut}
-                        clearShortcut={settings.clearShortcut}
-                      />
-                    </TabsContent>
-                  )
-                ) : (
-                  sessions.map((session) => (
-                    <TabsContent key={session.id} value={session.id} className="flex-1 flex flex-col m-0 absolute inset-0">
-                      <WebTerminal
-                        sessionId={session.id}
-                        serverId={typeof session.serverId === 'string' ? session.serverId : undefined}
-                        serverName={session.serverName}
-                        host={session.host}
-                        username={session.username}
-                        isConnected={session.isConnected}
-                        onCommand={(command) => handleCommand(session.id, command)}
-                        onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
-                        theme={settings.theme}
-                        fontSize={settings.fontSize}
-                        fontFamily={settings.fontFamily}
-                        cursorStyle={settings.cursorStyle}
-                        cursorBlink={settings.cursorBlink}
-                        scrollback={settings.scrollback}
-                        rightClickPaste={settings.rightClickPaste}
-                        copyOnSelect={settings.copyOnSelect}
-                        opacity={settings.opacity}
-                        backgroundImage={settings.backgroundImage}
-                        backgroundImageOpacity={settings.backgroundImageOpacity}
-                        copyShortcut={settings.copyShortcut}
-                        pasteShortcut={settings.pasteShortcut}
-                        clearShortcut={settings.clearShortcut}
-                      />
-                    </TabsContent>
-                  ))
-                )}
-              </div>
-            </div>
+              return (
+                <TabsContent
+                  key={session.id}
+                  value={session.id}
+                  forceMount // 强制保持挂载
+                  className={cn(
+                    "flex-1 flex flex-col m-0 absolute inset-0",
+                    !isActive && "hidden" // 非激活页签隐藏
+                  )}
+                >
+                  <TabTerminalContent
+                    session={session}
+                    isActive={isActive}
+                    settings={settings}
+                    effectiveIsLoading={effectiveIsLoading && isActive}
+                    isFullscreen={isFullscreen}
+                    servers={servers}
+                    serversLoading={serversLoading}
+                    onCommand={(command) => handleCommand(session.id, command)}
+                    onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
+                    onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+                    onToggleSettings={() => setIsSettingsOpen(true)}
+                    onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}
+                  />
+                </TabsContent>
+              )
+            })}
           </Tabs>
-        </MonitorWebSocketProvider>
-      )}
+        )}
 
         {/* AI 助手悬浮输入框 - 终端内部悬浮 */}
         {/* 只在非加载状态时渲染，避免与 ConnectionLoader 动画冲突 */}
         {active && active.type !== 'quick' && !effectiveIsLoading && (
           <AiAssistantPanel
-            isOpen={isAiInputOpen}
-            onClose={() => setIsAiInputOpen(false)}
+            isOpen={useTabUIStore.getState().getTabState(active.id).isAiInputOpen}
+            onClose={() => useTabUIStore.getState().setTabState(active.id, { isAiInputOpen: false })}
           />
         )}
         </div>
@@ -539,8 +439,8 @@ export function TerminalComponent({
       {/* 文件管理器面板 */}
       {active && active.type !== 'quick' && (
         <FileManagerPanel
-          isOpen={isFileManagerOpen}
-          onClose={() => setIsFileManagerOpen(false)}
+          isOpen={useTabUIStore.getState().getTabState(active.id).isFileManagerOpen}
+          onClose={() => useTabUIStore.getState().setTabState(active.id, { isFileManagerOpen: false })}
           mountContainer={floatingPanelRootRef.current || undefined}
           anchorTop={toolbarHeight}
           serverId={Number(active.serverId)}
@@ -559,7 +459,7 @@ export function TerminalComponent({
           onCreateFolder={sftpSession.createFolder}
           onCreateFile={sftpSession.createFile}
           onRename={sftpSession.renameFile}
-          onDisconnect={() => setIsFileManagerOpen(false)}
+          onDisconnect={() => useTabUIStore.getState().setTabState(active.id, { isFileManagerOpen: false })}
           onRefresh={sftpSession.refresh}
           onReadFile={sftpSession.readFile}
           onSaveFile={sftpSession.saveFile}

@@ -306,7 +306,6 @@ export default function TerminalPage() {
  onCloseAll={handleCloseAll}
  onTogglePin={handleTogglePin}
  onReorderSessions={handleReorder}
- hibernateBackground={hibernateBackground}
  onStartConnectionFromQuick={handleStartConnectionFromQuick}
  servers={servers}
  serversLoading={loading}

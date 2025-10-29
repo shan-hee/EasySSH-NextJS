@@ -1,0 +1,239 @@
+/**
+ * 单个页签的完整内容组件
+ * 每个 TabsContent 渲染一个独立的 TabTerminalContent
+ * 包含独立的 MonitorWebSocketProvider
+ */
+
+'use client'
+
+import React, { useRef, useState, useEffect } from 'react'
+import { MonitorWebSocketProvider } from './monitor/contexts/MonitorWebSocketContext'
+import { Button } from '@/components/ui/button'
+import { Maximize2, Minimize2, Settings, FolderOpen, Activity, Bot } from 'lucide-react'
+import { NetworkLatencyPopover } from './network-latency-popover'
+import { MonitorPanel } from './monitor/MonitorPanel'
+import { WebTerminal } from './web-terminal'
+import { QuickConnect, QuickServer } from './quick-connect'
+import { cn } from '@/lib/utils'
+import { useTabUIStore } from '@/stores/tab-ui-store'
+import type { TerminalSession } from './types'
+import type { TerminalSettings } from './terminal-settings-dialog'
+
+interface TabTerminalContentProps {
+  session: TerminalSession
+  isActive: boolean
+  settings: TerminalSettings
+  effectiveIsLoading: boolean
+  isFullscreen: boolean
+  servers: QuickServer[]
+  serversLoading?: boolean
+  onCommand: (command: string) => void
+  onLoadingChange: (isLoading: boolean) => void
+  onToggleFullscreen: () => void
+  onToggleSettings: () => void
+  onStartConnectionFromQuick: (server: QuickServer) => void
+}
+
+export function TabTerminalContent({
+  session,
+  isActive,
+  settings,
+  effectiveIsLoading,
+  isFullscreen,
+  servers,
+  serversLoading,
+  onCommand,
+  onLoadingChange,
+  onToggleFullscreen,
+  onToggleSettings,
+  onStartConnectionFromQuick,
+}: TabTerminalContentProps) {
+  // 工具栏引用
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const [toolbarHeight, setToolbarHeight] = useState(0)
+
+  // 从 Store 获取当前页签的 UI 状态
+  const tabState = useTabUIStore((state) => state.getTabState(session.id))
+  const setTabState = useTabUIStore((state) => state.setTabState)
+
+  const isMonitorOpen = tabState.isMonitorOpen
+  const isFileManagerOpen = tabState.isFileManagerOpen
+  const isAiInputOpen = tabState.isAiInputOpen
+
+  // 监听工具栏高度变化
+  useEffect(() => {
+    const el = toolbarRef.current
+    if (!el) return
+    const update = () => setToolbarHeight(el.offsetHeight || 0)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  // 计算监控参数
+  const serverId = session.type !== 'quick' && session.isConnected
+    ? String(session.serverId)
+    : ''
+  const monitorEnabled = !!(session.type !== 'quick' && session.isConnected)
+
+  // ==================== 调试日志：验证多例架构 ====================
+  console.log(`[TabTerminalContent] 渲染页签: ${session.id}`, {
+    serverId,
+    monitorEnabled,
+    isActive,
+    isMonitorOpen,
+  })
+
+  return (
+    <MonitorWebSocketProvider
+      serverId={serverId}
+      enabled={monitorEnabled}
+      interval={settings.monitorInterval || 2}
+      latencyIntervalMs={5000}
+    >
+      <div className="flex-1 flex flex-col h-full">
+        {/* 工具栏 - 只在非快速连接且非加载时显示 */}
+        {session.type !== 'quick' && !effectiveIsLoading && (
+          <div
+            ref={toolbarRef}
+            className={cn(
+              'border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors',
+              'bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30'
+            )}
+          >
+            {/* 左侧工具图标组 */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
+                aria-label="文件管理器"
+                title="文件管理器 (Ctrl+E)"
+                onClick={() => setTabState(session.id, { isFileManagerOpen: !isFileManagerOpen })}
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+              </Button>
+
+              <NetworkLatencyPopover />
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
+                aria-label="监控"
+                title="系统监控"
+                onClick={() => setTabState(session.id, { isMonitorOpen: !isMonitorOpen })}
+              >
+                <Activity className="h-3.5 w-3.5" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
+                aria-label="AI 助手"
+                title="AI 助手 (Ctrl+K)"
+                onClick={() => setTabState(session.id, { isAiInputOpen: !isAiInputOpen })}
+              >
+                <Bot className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            {/* 中间：会话信息 */}
+            <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
+              <span className="font-mono">
+                {session.username}@{session.host}
+              </span>
+              <span className="text-zinc-400 dark:text-zinc-700">|</span>
+              <span className={session.isConnected ? 'text-green-400' : 'text-red-400'}>
+                {session.isConnected ? '已连接' : '已断开'}
+              </span>
+            </div>
+
+            {/* 右侧工具按钮 */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
+                onClick={onToggleFullscreen}
+                title={isFullscreen ? '退出全屏' : '全屏'}
+              >
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
+                onClick={onToggleSettings}
+                title="设置"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 内容区域：监控面板 + 终端 */}
+        <div className="flex-1 min-h-0 relative flex">
+          {/* 监控面板 - 左侧固定 280px */}
+          <div
+            className={cn(
+              'transition-all duration-300 ease-out overflow-hidden',
+              'border-r border-zinc-200 dark:border-zinc-800/30',
+              'bg-white dark:bg-black',
+              isMonitorOpen && session.type !== 'quick'
+                ? 'w-[280px] opacity-100 translate-x-0'
+                : 'w-0 opacity-0 -translate-x-4'
+            )}
+          >
+            {isMonitorOpen && session.type !== 'quick' && session.isConnected && (
+              <MonitorPanel />
+            )}
+          </div>
+
+          {/* 终端区域 */}
+          <div className="flex-1 min-w-0 relative">
+            {session.type === 'quick' ? (
+              <QuickConnect
+                servers={servers}
+                isLoading={serversLoading}
+                onSelectServer={onStartConnectionFromQuick}
+              />
+            ) : (
+              <WebTerminal
+                sessionId={session.id}
+                serverId={typeof session.serverId === 'string' ? session.serverId : undefined}
+                serverName={session.serverName}
+                host={session.host}
+                username={session.username}
+                isConnected={session.isConnected}
+                onCommand={onCommand}
+                onLoadingChange={onLoadingChange}
+                theme={settings.theme}
+                fontSize={settings.fontSize}
+                fontFamily={settings.fontFamily}
+                cursorStyle={settings.cursorStyle}
+                cursorBlink={settings.cursorBlink}
+                scrollback={settings.scrollback}
+                rightClickPaste={settings.rightClickPaste}
+                copyOnSelect={settings.copyOnSelect}
+                opacity={settings.opacity}
+                backgroundImage={settings.backgroundImage}
+                backgroundImageOpacity={settings.backgroundImageOpacity}
+                copyShortcut={settings.copyShortcut}
+                pasteShortcut={settings.pasteShortcut}
+                clearShortcut={settings.clearShortcut}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </MonitorWebSocketProvider>
+  )
+}

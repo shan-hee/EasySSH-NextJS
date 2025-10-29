@@ -28,6 +28,7 @@ export class TerminalWebSocket {
   private maxReconnectAttempts = 3
   private reconnectDelay = 2000
   private isManualClose = false
+  private isDestroyed = false // 防止销毁后重连
   private pingInterval: NodeJS.Timeout | null = null
   // 复用 TextDecoder/TextEncoder 实例以提升性能
   private decoder = new TextDecoder("utf-8")
@@ -47,6 +48,12 @@ export class TerminalWebSocket {
    * 连接到 WebSocket 服务器
    */
   connect(): void {
+    // 防止销毁后重连
+    if (this.isDestroyed) {
+      console.warn("[TerminalWS] WebSocket 已销毁，无法重连")
+      return
+    }
+
     try {
       const token = localStorage.getItem("easyssh_access_token")
       if (!token) {
@@ -95,9 +102,15 @@ export class TerminalWebSocket {
           this.onData(remaining)
         }
 
+        // 防止销毁后重连
+        if (this.isDestroyed) {
+          return
+        }
+
         if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
           // 自动重连
           this.reconnectAttempts++
+          console.log(`[TerminalWS] 尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
           setTimeout(() => this.connect(), this.reconnectDelay)
         } else {
           this.onDisconnected?.()
@@ -155,6 +168,7 @@ export class TerminalWebSocket {
    */
   disconnect(): void {
     this.isManualClose = true
+    this.isDestroyed = true // 标记为已销毁
     this.stopPing()
 
     if (this.ws) {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/easyssh/server/internal/domain/server"
@@ -200,8 +201,14 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		Data: json.RawMessage(fmt.Sprintf(`{"session_id":"%s"}`, session.ID)),
 	})
 
-	// 创建停止通道
+	// 创建停止通道和关闭保护
 	done := make(chan struct{})
+	var closeOnce sync.Once
+	closeChannel := func() {
+		closeOnce.Do(func() {
+			close(done)
+		})
+	}
 
 	// 从 SSH 读取并发送到 WebSocket（stdout）- 使用二进制传输
 	go func() {
@@ -212,7 +219,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 				if err != io.EOF {
 					log.Printf("Error reading from stdout: %v", err)
 				}
-				close(done)
+				closeChannel()
 				return
 			}
 
@@ -220,7 +227,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 				// 直接发送二进制数据，不使用 JSON 包装
 				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
 					log.Printf("Error sending output: %v", err)
-					close(done)
+					closeChannel()
 					return
 				}
 			}
@@ -257,7 +264,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					log.Printf("WebSocket error: %v", err)
 				}
-				close(done)
+				closeChannel()
 				return
 			}
 
@@ -279,7 +286,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 					}
 					if _, err := stdin.Write([]byte(input.Data)); err != nil {
 						log.Printf("Error writing to stdin: %v", err)
-						close(done)
+						closeChannel()
 						return
 					}
 
@@ -301,7 +308,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 				// 二进制数据直接作为输入发送到 SSH
 				if _, err := stdin.Write(message); err != nil {
 					log.Printf("Error writing binary to stdin: %v", err)
-					close(done)
+					closeChannel()
 					return
 				}
 			}
@@ -311,8 +318,9 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	// 等待会话结束
 	<-done
 
-	// 发送关闭消息
-	h.sendMessage(wsConn, Message{Type: "closed"})
+	// 尝试发送关闭消息（如果连接已关闭则静默忽略）
+	wsConn.SetWriteDeadline(time.Now().Add(time.Second))
+	_ = wsConn.WriteJSON(Message{Type: "closed"})
 }
 
 // sendMessage 发送消息

@@ -1,16 +1,16 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react"
+import { useEffect, useRef, useCallback, useLayoutEffect } from "react"
 import { useTheme } from "next-themes"
 import { ConnectionLoader } from "./connection-loader"
 import { getTerminalTheme } from "./terminal-themes"
-import { TerminalWebSocket } from "@/lib/websocket-terminal"
 import type { Terminal } from "@xterm/xterm"
-import type { FitAddon } from "@xterm/addon-fit"
+import { useTerminalInstance } from "@/hooks/useTerminalInstance"
+import { useWebSocketConnection } from "@/hooks/useWebSocketConnection"
 
 interface WebTerminalProps {
   sessionId: string
-  serverId?: string  // 添加服务器 ID 用于 WebSocket 连接
+  serverId?: string  // 服务器 ID 用于 WebSocket 连接
   serverName: string
   host: string
   username: string
@@ -59,17 +59,10 @@ export function WebTerminal({
   pasteShortcut = 'Ctrl+Shift+V',
   clearShortcut = 'Ctrl+L',
 }: WebTerminalProps) {
-  const terminalRef = useRef<HTMLDivElement>(null)
-  const terminalInstanceRef = useRef<Terminal | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
-  const wsRef = useRef<TerminalWebSocket | null>(null)
-  const [isClient, setIsClient] = useState(false)
-  const [terminalReady, setTerminalReady] = useState(false)
-
   // 使用 next-themes 获取应用主题
   const { theme: appTheme, resolvedTheme } = useTheme()
 
-  // 获取实际的主题（light 或 dark），未解析时优先读取 html 上的类，避免黑屏闪烁
+  // 获取实际的主题（light 或 dark）
   const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
   const initialIsDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   const effectiveAppTheme: 'light' | 'dark' =
@@ -77,350 +70,216 @@ export function WebTerminal({
       ? (initialIsDark ? 'dark' : 'light')
       : currentAppTheme
 
-  // 确保只在客户端执行
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
+  // 获取终端主题
+  const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
 
-  // 监听应用主题/终端主题变化；使用 layoutEffect 减少可见延迟
+  // ==================== 核心改动：从 Store 获取终端实例 ====================
+  const { terminal, fitAddon, terminalReady, containerRef, isClient } = useTerminalInstance(
+    sessionId,
+    {
+      theme: terminalTheme,
+      fontSize,
+      fontFamily: `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`,
+      cursorStyle,
+      cursorBlink,
+      scrollback,
+    },
+    true // enabled
+  )
+
+  // ==================== WebSocket 连接管理 ====================
+  // 调试日志：查看传递给 useWebSocketConnection 的参数
+  console.log('[WebTerminal] useWebSocketConnection 参数:', {
+    sessionId,
+    serverId,
+    serverName,
+    host,
+    username,
+    isConnected,
+    hasTerminal: !!terminal,
+    terminalCols: terminal?.cols,
+    terminalRows: terminal?.rows,
+  })
+
+  const { sendInput, resize } = useWebSocketConnection({
+    sessionId,
+    serverId,
+    serverName,
+    host,
+    username,
+    isConnected,
+    terminal,
+    cols: terminal?.cols || 80,
+    rows: terminal?.rows || 24,
+    onLoadingChange,
+  })
+
+  // ==================== 监听应用主题/终端主题变化 ====================
   useLayoutEffect(() => {
-    if (!terminalInstanceRef.current) return
+    if (!terminal) return
 
-    // 根据当前终端主题选择（default/其他主题）与应用明暗态，动态更新 xterm 主题
-    const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
-    terminalInstanceRef.current.options.theme = terminalTheme
-    // xterm 在更新 options.theme 时会自动重绘
-  }, [theme, effectiveAppTheme])
+    const newTerminalTheme = getTerminalTheme(theme, effectiveAppTheme)
+    terminal.options.theme = newTerminalTheme
+  }, [theme, effectiveAppTheme, terminal])
 
-  // 监听字体设置变化并实时更新
+  // ==================== 监听字体设置变化 ====================
   useEffect(() => {
-    if (!terminalInstanceRef.current || !terminalReady) return
-    const terminal = terminalInstanceRef.current
+    if (!terminal || !terminalReady) return
     if (terminal.options.fontSize !== fontSize) {
       terminal.options.fontSize = fontSize
     }
-  }, [fontSize, terminalReady])
+  }, [fontSize, terminalReady, terminal])
 
   useEffect(() => {
-    if (!terminalInstanceRef.current || !terminalReady) return
-    const terminal = terminalInstanceRef.current
+    if (!terminal || !terminalReady) return
     const newFontFamily = `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`
     if (terminal.options.fontFamily !== newFontFamily) {
       terminal.options.fontFamily = newFontFamily
     }
-  }, [fontFamily, terminalReady])
+  }, [fontFamily, terminalReady, terminal])
 
-  // 监听光标设置变化并实时更新
+  // ==================== 监听光标设置变化 ====================
   useEffect(() => {
-    if (!terminalInstanceRef.current || !terminalReady) return
-    const terminal = terminalInstanceRef.current
+    if (!terminal || !terminalReady) return
     if (terminal.options.cursorStyle !== cursorStyle) {
       terminal.options.cursorStyle = cursorStyle
       terminal.options.cursorWidth = cursorStyle === 'bar' ? 2 : 1
     }
-  }, [cursorStyle, terminalReady])
+  }, [cursorStyle, terminalReady, terminal])
 
   useEffect(() => {
-    if (!terminalInstanceRef.current || !terminalReady) return
-    const terminal = terminalInstanceRef.current
+    if (!terminal || !terminalReady) return
     if (terminal.options.cursorBlink !== cursorBlink) {
       terminal.options.cursorBlink = cursorBlink
     }
-  }, [cursorBlink, terminalReady])
+  }, [cursorBlink, terminalReady, terminal])
 
-  // 监听回滚缓冲行数变化并实时更新
+  // ==================== 监听回滚缓冲行数变化 ====================
   useEffect(() => {
-    if (!terminalInstanceRef.current || !terminalReady) return
-    const terminal = terminalInstanceRef.current
+    if (!terminal || !terminalReady) return
     if (terminal.options.scrollback !== scrollback) {
       terminal.options.scrollback = scrollback
     }
-  }, [scrollback, terminalReady])
+  }, [scrollback, terminalReady, terminal])
 
-  // Write prompt function - defined early to be used in useEffect
-  const writePrompt = useCallback((terminal: Terminal) => {
+  // ==================== Write prompt function ====================
+  const writePrompt = useCallback((term: Terminal) => {
     const hostShort = host.split('.')[0] || host
-    terminal.write(`\x1b[1;32m${username}\x1b[0m\x1b[2m@\x1b[0m\x1b[1;36m${hostShort}\x1b[0m \x1b[1;34m~\x1b[0m\x1b[1;35m $\x1b[0m `)
+    term.write(`\x1b[1;32m${username}\x1b[0m\x1b[2m@\x1b[0m\x1b[1;36m${hostShort}\x1b[0m \x1b[1;34m~\x1b[0m\x1b[1;35m $\x1b[0m `)
   }, [host, username])
 
+  // ==================== 处理用户输入 ====================
   useEffect(() => {
-    if (!isClient || !terminalRef.current) return
+    if (!terminal || !terminalReady) return
 
-    let terminal: Terminal | undefined
-    let fitAddon: FitAddon | undefined
-    let isMounted = true
+    const disposable = terminal.onData((data: string) => {
+      if (!isConnected) return
 
-    // 动态导入 xterm.js 及其插件
-    const initTerminal = async () => {
-      try {
-        // 通知开始加载（不阻塞）
-        if (isMounted) {
-          onLoadingChange?.(true)
-        }
+      // 发送用户输入到 WebSocket
+      sendInput(data)
 
-        // 并行加载所有依赖，不添加人为延迟
-        const [
-          { Terminal: XTermTerminal },
-          { FitAddon: XTermFitAddon },
-          { WebLinksAddon },
-        ] = await Promise.all([
-          import("@xterm/xterm"),
-          import("@xterm/addon-fit"),
-          import("@xterm/addon-web-links"),
-          // @ts-expect-error - CSS import
-          import("@xterm/xterm/css/xterm.css"),
-        ])
-
-        // 获取终端主题 - 使用应用主题
-        const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
-
-        // 创建终端实例 - 使用配置的主题
-        terminal = new XTermTerminal({
-          theme: terminalTheme,
-          fontSize: fontSize,
-          fontFamily: `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`,
-          fontWeight: "400",
-          fontWeightBold: "600",
-          cursorBlink: cursorBlink,
-          cursorStyle: cursorStyle,
-          cursorWidth: cursorStyle === 'bar' ? 2 : 1,
-          scrollback: scrollback,
-          cols: 80,
-          rows: 24,
-          lineHeight: 1.2,
-          letterSpacing: 0,
-          // 性能优化选项
-          allowProposedApi: true,
-          allowTransparency: false,
-          disableStdin: false,
-          fastScrollModifier: 'shift',
-          fastScrollSensitivity: 5,
-          scrollSensitivity: 3,
-          windowOptions: {},
-        })
-
-        // 添加插件
-        fitAddon = new XTermFitAddon()
-        const webLinksAddon = new WebLinksAddon()
-
-        terminal.loadAddon(fitAddon)
-        terminal.loadAddon(webLinksAddon)
-
-        // 打开终端
-        terminal.open(terminalRef.current!)
-        fitAddon.fit()
-
-        // 存储引用
-        terminalInstanceRef.current = terminal
-        fitAddonRef.current = fitAddon
-
-        // 标记终端已准备就绪
-        setTerminalReady(true)
-
-        // 尝试加载 WebGL 渲染器以获得最佳性能 (GPU 加速)
-        // 使用 requestAnimationFrame 确保 DOM 完全渲染后再加载
-        requestAnimationFrame(async () => {
-          if (!terminal || !isMounted) return
-
-          try {
-            const { WebglAddon } = await import("@xterm/addon-webgl")
-            const webglAddon = new WebglAddon()
-
-            // 监听 WebGL 上下文丢失,自动清理
-            webglAddon.onContextLoss(() => {
-              webglAddon.dispose()
-            })
-
-            terminal.loadAddon(webglAddon)
-            // WebGL 渲染器已启用,使用 GPU 加速
-          } catch (error) {
-            // WebGL 不可用时自动降级到 Canvas 渲染器,性能仍然很好
-          }
-        })
-
-        // 如果有 serverId 且已连接，建立 WebSocket 连接
-        if (serverId && isConnected) {
-          try {
-            const ws = new TerminalWebSocket({
-              serverId,
-              cols: terminal.cols,
-              rows: terminal.rows,
-              onData: (data) => {
-                // 直接使用 XTerm.js 的 write 方法
-                // XTerm.js 内置高效的缓冲机制,无需额外批量处理
-                if (terminal) {
-                  terminal.write(data)
-                }
-              },
-              onConnected: () => {
-                if (isMounted) {
-                  onLoadingChange?.(false)
-                }
-                // 显示欢迎信息
-                if (terminal) {
-                  terminal.writeln(`\x1b[1;32m✓\x1b[0m \x1b[2mConnected to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
-                  terminal.writeln(`\x1b[2m┌─ User:\x1b[0m \x1b[36m${username}\x1b[0m`)
-                  terminal.writeln(`\x1b[2m└─ Session:\x1b[0m \x1b[33m${sessionId}\x1b[0m`)
-                  terminal.writeln("")
-                }
-              },
-              onDisconnected: () => {
-                if (terminal) {
-                  terminal.writeln("\r\n\x1b[1;31m✗ Connection closed\x1b[0m")
-                }
-              },
-              onError: (error) => {
-                console.error("[WebTerminal] WebSocket 错误:", error)
-                if (terminal) {
-                  terminal.writeln(`\r\n\x1b[1;31m✗ Error: ${error.message}\x1b[0m`)
-                }
-              }
-            })
-
-            ws.connect()
-            wsRef.current = ws
-          } catch (error) {
-            console.error("[WebTerminal] 创建 WebSocket 失败:", error)
-          }
-        } else {
-          // 没有 serverId，显示离线状态
-          if (isMounted) {
-            onLoadingChange?.(false)
-          }
-          if (!isConnected) {
-            terminal.writeln(`\x1b[1;31m✗\x1b[0m \x1b[2mConnection failed to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
-            terminal.writeln(`\x1b[2m└─\x1b[0m \x1b[33mPlease check server status or network connection\x1b[0m`)
-          }
-        }
-
-        // 处理用户输入 - 直接发送到 WebSocket
-        terminal.onData((data: string) => {
-          if (!isConnected || !wsRef.current) return
-
-          // 发送用户输入到 WebSocket
-          wsRef.current.sendInput(data)
-
-          // 通知父组件（用于日志记录等）
-          onCommand(data)
-        })
-
-        // 容器尺寸变化时重新适配 - 使用 ResizeObserver 避免全局重绘
-        let resizeTimeout: NodeJS.Timeout | null = null
-        let resizeObserver: ResizeObserver | null = null
-        let removeWindowResize: (() => void) | null = null
-
-        const applyFit = () => {
-          if (!fitAddon || !terminal) return
-
-          fitAddon.fit()
-          const newCols = terminal.cols
-          const newRows = terminal.rows
-
-          if (wsRef.current) {
-            wsRef.current.resize(newCols, newRows)
-          }
-
-          if (onResize) {
-            onResize(newCols, newRows)
-          }
-        }
-
-        const scheduleFit = () => {
-          if (resizeTimeout) {
-            clearTimeout(resizeTimeout)
-          }
-          resizeTimeout = setTimeout(applyFit, 80)
-        }
-
-        if (typeof ResizeObserver !== 'undefined') {
-          resizeObserver = new ResizeObserver(() => {
-            scheduleFit()
-          })
-          const containerElement = terminalRef.current
-          if (containerElement) {
-            resizeObserver.observe(containerElement)
-          }
-        } else {
-          const handleResize = () => scheduleFit()
-          window.addEventListener("resize", handleResize)
-          removeWindowResize = () => window.removeEventListener("resize", handleResize)
-        }
-
-        return () => {
-          // 清理 resize timeout
-          if (resizeTimeout) {
-            clearTimeout(resizeTimeout)
-          }
-          resizeObserver?.disconnect()
-          resizeObserver = null
-          removeWindowResize?.()
-          removeWindowResize = null
-          // 断开 WebSocket
-          if (wsRef.current) {
-            wsRef.current.disconnect()
-            wsRef.current = null
-          }
-          terminal!.dispose()
-        }
-      } catch (error) {
-        console.error("Failed to initialize terminal:", error)
-        if (isMounted) {
-          onLoadingChange?.(false)
-        }
-      }
-    }
-
-    initTerminal()
+      // 通知父组件（用于日志记录等）
+      onCommand(data)
+    })
 
     return () => {
-      isMounted = false
-      setTerminalReady(false)
-      if (terminal) {
-        terminal.dispose()
+      disposable.dispose()
+    }
+  }, [terminal, terminalReady, isConnected, sendInput, onCommand])
+
+  // ==================== 容器尺寸变化时重新适配 ====================
+  useEffect(() => {
+    if (!terminal || !fitAddon || !containerRef.current || !terminalReady) return
+
+    let resizeTimeout: NodeJS.Timeout | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let removeWindowResize: (() => void) | null = null
+
+    const applyFit = () => {
+      if (!fitAddon || !terminal) return
+
+      fitAddon.fit()
+      const newCols = terminal.cols
+      const newRows = terminal.rows
+
+      // 通知 WebSocket 调整大小
+      resize(newCols, newRows)
+
+      if (onResize) {
+        onResize(newCols, newRows)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, isConnected, isClient])
 
-  // 公开方法供父组件调用
-  const writeToTerminal = useCallback((text: string) => {
-    if (terminalInstanceRef.current) {
-      terminalInstanceRef.current.writeln(text)
+    const scheduleFit = () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+      resizeTimeout = setTimeout(applyFit, 80)
     }
-  }, [])
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        scheduleFit()
+      })
+      const containerElement = containerRef.current
+      if (containerElement) {
+        resizeObserver.observe(containerElement)
+      }
+    } else {
+      const handleResize = () => scheduleFit()
+      window.addEventListener("resize", handleResize)
+      removeWindowResize = () => window.removeEventListener("resize", handleResize)
+    }
+
+    return () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+      resizeObserver?.disconnect()
+      resizeObserver = null
+      removeWindowResize?.()
+      removeWindowResize = null
+    }
+  }, [terminal, fitAddon, containerRef, terminalReady, resize, onResize])
+
+  // ==================== 公开方法供父组件调用 ====================
+  const writeToTerminal = useCallback((text: string) => {
+    if (terminal) {
+      terminal.writeln(text)
+    }
+  }, [terminal])
 
   const clearTerminal = useCallback(() => {
-    if (terminalInstanceRef.current) {
-      terminalInstanceRef.current.clear()
-      writePrompt(terminalInstanceRef.current)
+    if (terminal) {
+      terminal.clear()
+      writePrompt(terminal)
     }
-  }, [writePrompt])
+  }, [terminal, writePrompt])
 
   const fitTerminal = useCallback(() => {
-    if (fitAddonRef.current) {
-      fitAddonRef.current.fit()
+    if (fitAddon) {
+      fitAddon.fit()
     }
-  }, [])
+  }, [fitAddon])
 
   // 暴露方法给父组件
   useEffect(() => {
-    if (terminalRef.current) {
+    if (containerRef.current) {
       // @ts-expect-error - Extending DOM element with custom methods
-      terminalRef.current.writeToTerminal = writeToTerminal
+      containerRef.current.writeToTerminal = writeToTerminal
       // @ts-expect-error - Extending DOM element with custom methods
-      terminalRef.current.clearTerminal = clearTerminal
+      containerRef.current.clearTerminal = clearTerminal
       // @ts-expect-error - Extending DOM element with custom methods
-      terminalRef.current.fitTerminal = fitTerminal
+      containerRef.current.fitTerminal = fitTerminal
     }
-  }, [writeToTerminal, clearTerminal, fitTerminal])
+  }, [containerRef, writeToTerminal, clearTerminal, fitTerminal])
 
-  // 动态处理选中复制功能
+  // ==================== 动态处理选中复制功能 ====================
   const selectionFrameRef = useRef<number | null>(null)
 
   useEffect(() => {
-    if (!terminalInstanceRef.current || !terminalReady || !copyOnSelect) return
+    if (!terminal || !terminalReady || !copyOnSelect) return
 
-    const terminal = terminalInstanceRef.current
     const handleSelection = () => {
       if (selectionFrameRef.current !== null) return
 
@@ -443,33 +302,33 @@ export function WebTerminal({
         selectionFrameRef.current = null
       }
     }
-  }, [copyOnSelect, terminalReady])
+  }, [copyOnSelect, terminalReady, terminal])
 
-  // 动态处理右键粘贴功能
+  // ==================== 动态处理右键粘贴功能 ====================
   useEffect(() => {
-    if (!terminalRef.current || !terminalReady || !rightClickPaste) return
+    if (!containerRef.current || !terminalReady || !rightClickPaste) return
 
     const handleContextMenu = async (e: MouseEvent) => {
       e.preventDefault()
       if (!navigator.clipboard?.readText) return
       try {
         const text = await navigator.clipboard.readText()
-        if (text && wsRef.current) {
-          wsRef.current.sendInput(text)
+        if (text) {
+          sendInput(text)
         }
       } catch (err) {
         console.error('Failed to read from clipboard:', err)
       }
     }
 
-    const terminalEl = terminalRef.current
+    const terminalEl = containerRef.current
     terminalEl.addEventListener('contextmenu', handleContextMenu)
     return () => {
       terminalEl.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [rightClickPaste, terminalReady])
+  }, [rightClickPaste, terminalReady, containerRef, sendInput])
 
-  // 动态处理快捷键功能
+  // ==================== 动态处理快捷键功能 ====================
   type ParsedShortcut = {
     ctrl: boolean
     shift: boolean
@@ -512,65 +371,62 @@ export function WebTerminal({
 
   const handleKeyEvent = useCallback((event: KeyboardEvent) => {
     const shortcuts = shortcutsRef.current
-    const terminal = terminalInstanceRef.current
+    const term = terminal
 
-    if (!shortcuts || !terminal) {
+    if (!shortcuts || !term) {
       return true
     }
 
-    // 快速路径: 如果没有修饰键,直接返回 (优化 99% 的按键)
-    // 这将按键处理时间从 ~10ms 降低到 < 1ms
+    // 快速路径: 如果没有修饰键,直接返回
     if (!event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey) {
       return true
     }
 
-    // 只有在有修饰键时才检查快捷键
+    // 复制
     if (matchesShortcut(event, shortcuts.copy)) {
       event.preventDefault()
-      const selection = terminal.getSelection()
+      const selection = term.getSelection()
       if (selection && navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(selection).catch(() => {
-          // 静默处理错误
-        })
+        navigator.clipboard.writeText(selection).catch(() => {})
       }
       return false
     }
 
+    // 粘贴
     if (matchesShortcut(event, shortcuts.paste)) {
       event.preventDefault()
       if (navigator.clipboard?.readText) {
         navigator.clipboard.readText().then((text) => {
-          if (text && wsRef.current) {
-            wsRef.current.sendInput(text)
+          if (text) {
+            sendInput(text)
           }
-        }).catch(() => {
-          // 静默处理错误
-        })
+        }).catch(() => {})
       }
       return false
     }
 
+    // 清屏
     if (matchesShortcut(event, shortcuts.clear)) {
       event.preventDefault()
-      terminal.clear()
+      term.clear()
       return false
     }
 
     return true
-  }, [matchesShortcut])
+  }, [matchesShortcut, terminal, sendInput])
 
   useEffect(() => {
-    if (!terminalInstanceRef.current || !terminalReady) return
+    if (!terminal || !terminalReady) return
 
-    const terminal = terminalInstanceRef.current
     terminal.attachCustomKeyEventHandler(handleKeyEvent)
 
     return () => {
       terminal.attachCustomKeyEventHandler(() => true)
     }
-  }, [handleKeyEvent, terminalReady])
+  }, [handleKeyEvent, terminalReady, terminal])
 
-  // 如果不是客户端，显示加载状态 - 使用主题变量背景避免闪烁
+  // ==================== 渲染 ====================
+  // 如果不是客户端，显示加载状态
   if (!isClient) {
     return (
       <div className="h-full w-full bg-background flex items-center justify-center">
@@ -590,7 +446,6 @@ export function WebTerminal({
   // 应用透明度
   if (opacity < 100) {
     const rgb = currentTheme.background || '#000000'
-    // 将 hex 转换为 rgba
     const r = parseInt(rgb.slice(1, 3), 16)
     const g = parseInt(rgb.slice(3, 5), 16)
     const b = parseInt(rgb.slice(5, 7), 16)
@@ -613,7 +468,7 @@ export function WebTerminal({
     <div className="h-full w-full relative overflow-hidden">
       {/* 终端容器 */}
       <div
-        ref={terminalRef}
+        ref={containerRef}
         className="h-full w-full terminal-container"
         style={backgroundStyle}
       />
