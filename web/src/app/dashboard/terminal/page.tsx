@@ -14,7 +14,27 @@ export default function TerminalPage() {
   const searchParams = useSearchParams()
   const [servers, setServers] = useState<QuickServer[]>([])
   const [loading, setLoading] = useState(true)
-  const [sessions, setSessions] = useState<TerminalSession[]>([])
+
+  // 立即创建初始快速连接会话，避免显示空状态
+  const [sessions, setSessions] = useState<TerminalSession[]>(() => {
+    const now = Date.now()
+    return [
+      {
+        id: "quick-initial",
+        serverId: 0,
+        serverName: "快速连接",
+        host: "",
+        port: undefined,
+        username: "",
+        isConnected: false,
+        status: "disconnected",
+        lastActivity: now,
+        type: "quick",
+        pinned: false,
+      },
+    ]
+  })
+
   const [hibernateBackground, setHibernateBackground] = useState(true)
   const [maxTabs, setMaxTabs] = useState(50)
   const [inactiveMinutes, setInactiveMinutes] = useState(60)
@@ -22,14 +42,14 @@ export default function TerminalPage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const initializedRef = useRef(false)
 
-  // 初始化会话（在 servers 加载完成后）
+  // 处理 URL 参数中的服务器 ID（在 servers 加载完成后）
   useEffect(() => {
     if (!initializedRef.current && !loading && servers.length > 0) {
       initializedRef.current = true
 
       const serverId = searchParams.get("server")
       if (serverId) {
-        // 如果有 server 参数，直接创建该服务器的会话，不创建快速连接
+        // 如果有 server 参数，直接创建该服务器的会话，替换初始的快速连接
         const server = servers.find(s => s.id.toString() === serverId)
         if (server && server.status === "online") {
           const now = Date.now()
@@ -52,29 +72,11 @@ export default function TerminalPage() {
           setSessions([newSession])
           setActiveSessionId(sessionId)
           router.replace("/dashboard/terminal", { scroll: false })
-          return
         }
       }
-
-      // 否则创建默认的快速连接会话
-      const now = Date.now()
-      setSessions([
-        {
-          id: "quick-initial",
-          serverId: 0,
-          serverName: "快速连接",
-          host: "",
-          port: undefined,
-          username: "",
-          isConnected: false,
-          status: "disconnected",
-          lastActivity: now,
-          type: "quick",
-          pinned: false,
-        },
-      ])
+      // 注意：不需要再创建快速连接会话，因为已在 useState 初始化时创建
     }
-  }, [loading, servers, searchParams])
+  }, [loading, servers, searchParams, router])
 
   // 加载服务器列表
   useEffect(() => {
@@ -149,9 +151,6 @@ export default function TerminalPage() {
       toast.error(`已达到最大页签数限制 (${maxTabs})`)
       return
     }
-
-    // 重新加载服务器列表以获取最新的 last_connected 时间
-    loadServers()
 
     const now = Date.now()
     const id = `quick-${now}`
@@ -291,29 +290,9 @@ export default function TerminalPage() {
     return () => clearInterval(t)
   }, [sessions, inactiveMinutes])
 
-  // 加载中状态
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">加载服务器列表...</p>
-        </div>
-      </div>
-    )
-  }
-
   // 会话初始化中（等待 sessions 被设置）
-  if (sessions.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">初始化终端...</p>
-        </div>
-      </div>
-    )
-  }
+  // 现在始终有初始会话，不需要这个检查了
+  // if (sessions.length === 0) { ... }
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
@@ -330,6 +309,7 @@ export default function TerminalPage() {
         hibernateBackground={hibernateBackground}
         onStartConnectionFromQuick={handleStartConnectionFromQuick}
         servers={servers}
+        serversLoading={loading}
         externalActiveSessionId={activeSessionId}
       />
     </div>

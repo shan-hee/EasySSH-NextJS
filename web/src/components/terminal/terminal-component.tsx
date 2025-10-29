@@ -46,6 +46,7 @@ interface TerminalComponentProps {
   // 快速连接：在当前页签中选择服务器以开始终端
   onStartConnectionFromQuick: (sessionId: string, server: QuickServer) => void
   servers: QuickServer[]
+  serversLoading?: boolean
   // 外部控制激活的会话 ID
   externalActiveSessionId?: string | null
 }
@@ -63,6 +64,7 @@ export function TerminalComponent({
   hibernateBackground = true,
   onStartConnectionFromQuick,
   servers,
+  serversLoading,
   externalActiveSessionId,
 }: TerminalComponentProps) {
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
@@ -128,8 +130,14 @@ export function TerminalComponent({
   const active = sessions.find((s) => s.id === activeSession)
 
   // 如果当前激活的会话不存在（被删除），自动切换到第一个会话
+  // 使用 ref 跟踪上一次的 sessions 长度，避免在新增页签时误触发
+  const prevSessionsLengthRef = useRef(sessions.length)
   useEffect(() => {
-    if (!active && sessions.length > 0) {
+    const isSessionAdded = sessions.length > prevSessionsLengthRef.current
+    prevSessionsLengthRef.current = sessions.length
+
+    // 只在会话被删除（而非新增）且当前激活会话不存在时才切换到第一个
+    if (!active && sessions.length > 0 && !isSessionAdded) {
       setActiveSession(sessions[0].id)
     }
   }, [active, sessions])
@@ -440,6 +448,7 @@ export function TerminalComponent({
                   <TabsContent value={active.id} className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden absolute inset-0">
                     <QuickConnect
                       servers={servers}
+                      isLoading={serversLoading}
                       onSelectServer={(server) => onStartConnectionFromQuick(active.id, server)}
                     />
                   </TabsContent>
