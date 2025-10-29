@@ -12,926 +12,919 @@ import { Textarea } from "@/components/ui/textarea"
 import { Kbd } from "@/components/ui/kbd"
 import { toast } from "sonner"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+ Table,
+ TableBody,
+ TableCell,
+ TableHead,
+ TableHeader,
+ TableRow,
 } from "@/components/ui/table"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+ Dialog,
+ DialogContent,
+ DialogDescription,
+ DialogFooter,
+ DialogHeader,
+ DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  Search,
-  Plus,
-  FileText,
-  Play,
-  Edit,
-  Trash2,
-  X,
-  Code2,
-  MoreVertical,
-  Loader2,
-  RefreshCw
+ Search,
+ Plus,
+ FileText,
+ Play,
+ Edit,
+ Trash2,
+ X,
+ Code2,
+ MoreVertical,
+ Loader2,
+ RefreshCw
 } from "lucide-react"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+ DropdownMenu,
+ DropdownMenuContent,
+ DropdownMenuItem,
+ DropdownMenuSeparator,
+ DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { scriptsApi, type Script } from "@/lib/api"
 
 export default function ScriptsPage() {
-  const router = useRouter()
-  const [scripts, setScripts] = useState<Script[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedTag, setSelectedTag] = useState<string | null>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingScriptId, setEditingScriptId] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-
-  // 新建脚本表单状态
-  const [newScript, setNewScript] = useState({
-    name: "",
-    description: "",
-    content: "",
-    tags: [] as string[],
-  })
-
-  // 编辑脚本表单状态
-  const [editScript, setEditScript] = useState({
-    name: "",
-    description: "",
-    content: "",
-    tags: [] as string[],
-  })
-
-  const [tagInput, setTagInput] = useState("")
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
-  const suggestionRefs = useRef<(HTMLButtonElement | null)[]>([])
-
-  const [editTagInput, setEditTagInput] = useState("")
-  const [showEditSuggestions, setShowEditSuggestions] = useState(false)
-  const [selectedEditSuggestionIndex, setSelectedEditSuggestionIndex] = useState(-1)
-  const editSuggestionRefs = useRef<(HTMLButtonElement | null)[]>([])
-
-  // 加载脚本列表
-  const loadScripts = async () => {
-    try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      const response = await scriptsApi.list(token, {
-        page: 1,
-        limit: 100,
-        search: searchTerm || undefined,
-        tags: selectedTag ? [selectedTag] : undefined,
-      })
-
-      setScripts(response.data)
-    } catch (error: any) {
-      console.error("加载脚本列表失败:", error)
-      if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
-        toast.error("登录已过期，请重新登录")
-        router.push("/login")
-      } else {
-        toast.error(`加载脚本失败: ${error.message}`)
-      }
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
-
-  // 刷新脚本列表
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await loadScripts()
-  }
-
-  // 初始加载
-  useEffect(() => {
-    loadScripts()
-  }, [])
-
-  // 自动滚动选中的建议项到可见区域
-  useEffect(() => {
-    if (selectedSuggestionIndex >= 0 && suggestionRefs.current[selectedSuggestionIndex]) {
-      suggestionRefs.current[selectedSuggestionIndex]?.scrollIntoView({
-        block: 'nearest',
-        behavior: 'smooth'
-      })
-    }
-  }, [selectedSuggestionIndex])
-
-  useEffect(() => {
-    if (selectedEditSuggestionIndex >= 0 && editSuggestionRefs.current[selectedEditSuggestionIndex]) {
-      editSuggestionRefs.current[selectedEditSuggestionIndex]?.scrollIntoView({
-        block: 'nearest',
-        behavior: 'smooth'
-      })
-    }
-  }, [selectedEditSuggestionIndex])
-
-  // 获取所有标签
-  const allTags = Array.from(new Set(scripts.flatMap(script => script.tags)))
-
-  // 获取可用标签（排除已选择的）
-  const availableTags = allTags.filter(tag => !newScript.tags.includes(tag))
-
-  // 根据输入过滤标签建议
-  const filteredSuggestions = tagInput.trim()
-    ? availableTags.filter(tag =>
-        tag.toLowerCase().includes(tagInput.toLowerCase())
-      )
-    : availableTags
-
-  // 编辑模式的可用标签（排除已选择的）
-  const availableEditTags = allTags.filter(tag => !editScript.tags.includes(tag))
-
-  // 编辑模式的标签建议
-  const filteredEditSuggestions = editTagInput.trim()
-    ? availableEditTags.filter(tag =>
-        tag.toLowerCase().includes(editTagInput.toLowerCase())
-      )
-    : availableEditTags
-
-  // 过滤脚本
-  const filteredScripts = scripts.filter(script => {
-    const matchesSearch = script.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         script.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesTag = !selectedTag || script.tags.includes(selectedTag)
-    return matchesSearch && matchesTag
-  })
-
-  const handleExecute = (scriptId: string) => {
-    console.log("执行脚本:", scriptId)
-    toast.info("脚本执行功能即将推出")
-    // TODO: 实现脚本执行对话框和逻辑
-  }
-
-  const handleEdit = (scriptId: string) => {
-    const script = scripts.find(s => s.id === scriptId)
-    if (script) {
-      setEditingScriptId(scriptId)
-      setEditScript({
-        name: script.name,
-        description: script.description || "",
-        content: script.content,
-        tags: [...script.tags],
-      })
-      setIsEditDialogOpen(true)
-    }
-  }
-
-  const handleDelete = async (scriptId: string) => {
-    if (!confirm("确定要删除这个脚本吗？")) {
-      return
-    }
-
-    try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      await scriptsApi.delete(token, scriptId)
-      toast.success("脚本删除成功")
-      await loadScripts()
-    } catch (error: any) {
-      console.error("删除脚本失败:", error)
-      toast.error(`删除脚本失败: ${error.message}`)
-    }
-  }
-
-  const handleAddTag = (tag?: string) => {
-    const tagToAdd = tag || tagInput.trim()
-    if (tagToAdd && !newScript.tags.includes(tagToAdd)) {
-      setNewScript({
-        ...newScript,
-        tags: [...newScript.tags, tagToAdd],
-      })
-      setTagInput("")
-      setShowSuggestions(false)
-      setSelectedSuggestionIndex(-1)
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showSuggestions || filteredSuggestions.length === 0) {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        handleAddTag()
-      }
-      return
-    }
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        setSelectedSuggestionIndex((prev) =>
-          prev < filteredSuggestions.length - 1 ? prev + 1 : prev
-        )
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1))
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (selectedSuggestionIndex >= 0) {
-          handleAddTag(filteredSuggestions[selectedSuggestionIndex])
-        } else {
-          handleAddTag()
-        }
-        break
-      case 'Escape':
-        e.preventDefault()
-        setShowSuggestions(false)
-        setSelectedSuggestionIndex(-1)
-        break
-    }
-  }
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setNewScript({
-      ...newScript,
-      tags: newScript.tags.filter(tag => tag !== tagToRemove),
-    })
-  }
-
-  // 编辑模式的标签处理函数
-  const handleAddEditTag = (tag?: string) => {
-    const tagToAdd = tag || editTagInput.trim()
-    if (tagToAdd && !editScript.tags.includes(tagToAdd)) {
-      setEditScript({
-        ...editScript,
-        tags: [...editScript.tags, tagToAdd],
-      })
-      setEditTagInput("")
-      setShowEditSuggestions(false)
-      setSelectedEditSuggestionIndex(-1)
-    }
-  }
-
-  const handleKeyDownEditTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showEditSuggestions || filteredEditSuggestions.length === 0) {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        handleAddEditTag()
-      }
-      return
-    }
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        setSelectedEditSuggestionIndex((prev) =>
-          prev < filteredEditSuggestions.length - 1 ? prev + 1 : prev
-        )
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setSelectedEditSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1))
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (selectedEditSuggestionIndex >= 0) {
-          handleAddEditTag(filteredEditSuggestions[selectedEditSuggestionIndex])
-        } else {
-          handleAddEditTag()
-        }
-        break
-      case 'Escape':
-        e.preventDefault()
-        setShowEditSuggestions(false)
-        setSelectedEditSuggestionIndex(-1)
-        break
-    }
-  }
-
-  const handleRemoveEditTag = (tagToRemove: string) => {
-    setEditScript({
-      ...editScript,
-      tags: editScript.tags.filter(tag => tag !== tagToRemove),
-    })
-  }
-
-  const handleCreateScript = async () => {
-    if (!newScript.name || !newScript.content) {
-      toast.error("请填写脚本名称和内容")
-      return
-    }
-
-    try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      await scriptsApi.create(token, {
-        name: newScript.name,
-        description: newScript.description || "",
-        content: newScript.content,
-        language: "bash",
-        tags: newScript.tags,
-      })
-
-      toast.success("脚本创建成功")
-      setIsDialogOpen(false)
-
-      // 重置表单
-      setNewScript({
-        name: "",
-        description: "",
-        content: "",
-        tags: [],
-      })
-      setTagInput("")
-
-      // 重新加载列表
-      await loadScripts()
-    } catch (error: any) {
-      console.error("创建脚本失败:", error)
-      toast.error(`创建脚本失败: ${error.message}`)
-    }
-  }
-
-  const handleOpenDialog = () => {
-    setIsDialogOpen(true)
-  }
-
-  const handleCloseDialog = (open: boolean) => {
-    setIsDialogOpen(open)
-    if (!open) {
-      // 重置表单
-      setNewScript({
-        name: "",
-        description: "",
-        content: "",
-        tags: [],
-      })
-      setTagInput("")
-    }
-  }
-
-  const handleUpdateScript = async () => {
-    if (!editScript.name || !editScript.content) {
-      toast.error("请填写脚本名称和内容")
-      return
-    }
-
-    if (editingScriptId === null) return
-
-    try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      await scriptsApi.update(token, editingScriptId, {
-        name: editScript.name,
-        description: editScript.description || "",
-        content: editScript.content,
-        language: "bash",
-        tags: editScript.tags,
-      })
-
-      toast.success("脚本更新成功")
-      setIsEditDialogOpen(false)
-      setEditingScriptId(null)
-
-      // 重置表单
-      setEditScript({
-        name: "",
-        description: "",
-        content: "",
-        tags: [],
-      })
-      setEditTagInput("")
-
-      // 重新加载列表
-      await loadScripts()
-    } catch (error: any) {
-      console.error("更新脚本失败:", error)
-      toast.error(`更新脚本失败: ${error.message}`)
-    }
-  }
-
-  const handleCloseEditDialog = (open: boolean) => {
-    setIsEditDialogOpen(open)
-    if (!open) {
-      setEditingScriptId(null)
-      // 重置表单
-      setEditScript({
-        name: "",
-        description: "",
-        content: "",
-        tags: [],
-      })
-      setEditTagInput("")
-    }
-  }
-
-  return (
-    <>
-      <PageHeader
-        title="脚本管理"
-        breadcrumbs={[
-          { title: "自动化", href: "#" },
-          { title: "脚本管理" }
-        ]}
-      >
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            刷新
-          </Button>
-          <Button onClick={handleOpenDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            新建脚本
-          </Button>
-        </div>
-      </PageHeader>
-
-      {loading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        {/* 搜索和筛选 */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="搜索脚本..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* 标签筛选 */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground">标签:</span>
-            <Button
-              variant={selectedTag === null ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedTag(null)}
-            >
-              全部
-            </Button>
-            {allTags.map(tag => (
-              <Button
-                key={tag}
-                variant={selectedTag === tag ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-              >
-                {tag}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* 脚本列表 */}
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[200px]">脚本名称</TableHead>
-                <TableHead className="w-[250px]">描述</TableHead>
-                <TableHead className="min-w-[300px]">脚本内容</TableHead>
-                <TableHead className="w-[200px]">标签</TableHead>
-                <TableHead className="w-[100px]">作者</TableHead>
-                <TableHead className="w-[120px]">更新时间</TableHead>
-                <TableHead className="w-[80px] text-center">执行次数</TableHead>
-                <TableHead className="w-[100px] text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredScripts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center">
-                    <div className="flex flex-col items-center justify-center text-muted-foreground">
-                      <FileText className="h-8 w-8 mb-2" />
-                      <p className="text-sm">
-                        {searchTerm || selectedTag ? "暂无匹配的脚本" : "暂无脚本"}
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredScripts.map(script => (
-                  <TableRow key={script.id} className="group">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Code2 className="h-4 w-4 text-muted-foreground" />
-                        <span>{script.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground line-clamp-2">
-                        {script.description}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="bg-muted rounded-md px-3 py-2 max-w-[400px]">
-                        <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap line-clamp-3">
-                          {script.content}
-                        </pre>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {script.tags.map(tag => (
-                          <Badge key={tag} variant="secondary" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">{script.author}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">{script.updatedAt}</span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="text-sm">{script.executions}</span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleExecute(script.id)}
-                          className="h-8 w-8 p-0"
-                          title="执行脚本"
-                        >
-                          <Play className="h-4 w-4" />
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(script.id)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              编辑
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(script.id)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-        </div>
-      )}
-
-      {/* 新建脚本弹窗 */}
-      <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>新建脚本</DialogTitle>
-            <DialogDescription>
-              创建一个新的脚本模板，可以在任务中使用
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* 脚本名称 */}
-            <div className="space-y-2">
-              <Label htmlFor="script-name">
-                脚本名称 <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="script-name"
-                placeholder="例如：系统监控脚本"
-                value={newScript.name}
-                onChange={(e) => setNewScript({ ...newScript, name: e.target.value })}
-              />
-            </div>
-
-            {/* 脚本描述 */}
-            <div className="space-y-2">
-              <Label htmlFor="script-description">脚本描述</Label>
-              <Input
-                id="script-description"
-                placeholder="简要描述脚本的功能"
-                value={newScript.description}
-                onChange={(e) => setNewScript({ ...newScript, description: e.target.value })}
-              />
-            </div>
-
-            {/* 脚本内容 */}
-            <div className="space-y-2">
-              <Label htmlFor="script-content">
-                脚本内容 <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="script-content"
-                placeholder="#!/bin/bash&#10;&#10;echo 'Hello World'"
-                className="font-mono min-h-[200px]"
-                value={newScript.content}
-                onChange={(e) => setNewScript({ ...newScript, content: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                支持使用变量，如 $HOST, $PORT 等
-              </p>
-            </div>
-
-            {/* 标签 */}
-            <div className="space-y-2">
-              <Label htmlFor="script-tags">标签</Label>
-              <div className="relative">
-                <Input
-                  id="script-tags"
-                  placeholder="输入标签名称，按回车添加"
-                  value={tagInput}
-                  onChange={(e) => {
-                    setTagInput(e.target.value)
-                    setShowSuggestions(true)
-                    setSelectedSuggestionIndex(-1)
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                  onBlur={() => {
-                    // 延迟关闭，让点击建议项有时间触发
-                    setTimeout(() => {
-                      setShowSuggestions(false)
-                      setSelectedSuggestionIndex(-1)
-                    }, 200)
-                  }}
-                  onKeyDown={handleKeyDown}
-                />
-
-                {/* 标签建议下拉列表 */}
-                {showSuggestions && filteredSuggestions.length > 0 && tagInput.trim() && (
-                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto scrollbar-custom">
-                    <div className="p-1">
-                      {filteredSuggestions.map((tag, index) => (
-                        <button
-                          key={tag}
-                          ref={(el) => {
-                            suggestionRefs.current[index] = el
-                          }}
-                          type="button"
-                          className={`w-full text-left px-2 py-1.5 text-sm rounded-sm cursor-pointer transition-colors ${
-                            index === selectedSuggestionIndex
-                              ? 'bg-accent text-accent-foreground'
-                              : 'hover:bg-accent/50'
-                          }`}
-                          onMouseEnter={() => setSelectedSuggestionIndex(index)}
-                          onMouseDown={(e) => {
-                            e.preventDefault() // 防止失去焦点
-                            handleAddTag(tag)
-                          }}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
-                输入标签名称，
-                <Kbd>↑</Kbd>
-                <Kbd>↓</Kbd>
-                选择建议，
-                <Kbd>Enter</Kbd>
-                添加，
-                <Kbd>Esc</Kbd>
-                关闭
-              </p>
-
-              {/* 已添加的标签 */}
-              {newScript.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {newScript.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1">
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTag(tag)}
-                        className="ml-1 hover:text-destructive"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleCreateScript}>
-              创建脚本
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 编辑脚本弹窗 */}
-      <Dialog open={isEditDialogOpen} onOpenChange={handleCloseEditDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>编辑脚本</DialogTitle>
-            <DialogDescription>
-              修改脚本信息和内容
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* 脚本名称 */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-script-name">
-                脚本名称 <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="edit-script-name"
-                placeholder="例如：系统监控脚本"
-                value={editScript.name}
-                onChange={(e) => setEditScript({ ...editScript, name: e.target.value })}
-              />
-            </div>
-
-            {/* 脚本描述 */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-script-description">脚本描述</Label>
-              <Input
-                id="edit-script-description"
-                placeholder="简要描述脚本的功能"
-                value={editScript.description}
-                onChange={(e) => setEditScript({ ...editScript, description: e.target.value })}
-              />
-            </div>
-
-            {/* 脚本内容 */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-script-content">
-                脚本内容 <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="edit-script-content"
-                placeholder="#!/bin/bash&#10;&#10;echo 'Hello World'"
-                className="font-mono min-h-[200px]"
-                value={editScript.content}
-                onChange={(e) => setEditScript({ ...editScript, content: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                支持使用变量，如 $HOST, $PORT 等
-              </p>
-            </div>
-
-            {/* 标签 */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-script-tags">标签</Label>
-              <div className="relative">
-                <Input
-                  id="edit-script-tags"
-                  placeholder="输入标签名称，按回车添加"
-                  value={editTagInput}
-                  onChange={(e) => {
-                    setEditTagInput(e.target.value)
-                    setShowEditSuggestions(true)
-                    setSelectedEditSuggestionIndex(-1)
-                  }}
-                  onFocus={() => setShowEditSuggestions(true)}
-                  onBlur={() => {
-                    // 延迟关闭，让点击建议项有时间触发
-                    setTimeout(() => {
-                      setShowEditSuggestions(false)
-                      setSelectedEditSuggestionIndex(-1)
-                    }, 200)
-                  }}
-                  onKeyDown={handleKeyDownEditTag}
-                />
-
-                {/* 标签建议下拉列表 */}
-                {showEditSuggestions && filteredEditSuggestions.length > 0 && editTagInput.trim() && (
-                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto scrollbar-custom">
-                    <div className="p-1">
-                      {filteredEditSuggestions.map((tag, index) => (
-                        <button
-                          key={tag}
-                          ref={(el) => {
-                            editSuggestionRefs.current[index] = el
-                          }}
-                          type="button"
-                          className={`w-full text-left px-2 py-1.5 text-sm rounded-sm cursor-pointer transition-colors ${
-                            index === selectedEditSuggestionIndex
-                              ? 'bg-accent text-accent-foreground'
-                              : 'hover:bg-accent/50'
-                          }`}
-                          onMouseEnter={() => setSelectedEditSuggestionIndex(index)}
-                          onMouseDown={(e) => {
-                            e.preventDefault() // 防止失去焦点
-                            handleAddEditTag(tag)
-                          }}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
-                输入标签名称，
-                <Kbd>↑</Kbd>
-                <Kbd>↓</Kbd>
-                选择建议，
-                <Kbd>Enter</Kbd>
-                添加，
-                <Kbd>Esc</Kbd>
-                关闭
-              </p>
-
-              {/* 已添加的标签 */}
-              {editScript.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {editScript.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1">
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEditTag(tag)}
-                        className="ml-1 hover:text-destructive"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleUpdateScript}>
-              保存修改
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
+ const router = useRouter()
+ const [scripts, setScripts] = useState<Script[]>([])
+ const [loading, setLoading] = useState(true)
+ const [searchTerm, setSearchTerm] = useState("")
+ const [selectedTag, setSelectedTag] = useState<string | null>(null)
+ const [isDialogOpen, setIsDialogOpen] = useState(false)
+ const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+ const [editingScriptId, setEditingScriptId] = useState<string | null>(null)
+ const [refreshing, setRefreshing] = useState(false)
+
+ // 新建脚本表单状态
+ const [newScript, setNewScript] = useState({
+ name: "",
+ description: "",
+ content: "",
+ tags: [] as string[],
+ })
+
+ // 编辑脚本表单状态
+ const [editScript, setEditScript] = useState({
+ name: "",
+ description: "",
+ content: "",
+ tags: [] as string[],
+ })
+
+ const [tagInput, setTagInput] = useState("")
+ const [showSuggestions, setShowSuggestions] = useState(false)
+ const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+ const suggestionRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+ const [editTagInput, setEditTagInput] = useState("")
+ const [showEditSuggestions, setShowEditSuggestions] = useState(false)
+ const [selectedEditSuggestionIndex, setSelectedEditSuggestionIndex] = useState(-1)
+ const editSuggestionRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+ // 加载脚本列表
+ const loadScripts = async () => {
+ try {
+ const token = localStorage.getItem("easyssh_access_token")
+ if (!token) {
+ toast.error("未登录，请先登录")
+ router.push("/login")
+ return
+ }
+
+ const response = await scriptsApi.list(token, {
+ page: 1,
+ limit: 100,
+ search: searchTerm || undefined,
+ tags: selectedTag ? [selectedTag] : undefined,
+ })
+
+ setScripts(response.data)
+ } catch (error: any) {
+ console.error("加载脚本列表失败:", error)
+ if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+ toast.error("登录已过期，请重新登录")
+ router.push("/login")
+ } else {
+ toast.error(`加载脚本失败: ${error.message}`)
+ }
+ } finally {
+ setLoading(false)
+ setRefreshing(false)
+ }
+ }
+
+ // 刷新脚本列表
+ const handleRefresh = async () => {
+ setRefreshing(true)
+ await loadScripts()
+ }
+
+ // 初始加载
+ useEffect(() => {
+ loadScripts()
+ }, [])
+
+ // 自动滚动选中的建议项到可见区域
+ useEffect(() => {
+ if (selectedSuggestionIndex >= 0 && suggestionRefs.current[selectedSuggestionIndex]) {
+ suggestionRefs.current[selectedSuggestionIndex]?.scrollIntoView({
+ block: 'nearest',
+ behavior: 'smooth'
+ })
+ }
+ }, [selectedSuggestionIndex])
+
+ useEffect(() => {
+ if (selectedEditSuggestionIndex >= 0 && editSuggestionRefs.current[selectedEditSuggestionIndex]) {
+ editSuggestionRefs.current[selectedEditSuggestionIndex]?.scrollIntoView({
+ block: 'nearest',
+ behavior: 'smooth'
+ })
+ }
+ }, [selectedEditSuggestionIndex])
+
+ // 获取所有标签
+ const allTags = Array.from(new Set(scripts.flatMap(script => script.tags)))
+
+ // 获取可用标签（排除已选择的）
+ const availableTags = allTags.filter(tag => !newScript.tags.includes(tag))
+
+ // 根据输入过滤标签建议
+ const filteredSuggestions = tagInput.trim()
+ ? availableTags.filter(tag =>
+ tag.toLowerCase().includes(tagInput.toLowerCase())
+ )
+ : availableTags
+
+ // 编辑模式的可用标签（排除已选择的）
+ const availableEditTags = allTags.filter(tag => !editScript.tags.includes(tag))
+
+ // 编辑模式的标签建议
+ const filteredEditSuggestions = editTagInput.trim()
+ ? availableEditTags.filter(tag =>
+ tag.toLowerCase().includes(editTagInput.toLowerCase())
+ )
+ : availableEditTags
+
+ // 过滤脚本
+ const filteredScripts = scripts.filter(script => {
+ const matchesSearch = script.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+ script.description.toLowerCase().includes(searchTerm.toLowerCase())
+ const matchesTag = !selectedTag || script.tags.includes(selectedTag)
+ return matchesSearch && matchesTag
+ })
+
+ const handleExecute = (scriptId: string) => {
+ console.log("执行脚本:", scriptId)
+ toast.info("脚本执行功能即将推出")
+ // TODO: 实现脚本执行对话框和逻辑
+ }
+
+ const handleEdit = (scriptId: string) => {
+ const script = scripts.find(s => s.id === scriptId)
+ if (script) {
+ setEditingScriptId(scriptId)
+ setEditScript({
+ name: script.name,
+ description: script.description || "",
+ content: script.content,
+ tags: [...script.tags],
+ })
+ setIsEditDialogOpen(true)
+ }
+ }
+
+ const handleDelete = async (scriptId: string) => {
+ if (!confirm("确定要删除这个脚本吗？")) {
+ return
+ }
+
+ try {
+ const token = localStorage.getItem("easyssh_access_token")
+ if (!token) {
+ toast.error("未登录，请先登录")
+ router.push("/login")
+ return
+ }
+
+ await scriptsApi.delete(token, scriptId)
+ toast.success("脚本删除成功")
+ await loadScripts()
+ } catch (error: any) {
+ console.error("删除脚本失败:", error)
+ toast.error(`删除脚本失败: ${error.message}`)
+ }
+ }
+
+ const handleAddTag = (tag?: string) => {
+ const tagToAdd = tag || tagInput.trim()
+ if (tagToAdd && !newScript.tags.includes(tagToAdd)) {
+ setNewScript({
+ ...newScript,
+ tags: [...newScript.tags, tagToAdd],
+ })
+ setTagInput("")
+ setShowSuggestions(false)
+ setSelectedSuggestionIndex(-1)
+ }
+ }
+
+ const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+ if (!showSuggestions || filteredSuggestions.length === 0) {
+ if (e.key === 'Enter') {
+ e.preventDefault()
+ handleAddTag()
+ }
+ return
+ }
+
+ switch (e.key) {
+ case 'ArrowDown':
+ e.preventDefault()
+ setSelectedSuggestionIndex((prev) =>
+ prev < filteredSuggestions.length - 1 ? prev + 1 : prev
+ )
+ break
+ case 'ArrowUp':
+ e.preventDefault()
+ setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1))
+ break
+ case 'Enter':
+ e.preventDefault()
+ if (selectedSuggestionIndex >= 0) {
+ handleAddTag(filteredSuggestions[selectedSuggestionIndex])
+ } else {
+ handleAddTag()
+ }
+ break
+ case 'Escape':
+ e.preventDefault()
+ setShowSuggestions(false)
+ setSelectedSuggestionIndex(-1)
+ break
+ }
+ }
+
+ const handleRemoveTag = (tagToRemove: string) => {
+ setNewScript({
+ ...newScript,
+ tags: newScript.tags.filter(tag => tag !== tagToRemove),
+ })
+ }
+
+ // 编辑模式的标签处理函数
+ const handleAddEditTag = (tag?: string) => {
+ const tagToAdd = tag || editTagInput.trim()
+ if (tagToAdd && !editScript.tags.includes(tagToAdd)) {
+ setEditScript({
+ ...editScript,
+ tags: [...editScript.tags, tagToAdd],
+ })
+ setEditTagInput("")
+ setShowEditSuggestions(false)
+ setSelectedEditSuggestionIndex(-1)
+ }
+ }
+
+ const handleKeyDownEditTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
+ if (!showEditSuggestions || filteredEditSuggestions.length === 0) {
+ if (e.key === 'Enter') {
+ e.preventDefault()
+ handleAddEditTag()
+ }
+ return
+ }
+
+ switch (e.key) {
+ case 'ArrowDown':
+ e.preventDefault()
+ setSelectedEditSuggestionIndex((prev) =>
+ prev < filteredEditSuggestions.length - 1 ? prev + 1 : prev
+ )
+ break
+ case 'ArrowUp':
+ e.preventDefault()
+ setSelectedEditSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1))
+ break
+ case 'Enter':
+ e.preventDefault()
+ if (selectedEditSuggestionIndex >= 0) {
+ handleAddEditTag(filteredEditSuggestions[selectedEditSuggestionIndex])
+ } else {
+ handleAddEditTag()
+ }
+ break
+ case 'Escape':
+ e.preventDefault()
+ setShowEditSuggestions(false)
+ setSelectedEditSuggestionIndex(-1)
+ break
+ }
+ }
+
+ const handleRemoveEditTag = (tagToRemove: string) => {
+ setEditScript({
+ ...editScript,
+ tags: editScript.tags.filter(tag => tag !== tagToRemove),
+ })
+ }
+
+ const handleCreateScript = async () => {
+ if (!newScript.name || !newScript.content) {
+ toast.error("请填写脚本名称和内容")
+ return
+ }
+
+ try {
+ const token = localStorage.getItem("easyssh_access_token")
+ if (!token) {
+ toast.error("未登录，请先登录")
+ router.push("/login")
+ return
+ }
+
+ await scriptsApi.create(token, {
+ name: newScript.name,
+ description: newScript.description || "",
+ content: newScript.content,
+ language: "bash",
+ tags: newScript.tags,
+ })
+
+ toast.success("脚本创建成功")
+ setIsDialogOpen(false)
+
+ // 重置表单
+ setNewScript({
+ name: "",
+ description: "",
+ content: "",
+ tags: [],
+ })
+ setTagInput("")
+
+ // 重新加载列表
+ await loadScripts()
+ } catch (error: any) {
+ console.error("创建脚本失败:", error)
+ toast.error(`创建脚本失败: ${error.message}`)
+ }
+ }
+
+ const handleOpenDialog = () => {
+ setIsDialogOpen(true)
+ }
+
+ const handleCloseDialog = (open: boolean) => {
+ setIsDialogOpen(open)
+ if (!open) {
+ // 重置表单
+ setNewScript({
+ name: "",
+ description: "",
+ content: "",
+ tags: [],
+ })
+ setTagInput("")
+ }
+ }
+
+ const handleUpdateScript = async () => {
+ if (!editScript.name || !editScript.content) {
+ toast.error("请填写脚本名称和内容")
+ return
+ }
+
+ if (editingScriptId === null) return
+
+ try {
+ const token = localStorage.getItem("easyssh_access_token")
+ if (!token) {
+ toast.error("未登录，请先登录")
+ router.push("/login")
+ return
+ }
+
+ await scriptsApi.update(token, editingScriptId, {
+ name: editScript.name,
+ description: editScript.description || "",
+ content: editScript.content,
+ language: "bash",
+ tags: editScript.tags,
+ })
+
+ toast.success("脚本更新成功")
+ setIsEditDialogOpen(false)
+ setEditingScriptId(null)
+
+ // 重置表单
+ setEditScript({
+ name: "",
+ description: "",
+ content: "",
+ tags: [],
+ })
+ setEditTagInput("")
+
+ // 重新加载列表
+ await loadScripts()
+ } catch (error: any) {
+ console.error("更新脚本失败:", error)
+ toast.error(`更新脚本失败: ${error.message}`)
+ }
+ }
+
+ const handleCloseEditDialog = (open: boolean) => {
+ setIsEditDialogOpen(open)
+ if (!open) {
+ setEditingScriptId(null)
+ // 重置表单
+ setEditScript({
+ name: "",
+ description: "",
+ content: "",
+ tags: [],
+ })
+ setEditTagInput("")
+ }
+ }
+
+ return (
+ <>
+ <PageHeader title="脚本管理">
+ <div className="flex items-center gap-2">
+ <Button
+ variant="outline"
+ size="sm"
+ onClick={handleRefresh}
+ disabled={refreshing}
+ >
+ <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+ 刷新
+ </Button>
+ <Button onClick={handleOpenDialog}>
+ <Plus className="mr-2 h-4 w-4" />
+ 新建脚本
+ </Button>
+ </div>
+ </PageHeader>
+
+ {loading ? (
+ <div className="flex flex-1 items-center justify-center">
+ <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+ </div>
+ ) : (
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ {/* 搜索和筛选 */}
+ <div className="flex flex-col gap-4">
+ <div className="flex items-center gap-4">
+ <div className="relative flex-1 max-w-md">
+ <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+ <Input
+ placeholder="搜索脚本..."
+ className="pl-10"
+ value={searchTerm}
+ onChange={(e) => setSearchTerm(e.target.value)}
+ />
+ </div>
+ </div>
+
+ {/* 标签筛选 */}
+ <div className="flex items-center gap-2 flex-wrap">
+ <span className="text-sm text-muted-foreground">标签:</span>
+ <Button
+ variant={selectedTag === null ? "default" : "outline"}
+ size="sm"
+ onClick={() => setSelectedTag(null)}
+ >
+ 全部
+ </Button>
+ {allTags.map(tag => (
+ <Button
+ key={tag}
+ variant={selectedTag === tag ? "default" : "outline"}
+ size="sm"
+ onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+ >
+ {tag}
+ </Button>
+ ))}
+ </div>
+ </div>
+
+ {/* 脚本列表 */}
+ <Card>
+ <Table>
+ <TableHeader>
+ <TableRow>
+ <TableHead className="w-[200px]">脚本名称</TableHead>
+ <TableHead className="w-[250px]">描述</TableHead>
+ <TableHead className="min-w-[300px]">脚本内容</TableHead>
+ <TableHead className="w-[200px]">标签</TableHead>
+ <TableHead className="w-[100px]">作者</TableHead>
+ <TableHead className="w-[120px]">更新时间</TableHead>
+ <TableHead className="w-[80px] text-center">执行次数</TableHead>
+ <TableHead className="w-[100px] text-right">操作</TableHead>
+ </TableRow>
+ </TableHeader>
+ <TableBody>
+ {filteredScripts.length === 0 ? (
+ <TableRow>
+ <TableCell colSpan={8} className="h-32 text-center">
+ <div className="flex flex-col items-center justify-center text-muted-foreground">
+ <FileText className="h-8 w-8 mb-2" />
+ <p className="text-sm">
+ {searchTerm || selectedTag ? "暂无匹配的脚本" : "暂无脚本"}
+ </p>
+ </div>
+ </TableCell>
+ </TableRow>
+ ) : (
+ filteredScripts.map(script => (
+ <TableRow key={script.id} className="group">
+ <TableCell className="font-medium">
+ <div className="flex items-center gap-2">
+ <Code2 className="h-4 w-4 text-muted-foreground" />
+ <span>{script.name}</span>
+ </div>
+ </TableCell>
+ <TableCell>
+ <span className="text-sm text-muted-foreground line-clamp-2">
+ {script.description}
+ </span>
+ </TableCell>
+ <TableCell>
+ <div className="bg-muted rounded-md px-3 py-2 max-w-[400px]">
+ <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap line-clamp-3">
+ {script.content}
+ </pre>
+ </div>
+ </TableCell>
+ <TableCell>
+ <div className="flex flex-wrap gap-1">
+ {script.tags.map(tag => (
+ <Badge key={tag} variant="secondary" className="text-xs">
+ {tag}
+ </Badge>
+ ))}
+ </div>
+ </TableCell>
+ <TableCell>
+ <span className="text-sm text-muted-foreground">{script.author}</span>
+ </TableCell>
+ <TableCell>
+ <span className="text-sm text-muted-foreground">{script.updatedAt}</span>
+ </TableCell>
+ <TableCell className="text-center">
+ <span className="text-sm">{script.executions}</span>
+ </TableCell>
+ <TableCell className="text-right">
+ <div className="flex items-center justify-end gap-1">
+ <Button
+ variant="ghost"
+ size="sm"
+ onClick={() => handleExecute(script.id)}
+ className="h-8 w-8 p-0"
+ title="执行脚本">
+ <Play className="h-4 w-4" />
+ </Button>
+ <DropdownMenu>
+ <DropdownMenuTrigger asChild>
+ <Button
+ variant="ghost"
+ size="sm"
+ className="h-8 w-8 p-0"
+ >
+ <MoreVertical className="h-4 w-4" />
+ </Button>
+ </DropdownMenuTrigger>
+ <DropdownMenuContent align="end">
+ <DropdownMenuItem onClick={() => handleEdit(script.id)}>
+ <Edit className="mr-2 h-4 w-4" />
+ 编辑
+ </DropdownMenuItem>
+ <DropdownMenuSeparator />
+ <DropdownMenuItem
+ onClick={() => handleDelete(script.id)}
+ className="text-destructive"
+ >
+ <Trash2 className="mr-2 h-4 w-4" />
+ 删除
+ </DropdownMenuItem>
+ </DropdownMenuContent>
+ </DropdownMenu>
+ </div>
+ </TableCell>
+ </TableRow>
+ ))
+ )}
+ </TableBody>
+ </Table>
+ </Card>
+ </div>
+ )}
+
+ {/* 新建脚本弹窗 */}
+ <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
+ <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+ <DialogHeader>
+ <DialogTitle>新建脚本</DialogTitle>
+ <DialogDescription>
+ 创建一个新的脚本模板，可以在任务中使用
+ </DialogDescription>
+ </DialogHeader>
+
+ <div className="space-y-4 py-4">
+ {/* 脚本名称 */}
+ <div className="space-y-2">
+ <Label htmlFor="script-name">
+ 脚本名称 <span className="text-destructive">*</span>
+ </Label>
+ <Input
+ id="script-name"
+ placeholder="例如：系统监控脚本"
+ value={newScript.name}
+ onChange={(e) => setNewScript({ ...newScript, name: e.target.value })}
+ />
+ </div>
+
+ {/* 脚本描述 */}
+ <div className="space-y-2">
+ <Label htmlFor="script-description">脚本描述</Label>
+ <Input
+ id="script-description"
+ placeholder="简要描述脚本的功能"
+ value={newScript.description}
+ onChange={(e) => setNewScript({ ...newScript, description: e.target.value })}
+ />
+ </div>
+
+ {/* 脚本内容 */}
+ <div className="space-y-2">
+ <Label htmlFor="script-content">
+ 脚本内容 <span className="text-destructive">*</span>
+ </Label>
+ <Textarea
+ id="script-content"
+ placeholder="#!/bin/bash&#10;&#10;echo 'Hello World'"
+ className="font-mono min-h-[200px]"
+ value={newScript.content}
+ onChange={(e) => setNewScript({ ...newScript, content: e.target.value })}
+ />
+ <p className="text-xs text-muted-foreground">
+ 支持使用变量，如 $HOST, $PORT 等
+ </p>
+ </div>
+
+ {/* 标签 */}
+ <div className="space-y-2">
+ <Label htmlFor="script-tags">标签</Label>
+ <div className="relative">
+ <Input
+ id="script-tags"
+ placeholder="输入标签名称，按回车添加"
+ value={tagInput}
+ onChange={(e) => {
+ setTagInput(e.target.value)
+ setShowSuggestions(true)
+ setSelectedSuggestionIndex(-1)
+ }}
+ onFocus={() => setShowSuggestions(true)}
+ onBlur={() => {
+ // 延迟关闭，让点击建议项有时间触发
+ setTimeout(() => {
+ setShowSuggestions(false)
+ setSelectedSuggestionIndex(-1)
+ }, 200)
+ }}
+ onKeyDown={handleKeyDown}
+ />
+
+ {/* 标签建议下拉列表 */}
+ {showSuggestions && filteredSuggestions.length > 0 && tagInput.trim() && (
+ <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto scrollbar-custom">
+ <div className="p-1">
+ {filteredSuggestions.map((tag, index) => (
+ <button
+ key={tag}
+ ref={(el) => {
+ suggestionRefs.current[index] = el
+ }}
+ type="button"
+ className={`w-full text-left px-2 py-1.5 text-sm rounded-sm cursor-pointer transition-colors ${
+ index === selectedSuggestionIndex
+ ? 'bg-accent text-accent-foreground'
+ : 'hover:bg-accent/50'
+ }`}
+ onMouseEnter={() => setSelectedSuggestionIndex(index)}
+ onMouseDown={(e) => {
+ e.preventDefault() // 防止失去焦点
+ handleAddTag(tag)
+ }}
+ >
+ {tag}
+ </button>
+ ))}
+ </div>
+ </div>
+ )}
+ </div>
+
+ <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+ 输入标签名称，
+ <Kbd>↑</Kbd>
+ <Kbd>↓</Kbd>
+ 选择建议，
+ <Kbd>Enter</Kbd>
+ 添加，
+ <Kbd>Esc</Kbd>
+ 关闭
+ </p>
+
+ {/* 已添加的标签 */}
+ {newScript.tags.length > 0 && (
+ <div className="flex flex-wrap gap-2 mt-2">
+ {newScript.tags.map((tag) => (
+ <Badge key={tag} variant="secondary" className="gap-1">
+ {tag}
+ <button
+ type="button"
+ onClick={() => handleRemoveTag(tag)}
+ className="ml-1 hover:text-destructive"
+ >
+ <X className="h-3 w-3" />
+ </button>
+ </Badge>
+ ))}
+ </div>
+ )}
+ </div>
+ </div>
+
+ <DialogFooter>
+ <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+ 取消
+ </Button>
+ <Button onClick={handleCreateScript}>
+ 创建脚本
+ </Button>
+ </DialogFooter>
+ </DialogContent>
+ </Dialog>
+
+ {/* 编辑脚本弹窗 */}
+ <Dialog open={isEditDialogOpen} onOpenChange={handleCloseEditDialog}>
+ <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+ <DialogHeader>
+ <DialogTitle>编辑脚本</DialogTitle>
+ <DialogDescription>
+ 修改脚本信息和内容
+ </DialogDescription>
+ </DialogHeader>
+
+ <div className="space-y-4 py-4">
+ {/* 脚本名称 */}
+ <div className="space-y-2">
+ <Label htmlFor="edit-script-name">
+ 脚本名称 <span className="text-destructive">*</span>
+ </Label>
+ <Input
+ id="edit-script-name"
+ placeholder="例如：系统监控脚本"
+ value={editScript.name}
+ onChange={(e) => setEditScript({ ...editScript, name: e.target.value })}
+ />
+ </div>
+
+ {/* 脚本描述 */}
+ <div className="space-y-2">
+ <Label htmlFor="edit-script-description">脚本描述</Label>
+ <Input
+ id="edit-script-description"
+ placeholder="简要描述脚本的功能"
+ value={editScript.description}
+ onChange={(e) => setEditScript({ ...editScript, description: e.target.value })}
+ />
+ </div>
+
+ {/* 脚本内容 */}
+ <div className="space-y-2">
+ <Label htmlFor="edit-script-content">
+ 脚本内容 <span className="text-destructive">*</span>
+ </Label>
+ <Textarea
+ id="edit-script-content"
+ placeholder="#!/bin/bash&#10;&#10;echo 'Hello World'"
+ className="font-mono min-h-[200px]"
+ value={editScript.content}
+ onChange={(e) => setEditScript({ ...editScript, content: e.target.value })}
+ />
+ <p className="text-xs text-muted-foreground">
+ 支持使用变量，如 $HOST, $PORT 等
+ </p>
+ </div>
+
+ {/* 标签 */}
+ <div className="space-y-2">
+ <Label htmlFor="edit-script-tags">标签</Label>
+ <div className="relative">
+ <Input
+ id="edit-script-tags"
+ placeholder="输入标签名称，按回车添加"
+ value={editTagInput}
+ onChange={(e) => {
+ setEditTagInput(e.target.value)
+ setShowEditSuggestions(true)
+ setSelectedEditSuggestionIndex(-1)
+ }}
+ onFocus={() => setShowEditSuggestions(true)}
+ onBlur={() => {
+ // 延迟关闭，让点击建议项有时间触发
+ setTimeout(() => {
+ setShowEditSuggestions(false)
+ setSelectedEditSuggestionIndex(-1)
+ }, 200)
+ }}
+ onKeyDown={handleKeyDownEditTag}
+ />
+
+ {/* 标签建议下拉列表 */}
+ {showEditSuggestions && filteredEditSuggestions.length > 0 && editTagInput.trim() && (
+ <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto scrollbar-custom">
+ <div className="p-1">
+ {filteredEditSuggestions.map((tag, index) => (
+ <button
+ key={tag}
+ ref={(el) => {
+ editSuggestionRefs.current[index] = el
+ }}
+ type="button"
+ className={`w-full text-left px-2 py-1.5 text-sm rounded-sm cursor-pointer transition-colors ${
+ index === selectedEditSuggestionIndex
+ ? 'bg-accent text-accent-foreground'
+ : 'hover:bg-accent/50'
+ }`}
+ onMouseEnter={() => setSelectedEditSuggestionIndex(index)}
+ onMouseDown={(e) => {
+ e.preventDefault() // 防止失去焦点
+ handleAddEditTag(tag)
+ }}
+ >
+ {tag}
+ </button>
+ ))}
+ </div>
+ </div>
+ )}
+ </div>
+
+ <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+ 输入标签名称，
+ <Kbd>↑</Kbd>
+ <Kbd>↓</Kbd>
+ 选择建议，
+ <Kbd>Enter</Kbd>
+ 添加，
+ <Kbd>Esc</Kbd>
+ 关闭
+ </p>
+
+ {/* 已添加的标签 */}
+ {editScript.tags.length > 0 && (
+ <div className="flex flex-wrap gap-2 mt-2">
+ {editScript.tags.map((tag) => (
+ <Badge key={tag} variant="secondary" className="gap-1">
+ {tag}
+ <button
+ type="button"
+ onClick={() => handleRemoveEditTag(tag)}
+ className="ml-1 hover:text-destructive"
+ >
+ <X className="h-3 w-3" />
+ </button>
+ </Badge>
+ ))}
+ </div>
+ )}
+ </div>
+ </div>
+
+ <DialogFooter>
+ <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+ 取消
+ </Button>
+ <Button onClick={handleUpdateScript}>
+ 保存修改
+ </Button>
+ </DialogFooter>
+ </DialogContent>
+ </Dialog>
+ </>
+ )
 }
 
