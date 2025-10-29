@@ -14,12 +14,12 @@ import {
  Server,
  Activity,
  AlertTriangle,
- RefreshCw,
- Loader2
+ RefreshCw
 } from "lucide-react"
 import { serversApi, monitoringApi, type Server as ApiServer, type SystemInfo, type CPUInfo, type MemoryInfo, type DiskInfo, type NetworkInterface } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
 import { useRouter } from "next/navigation"
+import { SkeletonCard } from "@/components/ui/loading"
 
 // 服务器资源数据接口
 interface ServerResource {
@@ -228,15 +228,24 @@ export default function MonitoringResourcesPage() {
  return "bg-green-500"
  }
 
- // 加载状态
+ // 加载状态 - 使用图表卡片骨架屏
  if (loading) {
  return (
  <>
  <PageHeader title="资源监控" />
- <div className="flex flex-1 items-center justify-center p-4">
- <div className="flex flex-col items-center gap-4">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
- <p className="text-sm text-muted-foreground">加载监控数据...</p>
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ {/* 统计卡片骨架屏 */}
+ <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ </div>
+ {/* 服务器资源卡片网格骨架屏 */}
+ <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
+ <SkeletonCard showHeader showIcon lines={6} />
+ <SkeletonCard showHeader showIcon lines={6} />
+ <SkeletonCard showHeader showIcon lines={6} />
  </div>
  </div>
  </>

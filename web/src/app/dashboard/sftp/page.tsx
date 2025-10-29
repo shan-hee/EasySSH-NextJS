@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useRef } from "react"
 import { PageHeader } from "@/components/page-header"
 import { SftpManager } from "@/components/sftp/sftp-manager"
-import { FolderOpen, Server, Plus, ChevronDown, GripVertical, Loader2 } from "lucide-react"
+import { FolderOpen, Server, Plus, ChevronDown, GripVertical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { SkeletonList } from "@/components/ui/loading"
 import {
  DropdownMenu,
  DropdownMenuContent,
@@ -809,16 +810,16 @@ export default function SftpPage() {
  </div>
  )
 
- // 加载状态
+ // 加载状态 - 使用列表骨架屏
  if (loading) {
  return (
  <>
  <PageHeader title="文件传输" />
- <div className="flex flex-1 items-center justify-center p-4">
- <div className="flex flex-col items-center gap-4">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
- <p className="text-sm text-muted-foreground">加载服务器列表...</p>
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex items-center justify-between mb-4">
+ <h3 className="text-lg font-semibold">可用服务器</h3>
  </div>
+ <SkeletonList items={6} showIcon iconShape="square" showSubtitle />
  </div>
  </>
  )

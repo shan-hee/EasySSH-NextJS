@@ -49,10 +49,10 @@ import {
  Shield,
  Eye,
  RefreshCw,
- Loader2,
  Key,
 } from "lucide-react"
 import { usersApi, type User, type UserRole } from "@/lib/api"
+import { SkeletonCard, SkeletonTable } from "@/components/ui/loading"
 
 export default function UsersPage() {
  const router = useRouter()
@@ -351,8 +351,16 @@ export default function UsersPage() {
  </PageHeader>
 
  {loading ? (
- <div className="flex flex-1 items-center justify-center">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ {/* 统计卡片骨架屏 */}
+ <div className="grid gap-4 md:grid-cols-4">
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ </div>
+ {/* 表格骨架屏 */}
+ <SkeletonTable rows={10} columns={3} showActions />
  </div>
  ) : (
  <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

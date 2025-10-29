@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import Link from "next/link"
 import { serversApi, auditLogsApi, type AuditLogStatisticsResponse } from "@/lib/api"
-import { Loader2, Server, Activity, History } from "lucide-react"
+import { Server, Activity, History } from "lucide-react"
+import { SkeletonCard } from "@/components/ui/loading"
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/sonner"
 
@@ -90,16 +91,18 @@ export default function Page() {
  }
  }
 
- // 加载状态
+ // 加载状态 - 使用固定的卡片骨架屏
  if (loading) {
  return (
  <>
  <PageHeader title="仪表盘" />
- <div className="flex flex-1 items-center justify-center p-4">
- <div className="flex flex-col items-center gap-4">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
- <p className="text-sm text-muted-foreground">加载仪表盘数据...</p>
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="grid auto-rows-min gap-4 md:grid-cols-3">
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
  </div>
+ <SkeletonCard showHeader lines={4} className="flex-1" />
  </div>
  </>
  )

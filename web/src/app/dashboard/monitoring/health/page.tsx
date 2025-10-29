@@ -17,8 +17,7 @@ import {
  HardDrive,
  Cpu,
  MemoryStick,
- RefreshCw,
- Loader2
+ RefreshCw
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -31,6 +30,7 @@ import {
  type DiskInfo,
  type NetworkInterface
 } from "@/lib/api"
+import { SkeletonCard } from "@/components/ui/loading"
 
 // 健康检查项
 interface HealthCheckItem {
@@ -330,8 +330,23 @@ export default function MonitoringHealthPage() {
  </PageHeader>
 
  {loading ? (
- <div className="flex flex-1 items-center justify-center">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ {/* 统计卡片骨架屏 */}
+ <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ <SkeletonCard showHeader={false} lines={2} />
+ </div>
+ {/* 服务器卡片网格骨架屏 */}
+ <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+ <SkeletonCard showHeader showIcon lines={4} />
+ <SkeletonCard showHeader showIcon lines={4} />
+ <SkeletonCard showHeader showIcon lines={4} />
+ <SkeletonCard showHeader showIcon lines={4} />
+ <SkeletonCard showHeader showIcon lines={4} />
+ <SkeletonCard showHeader showIcon lines={4} />
+ </div>
  </div>
  ) : (
  <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

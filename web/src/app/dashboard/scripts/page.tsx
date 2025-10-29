@@ -37,7 +37,6 @@ import {
  X,
  Code2,
  MoreVertical,
- Loader2,
  RefreshCw
 } from "lucide-react"
 import {
@@ -48,6 +47,7 @@ import {
  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { scriptsApi, type Script } from "@/lib/api"
+import { SkeletonTable } from "@/components/ui/loading"
 
 export default function ScriptsPage() {
  const router = useRouter()
@@ -475,8 +475,8 @@ export default function ScriptsPage() {
  </PageHeader>
 
  {loading ? (
- <div className="flex flex-1 items-center justify-center">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <SkeletonTable rows={8} columns={4} showActions />
  </div>
  ) : (
  <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
