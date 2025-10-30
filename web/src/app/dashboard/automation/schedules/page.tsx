@@ -790,13 +790,13 @@ export default function AutomationSchedulesPage() {
 
  {/* 新建任务对话框 */}
  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
- <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
- <DialogHeader>
+ <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+ <DialogHeader className="shrink-0">
  <DialogTitle>新建定时任务</DialogTitle>
  <DialogDescription>创建一个新的定时任务，按照Cron表达式定时执行</DialogDescription>
  </DialogHeader>
 
- <div className="space-y-4 py-4">
+ <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  {/* 任务名称 */}
  <div className="space-y-2">
  <Label htmlFor="task-name">
@@ -972,7 +972,7 @@ export default function AutomationSchedulesPage() {
  </div>
  </div>
 
- <DialogFooter>
+ <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
  取消
  </Button>
@@ -983,13 +983,13 @@ export default function AutomationSchedulesPage() {
 
  {/* 编辑任务对话框 */}
  <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
- <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
- <DialogHeader>
+ <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+ <DialogHeader className="shrink-0">
  <DialogTitle>编辑定时任务</DialogTitle>
  <DialogDescription>修改定时任务的配置</DialogDescription>
  </DialogHeader>
 
- <div className="space-y-4 py-4">
+ <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  {/* 任务名称 */}
  <div className="space-y-2">
  <Label htmlFor="edit-task-name">
@@ -1118,7 +1118,7 @@ export default function AutomationSchedulesPage() {
  </div>
  </div>
 
- <DialogFooter>
+ <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
  取消
  </Button>

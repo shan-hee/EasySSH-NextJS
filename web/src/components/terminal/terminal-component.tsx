@@ -136,18 +136,33 @@ export function TerminalComponent({
   // 获取当前活跃会话
   const active = sessions.find((s) => s.id === activeSession)
 
-  // 如果当前激活的会话不存在（被删除），自动切换到第一个会话
-  // 使用 ref 跟踪上一次的 sessions 长度，避免在新增页签时误触发
-  const prevSessionsLengthRef = useRef(sessions.length)
-  useEffect(() => {
-    const isSessionAdded = sessions.length > prevSessionsLengthRef.current
-    prevSessionsLengthRef.current = sessions.length
+  // 如果当前激活的会话不存在（被删除），自动切换到合适的会话
+  // 使用 ref 跟踪上一次的 sessions 数组，用于找到被删除页签的位置
+  const prevSessionsRef = useRef(sessions)
 
-    // 只在会话被删除（而非新增）且当前激活会话不存在时才切换到第一个
+  useEffect(() => {
+    const prevSessions = prevSessionsRef.current
+    const isSessionAdded = sessions.length > prevSessions.length
+
+    // 更新 ref
+    prevSessionsRef.current = sessions
+
+    // 只在会话被删除（而非新增）且当前激活会话不存在时才切换
     if (!active && sessions.length > 0 && !isSessionAdded) {
-      setActiveSession(sessions[0].id)
+      // 位置策略：优先激活右侧页签，没有则激活左侧
+      // 找到被删除页签在原数组中的索引位置
+      const deletedIndex = prevSessions.findIndex((s) => s.id === activeSession)
+
+      let targetIndex = 0
+      if (deletedIndex >= 0) {
+        // 优先选择右侧页签（原索引位置，因为左侧页签会左移）
+        // 如果右侧没有页签了（删除的是最后一个），则取最后一个页签
+        targetIndex = Math.min(deletedIndex, sessions.length - 1)
+      }
+
+      setActiveSession(sessions[targetIndex].id)
     }
-  }, [active, sessions])
+  }, [active, sessions, activeSession])
 
   // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
   const initializedSessionsRef = useRef<Set<string>>(new Set())
@@ -193,8 +208,6 @@ export function TerminalComponent({
 
   // ==================== 页签关闭处理：先销毁终端实例，依赖引用计数自动管理监控连接 ====================
   const handleCloseSession = (sessionId: string) => {
-    console.log(`[TerminalComponent] 关闭页签: ${sessionId}`)
-
     // 1. 从 Store 中销毁终端实例和 WebSocket
     destroySession(sessionId)
 
@@ -218,7 +231,6 @@ export function TerminalComponent({
   }
 
   const handleCloseOthers = (sessionId: string) => {
-    console.log(`[TerminalComponent] 关闭其他页签，保留: ${sessionId}`)
     // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
     // 销毁所有其他会话的终端实例，监控连接由引用计数自动管理
     sessions.forEach((session) => {
@@ -235,7 +247,6 @@ export function TerminalComponent({
   }
 
   const handleCloseAll = () => {
-    console.log(`[TerminalComponent] 关闭所有页签`)
     // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
     // 销毁所有会话的终端实例，监控连接由引用计数自动管理
     sessions.forEach((session) => {
@@ -259,8 +270,6 @@ export function TerminalComponent({
       // 连接成功，触发该页签的退出动画
       if (loadingSessionIds.has(sessionId)) {
         setLoaderStates(prev => ({ ...prev, [sessionId]: "exiting" }))
-      } else {
-        console.log(`[TerminalComponent] 会话 ${sessionId} 加载完成，但未在加载列表中`)
       }
     }
   }

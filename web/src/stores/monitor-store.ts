@@ -145,7 +145,6 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
 
   setConnection: (serverId: string, state: MonitorConnectionState) => {
     const currentRefCount = get().refCount.get(serverId) || 0
-    console.log(`[MonitorStore] 保存连接: ${serverId}, refCount: ${currentRefCount}`)
     set((storeState) => {
       const newConnections = new Map(storeState.connections)
       newConnections.set(serverId, state)
@@ -229,8 +228,6 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
       subscribers.add(callback)
       newSubscribers.set(serverId, subscribers)
 
-      console.log(`[MonitorStore] 注册订阅者: ${serverId}, refCount: ${newCount}, 订阅者数: ${subscribers.size}`)
-
       return {
         refCount: newRefCount,
         subscribers: newSubscribers
@@ -246,7 +243,6 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
         const subs = newSubscribers.get(serverId)
         if (subs) {
           subs.delete(callback)
-          console.log(`[MonitorStore] 取消订阅者: ${serverId}, 剩余订阅者: ${subs.size}`)
         }
 
         // 减少引用计数
@@ -254,11 +250,8 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
         const count = Math.max(0, (newRefCount.get(serverId) || 1) - 1)
         newRefCount.set(serverId, count)
 
-        console.log(`[MonitorStore] 引用计数减少: ${serverId}, refCount: ${count}`)
-
         // 如果引用计数归零，立即销毁连接（无延迟）
         if (count === 0) {
-          console.log(`[MonitorStore] 引用计数归零，立即销毁连接: ${serverId}`)
           // 注意：这里需要在状态更新后调用 destroyConnection
           // 使用 setTimeout 0 确保状态更新完成后再销毁
           setTimeout(() => get().destroyConnection(serverId), 0)
@@ -278,8 +271,6 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
       return
     }
 
-    console.log(`[MonitorStore] 分发消息: ${serverId}, 订阅者数: ${subscribers.size}`)
-
     // 通知所有订阅者
     subscribers.forEach((callback) => {
       try {
@@ -293,8 +284,6 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
   destroyConnection: (serverId: string) => {
     const connection = get().connections.get(serverId)
     if (!connection) return
-
-    console.log(`[MonitorStore] 销毁连接: ${serverId}`)
 
     // 1. 断开 WebSocket
     try {
@@ -330,7 +319,6 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
 
   destroyAll: () => {
     const connections = get().connections
-    console.log(`[MonitorStore] 清理所有监控连接，共 ${connections.size} 个`)
 
     // 销毁所有连接
     connections.forEach((connection, serverId) => {

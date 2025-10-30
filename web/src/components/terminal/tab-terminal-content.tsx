@@ -81,14 +81,6 @@ export function TabTerminalContent({
     : ''
   const monitorEnabled = !!(session.type !== 'quick' && session.isConnected)
 
-  // ==================== 调试日志：验证多例架构 ====================
-  console.log(`[TabTerminalContent] 渲染页签: ${session.id}`, {
-    serverId,
-    monitorEnabled,
-    isActive,
-    isMonitorOpen,
-  })
-
   return (
     <MonitorWebSocketProvider
       serverId={serverId}

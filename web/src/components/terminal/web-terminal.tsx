@@ -88,19 +88,6 @@ export function WebTerminal({
   )
 
   // ==================== WebSocket 连接管理 ====================
-  // 调试日志：查看传递给 useWebSocketConnection 的参数
-  console.log('[WebTerminal] useWebSocketConnection 参数:', {
-    sessionId,
-    serverId,
-    serverName,
-    host,
-    username,
-    isConnected,
-    hasTerminal: !!terminal,
-    terminalCols: terminal?.cols,
-    terminalRows: terminal?.rows,
-  })
-
   const { sendInput, resize } = useWebSocketConnection({
     sessionId,
     serverId,

@@ -15,6 +15,23 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  horizontalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { restrictToHorizontalAxis } from "@dnd-kit/modifiers"
 
 interface SessionTabBarProps {
   sessions: TerminalSession[]
@@ -42,6 +59,96 @@ type MenuState = {
 
 // 标签色彩算法暂不需要，后续如需按分组着色可恢复
 
+// 可排序的页签子组件
+interface SortableTabProps {
+  session: TerminalSession
+  isActive: boolean
+  onChangeActive: (id: string) => void
+  onCloseSession: (id: string) => void
+  onContextMenu: (e: React.MouseEvent, id: string) => void
+  onAuxClick: (e: React.MouseEvent, id: string, pinned?: boolean) => void
+  onDoubleClick: (id: string) => void
+}
+
+function SortableTab({
+  session: s,
+  isActive: active,
+  onChangeActive,
+  onCloseSession,
+  onContextMenu,
+  onAuxClick,
+  onDoubleClick,
+}: SortableTabProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: s.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  const statusColor =
+    s.status === "connected"
+      ? "bg-green-500"
+      : s.status === "reconnecting"
+      ? "bg-yellow-500 animate-pulse"
+      : "bg-red-500"
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      role="button"
+      onClick={() => onChangeActive(s.id)}
+      onContextMenu={(e) => onContextMenu(e, s.id)}
+      onAuxClick={(e) => onAuxClick(e, s.id, s.pinned)}
+      onDoubleClick={() => onDoubleClick(s.id)}
+      className={cn(
+        "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm cursor-grab active:cursor-grabbing",
+        active
+          ? "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 shadow-lg shadow-zinc-200/50 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50 dark:shadow-black/20"
+          : "bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 opacity-75 hover:opacity-100 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40",
+        s.pinned && "ring-1 ring-blue-500/20",
+        isDragging && "cursor-grabbing"
+      )}
+    >
+      {/* 状态指示点 */}
+      <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusColor)} />
+
+      <span className={cn(
+        "max-w-32 truncate text-xs font-medium transition-colors",
+        active ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-gray-400"
+      )}>
+        {s.serverName}
+      </span>
+
+      {/* 固定图标 */}
+      {s.pinned && (
+        <div className="absolute top-1 right-1 w-1 h-1 rounded-full bg-blue-400" />
+      )}
+
+      {!s.pinned && (
+        <button
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-red-500/20 hover:text-red-400 opacity-0 scale-90 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
+          onClick={(e) => { e.stopPropagation(); onCloseSession(s.id) }}
+          aria-label="关闭"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function SessionTabBar(props: SessionTabBarProps) {
   const {
     sessions,
@@ -62,6 +169,32 @@ export function SessionTabBar(props: SessionTabBarProps) {
 
   const [menu, setMenu] = useState<MenuState>({ open: false, x: 0, y: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // 客户端挂载状态（解决 DndContext 水合不匹配问题）
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // 溢出检测：判断页签是否超出容器
+  const [isOverflowing, setIsOverflowing] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const tabsContainerRef = useRef<HTMLDivElement>(null)
+
+  // 检测页签溢出
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (scrollContainerRef.current && tabsContainerRef.current) {
+        const isOverflow = tabsContainerRef.current.scrollWidth > scrollContainerRef.current.clientWidth
+        setIsOverflowing(isOverflow)
+      }
+    }
+
+    checkOverflow()
+    window.addEventListener('resize', checkOverflow)
+    return () => window.removeEventListener('resize', checkOverflow)
+  }, [sessions])
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -85,27 +218,40 @@ export function SessionTabBar(props: SessionTabBarProps) {
     setMenu({ open: true, x: e.clientX, y: e.clientY, targetId: id })
   }
 
-  // 拖拽排序
-  const dragIdRef = useRef<string | null>(null)
-  const onDragStart = (e: React.DragEvent, id: string) => {
-    dragIdRef.current = id
-    e.dataTransfer.effectAllowed = "move"
+  // 使用 @dnd-kit 配置拖拽传感器
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 移动8px后才激活拖拽，避免与点击事件冲突
+      },
+    })
+  )
+
+  // 拖拽活动状态
+  const [draggedSession, setDraggedSession] = useState<TerminalSession | null>(null)
+
+  // 拖拽结束处理
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    setDraggedSession(null)
+
+    if (!over || active.id === over.id) return
+
+    const oldIndex = sessions.findIndex((s) => s.id === active.id)
+    const newIndex = sessions.findIndex((s) => s.id === over.id)
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newOrder = arrayMove(sessions, oldIndex, newIndex).map((s) => s.id)
+      onReorder(newOrder)
+    }
   }
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = "move"
-  }
-  const onDrop = (e: React.DragEvent, dropId: string) => {
-    e.preventDefault()
-    const dragId = dragIdRef.current
-    if (!dragId || dragId === dropId) return
-    const order = sessions.map(s => s.id)
-    const from = order.indexOf(dragId)
-    const to = order.indexOf(dropId)
-    if (from === -1 || to === -1) return
-    order.splice(to, 0, order.splice(from, 1)[0])
-    dragIdRef.current = null
-    onReorder(order)
+
+  // 拖拽开始处理
+  const handleDragStart = (event: any) => {
+    const session = sessions.find((s) => s.id === event.active.id)
+    if (session) {
+      setDraggedSession(session)
+    }
   }
 
   // 去除状态图标，使用激活标签文字颜色表示状态
@@ -173,89 +319,170 @@ export function SessionTabBar(props: SessionTabBarProps) {
 
       {/* 页签栏（现代化设计） */}
       <div className={
-        "w-full border-b transition-colors bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/95 dark:to-black dark:border-white/5"
+        "w-full min-w-0 border-b transition-colors bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/95 dark:to-black dark:border-white/5"
       }>
-        <div className="flex items-center h-10 gap-0 px-2">
+        <div className="flex items-center h-10 gap-0 px-2 min-w-0 overflow-hidden">
           {/* Tabs 容器 */}
-          <div className="flex-1 overflow-x-auto scrollbar-hide">
-            <div className="flex items-center gap-1 min-h-0 py-1">
-            {sessions.map((s, idx) => {
-              const active = s.id === activeId
-              const statusColor =
-                s.status === "connected"
-                  ? "bg-green-500"
-                  : s.status === "reconnecting"
-                  ? "bg-yellow-500 animate-pulse"
-                  : "bg-red-500"
-              const statusClass =
-                s.status === "connected"
-                  ? "text-green-400"
-                  : s.status === "reconnecting"
-                  ? "text-yellow-400"
-                  : "text-red-400"
-              return (
-                      <div key={s.id}
-                        role="button"
-                        draggable
-                        onDragStart={(e) => onDragStart(e, s.id)}
-                        onDragOver={onDragOver}
-                        onDrop={(e) => onDrop(e, s.id)}
-                        onClick={() => onChangeActive(s.id)}
-                        onContextMenu={(e) => onContextMenu(e, s.id)}
-                        onAuxClick={(e) => onAuxClick(e, s.id, s.pinned)}
-                        onDoubleClick={() => onDoubleClick(s.id)}
+          <div ref={scrollContainerRef} className="flex-1 min-w-0 h-10 overflow-x-auto overflow-y-hidden scrollbar-custom pb-1">
+            {isMounted ? (
+              // 客户端渲染：带拖动功能
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                modifiers={[restrictToHorizontalAxis]}
+              >
+                <SortableContext
+                  items={sessions.map((s) => s.id)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  <div ref={tabsContainerRef} className="flex items-center gap-1 min-h-0 pt-1 w-max">
+                    {sessions.map((s) => (
+                      <SortableTab
+                        key={s.id}
+                        session={s}
+                        isActive={s.id === activeId}
+                        onChangeActive={onChangeActive}
+                        onCloseSession={onCloseSession}
+                        onContextMenu={onContextMenu}
+                        onAuxClick={onAuxClick}
+                        onDoubleClick={onDoubleClick}
+                      />
+                    ))}
+                    {/* 新建会话按钮：页签不溢出时显示 */}
+                    {!isOverflowing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className={cn(
-                          "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm",
-                          active
-                            ? "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 shadow-lg shadow-zinc-200/50 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50 dark:shadow-black/20"
-                            : "bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 opacity-75 hover:opacity-100 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40",
-                          s.pinned && "ring-1 ring-blue-500/20"
+                          "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
                         )}
-                        
+                        onClick={onNewSession}
+                        aria-label="新建会话"
                       >
-                        {/* 状态指示点 */}
-                        <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusColor)} />
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </SortableContext>
 
-                        <span className={cn(
-                          "max-w-32 truncate text-xs font-medium transition-colors",
-                          active ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-gray-400"
-                        )}>
-                          {s.serverName}
-                        </span>
+                {/* 拖动预览层 */}
+                <DragOverlay>
+                  {draggedSession ? (
+                    <div className={cn(
+                      "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm shadow-2xl",
+                      "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50",
+                      draggedSession.pinned && "ring-1 ring-blue-500/20"
+                    )}>
+                      {/* 状态指示点 */}
+                      <div className={cn(
+                        "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                        draggedSession.status === "connected"
+                          ? "bg-green-500"
+                          : draggedSession.status === "reconnecting"
+                          ? "bg-yellow-500"
+                          : "bg-red-500"
+                      )} />
+                      <span className="max-w-32 truncate text-xs font-medium text-zinc-900 dark:text-white">
+                        {draggedSession.serverName}
+                      </span>
+                      {draggedSession.pinned && (
+                        <div className="absolute top-1 right-1 w-1 h-1 rounded-full bg-blue-400" />
+                      )}
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            ) : (
+              // 服务端渲染：静态页签（无拖动功能）
+              <div ref={tabsContainerRef} className="flex items-center gap-1 min-h-0 pt-1 w-max">
+                {sessions.map((s) => {
+                  const active = s.id === activeId
+                  const statusColor =
+                    s.status === "connected"
+                      ? "bg-green-500"
+                      : s.status === "reconnecting"
+                      ? "bg-yellow-500 animate-pulse"
+                      : "bg-red-500"
 
-                        
+                  return (
+                    <div
+                      key={s.id}
+                      role="button"
+                      onClick={() => onChangeActive(s.id)}
+                      onContextMenu={(e) => onContextMenu(e, s.id)}
+                      onAuxClick={(e) => onAuxClick(e, s.id, s.pinned)}
+                      onDoubleClick={() => onDoubleClick(s.id)}
+                      className={cn(
+                        "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm",
+                        active
+                          ? "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 shadow-lg shadow-zinc-200/50 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50 dark:shadow-black/20"
+                          : "bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 opacity-75 hover:opacity-100 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40",
+                        s.pinned && "ring-1 ring-blue-500/20"
+                      )}
+                    >
+                      {/* 状态指示点 */}
+                      <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusColor)} />
 
-                        {/* 固定图标 */}
-                        {s.pinned && (
-                          <div className="absolute top-1 right-1 w-1 h-1 rounded-full bg-blue-400" />
-                        )}
+                      <span className={cn(
+                        "max-w-32 truncate text-xs font-medium transition-colors",
+                        active ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-gray-400"
+                      )}>
+                        {s.serverName}
+                      </span>
 
-                        {!s.pinned && (
-                          <button
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-red-500/20 hover:text-red-400 opacity-0 scale-90 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
-                            onClick={(e) => { e.stopPropagation(); onCloseSession(s.id) }}
-                            aria-label="关闭"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-              )
-            })}
-            {/* 新建会话按钮：放在标签之后 */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
-              )}
-              onClick={onNewSession}
-              aria-label="新建会话"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+                      {/* 固定图标 */}
+                      {s.pinned && (
+                        <div className="absolute top-1 right-1 w-1 h-1 rounded-full bg-blue-400" />
+                      )}
+
+                      {!s.pinned && (
+                        <button
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-red-500/20 hover:text-red-400 opacity-0 scale-90 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
+                          onClick={(e) => { e.stopPropagation(); onCloseSession(s.id) }}
+                          aria-label="关闭"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+                {/* 新建会话按钮：页签不溢出时显示 */}
+                {!isOverflowing && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
+                    )}
+                    onClick={onNewSession}
+                    aria-label="新建会话"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
-        </div>
+
+          {/* 新建会话按钮：页签溢出时固定显示 */}
+          {isOverflowing && (
+            <div className="flex items-center gap-1 px-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
+                )}
+                onClick={onNewSession}
+                aria-label="新建会话"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
 
           {onOpenSettings && (
             <div className={"flex items-center gap-1 px-2 border-l border-zinc-200 dark:border-white/5"}>

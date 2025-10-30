@@ -67,31 +67,13 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     const currentInstance = getTerminal(sessionId)
     const terminalInstance = currentInstance?.terminal
 
-    // 调试日志：查看 useEffect 执行时的状态
-    console.log(`[useWebSocketConnection] useEffect 执行:`, {
-      sessionId,
-      serverId,
-      isConnected,
-      hasTerminalInstance: !!terminalInstance,
-      hasWsRef: !!wsRef.current,
-      hasWsInStore: !!currentInstance?.wsConnection,
-      storeServerId: currentInstance?.serverId,
-    })
-
     // 只有满足以下条件才创建连接：
     // 1. 有 serverId
     // 2. 服务器已连接
     // 3. 终端实例已创建
     if (!serverId || !isConnected || !terminalInstance) {
-      console.log(`[useWebSocketConnection] 条件检查失败:`, {
-        hasServerId: !!serverId,
-        serverIdValue: serverId,
-        isConnected,
-        hasTerminalInstance: !!terminalInstance,
-      })
       // 如果连接断开，清理现有连接
       if (wsRef.current) {
-        console.log(`[useWebSocketConnection] 清理 WebSocket 连接: ${sessionId}`)
         wsRef.current.disconnect()
         wsRef.current = null
         updateWebSocket(sessionId, null)
@@ -101,20 +83,16 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
 
     // 检查是否已有连接且 serverId 未变化（从 Store 和 ref 双重检查）
     if (wsRef.current && currentInstance?.serverId === serverId) {
-      console.log(`[useWebSocketConnection] 复用现有 WebSocket 连接: ${sessionId} -> ${serverId}`)
       return
     }
 
     // 如果 Store 中有连接且 serverId 匹配，同步到 ref
     if (currentInstance?.wsConnection && currentInstance.serverId === serverId) {
-      console.log(`[useWebSocketConnection] 从 Store 恢复 WebSocket 连接: ${sessionId}`)
       wsRef.current = currentInstance.wsConnection
       return
     }
 
     // 创建新连接
-    console.log(`[useWebSocketConnection] 创建新 WebSocket 连接: ${sessionId} -> ${serverId}`)
-
     try {
       onLoadingChangeRef.current?.(true)
 
@@ -179,7 +157,6 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     return () => {
       // 注意：这里不调用 disconnect()，连接会保持活跃
       // 只有在页签关闭时才会通过 Store.destroySession() 真正断开
-      console.log(`[useWebSocketConnection] 组件卸载，保持 WebSocket 连接: ${sessionId}`)
     }
     // 依赖项说明：
     // - sessionId: 会话变化时需要重新连接

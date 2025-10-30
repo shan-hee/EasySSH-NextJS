@@ -149,10 +149,12 @@
   .scrollbar-custom {
     scrollbar-width: thin;
     scrollbar-color: oklch(0.65 0 0 / 50%) transparent;
+    /* 不使用 scrollbar-gutter，避免浏览器按系统厚度(约14–17px)预留空间导致行高被撑大 */
   }
 
   .scrollbar-custom::-webkit-scrollbar {
     width: 6px;
+    height: 4px; /* 横向滚动条高度，配合 Tab 栏预留 4px */
   }
 
   .scrollbar-custom::-webkit-scrollbar-track {
@@ -166,6 +168,16 @@
 
   .scrollbar-custom::-webkit-scrollbar-thumb:hover {
     background-color: oklch(0.65 0 0 / 60%);
+  }
+
+  /* 隐藏滚动条样式别名（兼容性） */
+  .scrollbar-hide {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* WebKit */
   }
 
   /* ===== 图片防闪烁优化 ===== */

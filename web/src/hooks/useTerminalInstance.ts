@@ -47,8 +47,6 @@ export function useTerminalInstance(
 
     // 如果实例已存在，直接挂载
     if (existingInstance) {
-      console.log(`[useTerminalInstance] 复用终端实例: ${sessionId}`)
-
       // 检查是否已经挂载到当前容器
       if (!existingInstance.isMounted || existingInstance.container !== containerRef.current) {
         try {
@@ -67,7 +65,6 @@ export function useTerminalInstance(
 
     // 创建新终端实例
     initializingRef.current = true
-    console.log(`[useTerminalInstance] 创建新终端实例: ${sessionId}`)
 
     const initTerminal = async () => {
       try {
@@ -134,7 +131,6 @@ export function useTerminalInstance(
             terminal.loadAddon(webglAddon)
           } catch (error) {
             // WebGL 不可用时自动降级到 Canvas 渲染器
-            console.log(`[useTerminalInstance] WebGL 不可用，使用 Canvas 渲染器`)
           }
         })
 
@@ -151,8 +147,6 @@ export function useTerminalInstance(
         // 保存到全局 Store
         setTerminal(sessionId, instanceState)
         setTerminalReady(true)
-
-        console.log(`[useTerminalInstance] 终端实例创建完成: ${sessionId}`)
       } catch (error) {
         console.error(`[useTerminalInstance] 创建终端实例失败:`, error)
       } finally {
@@ -164,7 +158,6 @@ export function useTerminalInstance(
 
     // 组件卸载时，只标记为未挂载，不销毁实例
     return () => {
-      console.log(`[useTerminalInstance] 组件卸载，标记终端为未挂载: ${sessionId}`)
       updateMountState(sessionId, false)
       setTerminalReady(false)
     }

@@ -121,8 +121,6 @@ export function useMonitorWebSocket({
   useEffect(() => {
     if (!enabled || !serverId || !shouldUseSubscription) return
 
-    console.log(`[useMonitorWebSocket] 注册订阅者: ${serverId}`)
-
     // 注册订阅者，接收监控数据更新
     const unsubscribe = subscribe(serverId, (newMetrics) => {
       // 将 Store 的 MonitorMetrics 转换为 Hook 的 MonitorMetrics 格式
@@ -190,7 +188,6 @@ export function useMonitorWebSocket({
 
     // 组件卸载时取消订阅
     return () => {
-      console.log(`[useMonitorWebSocket] 取消订阅者: ${serverId}`)
       unsubscribe()
     }
   }, [enabled, serverId, shouldUseSubscription, subscribe])
@@ -207,7 +204,6 @@ export function useMonitorWebSocket({
     if (storeConnection?.ws) {
       const ws = storeConnection.ws
       if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
-        console.log(`[useMonitorWebSocket] 复用现有连接（订阅模式）: ${serverId}`)
         // 注意：不再设置 wsRef.current，而是依赖订阅机制接收数据
         // 订阅逻辑已在上面的 useEffect 中处理
         return
@@ -216,7 +212,6 @@ export function useMonitorWebSocket({
 
     // React Strict Mode 防护：避免重复连接
     if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
-      console.log('[useMonitorWebSocket] 连接已存在，跳过重复连接');
       return;
     }
 
@@ -252,7 +247,6 @@ export function useMonitorWebSocket({
         createdAt: Date.now(),
         lastUpdateAt: Date.now(),
       })
-      console.log(`[useMonitorWebSocket] 创建新监控连接并保存到 Store: ${serverId}`)
 
       // 连接成功
       ws.onopen = () => {
@@ -566,7 +560,6 @@ export function useMonitorWebSocket({
 
       // ==================== 核心修复：组件卸载时不断开连接 ====================
       // 连接会保持活跃，只有在页签关闭时才会通过 Store.destroyConnection() 真正断开
-      console.log(`[useMonitorWebSocket] 组件卸载，保持监控连接: ${serverId}`)
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, serverId, interval]); // 添加 interval 依赖，当间隔改变时重新连接

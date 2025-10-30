@@ -1046,15 +1046,15 @@ export default function AutomationBatchPage() {
 
  {/* 脚本库对话框 */}
  <Dialog open={isScriptLibraryOpen} onOpenChange={setIsScriptLibraryOpen}>
- <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
- <DialogHeader>
+ <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+ <DialogHeader className="shrink-0">
  <DialogTitle>脚本库</DialogTitle>
  <DialogDescription>
  从已保存的脚本中选择一个
  </DialogDescription>
  </DialogHeader>
 
- <div className="space-y-4 py-4">
+ <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  <div className="relative">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
@@ -1114,7 +1114,7 @@ export default function AutomationBatchPage() {
  </div>
  </div>
 
- <DialogFooter>
+ <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsScriptLibraryOpen(false)}>
  取消
  </Button>

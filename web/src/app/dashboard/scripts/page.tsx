@@ -475,13 +475,13 @@ export default function ScriptsPage() {
  </PageHeader>
 
  {loading ? (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
  <SkeletonTable rows={8} columns={4} showActions />
  </div>
  ) : (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
  {/* 搜索和筛选 */}
- <div className="flex flex-col gap-4">
+ <div className="flex flex-col gap-4 shrink-0">
  <div className="flex items-center gap-4">
  <div className="relative flex-1 max-w-md">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -518,7 +518,8 @@ export default function ScriptsPage() {
  </div>
 
  {/* 脚本列表 */}
- <Card>
+ <Card className="flex-1 min-h-0 flex flex-col">
+ <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  <Table>
  <TableHeader>
  <TableRow>
@@ -625,21 +626,22 @@ export default function ScriptsPage() {
  )}
  </TableBody>
  </Table>
+ </div>
  </Card>
  </div>
  )}
 
  {/* 新建脚本弹窗 */}
  <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
- <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
- <DialogHeader>
+ <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+ <DialogHeader className="shrink-0">
  <DialogTitle>新建脚本</DialogTitle>
  <DialogDescription>
  创建一个新的脚本模板，可以在任务中使用
  </DialogDescription>
  </DialogHeader>
 
- <div className="space-y-4 py-4">
+ <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  {/* 脚本名称 */}
  <div className="space-y-2">
  <Label htmlFor="script-name">
@@ -766,7 +768,7 @@ export default function ScriptsPage() {
  </div>
  </div>
 
- <DialogFooter>
+ <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
  取消
  </Button>
@@ -779,15 +781,15 @@ export default function ScriptsPage() {
 
  {/* 编辑脚本弹窗 */}
  <Dialog open={isEditDialogOpen} onOpenChange={handleCloseEditDialog}>
- <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
- <DialogHeader>
+ <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+ <DialogHeader className="shrink-0">
  <DialogTitle>编辑脚本</DialogTitle>
  <DialogDescription>
  修改脚本信息和内容
  </DialogDescription>
  </DialogHeader>
 
- <div className="space-y-4 py-4">
+ <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  {/* 脚本名称 */}
  <div className="space-y-2">
  <Label htmlFor="edit-script-name">
@@ -914,7 +916,7 @@ export default function ScriptsPage() {
  </div>
  </div>
 
- <DialogFooter>
+ <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
  取消
  </Button>

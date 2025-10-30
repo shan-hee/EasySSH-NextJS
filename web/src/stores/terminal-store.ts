@@ -98,8 +98,6 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
     const instance = get().terminals.get(sessionId)
     if (!instance) return
 
-    console.log(`[TerminalStore] 销毁会话: ${sessionId}`)
-
     // 1. 断开 WebSocket
     if (instance.wsConnection) {
       try {
@@ -126,7 +124,6 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
 
   destroyAll: () => {
     const terminals = get().terminals
-    console.log(`[TerminalStore] 清理所有终端实例，共 ${terminals.size} 个`)
 
     // 销毁所有终端实例
     terminals.forEach((instance, sessionId) => {

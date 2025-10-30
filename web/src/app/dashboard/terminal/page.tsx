@@ -295,7 +295,7 @@ export default function TerminalPage() {
  // if (sessions.length === 0) { ... }
 
  return (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0 min-w-0 overflow-hidden">
  <TerminalComponent
  sessions={sessions}
  onNewSession={handleNewSession}

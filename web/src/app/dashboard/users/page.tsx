@@ -351,9 +351,9 @@ export default function UsersPage() {
  </PageHeader>
 
  {loading ? (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
  {/* 统计卡片骨架屏 */}
- <div className="grid gap-4 md:grid-cols-4">
+ <div className="grid gap-4 md:grid-cols-4 shrink-0">
  <SkeletonCard showHeader={false} lines={2} />
  <SkeletonCard showHeader={false} lines={2} />
  <SkeletonCard showHeader={false} lines={2} />
@@ -363,9 +363,9 @@ export default function UsersPage() {
  <SkeletonTable rows={10} columns={3} showActions />
  </div>
  ) : (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
  {/* 统计卡片 */}
- <div className="grid gap-4 md:grid-cols-4">
+ <div className="grid gap-4 md:grid-cols-4 shrink-0">
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
  <CardTitle className="text-sm font-medium">总用户数</CardTitle>
@@ -412,7 +412,7 @@ export default function UsersPage() {
  </div>
 
  {/* 搜索和筛选 */}
- <div className="flex items-center gap-4">
+ <div className="flex items-center gap-4 shrink-0">
  <div className="relative flex-1 max-w-md">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
@@ -437,7 +437,8 @@ export default function UsersPage() {
  </div>
 
  {/* 用户列表 */}
- <Card>
+ <Card className="flex-1 min-h-0 flex flex-col">
+ <CardContent className="flex-1 overflow-y-auto scrollbar-custom p-0">
  <Table>
  <TableHeader>
  <TableRow>
@@ -515,6 +516,7 @@ export default function UsersPage() {
  )}
  </TableBody>
  </Table>
+ </CardContent>
  </Card>
  </div>
  )}
