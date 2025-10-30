@@ -69,6 +69,7 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
   const [ready, setReady] = React.useState(false)
+  const [isServerDefaultOpen] = React.useState(defaultOpen)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -92,6 +93,9 @@ function SidebarProvider({
   // Read persisted state on first mount to keep sidebar state across refreshes
   // useLayoutEffect helps avoid visible flicker before first paint
   React.useLayoutEffect(() => {
+    // 如果通过 openProp 控制,跳过 Cookie 读取
+    if (openProp !== undefined) return
+
     try {
       if (typeof document === "undefined") return
       const match = document.cookie
@@ -99,7 +103,10 @@ function SidebarProvider({
         .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
       if (match) {
         const persisted = match.split("=")[1] === "true"
-        _setOpen(persisted)
+        // 只在与服务端传入的 defaultOpen 不同时才更新,避免水合不匹配
+        if (persisted !== isServerDefaultOpen) {
+          _setOpen(persisted)
+        }
       }
     } catch (_) {
       // no-op if cookie parsing fails
@@ -359,11 +366,10 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
       data-slot="sidebar-inset"
-      className={cn(
-        "bg-background relative flex w-full min-w-0 flex-1 flex-col overflow-hidden",
+      className={`bg-background relative flex w-full min-w-0 flex-1 flex-col overflow-hidden ${cn(
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
-      )}
+      )}`}
       {...props}
     />
   )

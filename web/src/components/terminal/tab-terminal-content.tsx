@@ -269,17 +269,21 @@ export function TabTerminalContent({
             host={session.host || ''}
             username={session.username || ''}
             isConnected={session.isConnected || false}
+            sessionId={session.id}
+            sessionLabel={session.label || session.serverName || 'Session'}
             currentPath={sftpSession.currentPath}
             files={sftpSession.files}
             isLoading={sftpSession.isLoading}
             error={sftpSession.error}
-            onNavigate={sftpSession.navigateTo}
+            onNavigate={sftpSession.navigate}
             onRefresh={sftpSession.refresh}
             onUpload={sftpSession.uploadFiles}
             onDownload={sftpSession.downloadFile}
             onDelete={sftpSession.deleteItem}
             onRename={sftpSession.renameItem}
             onCreateFolder={sftpSession.createFolder}
+            onReadFile={sftpSession.readFile}
+            onSaveFile={sftpSession.saveFile}
           />
         )}
 

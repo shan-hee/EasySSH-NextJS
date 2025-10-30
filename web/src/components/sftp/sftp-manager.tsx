@@ -194,6 +194,7 @@ export function SftpManager(props: SftpManagerProps) {
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [isDragging, setIsDragging] = useState(false)
+  const [dragCounter, setDragCounter] = useState(0)
   const [viewMode, setViewMode] = useState<"grid" | "list">("list") // 默认列表视图
   const [showHidden, setShowHidden] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
@@ -589,6 +590,7 @@ export function SftpManager(props: SftpManagerProps) {
 
     // 只有外部文件才显示上传提示
     if (!draggedFileName && e.dataTransfer.types.includes('Files')) {
+      setDragCounter(prev => prev + 1)
       setIsDragging(true)
     }
   }
@@ -596,9 +598,14 @@ export function SftpManager(props: SftpManagerProps) {
   const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    if (e.currentTarget === dropZoneRef.current) {
-      setIsDragging(false)
-    }
+
+    setDragCounter(prev => {
+      const newCount = prev - 1
+      if (newCount === 0) {
+        setIsDragging(false)
+      }
+      return newCount
+    })
   }
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -610,6 +617,7 @@ export function SftpManager(props: SftpManagerProps) {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
+    setDragCounter(0) // 重置计数器
 
     // 检查是否是跨会话拖拽
     try {
@@ -748,7 +756,7 @@ export function SftpManager(props: SftpManagerProps) {
 
   // 完成编辑会话标签
   const finishEditSessionLabel = () => {
-    if (tempSessionLabel.trim() && onRenameSession) {
+    if (tempSessionLabel?.trim() && onRenameSession) {
       onRenameSession(tempSessionLabel.trim())
     }
     setEditingSessionLabel(false)
@@ -1161,28 +1169,6 @@ export function SftpManager(props: SftpManagerProps) {
             "h-4 w-px mx-1 bg-zinc-300 dark:bg-zinc-800/50",
           )} />
 
-          {/* 路径导航工具 */}
-          {/* 返回上级目录按钮 */}
-          {pathSegments.length > 0 && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
-              )}
-              onClick={() =>
-                onNavigate(pathSegments.slice(0, -1).join("/") || "/")
-              }
-              title="返回上级目录"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-            </Button>
-          )}
-
-          <div className={cn(
-            "h-4 w-px mx-1 bg-zinc-300 dark:bg-zinc-800/50",
-          )} />
-
           {/* 路径导航/编辑框 - 混合模式 */}
           <div className="flex items-center gap-2 ml-2 flex-1 min-w-0">
             <div className="relative flex-1 min-w-0">
@@ -1375,6 +1361,24 @@ export function SftpManager(props: SftpManagerProps) {
 
       {/* 搜索栏 */}
       <div className="px-3 py-2 border-b flex items-center gap-2">
+        {/* 返回上级目录按钮 */}
+        {pathSegments.length > 0 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+            )}
+            onClick={() => {
+              const parentPath = pathSegments.slice(0, -1).join("/")
+              onNavigate(parentPath ? `/${parentPath}` : "/")
+            }}
+            title="返回上级目录"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
         <div className="relative flex-1 max-w-xs">
           <Search className={cn(
             "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500",

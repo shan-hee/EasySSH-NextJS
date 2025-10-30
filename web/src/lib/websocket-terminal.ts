@@ -172,7 +172,21 @@ export class TerminalWebSocket {
     this.stopPing()
 
     if (this.ws) {
-      this.ws.close(1000, "客户端主动断开")
+      const readyState = this.ws.readyState
+
+      // 根据 WebSocket 状态执行不同的清理逻辑
+      if (readyState === WebSocket.OPEN || readyState === WebSocket.CLOSING) {
+        // 连接已建立或正在关闭,安全关闭连接
+        this.ws.close(1000, "客户端主动断开")
+      } else if (readyState === WebSocket.CONNECTING) {
+        // 连接正在建立中,清除所有回调防止后续执行
+        this.ws.onopen = null
+        this.ws.onmessage = null
+        this.ws.onerror = null
+        this.ws.onclose = null
+      }
+      // CLOSED 状态无需处理
+
       this.ws = null
     }
   }
