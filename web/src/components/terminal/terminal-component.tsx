@@ -26,12 +26,6 @@ import {
   TerminalSettingsDialog,
   type TerminalSettings,
 } from "./terminal-settings-dialog"
-import { FileManagerPanel } from "./file-manager-panel"
-import { NetworkLatencyPopover } from "./network-latency-popover"
-import { MonitorPanel } from "./monitor/MonitorPanel"
-import { AiAssistantPanel } from "./ai-assistant-panel"
-import { MonitorWebSocketProvider } from "./monitor/contexts/MonitorWebSocketContext"
-import { useSftpSession } from "@/hooks/useSftpSession"
 import { TabTerminalContent } from "./tab-terminal-content"
 import { useTabUIStore } from "@/stores/tab-ui-store"
 
@@ -75,17 +69,13 @@ export function TerminalComponent({
   const [loadingSessionIds, setLoadingSessionIds] = useState<Set<string>>(new Set())
   const [loaderStates, setLoaderStates] = useState<Record<string, "entering" | "loading" | "exiting">>({})
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  // 文件管理器挂载容器与锚点（终端内部悬浮、位于工具栏下方）
-  const toolbarRef = useRef<HTMLDivElement>(null)
-  const floatingPanelRootRef = useRef<HTMLDivElement>(null)
-  const [toolbarHeight, setToolbarHeight] = useState(0)
 
   // ==================== 从 Store 获取销毁方法 ====================
   const destroySession = useTerminalStore(state => state.destroySession)
-  // ==================== P0 修复：移除 destroyMonitorConnection 的引用 ====================
-  // 监控连接现在完全由 useMonitorWebSocket 的引用计数自动管理
-  // const destroyMonitorConnection = useMonitorStore(state => state.destroyConnection) // ❌ 不再需要
   const deleteTabState = useTabUIStore(state => state.deleteTabState)
+
+  // ==================== 获取活跃会话 ====================
+  const active = sessions.find((s) => s.id === activeSession)
 
   // 当外部传入 activeSessionId 时，切换激活的会话
   useEffect(() => {
@@ -132,9 +122,6 @@ export function TerminalComponent({
       clearShortcut: 'Ctrl+L',
     }
   })
-
-  // 获取当前活跃会话
-  const active = sessions.find((s) => s.id === activeSession)
 
   // 如果当前激活的会话不存在（被删除），自动切换到合适的会话
   // 使用 ref 跟踪上一次的 sessions 数组，用于找到被删除页签的位置
@@ -322,31 +309,6 @@ export function TerminalComponent({
   // AI 助手快捷键（Ctrl+K）已移至 TabTerminalContent 组件内部
   // 每个页签独立管理快捷键
 
-  // SFTP 会话管理 - 为当前激活的终端会话
-  // 性能优化：只在文件管理器打开时才加载 SFTP 数据
-  // 避免在终端连接时就立即发起 SFTP 列表请求（500-800ms）
-  const sftpSession = useSftpSession(
-    active && active.type !== 'quick' && useTabUIStore.getState().getTabState(active.id).isFileManagerOpen
-      ? String(active.serverId)
-      : '',
-    '/root'
-  )
-
-  // 监听工具栏高度变化，确保文件管理器面板紧贴其下方
-  useEffect(() => {
-    const el = toolbarRef.current
-    if (!el) return
-    const update = () => setToolbarHeight(el.offsetHeight || 0)
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    window.addEventListener('resize', update)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [toolbarRef])
-
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-black' : ''}`}>
       {/* 全屏时隐藏面包屑头部 */}
@@ -393,18 +355,6 @@ export function TerminalComponent({
         />
 
         <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* 加载动画覆盖层 - 覆盖工具栏和终端内容区 */}
-        {effectiveIsLoading && active && active.type !== 'quick' && (
-          <div className="absolute inset-0 z-[60]">
-            <ConnectionLoader
-              serverName={`${active.username}@${active.host}`}
-              message="正在连接"
-              state={loaderStates[active.id] || "entering"}
-              onAnimationComplete={() => handleAnimationComplete(active.id)}
-            />
-          </div>
-        )}
-
         {sessions.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-zinc-500">
             暂无活动会话，使用右上角 + 新建
@@ -425,7 +375,8 @@ export function TerminalComponent({
                   )}
                   style={{
                     visibility: isActive ? 'visible' : 'hidden',
-                    zIndex: isActive ? 1 : 0,
+                    zIndex: isActive ? 10 : 0,
+                    pointerEvents: isActive ? 'auto' : 'none',
                   }}
                 >
                   <TabTerminalContent
@@ -433,6 +384,8 @@ export function TerminalComponent({
                     isActive={isActive}
                     settings={settings}
                     effectiveIsLoading={effectiveIsLoading && isActive}
+                    loaderState={loaderStates[session.id] || "entering"}
+                    onAnimationComplete={() => handleAnimationComplete(session.id)}
                     isFullscreen={isFullscreen}
                     servers={servers}
                     serversLoading={serversLoading}
@@ -447,15 +400,6 @@ export function TerminalComponent({
             })}
           </Tabs>
         )}
-
-        {/* AI 助手悬浮输入框 - 终端内部悬浮 */}
-        {/* 只在非加载状态时渲染，避免与 ConnectionLoader 动画冲突 */}
-        {active && active.type !== 'quick' && !effectiveIsLoading && (
-          <AiAssistantPanel
-            isOpen={useTabUIStore.getState().getTabState(active.id).isAiInputOpen}
-            onClose={() => useTabUIStore.getState().setTabState(active.id, { isAiInputOpen: false })}
-          />
-        )}
         </div>
       </div>
 
@@ -466,36 +410,6 @@ export function TerminalComponent({
         settings={settings}
         onSettingsChange={handleSettingsChange}
       />
-
-      {/* 文件管理器面板 */}
-      {active && active.type !== 'quick' && (
-        <FileManagerPanel
-          isOpen={useTabUIStore.getState().getTabState(active.id).isFileManagerOpen}
-          onClose={() => useTabUIStore.getState().setTabState(active.id, { isFileManagerOpen: false })}
-          mountContainer={floatingPanelRootRef.current || undefined}
-          anchorTop={toolbarHeight}
-          serverId={Number(active.serverId)}
-          serverName={active.serverName || ''}
-          host={active.host || ''}
-          username={active.username || ''}
-          isConnected={active.isConnected || false}
-          currentPath={sftpSession.currentPath}
-          files={sftpSession.files}
-          sessionId={active.id}
-          sessionLabel={active.serverName || ''}
-          onNavigate={sftpSession.navigate}
-          onUpload={sftpSession.uploadFiles}
-          onDownload={sftpSession.downloadFile}
-          onDelete={sftpSession.deleteFile}
-          onCreateFolder={sftpSession.createFolder}
-          onCreateFile={sftpSession.createFile}
-          onRename={sftpSession.renameFile}
-          onDisconnect={() => useTabUIStore.getState().setTabState(active.id, { isFileManagerOpen: false })}
-          onRefresh={sftpSession.refresh}
-          onReadFile={sftpSession.readFile}
-          onSaveFile={sftpSession.saveFile}
-        />
-      )}
     </div>
   )
 }

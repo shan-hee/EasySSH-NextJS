@@ -14,6 +14,10 @@ import { NetworkLatencyPopover } from './network-latency-popover'
 import { MonitorPanel } from './monitor/MonitorPanel'
 import { WebTerminal } from './web-terminal'
 import { QuickConnect, QuickServer } from './quick-connect'
+import { ConnectionLoader } from './connection-loader'
+import { FileManagerPanel } from './file-manager-panel'
+import { AiAssistantPanel } from './ai-assistant-panel'
+import { useSftpSession } from '@/hooks/useSftpSession'
 import { cn } from '@/lib/utils'
 import { useTabUIStore } from '@/stores/tab-ui-store'
 import type { TerminalSession } from './types'
@@ -24,6 +28,8 @@ interface TabTerminalContentProps {
   isActive: boolean
   settings: TerminalSettings
   effectiveIsLoading: boolean
+  loaderState: "entering" | "loading" | "exiting"
+  onAnimationComplete: () => void
   isFullscreen: boolean
   servers: QuickServer[]
   serversLoading?: boolean
@@ -39,6 +45,8 @@ export function TabTerminalContent({
   isActive,
   settings,
   effectiveIsLoading,
+  loaderState,
+  onAnimationComplete,
   isFullscreen,
   servers,
   serversLoading,
@@ -48,8 +56,9 @@ export function TabTerminalContent({
   onToggleSettings,
   onStartConnectionFromQuick,
 }: TabTerminalContentProps) {
-  // 工具栏引用
+  // 工具栏引用和浮动面板根容器
   const toolbarRef = useRef<HTMLDivElement>(null)
+  const floatingPanelRootRef = useRef<HTMLDivElement>(null)
   const [toolbarHeight, setToolbarHeight] = useState(0)
 
   // 从 Store 获取当前页签的 UI 状态
@@ -59,6 +68,12 @@ export function TabTerminalContent({
   const isMonitorOpen = tabState.isMonitorOpen
   const isFileManagerOpen = tabState.isFileManagerOpen
   const isAiInputOpen = tabState.isAiInputOpen
+
+  // SFTP 会话管理
+  const sftpSession = useSftpSession(
+    isFileManagerOpen && session.type !== 'quick' ? String(session.serverId) : '',
+    '/root'
+  )
 
   // 监听工具栏高度变化
   useEffect(() => {
@@ -88,14 +103,27 @@ export function TabTerminalContent({
       interval={settings.monitorInterval || 2}
       latencyIntervalMs={5000}
     >
-      <div className="flex-1 flex flex-col h-full">
+      <div className="flex-1 flex flex-col h-full relative">
+        {/* 加载动画覆盖层 - 覆盖整个页签内容 */}
+        {effectiveIsLoading && session.type !== 'quick' && (
+          <div className="absolute inset-0 z-[60]">
+            <ConnectionLoader
+              serverName={`${session.username}@${session.host}`}
+              message="正在连接"
+              state={loaderState}
+              onAnimationComplete={onAnimationComplete}
+            />
+          </div>
+        )}
+
         {/* 工具栏 - 只在非快速连接且非加载时显示 */}
         {session.type !== 'quick' && !effectiveIsLoading && (
           <div
             ref={toolbarRef}
             className={cn(
               'border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors',
-              'bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30'
+              'bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30',
+              'relative z-10'
             )}
           >
             {/* 左侧工具图标组 */}
@@ -191,6 +219,9 @@ export function TabTerminalContent({
 
           {/* 终端区域 */}
           <div className="flex-1 min-w-0 relative">
+            {/* 文件管理器悬浮挂载根，位于终端容器内部 */}
+            <div ref={floatingPanelRootRef} className="absolute inset-0 pointer-events-none" />
+
             {session.type === 'quick' ? (
               <QuickConnect
                 servers={servers}
@@ -225,6 +256,40 @@ export function TabTerminalContent({
             )}
           </div>
         </div>
+
+        {/* 文件管理器面板 - 渲染到 floatingPanelRootRef */}
+        {session.type !== 'quick' && (
+          <FileManagerPanel
+            isOpen={isFileManagerOpen}
+            onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
+            mountContainer={floatingPanelRootRef.current || undefined}
+            anchorTop={toolbarHeight}
+            serverId={Number(session.serverId)}
+            serverName={session.serverName || ''}
+            host={session.host || ''}
+            username={session.username || ''}
+            isConnected={session.isConnected || false}
+            currentPath={sftpSession.currentPath}
+            files={sftpSession.files}
+            isLoading={sftpSession.isLoading}
+            error={sftpSession.error}
+            onNavigate={sftpSession.navigateTo}
+            onRefresh={sftpSession.refresh}
+            onUpload={sftpSession.uploadFiles}
+            onDownload={sftpSession.downloadFile}
+            onDelete={sftpSession.deleteItem}
+            onRename={sftpSession.renameItem}
+            onCreateFolder={sftpSession.createFolder}
+          />
+        )}
+
+        {/* AI 助手面板 */}
+        {session.type !== 'quick' && !effectiveIsLoading && (
+          <AiAssistantPanel
+            isOpen={isAiInputOpen}
+            onClose={() => setTabState(session.id, { isAiInputOpen: false })}
+          />
+        )}
       </div>
     </MonitorWebSocketProvider>
   )
