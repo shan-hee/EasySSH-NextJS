@@ -14,6 +14,7 @@ import {
   ChartContainer,
   ChartTooltip,
 } from "@/components/ui/chart";
+import { AnimatedActiveDot } from './AnimatedActiveDot';
 
 interface CPUChartProps {
   data: CPUData[];
@@ -163,13 +164,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
                 stroke="var(--color-usage)"
                 strokeWidth={2}
                 dot={false}
-                activeDot={{
-                  r: 4,
-                  strokeWidth: 0,
-                  style: {
-                    transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
-                  }
-                }}
+                activeDot={<AnimatedActiveDot r={3} animationDuration={300} />}
                 animationDuration={300}
                 animationEasing="ease-out"
                 isAnimationActive={true}

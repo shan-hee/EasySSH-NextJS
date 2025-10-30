@@ -14,6 +14,7 @@ import {
   ChartContainer,
   ChartTooltip,
 } from "@/components/ui/chart";
+import { AnimatedActiveDot } from './AnimatedActiveDot';
 
 interface NetworkChartProps {
   data: NetworkData[];
@@ -61,9 +62,13 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
   }));
 
   // 计算Y轴的最大值用于显示刻度
-  const maxValue = chartData.length > 0
-    ? Math.max(...chartData.map(d => Math.max(d.download, d.upload)), 100)
-    : 100;
+  // 找出实际数据的最大值
+  const dataMax = chartData.length > 0
+    ? Math.max(...chartData.map(d => Math.max(d.download, d.upload)))
+    : 0;
+
+  // 为 Y 轴添加一些上方留白（增加 20%），最小值为 1（避免除零）
+  const maxValue = Math.max(Math.ceil(dataMax * 1.2), 1);
 
   const yAxisTicks = [
     0,
@@ -142,7 +147,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
                 tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                 interval={getXAxisInterval()}
               />
-              <YAxis hide />
+              <YAxis hide domain={[0, maxValue]} />
               <ChartTooltip
                 cursor={false}
                 content={({ active, payload, label }) => {
@@ -181,13 +186,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
                 stroke="var(--color-download)"
                 strokeWidth={2}
                 dot={false}
-                activeDot={{
-                  r: 4,
-                  strokeWidth: 0,
-                  style: {
-                    transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
-                  }
-                }}
+                activeDot={<AnimatedActiveDot r={3} animationDuration={300} />}
                 animationDuration={300}
                 animationEasing="ease-out"
                 isAnimationActive={true}
@@ -198,13 +197,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
                 stroke="var(--color-upload)"
                 strokeWidth={2}
                 dot={false}
-                activeDot={{
-                  r: 4,
-                  strokeWidth: 0,
-                  style: {
-                    transition: 'cx 300ms ease-out 50ms, cy 300ms ease-out 50ms'
-                  }
-                }}
+                activeDot={<AnimatedActiveDot r={3} animationDuration={300} />}
                 animationDuration={300}
                 animationEasing="ease-out"
                 isAnimationActive={true}
