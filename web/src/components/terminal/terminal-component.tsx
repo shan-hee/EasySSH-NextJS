@@ -71,8 +71,9 @@ export function TerminalComponent({
 }: TerminalComponentProps) {
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
-  const [loaderState, setLoaderState] = useState<"entering" | "loading" | "exiting">("entering")
+  // ==================== 方案A：多页签并发加载状态管理 ====================
+  const [loadingSessionIds, setLoadingSessionIds] = useState<Set<string>>(new Set())
+  const [loaderStates, setLoaderStates] = useState<Record<string, "entering" | "loading" | "exiting">>({})
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   // 文件管理器挂载容器与锚点（终端内部悬浮、位于工具栏下方）
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -250,45 +251,63 @@ export function TerminalComponent({
 
   const handleLoadingChange = (sessionId: string, isLoading: boolean) => {
     if (isLoading) {
-      setLoadingSessionId(sessionId)
-      setLoaderState("entering")
+      // 添加到加载中的页签集合
+      setLoadingSessionIds(prev => new Set(prev).add(sessionId))
+      // 设置该页签的状态为 entering
+      setLoaderStates(prev => ({ ...prev, [sessionId]: "entering" }))
     } else {
-      // 连接成功，只有当前正在加载的会话匹配时才触发退出动画
-      if (loadingSessionId === sessionId) {
-        setLoaderState("exiting")
+      // 连接成功，触发该页签的退出动画
+      if (loadingSessionIds.has(sessionId)) {
+        setLoaderStates(prev => ({ ...prev, [sessionId]: "exiting" }))
       } else {
-        // 如果 sessionId 不匹配，说明是其他会话的加载完成，直接清除
-        console.log(`[TerminalComponent] 会话 ${sessionId} 加载完成，但当前加载的是 ${loadingSessionId}`)
+        console.log(`[TerminalComponent] 会话 ${sessionId} 加载完成，但未在加载列表中`)
       }
     }
   }
 
-  const handleAnimationComplete = () => {
+  const handleAnimationComplete = (sessionId: string) => {
     // 退出动画完成后，标记该会话已初始化并清除加载状态
-    if (loadingSessionId) {
-      initializedSessionsRef.current.add(loadingSessionId)
-    }
-    setLoadingSessionId(null)
-    setLoaderState("entering")
+    initializedSessionsRef.current.add(sessionId)
+    // 从加载集合中移除
+    setLoadingSessionIds(prev => {
+      const next = new Set(prev)
+      next.delete(sessionId)
+      return next
+    })
+    // 清除该页签的状态
+    setLoaderStates(prev => {
+      const next = { ...prev }
+      delete next[sessionId]
+      return next
+    })
   }
 
-  const isActiveSessionLoading = loadingSessionId === activeSession
+  const isActiveSessionLoading = loadingSessionIds.has(activeSession)
   const shouldForceLoading = !!(active && active.type !== 'quick' && !initializedSessionsRef.current.has(active.id))
   const effectiveIsLoading = !!(active && active.type !== 'quick' && (isActiveSessionLoading || shouldForceLoading))
 
   // 当从"快速连接"升级为"终端"或首次连接新会话时，立刻设置为加载中
   useEffect(() => {
     if (shouldForceLoading && active) {
-      // 若还未设置当前加载会话，则设置并进入动画
-      if (loadingSessionId !== active.id) {
-        setLoadingSessionId(active.id)
-        setLoaderState("entering")
+      // 若还未设置当前加载会话，则添加到加载集合
+      if (!loadingSessionIds.has(active.id)) {
+        setLoadingSessionIds(prev => new Set(prev).add(active.id))
+        setLoaderStates(prev => ({ ...prev, [active.id]: "entering" }))
       }
-    } else if (!shouldForceLoading && loadingSessionId === active?.id) {
+    } else if (!shouldForceLoading && active && loadingSessionIds.has(active.id)) {
       // 如果切换到已初始化的会话，清除加载状态
-      setLoadingSessionId(null)
+      setLoadingSessionIds(prev => {
+        const next = new Set(prev)
+        next.delete(active.id)
+        return next
+      })
+      setLoaderStates(prev => {
+        const next = { ...prev }
+        delete next[active.id]
+        return next
+      })
     }
-  }, [shouldForceLoading, active?.id, loadingSessionId])
+  }, [shouldForceLoading, active?.id, loadingSessionIds])
 
   // 键盘快捷键支持
   // AI 助手快捷键（Ctrl+K）已移至 TabTerminalContent 组件内部
@@ -371,8 +390,8 @@ export function TerminalComponent({
             <ConnectionLoader
               serverName={`${active.username}@${active.host}`}
               message="正在连接"
-              state={loaderState}
-              onAnimationComplete={handleAnimationComplete}
+              state={loaderStates[active.id] || "entering"}
+              onAnimationComplete={() => handleAnimationComplete(active.id)}
             />
           </div>
         )}

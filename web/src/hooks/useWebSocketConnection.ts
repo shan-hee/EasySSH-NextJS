@@ -41,6 +41,14 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const getTerminal = useTerminalStore(state => state.getTerminal)
   const updateWebSocket = useTerminalStore(state => state.updateWebSocket)
 
+  // ==================== 方案C：使用 ref 存储最新的回调 ====================
+  const onLoadingChangeRef = useRef(onLoadingChange)
+
+  // 每次渲染时同步最新的回调到 ref
+  useEffect(() => {
+    onLoadingChangeRef.current = onLoadingChange
+  }, [onLoadingChange])
+
   // ==================== 核心修复：从 Store 同步 wsRef ====================
   // 每次渲染时，先从 Store 获取现有连接
   const instance = getTerminal(sessionId)
@@ -108,7 +116,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     console.log(`[useWebSocketConnection] 创建新 WebSocket 连接: ${sessionId} -> ${serverId}`)
 
     try {
-      onLoadingChange?.(true)
+      onLoadingChangeRef.current?.(true)
 
       const ws = new TerminalWebSocket({
         serverId,
@@ -122,7 +130,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           }
         },
         onConnected: () => {
-          onLoadingChange?.(false)
+          onLoadingChangeRef.current?.(false)
           // 动态获取终端实例
           const inst = getTerminal(sessionId)
           if (inst?.terminal) {
@@ -164,7 +172,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
       }
     } catch (error) {
       console.error('[useWebSocketConnection] 创建 WebSocket 失败:', error)
-      onLoadingChange?.(false)
+      onLoadingChangeRef.current?.(false)
     }
 
     // 清理函数：组件卸载时不断开连接，保持 WebSocket 活跃
