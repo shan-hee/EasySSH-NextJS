@@ -393,9 +393,12 @@ export function TerminalComponent({
                   value={session.id}
                   forceMount // 强制保持挂载
                   className={cn(
-                    "flex-1 flex flex-col m-0 absolute inset-0",
-                    !isActive && "hidden" // 非激活页签隐藏
+                    "flex-1 flex flex-col m-0 absolute inset-0 transition-none"
                   )}
+                  style={{
+                    visibility: isActive ? 'visible' : 'hidden',
+                    zIndex: isActive ? 1 : 0,
+                  }}
                 >
                   <TabTerminalContent
                     session={session}
