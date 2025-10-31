@@ -625,7 +625,11 @@ export default function SftpPage() {
  }
 
  // 上传文件
- const handleUpload = async (sessionId: string, uploadFiles: FileList) => {
+ const handleUpload = async (
+   sessionId: string,
+   uploadFiles: FileList,
+   onProgress?: (fileName: string, loaded: number, total: number) => void
+ ) => {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) return
 
@@ -635,7 +639,17 @@ export default function SftpPage() {
 
  for (const file of files) {
  try {
- await sftpApi.uploadFile(token, session.serverId, session.currentPath, file)
+ await sftpApi.uploadFile(
+   token,
+   session.serverId,
+   session.currentPath,
+   file,
+   onProgress
+     ? (loaded, total) => {
+         onProgress(file.name, loaded, total)
+       }
+     : undefined
+ )
  successCount++
  } catch (error: any) {
  console.error(`Failed to upload ${file.name}:`, error)
@@ -1017,7 +1031,7 @@ export default function SftpPage() {
  isFullscreen={true}
  pageContext="sftp"
  onNavigate={(path) => handleNavigate(session.id, path)}
- onUpload={(files) => handleUpload(session.id, files)}
+ onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
  onDownload={(fileName) => handleDownload(session.id, fileName)}
  onDelete={(fileName) => handleDelete(session.id, fileName)}
  onCreateFolder={(name) => handleCreateFolder(session.id, name)}
@@ -1088,7 +1102,7 @@ export default function SftpPage() {
  isFullscreen={false}
  pageContext="sftp"
  onNavigate={(path) => handleNavigate(session.id, path)}
- onUpload={(files) => handleUpload(session.id, files)}
+ onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
  onDownload={(fileName) => handleDownload(session.id, fileName)}
  onDelete={(fileName) => handleDelete(session.id, fileName)}
  onCreateFolder={(name) => handleCreateFolder(session.id, name)}

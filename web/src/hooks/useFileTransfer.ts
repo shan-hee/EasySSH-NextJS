@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
 import { sftpApi } from '@/lib/api/sftp';
+import { useSftpUploadWebSocket } from './useSftpUploadWebSocket';
+import { getWsUrl } from '@/lib/config';
 
 /**
  * 传输任务接口
@@ -18,6 +20,7 @@ export interface TransferTask {
   error?: string;
   startTime?: number;
   bytesTransferred?: number;
+  stage?: 'http' | 'sftp'; // 当前传输阶段
 }
 
 /**
@@ -93,85 +96,129 @@ export function useFileTransfer() {
   }, []);
 
   /**
-   * 上传文件
+   * 上传文件（支持 WebSocket 进度跟踪）
    */
   const uploadFile = useCallback(
     async (
       token: string,
       serverId: string,
       remotePath: string,
-      file: File
+      file: File,
+      onProgress?: (loaded: number, total: number) => void,
+      enableWebSocket?: boolean // 是否启用 WebSocket 进度跟踪
     ): Promise<void> => {
       const task = createUploadTask(file);
       setTasks(prev => [...prev, task]);
 
-      return new Promise((resolve, reject) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('path', remotePath);
+      // WebSocket 连接引用
+      let wsConnection: WebSocket | null = null;
+      let wsConnected = false;
 
-        const xhr = new XMLHttpRequest();
-        xhrRefs.current.set(task.id, xhr);
+      try {
+        // 如果启用 WebSocket，先建立连接
+        if (enableWebSocket) {
+          // 使用统一的 WebSocket URL 构建函数
+          const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}`) + `?token=${token}`;
 
-        // 进度监听
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            const progress = Math.round((e.loaded / e.total) * 100);
-            updateTaskProgress(task.id, {
-              progress,
-              bytesTransferred: e.loaded,
-              status: 'uploading',
-            });
-          }
-        });
+          wsConnection = new WebSocket(wsUrl);
 
-        // 完成监听
-        xhr.addEventListener('load', () => {
-          xhrRefs.current.delete(task.id);
-          if (xhr.status >= 200 && xhr.status < 300) {
-            updateTaskProgress(task.id, {
-              progress: 100,
-              status: 'completed',
-              bytesTransferred: file.size,
-            });
-            resolve();
-          } else {
-            const error = '上传失败';
-            updateTaskProgress(task.id, {
-              status: 'failed',
-              error,
-            });
-            reject(new Error(error));
-          }
-        });
+          // WebSocket 消息处理
+          wsConnection.onmessage = (event) => {
+            try {
+              const msg = JSON.parse(event.data);
 
-        // 错误监听
-        xhr.addEventListener('error', () => {
-          xhrRefs.current.delete(task.id);
-          const error = '网络错误';
-          updateTaskProgress(task.id, {
-            status: 'failed',
-            error,
+              if (msg.type === 'progress' && msg.stage === 'sftp') {
+                // SFTP 阶段进度更新
+                const progress = Math.round((msg.loaded / msg.total) * 100);
+                updateTaskProgress(task.id, {
+                  progress,
+                  bytesTransferred: msg.loaded,
+                  status: 'uploading',
+                  stage: 'sftp',
+                  speed: msg.speed_bps ? formatSpeed(msg.speed_bps) : undefined,
+                });
+                onProgress?.(msg.loaded, msg.total);
+              } else if (msg.type === 'complete') {
+                // SFTP 传输完成
+                updateTaskProgress(task.id, {
+                  progress: 100,
+                  status: 'completed',
+                  bytesTransferred: file.size,
+                  stage: 'sftp',
+                });
+              } else if (msg.type === 'error') {
+                console.error('[useFileTransfer] SFTP error:', msg.message);
+              }
+            } catch (err) {
+              console.error('[useFileTransfer] Failed to parse WS message:', err);
+            }
+          };
+
+          wsConnection.onerror = (err) => {
+            console.error('[useFileTransfer] WebSocket error:', err);
+          };
+
+          wsConnection.onopen = () => {
+            wsConnected = true;
+          };
+
+          // 等待 WebSocket 连接（最多 2 秒）
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => resolve(), 2000);
+            if (wsConnection) {
+              wsConnection.onopen = () => {
+                wsConnected = true;
+                clearTimeout(timeout);
+                resolve();
+              };
+            }
           });
-          reject(new Error(error));
-        });
+        }
 
-        // 取消监听
-        xhr.addEventListener('abort', () => {
-          xhrRefs.current.delete(task.id);
+        // HTTP 阶段进度回调
+        const httpProgressCallback = (loaded: number, total: number) => {
+          const progress = Math.round((loaded / total) * 100);
           updateTaskProgress(task.id, {
-            status: 'failed',
-            error: '已取消',
+            progress,
+            bytesTransferred: loaded,
+            status: 'uploading',
+            stage: 'http',
           });
-          reject(new Error('Upload cancelled'));
-        });
+          onProgress?.(loaded, total);
+        };
 
-        // 发送请求
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8521/api/v1';
-        xhr.open('POST', `${apiUrl}/sftp/${serverId}/upload`);
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        xhr.send(formData);
-      });
+        // 调用 API 上传（传递任务 ID 以便后端推送 SFTP 进度）
+        await sftpApi.uploadFile(
+          token,
+          serverId,
+          remotePath,
+          file,
+          httpProgressCallback,
+          enableWebSocket && wsConnected ? task.id : undefined
+        );
+
+        // HTTP 上传完成，如果没有 WebSocket，直接标记完成
+        if (!enableWebSocket || !wsConnected) {
+          updateTaskProgress(task.id, {
+            progress: 100,
+            status: 'completed',
+            bytesTransferred: file.size,
+          });
+        }
+        // 如果有 WebSocket，等待 SFTP 完成消息（由 WebSocket onmessage 处理）
+
+      } catch (error: any) {
+        updateTaskProgress(task.id, {
+          status: 'failed',
+          error: error.message || '上传失败',
+        });
+        throw error;
+      } finally {
+        // 清理 WebSocket 连接
+        if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+          wsConnection.close();
+        }
+      }
     },
     [createUploadTask, updateTaskProgress]
   );

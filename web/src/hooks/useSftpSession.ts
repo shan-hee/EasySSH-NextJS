@@ -112,7 +112,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    * 上传文件
    */
   const uploadFiles = useCallback(
-    async (fileList: FileList) => {
+    async (fileList: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => {
       const token = localStorage.getItem('easyssh_access_token');
       if (!token) {
         throw new Error('未找到访问令牌');
@@ -125,7 +125,9 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           token,
           serverId,
           currentPath,
-          file
+          file,
+          onProgress ? (loaded, total) => onProgress(file.name, loaded, total) : undefined,
+          true // 启用 WebSocket 进度跟踪
         );
         uploadPromises.push(promise);
       }

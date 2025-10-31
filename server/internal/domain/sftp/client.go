@@ -105,6 +105,12 @@ func (c *Client) GetFileInfo(path string) (*FileInfo, error) {
 
 // UploadFile 上传文件
 func (c *Client) UploadFile(localReader io.Reader, remotePath string) error {
+	return c.UploadFileWithProgress(localReader, remotePath, nil)
+}
+
+// UploadFileWithProgress 上传文件并报告进度
+// onProgress: 进度回调函数，参数为已传输字节数
+func (c *Client) UploadFileWithProgress(localReader io.Reader, remotePath string, onProgress func(loaded int64)) error {
 	// 创建远程文件
 	remoteFile, err := c.sftpClient.Create(remotePath)
 	if err != nil {
@@ -112,13 +118,54 @@ func (c *Client) UploadFile(localReader io.Reader, remotePath string) error {
 	}
 	defer remoteFile.Close()
 
-	// 复制数据
-	_, err = io.Copy(remoteFile, localReader)
+	// 如果没有进度回调，直接复制
+	if onProgress == nil {
+		_, err = io.Copy(remoteFile, localReader)
+		if err != nil {
+			return fmt.Errorf("failed to upload file: %w", err)
+		}
+		return nil
+	}
+
+	// 使用带进度跟踪的复制
+	reader := &progressReader{
+		reader:     localReader,
+		onProgress: onProgress,
+		lastReport: 0,
+		reportEvery: 65536, // 每 64KB 报告一次进度
+	}
+
+	_, err = io.Copy(remoteFile, reader)
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 
+	// 最后报告一次完整进度
+	onProgress(reader.loaded)
+
 	return nil
+}
+
+// progressReader 包装 io.Reader 以跟踪读取进度
+type progressReader struct {
+	reader      io.Reader
+	onProgress  func(loaded int64)
+	loaded      int64
+	lastReport  int64
+	reportEvery int64
+}
+
+func (r *progressReader) Read(p []byte) (n int, err error) {
+	n, err = r.reader.Read(p)
+	r.loaded += int64(n)
+
+	// 每隔 reportEvery 字节报告一次进度，避免过度频繁
+	if r.loaded-r.lastReport >= r.reportEvery {
+		r.onProgress(r.loaded)
+		r.lastReport = r.loaded
+	}
+
+	return n, err
 }
 
 // DownloadFile 下载文件

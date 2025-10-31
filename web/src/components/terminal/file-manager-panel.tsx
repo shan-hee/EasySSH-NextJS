@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button"
 import { X, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SftpManager } from "@/components/sftp/sftp-manager"
+import type { TransferTask } from "@/hooks/useFileTransfer"
 
 interface FileManagerPanelProps {
   isOpen: boolean
   onClose: () => void
   // SFTP Manager props
-  serverId: number
+  serverId: string  // 修改为 string
   serverName: string
   host: string
   username: string
@@ -21,7 +22,7 @@ interface FileManagerPanelProps {
   sessionId: string
   sessionLabel: string
   onNavigate: (path: string) => void
-  onUpload: (files: FileList) => void
+  onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
   onCreateFolder: (name: string) => void
@@ -31,6 +32,9 @@ interface FileManagerPanelProps {
   onRefresh: () => void
   onReadFile?: (fileName: string) => Promise<string>
   onSaveFile?: (fileName: string, content: string) => Promise<void>
+  // 传输任务管理
+  transferTasks?: TransferTask[]
+  onClearCompletedTransfers?: () => void
   // 将文件管理器渲染到指定容器（例如终端内部），而非整个页面
   mountContainer?: HTMLElement | null
   // 面板顶部锚点（用于位于工具栏下方）
@@ -42,6 +46,8 @@ export function FileManagerPanel({
   onClose,
   mountContainer,
   anchorTop,
+  transferTasks,
+  onClearCompletedTransfers,
   ...sftpProps
 }: FileManagerPanelProps) {
   const [width, setWidth] = useState(600) // 默认宽度
@@ -189,6 +195,8 @@ export function FileManagerPanel({
                 isFullscreen={false}
                 pageContext="terminal"
                 onDisconnect={onClose}
+                transferTasks={transferTasks}
+                onClearCompletedTransfers={onClearCompletedTransfers}
               />
             ) : (
               <div className="flex items-center justify-center h-full">

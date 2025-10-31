@@ -26,7 +26,7 @@ interface SftpSessionContextValue {
   sessionId: string
   sessionLabel: string
   sessionColor?: string
-  serverId: number
+  serverId: string  // 修改为 string 以匹配 SftpManager
   serverName: string
   host: string
   username: string

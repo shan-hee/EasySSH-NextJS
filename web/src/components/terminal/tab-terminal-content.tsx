@@ -264,26 +264,27 @@ export function TabTerminalContent({
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
             mountContainer={floatingPanelRootRef.current || undefined}
             anchorTop={toolbarHeight}
-            serverId={Number(session.serverId)}
+            serverId={String(session.serverId)}
             serverName={session.serverName || ''}
             host={session.host || ''}
             username={session.username || ''}
             isConnected={session.isConnected || false}
             sessionId={session.id}
-            sessionLabel={session.label || session.serverName || 'Session'}
+            sessionLabel={session.serverName || 'Session'}
             currentPath={sftpSession.currentPath}
             files={sftpSession.files}
-            isLoading={sftpSession.isLoading}
-            error={sftpSession.error}
             onNavigate={sftpSession.navigate}
             onRefresh={sftpSession.refresh}
             onUpload={sftpSession.uploadFiles}
             onDownload={sftpSession.downloadFile}
-            onDelete={sftpSession.deleteItem}
-            onRename={sftpSession.renameItem}
+            onDelete={sftpSession.deleteFile}
+            onRename={sftpSession.renameFile}
             onCreateFolder={sftpSession.createFolder}
             onReadFile={sftpSession.readFile}
             onSaveFile={sftpSession.saveFile}
+            onDisconnect={() => setTabState(session.id, { isFileManagerOpen: false })}
+            transferTasks={sftpSession.transferTasks}
+            onClearCompletedTransfers={sftpSession.clearCompletedTransfers}
           />
         )}
 

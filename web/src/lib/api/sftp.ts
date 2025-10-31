@@ -166,24 +166,69 @@ export const sftpApi = {
 
   /**
    * 上传文件
+   * @param onProgress 进度回调函数 (loaded: 已上传字节数, total: 总字节数)
+   * @param wsTaskId 可选的 WebSocket 任务 ID，用于接收 SFTP 阶段的进度
    */
-  async uploadFile(token: string, serverId: string, path: string, file: File): Promise<void> {
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("path", path)
+  async uploadFile(
+    token: string,
+    serverId: string,
+    path: string,
+    file: File,
+    onProgress?: (loaded: number, total: number) => void,
+    wsTaskId?: string
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
-    const response = await fetch(`${apiUrl}/sftp/${serverId}/upload`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
+      // 监听上传进度事件（HTTP 阶段）
+      if (onProgress) {
+        xhr.upload.onprogress = (event: ProgressEvent) => {
+          if (event.lengthComputable) {
+            onProgress(event.loaded, event.total)
+          }
+        }
+      }
+
+      // 监听完成事件
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText)
+            reject(new Error(error.message || "Upload failed"))
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`))
+          }
+        }
+      }
+
+      // 监听错误事件
+      xhr.onerror = () => {
+        reject(new Error("Network error during upload"))
+      }
+
+      // 监听超时事件
+      xhr.ontimeout = () => {
+        reject(new Error("Upload timeout"))
+      }
+
+      // 准备表单数据
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("path", path)
+
+      // 构建 URL，如果提供了 wsTaskId 则添加查询参数
+      let url = `${apiUrl}/sftp/${serverId}/upload`
+      if (wsTaskId) {
+        url += `?ws_task_id=${encodeURIComponent(wsTaskId)}`
+      }
+
+      // 发送请求
+      xhr.open("POST", url)
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+      xhr.send(formData)
     })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: "Upload failed" }))
-      throw new Error(error.message || "Upload failed")
-    }
   },
 }

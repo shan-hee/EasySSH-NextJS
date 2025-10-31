@@ -133,11 +133,14 @@ func main() {
 	userRepo := user.NewRepository(database)
 	userService := user.NewService(userRepo)
 
+	// SFTP 上传 WebSocket 处理器
+	sftpUploadWSHandler := ws.NewSFTPUploadHandler()
+
 	// 初始化处理器
 	authHandler := rest.NewAuthHandler(authService, jwtService)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
-	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor)
+	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler)
 	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
@@ -287,6 +290,13 @@ func main() {
 			// 文件内容
 			sftpRoutes.GET("/read", sftpHandler.ReadFile)                  // 读取文件
 			sftpRoutes.POST("/write", sftpHandler.WriteFile)               // 写入文件
+		}
+
+		// SFTP 上传进度 WebSocket 路由（需要认证）
+		sftpWSRoutes := v1.Group("/sftp/upload/ws")
+		sftpWSRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			sftpWSRoutes.GET("/:task_id", sftpUploadWSHandler.HandleUploadWebSocket) // 上传进度 WebSocket
 		}
 
 		// 监控路由（需要认证）

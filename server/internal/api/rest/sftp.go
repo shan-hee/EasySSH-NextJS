@@ -5,7 +5,9 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"time"
 
+	"github.com/easyssh/server/internal/api/ws"
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/sftp"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
@@ -16,17 +18,19 @@ import (
 
 // SFTPHandler SFTP 处理器
 type SFTPHandler struct {
-	serverService server.Service
-	serverRepo    server.Repository
-	encryptor     *crypto.Encryptor
+	serverService     server.Service
+	serverRepo        server.Repository
+	encryptor         *crypto.Encryptor
+	uploadWSHandler   *ws.SFTPUploadHandler
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
-func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor) *SFTPHandler {
+func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor, uploadWSHandler *ws.SFTPUploadHandler) *SFTPHandler {
 	return &SFTPHandler{
-		serverService: serverService,
-		serverRepo:    serverRepo,
-		encryptor:     encryptor,
+		serverService:   serverService,
+		serverRepo:      serverRepo,
+		encryptor:       encryptor,
+		uploadWSHandler: uploadWSHandler,
 	}
 }
 
@@ -139,7 +143,7 @@ func (h *SFTPHandler) GetFileInfo(c *gin.Context) {
 }
 
 // UploadFile 上传文件
-// POST /api/v1/sftp/:server_id/upload
+// POST /api/v1/sftp/:server_id/upload?ws_task_id=xxx (可选)
 func (h *SFTPHandler) UploadFile(c *gin.Context) {
 	// 解析服务器 ID
 	serverID, err := uuid.Parse(c.Param("server_id"))
@@ -147,6 +151,9 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
 		return
 	}
+
+	// 获取可选的 WebSocket 任务 ID
+	wsTaskID := c.Query("ws_task_id")
 
 	// 获取上传的文件
 	file, header, err := c.Request.FormFile("file")
@@ -172,10 +179,66 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 	}
 	defer sftpClient.Close()
 
-	// 上传文件
-	if err := sftpClient.UploadFile(file, remotePath); err != nil {
-		RespondError(c, http.StatusInternalServerError, "upload_failed", err.Error())
-		return
+	// 如果提供了 WebSocket 任务 ID，使用带进度跟踪的上传
+	if wsTaskID != "" && h.uploadWSHandler != nil {
+		// 进度跟踪变量
+		var (
+			lastProgressTime = time.Now()
+			lastLoaded       int64
+			totalSize        = header.Size
+		)
+
+		// 上传文件并报告进度
+		err = sftpClient.UploadFileWithProgress(file, remotePath, func(loaded int64) {
+			now := time.Now()
+			elapsed := now.Sub(lastProgressTime).Seconds()
+
+			// 计算速度（字节/秒）
+			var speedBps int64
+			if elapsed > 0 {
+				speedBps = int64(float64(loaded-lastLoaded) / elapsed)
+			}
+
+			// 发送进度消息
+			_ = h.uploadWSHandler.SendProgress(wsTaskID, ws.UploadProgressMessage{
+				Type:     "progress",
+				TaskID:   wsTaskID,
+				Loaded:   loaded,
+				Total:    totalSize,
+				Stage:    "sftp",
+				SpeedBps: speedBps,
+			})
+
+			lastProgressTime = now
+			lastLoaded = loaded
+		})
+
+		if err != nil {
+			// 发送错误消息
+			_ = h.uploadWSHandler.SendProgress(wsTaskID, ws.UploadProgressMessage{
+				Type:    "error",
+				TaskID:  wsTaskID,
+				Message: err.Error(),
+			})
+			RespondError(c, http.StatusInternalServerError, "upload_failed", err.Error())
+			return
+		}
+
+		// 发送完成消息
+		_ = h.uploadWSHandler.SendProgress(wsTaskID, ws.UploadProgressMessage{
+			Type:    "complete",
+			TaskID:  wsTaskID,
+			Loaded:  totalSize,
+			Total:   totalSize,
+			Stage:   "sftp",
+			Message: "Upload completed successfully",
+		})
+	} else {
+		// 无 WebSocket，使用普通上传
+		if err := sftpClient.UploadFile(file, remotePath); err != nil {
+			RespondError(c, http.StatusInternalServerError, "upload_failed", err.Error())
+			return
+		}
 	}
 
 	RespondSuccess(c, gin.H{

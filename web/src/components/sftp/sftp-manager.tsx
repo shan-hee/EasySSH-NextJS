@@ -72,6 +72,7 @@ import { parseFileSize } from "@/lib/format-utils"
 import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
 import { FileEditor } from "@/components/sftp/file-editor"
+import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransfer"
 
 interface FileItem {
   name: string
@@ -87,16 +88,8 @@ type EnhancedFileItem = FileItem & {
   sizeBytes: number
 }
 
-interface TransferTask {
-  id: string
-  fileName: string
-  fileSize: string
-  progress: number
-  status: "pending" | "uploading" | "downloading" | "completed" | "failed"
-  type: "upload" | "download"
-  speed?: string
-  timeRemaining?: string
-}
+// 使用导入的 TransferTask 类型
+type TransferTask = ImportedTransferTask
 
 interface ClipboardFile {
   fileName: string
@@ -121,7 +114,7 @@ interface SftpManagerProps {
   isFullscreen?: boolean
   pageContext?: 'sftp' | 'terminal' // 页面上下文
   onNavigate: (path: string) => void
-  onUpload: (files: FileList) => void
+  onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
   onCreateFolder: (name: string) => void
@@ -139,6 +132,9 @@ interface SftpManagerProps {
   clipboard?: ClipboardFile[]
   dragHandleListeners?: any
   dragHandleAttributes?: any
+  // 传输任务管理(从外部传入)
+  transferTasks?: TransferTask[]
+  onClearCompletedTransfers?: () => void
 }
 
 export function SftpManager(props: SftpManagerProps) {
@@ -173,6 +169,8 @@ export function SftpManager(props: SftpManagerProps) {
     clipboard = [],
     dragHandleListeners,
     dragHandleAttributes,
+    transferTasks = [],  // 从外部传入
+    onClearCompletedTransfers,
   } = props
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -190,7 +188,8 @@ export function SftpManager(props: SftpManagerProps) {
   // )
   const [sortBy, setSortBy] = useState<keyof FileItem>("name")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
-  const [transferTasks, setTransferTasks] = useState<TransferTask[]>([])
+  // 移除内部 transferTasks 状态管理,改用传入的 props
+  // const [transferTasks, setTransferTasks] = useState<TransferTask[]>([])
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [isDragging, setIsDragging] = useState(false)
@@ -555,25 +554,10 @@ export function SftpManager(props: SftpManagerProps) {
     })
   }
 
-  // 文件上传处理
-  const handleFileUpload = (files: FileList) => {
-    onUpload(files)
-    // 模拟添加传输任务
-    Array.from(files).forEach((file, index) => {
-      const task: TransferTask = {
-        id: `upload-${Date.now()}-${index}`,
-        fileName: file.name,
-        fileSize: formatFileSize(file.size),
-        progress: 0,
-        status: "uploading",
-        type: "upload",
-        speed: "1.2 MB/s",
-        timeRemaining: "00:15",
-      }
-      setTransferTasks(prev => [...prev, task])
-      // 模拟进度更新
-      simulateProgress(task.id)
-    })
+  // 文件上传处理 - 移除内部进度管理,由 useFileTransfer Hook 处理
+  const handleFileUpload = async (files: FileList) => {
+    // 直接调用父组件的上传函数,进度管理由 useFileTransfer 处理
+    await onUpload(files)
   }
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -646,27 +630,6 @@ export function SftpManager(props: SftpManagerProps) {
     if (files && files.length > 0) {
       handleFileUpload(files)
     }
-  }
-
-  // 模拟进度更新
-  const simulateProgress = (taskId: string) => {
-    const interval = setInterval(() => {
-      setTransferTasks(prev =>
-        prev.map(task => {
-          if (task.id === taskId) {
-            const newProgress = Math.min(task.progress + 10, 100)
-            return {
-              ...task,
-              progress: newProgress,
-              status: newProgress === 100 ? "completed" : task.status,
-            }
-          }
-          return task
-        })
-      )
-    }, 500)
-
-    setTimeout(() => clearInterval(interval), 5000)
   }
 
   // 创建文件夹
@@ -797,25 +760,10 @@ export function SftpManager(props: SftpManagerProps) {
     }
   }
 
-  // 批量下载
+  // 批量下载 - 移除内部进度管理
   const handleBatchDownload = () => {
     selectedFiles.forEach(fileName => {
       onDownload(fileName)
-      const file = files.find(f => f.name === fileName)
-      if (file && file.type === "file") {
-        const task: TransferTask = {
-          id: `download-${Date.now()}-${fileName}`,
-          fileName: fileName,
-          fileSize: file.size,
-          progress: 0,
-          status: "downloading",
-          type: "download",
-          speed: "2.5 MB/s",
-          timeRemaining: "00:08",
-        }
-        setTransferTasks(prev => [...prev, task])
-        simulateProgress(task.id)
-      }
     })
     setSelectedFiles([])
   }
@@ -826,9 +774,11 @@ export function SftpManager(props: SftpManagerProps) {
     setSelectedFiles([])
   }
 
-  // 清除已完成任务
+  // 清除已完成任务 - 使用外部传入的处理函数
   const handleClearCompleted = () => {
-    setTransferTasks(prev => prev.filter(task => task.status !== "completed"))
+    if (onClearCompletedTransfers) {
+      onClearCompletedTransfers()
+    }
   }
 
   // 键盘快捷键支持
@@ -2016,6 +1966,14 @@ export function SftpManager(props: SftpManagerProps) {
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {task.status === "uploading" || task.status === "downloading" ? (
                       <>
+                        {task.stage && (
+                          <>
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                              {task.stage === 'http' ? 'HTTP阶段' : 'SFTP阶段'}
+                            </Badge>
+                            <span>•</span>
+                          </>
+                        )}
                         <span>{task.speed}</span>
                         <span>•</span>
                         <span>{task.timeRemaining}</span>
