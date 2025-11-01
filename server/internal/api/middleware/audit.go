@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"context"
+	"log"
+	"os"
 	"time"
 
 	"github.com/easyssh/server/internal/domain/auditlog"
@@ -8,8 +11,38 @@ import (
 	"github.com/google/uuid"
 )
 
-// AuditLogMiddleware 审计日志中间件
-func AuditLogMiddleware(auditService auditlog.Service) gin.HandlerFunc {
+// AuditConfig 审计日志配置
+type AuditConfig struct {
+	// 是否启用调试日志 (生产环境应设置为 false)
+	EnableDebugLog bool
+	// 异步日志记录超时时间
+	AsyncTimeout time.Duration
+}
+
+// DefaultAuditConfig 默认审计配置
+func DefaultAuditConfig() *AuditConfig {
+	// 根据环境变量判断是否启用调试日志
+	env := os.Getenv("ENV")
+	enableDebug := env == "development" || env == "dev"
+
+	return &AuditConfig{
+		EnableDebugLog: enableDebug,
+		AsyncTimeout:   3 * time.Second,
+	}
+}
+
+// AuditLogMiddleware 审计日志中间件（优化版）
+// 特性:
+// - 支持配置调试日志开关
+// - 添加超时控制防止 goroutine 泄漏
+// - 改进类型安全检查
+// - 更好的错误处理
+func AuditLogMiddleware(auditService auditlog.Service, cfg *AuditConfig) gin.HandlerFunc {
+	// 使用默认配置
+	if cfg == nil {
+		cfg = DefaultAuditConfig()
+	}
+
 	return func(c *gin.Context) {
 		// 记录开始时间
 		startTime := time.Now()
@@ -20,27 +53,54 @@ func AuditLogMiddleware(auditService auditlog.Service) gin.HandlerFunc {
 		// 请求完成后记录日志
 		duration := time.Since(startTime).Milliseconds()
 
-		// 获取用户信息
-		userIDStr, exists := c.Get("user_id")
-		if !exists {
-			return // 未认证请求不记录
-		}
-
-		userID, err := uuid.Parse(userIDStr.(string))
-		if err != nil {
-			return
-		}
-
-		username, _ := c.Get("username")
-		usernameStr := ""
-		if username != nil {
-			usernameStr = username.(string)
-		}
-
 		// 根据路径和方法确定操作类型
 		action := determineAction(c.Request.Method, c.FullPath())
 		if action == "" {
 			return // 不需要记录的操作
+		}
+
+		// 获取用户信息（带类型安全检查）
+		var userID uuid.UUID
+		var usernameStr string
+
+		userIDStr, exists := c.Get("user_id")
+
+		// 对于登录/登出操作,即使未认证也需要记录
+		isAuthAction := action == auditlog.ActionLogin || action == auditlog.ActionLogout
+
+		if exists {
+			// 类型安全检查
+			if uidStr, ok := userIDStr.(string); ok {
+				var err error
+				userID, err = uuid.Parse(uidStr)
+				if err != nil {
+					log.Printf("⚠️ Invalid user_id format in context: %v", err)
+					return
+				}
+			} else {
+				log.Printf("⚠️ user_id in context is not a string")
+				return
+			}
+
+			// 获取用户名（类型安全检查）
+			if username, ok := c.Get("username"); ok {
+				if uname, ok := username.(string); ok {
+					usernameStr = uname
+				}
+			}
+		} else {
+			// 未认证且非登录/登出操作不记录
+			if !isAuthAction {
+				return
+			}
+
+			// 登录/登出操作：用户名由登录处理器在 c.Set("username") 设置
+			userID = uuid.Nil
+			if username, ok := c.Get("username"); ok {
+				if uname, ok := username.(string); ok {
+					usernameStr = uname
+				}
+			}
 		}
 
 		// 确定状态
@@ -54,10 +114,7 @@ func AuditLogMiddleware(auditService auditlog.Service) gin.HandlerFunc {
 		}
 
 		// 获取资源信息
-		resource := c.Param("server_id")
-		if resource == "" {
-			resource = c.Request.URL.Path
-		}
+		resource := getResource(c)
 
 		// 创建日志请求
 		req := &auditlog.CreateAuditLogRequest{
@@ -72,11 +129,37 @@ func AuditLogMiddleware(auditService auditlog.Service) gin.HandlerFunc {
 			Duration:  duration,
 		}
 
-		// 异步记录日志（不阻塞请求）
+		// 调试日志（仅开发环境）
+		if cfg.EnableDebugLog {
+			log.Printf("📝 Audit: action=%s, user=%s, status=%s, ip=%s",
+				action, usernameStr, status, c.ClientIP())
+		}
+
+		// 异步记录日志（带超时控制）
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.AsyncTimeout)
 		go func() {
-			_ = auditService.Log(c.Request.Context(), req)
+			defer cancel()
+			if err := auditService.Log(ctx, req); err != nil {
+				log.Printf("❌ Failed to log audit: %v (action=%s, user=%s)",
+					err, req.Action, req.Username)
+			} else if cfg.EnableDebugLog {
+				log.Printf("✅ Audit saved: action=%s, user=%s", req.Action, req.Username)
+			}
 		}()
 	}
+}
+
+// getResource 获取资源信息
+func getResource(c *gin.Context) string {
+	// 尝试从 URL 参数获取资源标识
+	if resource := c.Param("server_id"); resource != "" {
+		return resource
+	}
+	if resource := c.Param("id"); resource != "" {
+		return resource
+	}
+	// 默认使用请求路径
+	return c.Request.URL.Path
 }
 
 // determineAction 根据请求方法和路径确定操作类型

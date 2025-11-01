@@ -120,6 +120,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	user, accessToken, refreshToken, err := h.authService.Login(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
+		// 登录失败时也设置用户名,以便审计日志记录
+		c.Set("username", req.Username)
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			RespondError(c, http.StatusUnauthorized, "invalid_credentials", "Invalid username or password")
 			return
@@ -127,6 +129,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to login")
 		return
 	}
+
+	// 登录成功,设置用户信息到上下文,以便审计日志记录
+	c.Set("user_id", user.ID.String())
+	c.Set("username", user.Username)
 
 	RespondSuccess(c, AuthResponse{
 		User:         user.ToPublic(),

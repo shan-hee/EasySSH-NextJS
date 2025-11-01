@@ -43,7 +43,8 @@ export function NavMain({
   const isSubActive = React.useCallback(
     (url?: string) => {
       if (!url) return false
-      return pathname === url || pathname.startsWith(`${url}/`)
+      // 精确匹配当前路径,避免 /dashboard/logs 匹配到 /dashboard/logs/login
+      return pathname === url
     },
     [pathname]
   )

@@ -94,8 +94,6 @@ const data = {
       items: [
         { title: "操作日志", url: "/dashboard/logs" },
         { title: "登录日志", url: "/dashboard/logs/login" },
-        { title: "命令审计", url: "/dashboard/logs/commands" },
-        { title: "文件审计", url: "/dashboard/logs/files" },
       ],
     },
     {

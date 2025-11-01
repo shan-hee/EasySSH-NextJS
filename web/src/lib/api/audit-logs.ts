@@ -21,12 +21,14 @@ export interface AuditLog {
 
 /**
  * 审计日志列表响应
+ * 注意: apiFetch 会自动解包 data 字段，所以这里的结构是解包后的
  */
 export interface AuditLogListResponse {
-  data: AuditLog[]
+  logs: AuditLog[]
   total: number
   page: number
-  limit: number
+  page_size: number
+  total_pages: number
 }
 
 /**

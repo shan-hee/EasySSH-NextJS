@@ -60,11 +60,11 @@ export default function Page() {
  const offlineCount = servers.filter(s => s.status === "offline").length
 
  // 防御性检查：处理审计日志统计数据
- const statsData = logsStats?.by_action ? logsStats : (logsStats?.data || null)
+    const statsData = logsStats?.by_action ? logsStats : ((logsStats as any)?.data || null)
 
  // 统计今日连接（根据操作日志中的登录操作）
  const todayConnections = statsData?.by_action
- ? Object.values(statsData.by_action).reduce((sum, count) => sum + count, 0)
+      ? Object.values(statsData.by_action).reduce((sum: number, count) => sum + (count as number), 0)
  : 0
 
  // 最近日志数量

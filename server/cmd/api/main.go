@@ -16,6 +16,7 @@ import (
 	"github.com/easyssh/server/internal/domain/auditlog"
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/batchtask"
+	"github.com/easyssh/server/internal/domain/filetransfer"
 	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/monitoring"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
@@ -72,6 +73,7 @@ func main() {
 		&batchtask.BatchTask{},       // 批量任务表
 		&scheduledtask.ScheduledTask{}, // 定时任务表
 		&sshsession.SSHSession{},     // SSH会话表
+		&filetransfer.FileTransfer{}, // 文件传输表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -129,6 +131,10 @@ func main() {
 	sshSessionRepo := sshsession.NewRepository(database)
 	sshSessionService := sshsession.NewService(sshSessionRepo)
 
+	// 文件传输服务
+	fileTransferRepo := filetransfer.NewRepository(database)
+	fileTransferService := filetransfer.NewService(fileTransferRepo)
+
 	// 用户管理服务
 	userRepo := user.NewRepository(database)
 	userService := user.NewService(userRepo)
@@ -149,17 +155,18 @@ func main() {
 	batchTaskHandler := rest.NewBatchTaskHandler(batchTaskService)
 	scheduledTaskHandler := rest.NewScheduledTaskHandler(scheduledTaskService)
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
+	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	userHandler := rest.NewUserHandler(userService)
 
 	// 创建 Gin 路由
 	r := gin.New()
 
 	// 全局中间件
-	r.Use(middleware.Recovery())                     // 错误恢复
-	r.Use(middleware.Logger())                        // 日志记录
-	r.Use(middleware.RequestID())                     // 请求 ID
-	r.Use(middleware.CORS())                          // 跨域
-	r.Use(middleware.AuditLogMiddleware(auditLogService)) // 审计日志
+	r.Use(middleware.Recovery())                                    // 错误恢复
+	r.Use(middleware.Logger())                                       // 日志记录
+	r.Use(middleware.RequestID())                                    // 请求 ID
+	r.Use(middleware.CORS())                                         // 跨域
+	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 
 	// API v1 路由组
 	v1 := r.Group("/api/v1")
@@ -371,6 +378,18 @@ func main() {
 			sshSessionRoutes.GET("/:id", sshSessionHandler.GetByID)              // 会话详情
 			sshSessionRoutes.DELETE("/:id", sshSessionHandler.Delete)            // 删除会话
 			sshSessionRoutes.POST("/:id/close", sshSessionHandler.Close)         // 关闭会话
+		}
+
+		// 文件传输路由（需要认证）
+		fileTransferRoutes := v1.Group("/file-transfers")
+		fileTransferRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			fileTransferRoutes.GET("", fileTransferHandler.List)                     // 传输列表
+			fileTransferRoutes.POST("", fileTransferHandler.Create)                  // 创建传输记录
+			fileTransferRoutes.GET("/statistics", fileTransferHandler.GetStatistics) // 统计信息
+			fileTransferRoutes.GET("/:id", fileTransferHandler.GetByID)              // 传输详情
+			fileTransferRoutes.PUT("/:id", fileTransferHandler.Update)               // 更新传输记录
+			fileTransferRoutes.DELETE("/:id", fileTransferHandler.Delete)            // 删除传输记录
 		}
 	}
 

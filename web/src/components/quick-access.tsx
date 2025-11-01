@@ -72,7 +72,8 @@ export function QuickAccess() {
         <SidebarMenu>
           {quickActions.map((qa) => {
             const baseHref = qa.href?.split("?")[0]
-            const isActive = !!baseHref && (pathname === baseHref || pathname.startsWith(`${baseHref}/`))
+            // 精确匹配当前路径,避免前缀匹配导致误判
+            const isActive = !!baseHref && pathname === baseHref
             return (
               <SidebarMenuItem key={qa.title}>
                 {qa.href ? (
