@@ -239,6 +239,7 @@ func main() {
 			serverRoutes.GET("", serverHandler.List)                       // 列表
 			serverRoutes.POST("", serverHandler.Create)                    // 创建
 			serverRoutes.GET("/statistics", serverHandler.GetStatistics)   // 统计
+			serverRoutes.PATCH("/reorder", serverHandler.Reorder)          // 批量更新排序
 			serverRoutes.GET("/:id", serverHandler.GetByID)                // 详情
 			serverRoutes.PUT("/:id", serverHandler.Update)                 // 更新
 			serverRoutes.DELETE("/:id", serverHandler.Delete)              // 删除

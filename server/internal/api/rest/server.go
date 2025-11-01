@@ -244,6 +244,45 @@ func (h *ServerHandler) GetStatistics(c *gin.Context) {
 	RespondSuccess(c, stats)
 }
 
+// Reorder 批量更新服务器排序顺序
+// PATCH /api/v1/servers/reorder
+func (h *ServerHandler) Reorder(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	// 解析请求：期望一个服务器 ID 数组
+	var req struct {
+		ServerIDs []string `json:"server_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 转换字符串 ID 为 UUID
+	serverIDs := make([]uuid.UUID, 0, len(req.ServerIDs))
+	for _, idStr := range req.ServerIDs {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID format: "+idStr)
+			return
+		}
+		serverIDs = append(serverIDs, id)
+	}
+
+	// 调用服务层更新排序
+	if err := h.serverService.ReorderServers(c.Request.Context(), userID, serverIDs); err != nil {
+		RespondError(c, http.StatusInternalServerError, "reorder_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{"message": "Servers reordered successfully"})
+}
+
 // getUserIDFromContext 从上下文获取用户 ID
 func getUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
 	userIDStr, exists := c.Get("user_id")

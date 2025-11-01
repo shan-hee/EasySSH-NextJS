@@ -29,7 +29,7 @@ import { PrivateKeyInput } from "@/components/servers/private-key-input"
 interface AddServerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit?: (data: ServerFormData, shouldTest?: boolean) => void
+  onSubmit?: (data: ServerFormData) => void
 }
 
 export interface ServerFormData {
@@ -115,33 +115,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
       ...formData,
       jumpServer: formData.jumpServer === "none" ? "" : formData.jumpServer,
     }
-    onSubmit?.(normalized, false)
-    onOpenChange(false)
-  }
-
-  const handleSaveAndTest = () => {
-    // 验证必填字段
-    if (!formData.host.trim()) {
-      alert("请输入服务器地址")
-      return
-    }
-    if (!formData.username.trim()) {
-      alert("请输入用户名")
-      return
-    }
-
-    // 验证端口号
-    const port = parseInt(formData.port)
-    if (isNaN(port) || port < 1 || port > 65535) {
-      alert("端口号必须是1-65535之间的数字")
-      return
-    }
-
-    const normalized = {
-      ...formData,
-      jumpServer: formData.jumpServer === "none" ? "" : formData.jumpServer,
-    }
-    onSubmit?.(normalized, true)
+    onSubmit?.(normalized)
     onOpenChange(false)
   }
 
@@ -395,11 +369,8 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
           <Button variant="outline" onClick={handleCancel}>
             取消
           </Button>
-          <Button variant="outline" onClick={handleSave}>
+          <Button onClick={handleSave}>
             保存
-          </Button>
-          <Button onClick={handleSaveAndTest}>
-            保存并测试
           </Button>
         </div>
       </DialogContent>

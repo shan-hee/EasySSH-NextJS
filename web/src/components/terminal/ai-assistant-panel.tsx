@@ -393,7 +393,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       ref={containerRef}
       role="dialog"
       aria-label="AI 助手面板"
-      aria-hidden={!isOpen}
+      aria-modal={isOpen}
       className={cn(
         "absolute bottom-0 left-0 right-0 z-50",
         shouldAnimate && "transition-all duration-500 ease-out",
@@ -401,7 +401,8 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       )}
       style={{
         pointerEvents: isOpen ? "auto" : "none",
-        willChange: isOpen ? "transform, opacity" : "auto"
+        willChange: isOpen ? "transform, opacity" : "auto",
+        visibility: isOpen ? 'visible' : 'hidden',
       }}
     >
       <div className="w-full max-w-3xl mx-auto px-4 pointer-events-auto">

@@ -176,4 +176,15 @@ export const serversApi = {
   async getStatistics(token: string): Promise<ServerStatisticsResponse> {
     return apiFetch<ServerStatisticsResponse>("/servers/statistics", { token })
   },
+
+  /**
+   * 批量更新服务器排序顺序
+   */
+  async reorder(token: string, serverIds: string[]): Promise<void> {
+    return apiFetch<void>("/servers/reorder", {
+      method: "PATCH",
+      token,
+      body: { server_ids: serverIds },
+    })
+  },
 }

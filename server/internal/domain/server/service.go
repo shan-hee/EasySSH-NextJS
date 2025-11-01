@@ -40,6 +40,9 @@ type Service interface {
 
 	// GetStatistics 获取统计信息
 	GetStatistics(ctx context.Context, userID uuid.UUID) (*ServerStatistics, error)
+
+	// ReorderServers 批量更新服务器排序顺序
+	ReorderServers(ctx context.Context, userID uuid.UUID, serverIDs []uuid.UUID) error
 }
 
 // CreateServerRequest 创建服务器请求
@@ -361,6 +364,24 @@ func (s *serverService) GetStatistics(ctx context.Context, userID uuid.UUID) (*S
 	}
 
 	return stats, nil
+}
+
+// ReorderServers 批量更新服务器排序顺序
+// serverIDs: 按照新顺序排列的服务器 ID 数组
+func (s *serverService) ReorderServers(ctx context.Context, userID uuid.UUID, serverIDs []uuid.UUID) error {
+	if len(serverIDs) == 0 {
+		return errors.New("server IDs cannot be empty")
+	}
+
+	// 构建 serverID -> sortOrder 的映射
+	// sortOrder 从 1 开始，方便后续扩展（0 保留给未排序的服务器）
+	orders := make(map[uuid.UUID]int)
+	for i, serverID := range serverIDs {
+		orders[serverID] = i + 1
+	}
+
+	// 调用 repository 层批量更新
+	return s.repo.UpdateSortOrders(ctx, userID, orders)
 }
 
 // Helper function to check TCP connectivity

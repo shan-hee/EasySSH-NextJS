@@ -49,6 +49,9 @@ type Repository interface {
 
 	// CountByUserID 统计用户的服务器数量
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
+
+	// UpdateSortOrders 批量更新服务器排序顺序
+	UpdateSortOrders(ctx context.Context, userID uuid.UUID, orders map[uuid.UUID]int) error
 }
 
 // gormRepository GORM 实现
@@ -92,7 +95,7 @@ func (r *gormRepository) FindByUserID(ctx context.Context, userID uuid.UUID, lim
 		Where("user_id = ?", userID).
 		Limit(limit).
 		Offset(offset).
-		Order("created_at DESC").
+		Order("sort_order ASC, created_at DESC").
 		Find(&servers).Error; err != nil {
 		return nil, 0, err
 	}
@@ -170,7 +173,7 @@ func (r *gormRepository) List(ctx context.Context, limit, offset int) ([]*Server
 	if err := r.db.WithContext(ctx).
 		Limit(limit).
 		Offset(offset).
-		Order("created_at DESC").
+		Order("sort_order ASC, created_at DESC").
 		Find(&servers).Error; err != nil {
 		return nil, 0, err
 	}
@@ -196,7 +199,7 @@ func (r *gormRepository) Search(ctx context.Context, userID uuid.UUID, query str
 	if err := queryBuilder.
 		Limit(limit).
 		Offset(offset).
-		Order("created_at DESC").
+		Order("sort_order ASC, created_at DESC").
 		Find(&servers).Error; err != nil {
 		return nil, 0, err
 	}
@@ -220,7 +223,7 @@ func (r *gormRepository) FindByGroup(ctx context.Context, userID uuid.UUID, grou
 	if err := queryBuilder.
 		Limit(limit).
 		Offset(offset).
-		Order("created_at DESC").
+		Order("sort_order ASC, created_at DESC").
 		Find(&servers).Error; err != nil {
 		return nil, 0, err
 	}
@@ -236,4 +239,24 @@ func (r *gormRepository) CountByUserID(ctx context.Context, userID uuid.UUID) (i
 		return 0, err
 	}
 	return count, nil
+}
+
+// UpdateSortOrders 批量更新服务器排序顺序
+// 使用事务确保原子性，避免部分更新失败
+func (r *gormRepository) UpdateSortOrders(ctx context.Context, userID uuid.UUID, orders map[uuid.UUID]int) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for serverID, sortOrder := range orders {
+			// 验证服务器归属权，防止越权操作
+			result := tx.Model(&Server{}).
+				Where("id = ? AND user_id = ?", serverID, userID).
+				Update("sort_order", sortOrder)
+
+			if result.Error != nil {
+				return result.Error
+			}
+			// 如果没有找到匹配的记录（可能是越权或不存在），跳过
+			// 不返回错误，因为前端可能有过期数据
+		}
+		return nil
+	})
 }

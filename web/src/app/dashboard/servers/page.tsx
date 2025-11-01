@@ -17,15 +17,146 @@ import {
  Terminal,
  Edit,
  Trash2,
- Settings,
- Pin,
- PinOff,
+ TestTube2,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
-const STORAGE_KEY = 'servers-order'
-const PINNED_KEY = 'servers-pinned'
+// 可排序的服务器项组件
+function SortableServerItem({
+  server,
+  testingServerId,
+  onConnect,
+  onTest,
+  onEdit,
+  onDelete,
+}: {
+  server: Server
+  testingServerId: string | null
+  onConnect: (id: string) => void
+  onTest: (id: string, e: React.MouseEvent) => void
+  onEdit: (server: Server) => void
+  onDelete: (id: string) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: server.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging
+      ? transition
+      : 'transform 350ms cubic-bezier(0.25, 0.8, 0.25, 1)', // 平滑过渡动画
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="group flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40 cursor-grab active:cursor-grabbing"
+    >
+      <div
+        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+          server.status === 'online'
+            ? 'bg-green-500'
+            : 'bg-zinc-400 dark:bg-zinc-600'
+        }`}
+      />
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <div className={"text-sm font-medium transition-colors truncate text-zinc-900 dark:text-white"}>
+            {server.name || server.host}
+          </div>
+          {/* 测试气泡按钮 */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            onClick={(e) => onTest(server.id, e)}
+            disabled={testingServerId === server.id}
+            title="测试连接"
+          >
+            {testingServerId === server.id ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <TestTube2 className="h-3 w-3" />
+            )}
+          </Button>
+        </div>
+        <div className={"text-xs font-mono truncate text-zinc-500 dark:text-zinc-600"}>
+          {server.username}@{server.host}:{server.port}
+        </div>
+      </div>
+
+      {server.group && (
+        <Badge variant="secondary" className="text-xs flex-shrink-0">
+          {server.group}
+        </Badge>
+      )}
+
+      {server.tags && server.tags.length > 0 && (
+        <Badge variant="outline" className="text-xs flex-shrink-0">
+          {server.tags[0]}
+        </Badge>
+      )}
+
+      {/* 操作按钮组 */}
+      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          onClick={() => onConnect(server.id)}
+          disabled={server.status !== 'online'}
+          title="连接终端">
+          <Terminal className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          onClick={() => onEdit(server)}
+          title="编辑配置">
+          <Edit className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-destructive hover:bg-red-50 dark:hover:bg-red-950/20"
+          onClick={() => onDelete(server.id)}
+          title="删除服务器">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 
 export default function ServersPage() {
  const router = useRouter()
@@ -37,7 +168,10 @@ export default function ServersPage() {
  const [editingServer, setEditingServer] = useState<Server | null>(null)
  const [loading, setLoading] = useState(true)
  const [activeTab, setActiveTab] = useState<'all' | 'online' | 'offline'>('all')
- const [pinnedServers, setPinnedServers] = useState<Set<string>>(new Set())
+ const [testingServerId, setTestingServerId] = useState<string | null>(null)
+ const [isBatchTesting, setIsBatchTesting] = useState(false)
+ const [draggedServer, setDraggedServer] = useState<Server | null>(null)
+ const [isMounted, setIsMounted] = useState(false)
  const [statistics, setStatistics] = useState({
  total: 0,
  online: 0,
@@ -46,20 +180,27 @@ export default function ServersPage() {
  unknown: 0
  })
 
+ // 配置拖拽传感器
+ const sensors = useSensors(
+   useSensor(PointerSensor, {
+     activationConstraint: {
+       distance: 8, // 移动8px后才激活拖拽，避免与点击事件冲突
+     },
+   })
+ )
+
+ // 拖拽动画配置
+ const [activeId, setActiveId] = useState<string | null>(null)
+
+ // 客户端挂载检测
+ useEffect(() => {
+   setIsMounted(true)
+ }, [])
+
  // 加载服务器列表
  useEffect(() => {
  loadServers()
  loadStatistics()
-
- // 加载置顶状态
- const savedPinned = localStorage.getItem(PINNED_KEY)
- if (savedPinned) {
- try {
- setPinnedServers(new Set(JSON.parse(savedPinned)))
- } catch (e) {
- console.error('Failed to load pinned servers:', e)
- }
- }
  }, [])
 
  // 根据搜索词和激活的标签过滤服务器
@@ -82,15 +223,8 @@ export default function ServersPage() {
  )
  }
 
- // 置顶的服务器排在前面
- filtered.sort((a, b) => {
- const aPin = pinnedServers.has(a.id) ? 1 : 0
- const bPin = pinnedServers.has(b.id) ? 1 : 0
- return bPin - aPin
- })
-
  setFilteredServers(filtered)
- }, [servers, searchTerm, activeTab, pinnedServers])
+ }, [servers, searchTerm, activeTab])
 
  async function loadServers() {
  try {
@@ -107,7 +241,7 @@ export default function ServersPage() {
  limit: 100
  })
 
- const serverList = Array.isArray(response)
+ let serverList = Array.isArray(response)
  ? response
  : (response?.data || [])
 
@@ -148,20 +282,114 @@ export default function ServersPage() {
  setIsEditDialogOpen(true)
  }
 
- const handleTogglePin = (serverId: string) => {
- setPinnedServers(prev => {
- const newSet = new Set(prev)
- if (newSet.has(serverId)) {
- newSet.delete(serverId)
- toast.success("已取消置顶")
- } else {
- newSet.add(serverId)
- toast.success("已置顶")
+ const handleTestConnection = async (serverId: string, e: React.MouseEvent) => {
+ e.stopPropagation()
+
+ const token = localStorage.getItem("easyssh_access_token")
+ if (!token) {
+ router.push("/login")
+ return
  }
- // 保存到localStorage
- localStorage.setItem(PINNED_KEY, JSON.stringify(Array.from(newSet)))
- return newSet
+
+ setTestingServerId(serverId)
+ toast.info("正在测试连接...")
+
+ try {
+ const result = await serversApi.testConnection(token, serverId)
+ if (result.success) {
+ toast.success(`连接测试成功！延迟: ${result.latency_ms}ms`)
+
+ // 乐观更新：只更新当前服务器的状态，保持列表顺序不变
+ setServers(prev => prev.map(s =>
+ s.id === serverId ? { ...s, status: 'online' as const } : s
+ ))
+
+ // 只刷新统计信息
+ await loadStatistics()
+ } else {
+ toast.error("连接测试失败: " + result.message)
+
+ // 更新为离线状态
+ setServers(prev => prev.map(s =>
+ s.id === serverId ? { ...s, status: 'offline' as const } : s
+ ))
+
+ await loadStatistics()
+ }
+ } catch (error: any) {
+ toast.error("测试失败: " + (error?.message || "未知错误"))
+
+ // 异常时标记为错误状态
+ setServers(prev => prev.map(s =>
+ s.id === serverId ? { ...s, status: 'error' as const } : s
+ ))
+
+ await loadStatistics()
+ } finally {
+ setTestingServerId(null)
+ }
+ }
+
+ // 批量测试离线服务器
+ const handleBatchTestOffline = async () => {
+ const token = localStorage.getItem("easyssh_access_token")
+ if (!token) {
+ router.push("/login")
+ return
+ }
+
+ // 获取所有离线和错误状态的服务器
+ const offlineServers = servers.filter(s => s.status === 'offline' || s.status === 'error')
+
+ if (offlineServers.length === 0) {
+ toast.info("没有离线服务器需要测试")
+ return
+ }
+
+ setIsBatchTesting(true)
+ toast.info(`开始测试 ${offlineServers.length} 台离线服务器...`)
+
+ let successCount = 0
+ let failCount = 0
+
+ // 并发测试所有离线服务器
+ const testPromises = offlineServers.map(async (server) => {
+ try {
+ const result = await serversApi.testConnection(token, server.id)
+
+ // 更新服务器状态
+ setServers(prev => prev.map(s =>
+ s.id === server.id ? { ...s, status: result.success ? 'online' as const : 'offline' as const } : s
+ ))
+
+ if (result.success) {
+ successCount++
+ } else {
+ failCount++
+ }
+ } catch (error) {
+ failCount++
+ setServers(prev => prev.map(s =>
+ s.id === server.id ? { ...s, status: 'error' as const } : s
+ ))
+ }
  })
+
+ await Promise.all(testPromises)
+
+ // 刷新统计信息
+ await loadStatistics()
+
+ setIsBatchTesting(false)
+
+ // 显示测试结果
+ if (successCount > 0 && failCount > 0) {
+ toast.success(`测试完成：${successCount} 台恢复在线，${failCount} 台仍然离线`)
+ } else if (successCount > 0) {
+ toast.success(`测试完成：${successCount} 台服务器恢复在线！`)
+ } else {
+ toast.error(`测试完成：所有服务器仍然离线`)
+ }
  }
 
  const handleDelete = async (serverId: string) => {
@@ -187,7 +415,49 @@ export default function ServersPage() {
  }
  }
 
- const handleAddServer = async (data: ServerFormData, shouldTest = false) => {
+ // 拖拽开始
+ const handleDragStart = (event: any) => {
+ const server = servers.find(s => s.id === event.active.id)
+ setDraggedServer(server || null)
+ }
+
+ // 拖拽结束
+ const handleDragEnd = async (event: DragEndEvent) => {
+ const { active, over } = event
+ setDraggedServer(null)
+
+ if (!over || active.id === over.id) return
+
+ const oldIndex = servers.findIndex(s => s.id === active.id)
+ const newIndex = servers.findIndex(s => s.id === over.id)
+
+ if (oldIndex !== -1 && newIndex !== -1) {
+ const newOrder = arrayMove(servers, oldIndex, newIndex)
+
+ // 乐观更新：立即更新 UI
+ setServers(newOrder)
+
+ // 调用后端 API 保存新顺序
+ try {
+ const token = localStorage.getItem("easyssh_access_token")
+ if (!token) {
+ router.push("/login")
+ return
+ }
+
+ const serverIds = newOrder.map(s => s.id)
+ await serversApi.reorder(token, serverIds)
+ toast.success("排序已保存")
+ } catch (error: any) {
+ console.error("Failed to save server order:", error)
+ toast.error("保存排序失败: " + (error?.message || "未知错误"))
+ // 错误时重新加载服务器列表
+ await loadServers()
+ }
+ }
+ }
+
+ const handleAddServer = async (data: ServerFormData) => {
  try {
  const token = localStorage.getItem("easyssh_access_token")
  if (!token) {
@@ -219,37 +489,13 @@ export default function ServersPage() {
  description: data.description,
  }
 
- const createdServer = await serversApi.create(token, serverData)
+ await serversApi.create(token, serverData)
 
  toast.success("服务器添加成功")
  setIsAddDialogOpen(false)
 
  await loadServers()
  await loadStatistics()
-
- // 如果需要测试连接
- if (shouldTest && createdServer?.id) {
- toast.info("正在测试连接...")
- try {
- const result = await serversApi.testConnection(token, createdServer.id)
- if (result.success) {
- toast.success(`连接测试成功！延迟: ${result.latency_ms}ms`)
- // 测试成功后刷新服务器列表和统计信息以更新状态
- await loadServers()
- await loadStatistics()
- } else {
- toast.error("连接测试失败: " + result.message)
- // 测试失败也要刷新，因为后端会将状态更新为离线
- await loadServers()
- await loadStatistics()
- }
- } catch (error: any) {
- toast.error("测试失败: " + (error?.message || "未知错误"))
- // 测试失败也要刷新
- await loadServers()
- await loadStatistics()
- }
- }
  } catch (error: any) {
  console.error("Failed to add server:", error)
 
@@ -268,7 +514,7 @@ export default function ServersPage() {
  }
  }
 
- const handleEditServer = async (data: ServerFormData, shouldTest = false) => {
+ const handleEditServer = async (data: ServerFormData) => {
  try {
  const token = localStorage.getItem("easyssh_access_token")
  if (!token) {
@@ -296,36 +542,10 @@ export default function ServersPage() {
 
  toast.success("服务器更新成功")
  setIsEditDialogOpen(false)
-
- const serverId = editingServer.id
  setEditingServer(null)
 
  await loadServers()
  await loadStatistics()
-
- // 如果需要测试连接
- if (shouldTest) {
- toast.info("正在测试连接...")
- try {
- const result = await serversApi.testConnection(token, serverId)
- if (result.success) {
- toast.success(`连接测试成功！延迟: ${result.latency_ms}ms`)
- // 测试成功后刷新服务器列表和统计信息以更新状态
- await loadServers()
- await loadStatistics()
- } else {
- toast.error("连接测试失败: " + result.message)
- // 测试失败也要刷新，因为后端会将状态更新为离线
- await loadServers()
- await loadStatistics()
- }
- } catch (error: any) {
- toast.error("测试失败: " + (error?.message || "未知错误"))
- // 测试失败也要刷新
- await loadServers()
- await loadStatistics()
- }
- }
  } catch (error: any) {
  console.error("Failed to update server:", error)
 
@@ -391,7 +611,7 @@ export default function ServersPage() {
  </div>
 
  {/* 标签切换 */}
- <div className="flex gap-2">
+ <div className="flex gap-2 items-center">
  <Button
  variant={activeTab === 'all' ? 'default' : 'outline'}
  size="sm"
@@ -418,6 +638,24 @@ export default function ServersPage() {
  <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 mr-1.5" />
  离线 ({statistics.offline})
  </Button>
+
+ {/* 一键测试离线服务器按钮 */}
+ {statistics.offline > 0 && (
+ <Button
+ variant="ghost"
+ size="sm"
+ className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+ onClick={handleBatchTestOffline}
+ disabled={isBatchTesting}
+ title="一键测试所有离线服务器"
+ >
+ {isBatchTesting ? (
+ <Loader2 className="h-4 w-4 animate-spin" />
+ ) : (
+ <TestTube2 className="h-4 w-4" />
+ )}
+ </Button>
+ )}
  </div>
  </div>
  )}
@@ -428,15 +666,55 @@ export default function ServersPage() {
  <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
 
  <div className="space-y-2">
+ {isMounted ? (
+ <DndContext
+ sensors={sensors}
+ collisionDetection={closestCenter}
+ onDragStart={handleDragStart}
+ onDragEnd={handleDragEnd}
+ >
+ <SortableContext
+ items={filteredServers.map(s => s.id)}
+ strategy={verticalListSortingStrategy}
+ >
  {filteredServers.map((server) => (
+ <SortableServerItem
+ key={server.id}
+ server={server}
+ testingServerId={testingServerId}
+ onConnect={handleConnect}
+ onTest={handleTestConnection}
+ onEdit={handleEdit}
+ onDelete={handleDelete}
+ />
+ ))}
+ </SortableContext>
+
+ <DragOverlay>
+ {draggedServer ? (
+ <div className="flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30 shadow-lg opacity-80">
+ <div
+ className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+ draggedServer.status === 'online'
+ ? 'bg-green-500'
+ : 'bg-zinc-400 dark:bg-zinc-600'
+ }`}
+ />
+ <div className="flex-1 min-w-0">
+ <div className="text-sm font-medium text-zinc-900 dark:text-white">
+ {draggedServer.name || draggedServer.host}
+ </div>
+ </div>
+ </div>
+ ) : null}
+ </DragOverlay>
+ </DndContext>
+ ) : (
+ // 服务端渲染时的静态列表
+ filteredServers.map((server) => (
  <div
  key={server.id}
- className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40 cursor-pointer"}
- onClick={() => {
- if (server.status === 'online') {
- handleConnect(server.id)
- }
- }}
+ className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40"}
  >
  <div
  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
@@ -445,7 +723,6 @@ export default function ServersPage() {
  : 'bg-zinc-400 dark:bg-zinc-600'
  }`}
  />
-
  <div className="flex-1 min-w-0">
  <div className={"text-sm font-medium transition-colors truncate text-zinc-900 dark:text-white"}>
  {server.name || server.host}
@@ -454,63 +731,9 @@ export default function ServersPage() {
  {server.username}@{server.host}:{server.port}
  </div>
  </div>
-
- {server.group && (
- <Badge variant="secondary" className="text-xs flex-shrink-0">
- {server.group}
- </Badge>
- )}
-
- {server.tags && server.tags.length > 0 && (
- <Badge variant="outline" className="text-xs flex-shrink-0">
- {server.tags[0]}
- </Badge>
- )}
-
- {/* 操作按钮组 */}
- <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
- {/* 置顶按钮 */}
- <Button
- variant="ghost"
- size="sm"
- className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
- onClick={() => handleTogglePin(server.id)}
- title={pinnedServers.has(server.id) ? "取消置顶" : "置顶"}
- >
- {pinnedServers.has(server.id) ? (
- <Pin className="h-4 w-4" />
- ) : (
- <PinOff className="h-4 w-4" />
- )}
- </Button>
- <Button
- variant="ghost"
- size="sm"
- className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
- onClick={() => handleConnect(server.id)}
- disabled={server.status !== 'online'}
- title="连接终端">
- <Terminal className="h-4 w-4" />
- </Button>
- <Button
- variant="ghost"
- size="sm"
- className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
- onClick={() => handleEdit(server)}
- title="编辑配置">
- <Edit className="h-4 w-4" />
- </Button>
- <Button
- variant="ghost"
- size="sm"
- className="h-8 w-8 p-0 text-destructive hover:bg-red-50 dark:hover:bg-red-950/20"
- onClick={() => handleDelete(server.id)}
- title="删除服务器">
- <Trash2 className="h-4 w-4" />
- </Button>
  </div>
- </div>
- ))}
+ ))
+ )}
  </div>
  </div>
  )}

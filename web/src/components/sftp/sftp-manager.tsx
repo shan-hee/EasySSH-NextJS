@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, DragEvent, useMemo, useCallback, useDeferredValue } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, DragEvent, useMemo, useCallback, useDeferredValue, startTransition } from "react"
 import { createPortal } from "react-dom"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
@@ -229,6 +229,8 @@ export function SftpManager(props: SftpManagerProps) {
   const dropZoneRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const sessionLabelInputRef = useRef<HTMLInputElement>(null)
+  const filteredFilesRef = useRef<EnhancedFileItem[]>([])
+  const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const enhancedFiles = useMemo<EnhancedFileItem[]>(() => {
     return files.map((file) => ({
       ...file,
@@ -240,7 +242,7 @@ export function SftpManager(props: SftpManagerProps) {
   const filteredFiles = useMemo<EnhancedFileItem[]>(() => {
     const keyword = deferredSearchTerm.trim().toLowerCase()
 
-    return enhancedFiles
+    const result = enhancedFiles
       .filter((file) => {
         if (!showHidden && file.name.startsWith('.') && file.name !== '..') {
           return false
@@ -265,6 +267,10 @@ export function SftpManager(props: SftpManagerProps) {
         const comparison = aValue.localeCompare(bValue)
         return sortOrder === "asc" ? comparison : -comparison
       })
+
+    // 同时更新 ref 以供 handleFileSelect 使用
+    filteredFilesRef.current = result
+    return result
   }, [enhancedFiles, showHidden, deferredSearchTerm, sortBy, sortOrder])
 
   // 文件选择处理 - 使用 useCallback 优化
@@ -274,14 +280,14 @@ export function SftpManager(props: SftpManagerProps) {
 
     setSelectedFiles((prev) => {
       if (isShift && prev.length > 0) {
-        const lastIndex = filteredFiles.findIndex((f) => f.name === prev[prev.length - 1])
-        const currentIndex = filteredFiles.findIndex((f) => f.name === fileName)
+        const lastIndex = filteredFilesRef.current.findIndex((f) => f.name === prev[prev.length - 1])
+        const currentIndex = filteredFilesRef.current.findIndex((f) => f.name === fileName)
         if (lastIndex === -1 || currentIndex === -1) {
           return prev
         }
         const start = Math.min(lastIndex, currentIndex)
         const end = Math.max(lastIndex, currentIndex)
-        const range = filteredFiles.slice(start, end + 1).map((f) => f.name)
+        const range = filteredFilesRef.current.slice(start, end + 1).map((f) => f.name)
         return Array.from(new Set([...prev, ...range]))
       }
 
@@ -297,7 +303,7 @@ export function SftpManager(props: SftpManagerProps) {
 
       return [fileName]
     })
-  }, [filteredFiles])
+  }, [])
 
   // 打开文件编辑器 - 使用 useCallback 优化
   const handleOpenEditor = useCallback(async (fileName: string) => {
@@ -643,12 +649,13 @@ export function SftpManager(props: SftpManagerProps) {
 
   // 开始重命名
   const startRename = (fileName: string) => {
+    // 清除任何待处理的 blur 定时器
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current)
+      blurTimeoutRef.current = null
+    }
     setEditingFile(fileName)
     setEditingFileName(fileName)
-    setTimeout(() => {
-      editInputRef.current?.focus()
-      editInputRef.current?.select()
-    }, 0)
   }
 
   // 完成重命名
@@ -666,15 +673,63 @@ export function SftpManager(props: SftpManagerProps) {
     setEditingFileName("")
   }
 
+  // 延迟处理重命名失焦 - 避免与其他事件冲突
+  const handleRenameBlur = useCallback((e: React.FocusEvent) => {
+    // 清除之前的定时器
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current)
+    }
+
+    // 检查焦点是否移到了文档外部或者其他非输入元素
+    const relatedTarget = e.relatedTarget as HTMLElement
+
+    // 如果焦点移动到了按钮、菜单项等，延迟处理以允许点击事件完成
+    if (relatedTarget && (
+      relatedTarget.tagName === 'BUTTON' ||
+      relatedTarget.closest('[role="menuitem"]') ||
+      relatedTarget.closest('[role="menu"]')
+    )) {
+      blurTimeoutRef.current = setTimeout(() => {
+        // 再次检查，确保不是因为点击了其他操作
+        if (editInputRef.current && !editInputRef.current.contains(document.activeElement)) {
+          finishRename()
+        }
+      }, 150)
+    } else {
+      // 其他情况立即完成
+      blurTimeoutRef.current = setTimeout(() => finishRename(), 50)
+    }
+  }, [])
+
+  // 延迟处理创建失焦
+  const handleCreateBlur = useCallback((e: React.FocusEvent) => {
+    // 清除之前的定时器
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current)
+    }
+
+    const relatedTarget = e.relatedTarget as HTMLElement
+
+    if (relatedTarget && (
+      relatedTarget.tagName === 'BUTTON' ||
+      relatedTarget.closest('[role="menuitem"]') ||
+      relatedTarget.closest('[role="menu"]')
+    )) {
+      blurTimeoutRef.current = setTimeout(() => {
+        if (editInputRef.current && !editInputRef.current.contains(document.activeElement)) {
+          finishCreate()
+        }
+      }, 150)
+    } else {
+      blurTimeoutRef.current = setTimeout(() => finishCreate(), 50)
+    }
+  }, [])
+
   // 开始创建新文件/文件夹
   const startCreateNew = (type: "file" | "folder") => {
     setCreatingNew(type)
     const newName = type === "folder" ? "新建文件夹" : "新建文件.txt"
     setEditingFileName(newName)
-    setTimeout(() => {
-      editInputRef.current?.focus()
-      editInputRef.current?.select()
-    }, 0)
   }
 
   // 完成创建
@@ -980,6 +1035,21 @@ export function SftpManager(props: SftpManagerProps) {
     }
   }, [currentPath, isEditingPath])
 
+  // 当进入编辑/创建状态时,自动聚焦并选中输入框
+  useLayoutEffect(() => {
+    if (editingFile || creatingNew) {
+      // 使用 requestAnimationFrame + setTimeout 确保在所有渲染和动画完成后聚焦
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (editInputRef.current) {
+            editInputRef.current.focus()
+            editInputRef.current.select()
+          }
+        }, 100) // 增加延迟,等待 DropdownMenu 完全关闭
+      })
+    }
+  }, [editingFile, creatingNew])
+
   // 传输状态图标
   const getStatusIcon = (status: TransferTask["status"]) => {
     switch (status) {
@@ -1052,14 +1122,14 @@ export function SftpManager(props: SftpManagerProps) {
     username,
   ])
 
-  const stickyHeaderCellClass = "sticky top-0 z-20 bg-background/95 dark:bg-zinc-950/95 supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
+  const stickyHeaderCellClass = "sticky top-0 z-20 bg-muted supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
 
   // 主界面内容
   const managerContent = (
     <SftpSessionProvider value={sessionContextValue}>
       <div
         className={cn(
-          "flex flex-col h-full overflow-hidden transition-colors bg-card",
+          "flex flex-col h-full overflow-hidden transition-colors bg-background",
           isFullscreen ? "fixed inset-0 z-[9999] rounded-none border-0" : "rounded-xl border"
         )}
       >
@@ -1471,7 +1541,7 @@ export function SftpManager(props: SftpManagerProps) {
                           cancelCreate()
                         }
                       }}
-                      onBlur={finishCreate}
+                      onBlur={handleCreateBlur}
                       className={cn(
                         "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                       )}
@@ -1548,7 +1618,7 @@ export function SftpManager(props: SftpManagerProps) {
                               cancelRename()
                             }
                           }}
-                          onBlur={finishRename}
+                          onBlur={handleRenameBlur}
                           className={cn(
                             "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                           )}
@@ -1574,23 +1644,10 @@ export function SftpManager(props: SftpManagerProps) {
             wrapperClassName="overflow-auto h-full scrollbar-custom"
             className="sftp-table text-xs [&_th]:h-9 [&_th]:px-3 [&_th]:text-xs [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle"
           >
-            <TableHeader className="sticky top-0 z-20 bg-background/95 dark:bg-zinc-950/95 supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
+            <TableHeader className="sticky top-0 z-20 bg-muted supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
               <TableRow className={cn(
                 "border-b border-zinc-200 dark:border-zinc-800/50 text-xs",
               )}>
-                <TableHead
-                  className={cn(stickyHeaderCellClass, "w-10")}
-                >
-                  <input
-                    type="checkbox"
-                    checked={
-                      selectedFiles.length === filteredFiles.length &&
-                      filteredFiles.length > 0
-                    }
-                    onChange={handleSelectAll}
-                    className="rounded"
-                  />
-                </TableHead>
                 <TableHead
                   className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
                   onClick={() => {
@@ -1665,7 +1722,7 @@ export function SftpManager(props: SftpManagerProps) {
                           }
                           e.stopPropagation()
                         }}
-                        onBlur={finishCreate}
+                        onBlur={handleCreateBlur}
                         onClick={(e) => e.stopPropagation()}
                         className={cn(
                           "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
@@ -1726,15 +1783,6 @@ export function SftpManager(props: SftpManagerProps) {
                     }}
                     onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
                   >
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedFiles.includes(file.name)}
-                      onChange={() => {}}
-                      className="rounded"
-                    />
-                  </TableCell>
-
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {getFileIcon(file)}
@@ -1751,7 +1799,7 @@ export function SftpManager(props: SftpManagerProps) {
                             }
                             e.stopPropagation()
                           }}
-                          onBlur={finishRename}
+                          onBlur={handleRenameBlur}
                           onClick={(e) => e.stopPropagation()}
                           className={cn(
                             "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
@@ -1849,7 +1897,10 @@ export function SftpManager(props: SftpManagerProps) {
                         {/* 重命名 */}
                         <DropdownMenuItem
                           onClick={() => {
-                            startRename(file.name)
+                            // 延迟执行,等待 DropdownMenu 关闭动画完成
+                            setTimeout(() => {
+                              startRename(file.name)
+                            }, 50)
                           }}
                           className={cn(
                             "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
@@ -1917,6 +1968,7 @@ export function SftpManager(props: SftpManagerProps) {
               type="file"
               multiple
               className="hidden"
+              tabIndex={-1}
               onChange={handleInputChange}
             />
           </>
@@ -2211,10 +2263,13 @@ export function SftpManager(props: SftpManagerProps) {
                       "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
                     )}
                     onClick={() => {
-                      if (contextMenu.fileName) {
-                        startRename(contextMenu.fileName)
-                      }
                       closeContextMenu()
+                      if (contextMenu.fileName) {
+                        // 延迟执行,等待右键菜单关闭动画完成
+                        setTimeout(() => {
+                          startRename(contextMenu.fileName!)
+                        }, 50)
+                      }
                     }}
                   >
                     <Edit className="h-4 w-4" />

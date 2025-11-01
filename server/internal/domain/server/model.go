@@ -42,6 +42,7 @@ type Server struct {
 	Status        ServerStatus   `gorm:"type:varchar(20);default:'unknown'" json:"status"`
 	LastConnected *time.Time     `json:"last_connected,omitempty"`
 	Description   string         `gorm:"type:text" json:"description"`
+	SortOrder     int            `gorm:"default:0;index" json:"sort_order"` // 用户自定义排序顺序
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"` // 软删除
@@ -79,6 +80,7 @@ func (s *Server) ToPublic() map[string]interface{} {
 		"tags":        s.Tags,
 		"status":      s.Status,
 		"description": s.Description,
+		"sort_order":  s.SortOrder,
 		"created_at":  s.CreatedAt,
 		"updated_at":  s.UpdatedAt,
 	}
