@@ -8,6 +8,8 @@ import type { QuickServer } from "@/components/terminal/quick-connect"
 import { useRouter, useSearchParams } from "next/navigation"
 import { serversApi, type Server } from "@/lib/api"
 import { Loader2 } from "lucide-react"
+import { useTerminalStore } from "@/stores/terminal-store"
+import { useTabUIStore } from "@/stores/tab-ui-store"
 
 export default function TerminalPage() {
  const router = useRouter()
@@ -15,9 +17,32 @@ export default function TerminalPage() {
  const [servers, setServers] = useState<QuickServer[]>([])
  const [loading, setLoading] = useState(true)
 
- // 立即创建初始快速连接会话，避免显示空状态
+ // 根据 URL 参数决定初始会话类型
  const [sessions, setSessions] = useState<TerminalSession[]>(() => {
  const now = Date.now()
+ const serverId = searchParams.get("server")
+ const serverName = searchParams.get("name") || "" // 从 URL 获取服务器名称
+
+ // 如果有 server 参数，创建终端会话（等待服务器信息加载）
+ if (serverId) {
+ return [
+ {
+ id: `auto-${serverId}-${now}`,
+ serverId: serverId, // 暂时使用字符串，稍后 useEffect 会填充完整信息
+ serverName: serverName, // 使用 URL 传递的服务器名称
+ host: "",
+ port: undefined,
+ username: "",
+ isConnected: false,
+ status: "reconnecting", // 黄色状态指示器
+ lastActivity: now,
+ type: "terminal",
+ pinned: false,
+ },
+ ]
+ }
+
+ // 否则创建快速连接会话
  return [
  {
  id: "quick-initial",
@@ -49,13 +74,17 @@ export default function TerminalPage() {
 
  const serverId = searchParams.get("server")
  if (serverId) {
- // 如果有 server 参数，直接创建该服务器的会话，替换初始的快速连接
+ // 查找服务器信息
  const server = servers.find(s => s.id.toString() === serverId)
+
  if (server && server.status === "online") {
- const now = Date.now()
- const sessionId = `auto-${serverId}-${now}`
- const newSession: TerminalSession = {
- id: sessionId,
+ // 服务器在线，更新会话信息
+ setSessions(prev => {
+ const updated = prev.map(s => {
+ // 只更新我们初始创建的 auto- 会话
+ if (s.id.startsWith(`auto-${serverId}-`)) {
+ return {
+ ...s,
  serverId: server.id,
  serverName: server.name,
  host: server.host,
@@ -63,18 +92,49 @@ export default function TerminalPage() {
  username: server.username,
  isConnected: true,
  status: "connected",
- lastActivity: now,
  group: server.group,
  tags: server.tags,
- pinned: false,
- type: "terminal",
  }
- setSessions([newSession])
- setActiveSessionId(sessionId)
+ }
+ return s
+ })
+
+ // 设置激活的会话
+ const activeSession = updated.find(s => s.id.startsWith(`auto-${serverId}-`))
+ if (activeSession) {
+ setActiveSessionId(activeSession.id)
+ }
+
+ return updated
+ })
+
+ // 清除 URL 参数
+ router.replace("/dashboard/terminal", { scroll: false })
+ } else {
+ // 服务器不存在或离线，回退到快速连接
+ if (!server) {
+ toast.error("服务器不存在")
+ } else {
+ toast.error("服务器离线，无法连接")
+ }
+
+ const now = Date.now()
+ setSessions([{
+ id: "quick-initial",
+ serverId: 0,
+ serverName: "快速连接",
+ host: "",
+ port: undefined,
+ username: "",
+ isConnected: false,
+ status: "disconnected",
+ lastActivity: now,
+ type: "quick",
+ pinned: false,
+ }])
  router.replace("/dashboard/terminal", { scroll: false })
  }
  }
- // 注意：不需要再创建快速连接会话，因为已在 useState 初始化时创建
  }
  }, [loading, servers, searchParams, router])
 
@@ -173,8 +233,30 @@ export default function TerminalPage() {
  // 从"快速连接"页签内选择服务器，升级为终端会话
  const handleStartConnectionFromQuick = (sessionId: string, server: QuickServer) => {
  const now = Date.now()
+ const newSessionId = `auto-${server.id}-${now}`
+
+ // 获取 Store 实例
+ const terminalStore = useTerminalStore.getState()
+ const tabUIStore = useTabUIStore.getState()
+
+ // 迁移终端实例（如果存在）
+ const terminalInstance = terminalStore.getTerminal(sessionId)
+ if (terminalInstance) {
+ terminalStore.setTerminal(newSessionId, {
+ ...terminalInstance,
+ serverId: String(server.id)
+ })
+ terminalStore.destroySession(sessionId)
+ }
+
+ // 迁移 UI 状态
+ const tabState = tabUIStore.getTabState(sessionId)
+ tabUIStore.setTabState(newSessionId, tabState)
+ tabUIStore.deleteTabState(sessionId)
+
+ // 更新会话列表
  setSessions(prev => prev.map(s => s.id === sessionId ? {
- id: s.id,
+ id: newSessionId, // 使用新的 auto- 格式 ID
  serverId: server.id,
  serverName: server.name,
  host: server.host,
@@ -189,8 +271,12 @@ export default function TerminalPage() {
  type: "terminal",
  } : s))
 
+ // 更新激活状态
+ if (activeSessionId === sessionId) {
+ setActiveSessionId(newSessionId)
+ }
+
  // 连接建立后，稍后重新加载服务器列表以获取更新的 last_connected
- // 延迟加载，确保后端已经更新完成
  setTimeout(() => {
  loadServers()
  }, 1000)

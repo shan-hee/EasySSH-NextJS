@@ -164,17 +164,6 @@ export function TabTerminalContent({
               </Button>
             </div>
 
-            {/* 中间：会话信息 */}
-            <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
-              <span className="font-mono">
-                {session.username}@{session.host}
-              </span>
-              <span className="text-zinc-400 dark:text-zinc-700">|</span>
-              <span className={session.isConnected ? 'text-green-400' : 'text-red-400'}>
-                {session.isConnected ? '已连接' : '已断开'}
-              </span>
-            </div>
-
             {/* 右侧工具按钮 */}
             <div className="flex items-center gap-1">
               <Button

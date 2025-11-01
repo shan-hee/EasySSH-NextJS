@@ -274,7 +274,10 @@ export default function ServersPage() {
  }
 
  const handleConnect = (serverId: string) => {
- router.push(`/dashboard/terminal?server=${serverId}`)
+ // 查找服务器以获取名称
+ const server = servers.find(s => s.id === serverId)
+ const serverName = server?.name || server?.host || ""
+ router.push(`/dashboard/terminal?server=${serverId}&name=${encodeURIComponent(serverName)}`)
  }
 
  const handleEdit = (server: Server) => {
