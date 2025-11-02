@@ -23,7 +23,7 @@ type Service interface {
 	ListSSHSessions(userID uuid.UUID, req *ListSSHSessionsRequest) (*ListSSHSessionsResponse, error)
 	GetStatistics(userID uuid.UUID) (*SSHSessionStatistics, error)
 	CloseSession(userID uuid.UUID, id uuid.UUID) error
-	UpdateSessionMetrics(sessionID string, bytesSent, bytesReceived int64, commandsCount int) error
+	UpdateSessionMetrics(sessionID string, bytesSent, bytesReceived int64) error
 }
 
 type service struct {
@@ -54,7 +54,6 @@ func (s *service) CreateSSHSession(req *CreateSSHSessionRequest) (*SSHSession, e
 		ConnectedAt:  time.Now(),
 		BytesSent:    0,
 		BytesReceived: 0,
-		CommandsCount: 0,
 	}
 
 	if err := s.repo.Create(session); err != nil {
@@ -101,10 +100,6 @@ func (s *service) UpdateSSHSession(userID uuid.UUID, id uuid.UUID, req *UpdateSS
 
 	if req.BytesReceived != nil {
 		updates["bytes_received"] = *req.BytesReceived
-	}
-
-	if req.CommandsCount != nil {
-		updates["commands_count"] = *req.CommandsCount
 	}
 
 	if req.ErrorMessage != "" {
@@ -217,7 +212,7 @@ func (s *service) CloseSession(userID uuid.UUID, id uuid.UUID) error {
 }
 
 // UpdateSessionMetrics 更新会话指标（由SSH服务调用）
-func (s *service) UpdateSessionMetrics(sessionID string, bytesSent, bytesReceived int64, commandsCount int) error {
+func (s *service) UpdateSessionMetrics(sessionID string, bytesSent, bytesReceived int64) error {
 	session, err := s.repo.GetBySessionID(sessionID)
 	if err != nil {
 		return err
@@ -226,7 +221,6 @@ func (s *service) UpdateSessionMetrics(sessionID string, bytesSent, bytesReceive
 	updates := map[string]interface{}{
 		"bytes_sent":     bytesSent,
 		"bytes_received": bytesReceived,
-		"commands_count": commandsCount,
 	}
 
 	return s.repo.Update(session.ID, updates)

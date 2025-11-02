@@ -22,7 +22,6 @@ type SSHSession struct {
 	Duration     int            `json:"duration,omitempty"` // 连接时长(秒)
 	BytesSent    int64          `gorm:"default:0" json:"bytes_sent"`
 	BytesReceived int64         `gorm:"default:0" json:"bytes_received"`
-	CommandsCount int           `gorm:"default:0" json:"commands_count"`
 	ErrorMessage string         `gorm:"type:text" json:"error_message,omitempty"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
@@ -42,6 +41,28 @@ func (SSHSession) TableName() string {
 	return "ssh_sessions"
 }
 
+// SSHSessionWithServer SSH会话及服务器信息
+type SSHSessionWithServer struct {
+	ID             uuid.UUID  `json:"id"`
+	UserID         uuid.UUID  `json:"user_id"`
+	ServerID       uuid.UUID  `json:"server_id"`
+	ServerName     string     `json:"server_name"`
+	ServerHost     string     `json:"server_host"`
+	SessionID      string     `json:"session_id"`
+	ClientIP       string     `json:"client_ip"`
+	ClientPort     int        `json:"client_port"`
+	TerminalType   string     `json:"terminal_type"`
+	Status         string     `json:"status"`
+	ConnectedAt    time.Time  `json:"connected_at"`
+	DisconnectedAt *time.Time `json:"disconnected_at,omitempty"`
+	Duration       int        `json:"duration,omitempty"`
+	BytesSent      int64      `json:"bytes_sent"`
+	BytesReceived  int64      `json:"bytes_received"`
+	ErrorMessage   string     `json:"error_message,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
 // CreateSSHSessionRequest 创建SSH会话记录请求
 type CreateSSHSessionRequest struct {
 	UserID       uuid.UUID `json:"user_id" binding:"required"`
@@ -57,7 +78,6 @@ type UpdateSSHSessionRequest struct {
 	Status        string  `json:"status,omitempty"`
 	BytesSent     *int64  `json:"bytes_sent,omitempty"`
 	BytesReceived *int64  `json:"bytes_received,omitempty"`
-	CommandsCount *int    `json:"commands_count,omitempty"`
 	ErrorMessage  string  `json:"error_message,omitempty"`
 }
 
@@ -72,11 +92,11 @@ type ListSSHSessionsRequest struct {
 
 // ListSSHSessionsResponse SSH会话列表响应
 type ListSSHSessionsResponse struct {
-	Data       []SSHSession `json:"data"`
-	Total      int64        `json:"total"`
-	Page       int          `json:"page"`
-	PageSize   int          `json:"page_size"`
-	TotalPages int          `json:"total_pages"`
+	Data       []SSHSessionWithServer `json:"data"`
+	Total      int64                  `json:"total"`
+	Page       int                    `json:"page"`
+	PageSize   int                    `json:"page_size"`
+	TotalPages int                    `json:"total_pages"`
 }
 
 // SSHSessionStatistics SSH会话统计信息

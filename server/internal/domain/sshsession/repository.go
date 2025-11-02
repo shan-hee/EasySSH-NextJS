@@ -12,7 +12,7 @@ type Repository interface {
 	Delete(id uuid.UUID) error
 	GetByID(id uuid.UUID) (*SSHSession, error)
 	GetBySessionID(sessionID string) (*SSHSession, error)
-	List(userID uuid.UUID, req *ListSSHSessionsRequest) ([]SSHSession, int64, error)
+	List(userID uuid.UUID, req *ListSSHSessionsRequest) ([]SSHSessionWithServer, int64, error)
 	GetStatistics(userID uuid.UUID) (*SSHSessionStatistics, error)
 	CloseSession(id uuid.UUID) error
 	GetActiveSessions() ([]SSHSession, error)
@@ -62,29 +62,40 @@ func (r *repository) GetBySessionID(sessionID string) (*SSHSession, error) {
 	return &session, nil
 }
 
-// List 获取SSH会话列表
-func (r *repository) List(userID uuid.UUID, req *ListSSHSessionsRequest) ([]SSHSession, int64, error) {
-	var sessions []SSHSession
+// List 获取SSH会话列表（带服务器信息）
+func (r *repository) List(userID uuid.UUID, req *ListSSHSessionsRequest) ([]SSHSessionWithServer, int64, error) {
+	var sessions []SSHSessionWithServer
 	var total int64
 
-	query := r.db.Model(&SSHSession{}).Where("user_id = ?", userID)
+	// 基础查询：SSH会话表左连接服务器表
+	query := r.db.Table("ssh_sessions").
+		Select(`ssh_sessions.id, ssh_sessions.user_id, ssh_sessions.server_id,
+			ssh_sessions.session_id, ssh_sessions.client_ip, ssh_sessions.client_port,
+			ssh_sessions.terminal_type, ssh_sessions.status, ssh_sessions.connected_at,
+			ssh_sessions.disconnected_at, ssh_sessions.duration, ssh_sessions.bytes_sent,
+			ssh_sessions.bytes_received, ssh_sessions.error_message,
+			ssh_sessions.created_at, ssh_sessions.updated_at,
+			COALESCE(servers.name, '') as server_name,
+			COALESCE(servers.host, '') as server_host`).
+		Joins("LEFT JOIN servers ON ssh_sessions.server_id = servers.id").
+		Where("ssh_sessions.user_id = ? AND ssh_sessions.deleted_at IS NULL", userID)
 
 	// 筛选条件
 	if req.Status != "" {
-		query = query.Where("status = ?", req.Status)
+		query = query.Where("ssh_sessions.status = ?", req.Status)
 	}
 
 	if req.ServerID != "" {
 		serverID, err := uuid.Parse(req.ServerID)
 		if err == nil {
-			query = query.Where("server_id = ?", serverID)
+			query = query.Where("ssh_sessions.server_id = ?", serverID)
 		}
 	}
 
 	if req.UserID != "" {
 		uid, err := uuid.Parse(req.UserID)
 		if err == nil {
-			query = query.Where("user_id = ?", uid)
+			query = query.Where("ssh_sessions.user_id = ?", uid)
 		}
 	}
 
@@ -95,10 +106,10 @@ func (r *repository) List(userID uuid.UUID, req *ListSSHSessionsRequest) ([]SSHS
 
 	// 分页
 	offset := (req.Page - 1) * req.Limit
-	if err := query.Order("connected_at DESC").
+	if err := query.Order("ssh_sessions.connected_at DESC").
 		Offset(offset).
 		Limit(req.Limit).
-		Find(&sessions).Error; err != nil {
+		Scan(&sessions).Error; err != nil {
 		return nil, 0, err
 	}
 

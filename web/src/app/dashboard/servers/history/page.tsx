@@ -80,7 +80,11 @@ export default function ServersHistoryPage() {
         sshSessionsApi.getStatistics(token),
       ])
 
-      setSessions(sessionsResponse.data || [])
+      // 确保 data 是数组
+      const sessionData = Array.isArray(sessionsResponse.data)
+        ? sessionsResponse.data
+        : []
+      setSessions(sessionData)
       setTotalPages(sessionsResponse.total_pages || 1)
       setStatistics(statsResponse.data)
     } catch (error: any) {
@@ -270,14 +274,13 @@ export default function ServersHistoryPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>服务器</TableHead>
                       <TableHead>会话ID</TableHead>
                       <TableHead>客户端信息</TableHead>
-                      <TableHead>终端类型</TableHead>
                       <TableHead>连接时间</TableHead>
                       <TableHead>断开时间</TableHead>
                       <TableHead>持续时长</TableHead>
                       <TableHead>数据传输</TableHead>
-                      <TableHead>命令数</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead>操作</TableHead>
                     </TableRow>
@@ -286,21 +289,33 @@ export default function ServersHistoryPage() {
                     {filteredSessions.map(session => {
                       const connectedTime = formatTimestamp(session.connected_at)
                       const disconnectedTime = session.disconnected_at ? formatTimestamp(session.disconnected_at) : null
+
+                      // 格式化客户端IP
+                      const formatClientIP = (ip: string) => {
+                        if (ip === '::1' || ip === '127.0.0.1') {
+                          return '本地连接'
+                        }
+                        return ip
+                      }
+
                       return (
                         <TableRow key={session.id}>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div className="font-medium">{session.server_name || '未知服务器'}</div>
+                              <div className="text-xs text-muted-foreground font-mono">{session.server_host || '-'}</div>
+                            </div>
+                          </TableCell>
                           <TableCell className="font-mono text-sm">
                             {session.session_id.substring(0, 8)}...
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm">
-                              <div className="font-medium">{session.client_ip}</div>
+                            <div className="text-sm font-medium">{formatClientIP(session.client_ip)}</div>
+                            {session.client_port > 0 && (
                               <div className="text-xs text-muted-foreground">
-                                Port: {session.client_port}
+                                端口: {session.client_port}
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{session.terminal_type}</Badge>
+                            )}
                           </TableCell>
                           <TableCell className="font-mono text-sm">
                             <div>
@@ -332,9 +347,6 @@ export default function ServersHistoryPage() {
                                 {formatBytes(session.bytes_received)}
                               </div>
                             </div>
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {session.commands_count}
                           </TableCell>
                           <TableCell>
                             <div>

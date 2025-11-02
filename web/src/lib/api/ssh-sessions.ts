@@ -5,6 +5,8 @@ export interface SSHSession {
   id: string
   user_id: string
   server_id: string
+  server_name: string
+  server_host: string
   session_id: string
   client_ip: string
   client_port: number
@@ -15,7 +17,6 @@ export interface SSHSession {
   duration?: number
   bytes_sent: number
   bytes_received: number
-  commands_count: number
   error_message?: string
   created_at: string
   updated_at: string
@@ -75,7 +76,8 @@ export const sshSessionsApi = {
       throw new Error(error.message || "Failed to fetch SSH sessions")
     }
 
-    return response.json()
+    const result = await response.json()
+    return result.data
   },
 
   /**

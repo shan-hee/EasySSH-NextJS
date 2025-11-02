@@ -147,7 +147,7 @@ func main() {
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler)
-	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor)
+	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)

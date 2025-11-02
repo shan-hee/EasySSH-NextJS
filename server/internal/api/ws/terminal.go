@@ -11,6 +11,7 @@ import (
 
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
+	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -29,19 +30,21 @@ var upgrader = websocket.Upgrader{
 
 // TerminalHandler WebSocket 终端处理器
 type TerminalHandler struct {
-	serverService  server.Service
-	serverRepo     server.Repository
-	sessionManager *sshDomain.SessionManager
-	encryptor      *crypto.Encryptor
+	serverService     server.Service
+	serverRepo        server.Repository
+	sessionManager    *sshDomain.SessionManager
+	encryptor         *crypto.Encryptor
+	sshSessionService sshsession.Service
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service) *TerminalHandler {
 	return &TerminalHandler{
-		serverService:  serverService,
-		serverRepo:     serverRepo,
-		sessionManager: sessionManager,
-		encryptor:      encryptor,
+		serverService:     serverService,
+		serverRepo:        serverRepo,
+		sessionManager:    sessionManager,
+		encryptor:         encryptor,
+		sshSessionService: sshSessionService,
 	}
 }
 
@@ -156,6 +159,26 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	session.SSHSession = sshSession
 	h.sessionManager.Add(session)
 	defer h.sessionManager.Remove(session.ID)
+
+	// 获取客户端IP
+	clientIP := c.ClientIP()
+	clientPort := 0 // WebSocket无法获取客户端端口，使用0
+
+	// 创建数据库会话记录
+	createReq := &sshsession.CreateSSHSessionRequest{
+		UserID:       uuid.MustParse(userID),
+		ServerID:     uuid.MustParse(serverID),
+		SessionID:    session.ID,
+		ClientIP:     clientIP,
+		ClientPort:   clientPort,
+		TerminalType: "xterm-256color",
+	}
+
+	dbSession, err := h.sshSessionService.CreateSSHSession(createReq)
+	if err != nil {
+		log.Printf("Failed to create SSH session record: %v", err)
+		// 不中断连接，只记录错误
+	}
 
 	// 设置终端模式
 	modes := ssh.TerminalModes{
@@ -317,6 +340,17 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 	// 等待会话结束
 	<-done
+
+	// 更新数据库会话记录状态为关闭
+	if dbSession != nil {
+		updateReq := &sshsession.UpdateSSHSessionRequest{
+			Status: "closed",
+		}
+
+		if _, err := h.sshSessionService.UpdateSSHSession(dbSession.UserID, dbSession.ID, updateReq); err != nil {
+			log.Printf("Failed to update SSH session status: %v", err)
+		}
+	}
 
 	// 尝试发送关闭消息（如果连接已关闭则静默忽略）
 	wsConn.SetWriteDeadline(time.Now().Add(time.Second))
