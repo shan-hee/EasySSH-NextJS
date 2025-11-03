@@ -1,78 +1,38 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, RefreshCw, CheckCircle, XCircle, Clock, Shield, AlertTriangle, User, Loader2 } from "lucide-react"
+import { Search, RefreshCw, CheckCircle, XCircle, Shield, AlertTriangle } from "lucide-react"
 import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
 import { toast } from "@/components/ui/sonner"
-
-const statusColors = {
-  success: "bg-green-100 text-green-800",
-  failure: "bg-red-100 text-red-800",
-}
-
-// 格式化时间
-function formatTimestamp(timestamp: string): { date: string; time: string } {
-  const date = new Date(timestamp)
-  return {
-    date: date.toLocaleDateString('zh-CN'),
-    time: date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  }
-}
-
-// 检测异常IP（简单的内网IP检测）
-function isAbnormalIP(ip: string): boolean {
-  // 内网IP范围
-  const privateRanges = [
-    /^10\./,
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-    /^192\.168\./,
-    /^127\./,
-    /^localhost/,
-  ]
-
-  // 检查是否为内网IP
-  const isPrivate = privateRanges.some(range => range.test(ip))
-  return !isPrivate && ip !== '::1' && !ip.startsWith('fe80::')
-}
-
-// 获取用户浏览器信息
-function getBrowserInfo(userAgent: string): string {
-  if (!userAgent) return "未知"
-
-  const browsers = [
-    { name: "Chrome", pattern: /Chrome\/[\d.]+/ },
-    { name: "Firefox", pattern: /Firefox\/[\d.]+/ },
-    { name: "Safari", pattern: /Safari\/[\d.]+/ },
-    { name: "Edge", pattern: /Edge\/[\d.]+/ },
-    { name: "Opera", pattern: /Opera\/[\d.]+/ },
-  ]
-
-  for (const browser of browsers) {
-    if (browser.pattern.test(userAgent)) {
-      return browser.name
-    }
-  }
-
-  return "其他"
-}
+import { DataTable } from "@/components/ui/data-table"
+import { ColumnVisibility } from "@/components/ui/column-visibility"
+import { exportLogsToCSV, exportLogsToJSON, downloadFile } from "@/components/ui/batch-actions"
+import { loginLogColumns } from "../components/login-log-columns"
 
 export default function LoginLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [statistics, setStatistics] = useState<AuditLogStatisticsResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedStatus, setSelectedStatus] = useState<string>("all")
-  const [selectedUser, setSelectedUser] = useState<string>("all")
-  const [selectedIPType, setSelectedIPType] = useState<string>("all")
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [userFilter, setUserFilter] = useState<string[]>([])
+  const [columnVisibility, setColumnVisibility] = useState({
+    created_at: true,
+    username: true,
+    status: true,
+    ip: true,
+    location: true,
+    user_agent: true,
+    details: true,
+  })
 
   // 获取 token
   const getToken = () => {
@@ -93,10 +53,10 @@ export default function LoginLogsPage() {
       // 获取登录相关日志
       const logsResponse = await auditLogsApi.list(token, {
         page,
-        page_size: 20,
+        page_size: pageSize,
         action: "login",
-        status: selectedStatus !== "all" ? selectedStatus as any : undefined,
-        user_id: selectedUser !== "all" ? selectedUser : undefined,
+        status: statusFilter.length > 0 ? statusFilter[0] as any : undefined,
+        user_id: userFilter.length > 0 ? userFilter[0] : undefined,
       })
 
       const filteredLogs = logsResponse.logs.filter(log => log.action === "login")
@@ -133,8 +93,9 @@ export default function LoginLogsPage() {
         console.error("API请求详情:", {
           hasToken: !!getToken(),
           page,
-          selectedStatus,
-          selectedUser,
+          pageSize,
+          statusFilter,
+          userFilter,
           error
         })
       }
@@ -146,29 +107,50 @@ export default function LoginLogsPage() {
   // 初始加载和筛选变化时重新加载
   useEffect(() => {
     loadData()
-  }, [page, selectedStatus, selectedUser])
+  }, [page, pageSize, statusFilter, userFilter])
 
   // 客户端搜索过滤
   const filteredLogs = logs.filter(log => {
-    const matchesSearch = log.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = !searchTerm ||
+      log.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.ip.includes(searchTerm) ||
       (log.user_agent && log.user_agent.toLowerCase().includes(searchTerm.toLowerCase()))
 
-    let matchesIPType = true
-    if (selectedIPType !== "all") {
-      const isAbnormal = isAbnormalIP(log.ip)
-      if (selectedIPType === "abnormal") {
-        matchesIPType = isAbnormal
-      } else if (selectedIPType === "normal") {
-        matchesIPType = !isAbnormal
-      }
-    }
+    const matchesStatus = statusFilter.length === 0 || statusFilter.includes(log.status)
+    const matchesUser = userFilter.length === 0 || userFilter.includes(log.username)
 
-    return matchesSearch && matchesIPType
+    return matchesSearch && matchesStatus && matchesUser
   })
 
   // 获取唯一用户列表
-  const uniqueUsers = Array.from(new Set(logs.map(log => log.username))).sort()
+  const uniqueUsers = Array.from(new Set(logs.map(log => log.username)))
+    .sort()
+    .map(user => ({ value: user, label: user }))
+
+  // 导出操作函数
+  const handleExportAll = (format: "csv" | "json") => {
+    try {
+      let content: string
+      let filename: string
+      let type: string
+
+      if (format === "csv") {
+        content = exportLogsToCSV(filteredLogs)
+        filename = `登录日志_${new Date().toISOString().split('T')[0]}.csv`
+        type = 'text/csv;charset=utf-8'
+      } else {
+        content = exportLogsToJSON(filteredLogs)
+        filename = `登录日志_${new Date().toISOString().split('T')[0]}.json`
+        type = 'application/json;charset=utf-8'
+      }
+
+      downloadFile(content, filename, type)
+      toast.success(`成功导出 ${filteredLogs.length} 条日志`)
+    } catch (error) {
+      console.error("导出失败:", error)
+      toast.error("导出失败")
+    }
+  }
 
   // 计算统计数据
   const loginStats = {
@@ -178,16 +160,27 @@ export default function LoginLogsPage() {
     abnormalIP: logs.filter(log => isAbnormalIP(log.ip)).length,
   }
 
+  // 检测异常IP（简单的内网IP检测）
+  function isAbnormalIP(ip: string): boolean {
+    // 内网IP范围
+    const privateRanges = [
+      /^10\./,
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+      /^192\.168\./,
+      /^127\./,
+      /^localhost/,
+    ]
+
+    // 检查是否为内网IP
+    const isPrivate = privateRanges.some(range => range.test(ip))
+    return !isPrivate && ip !== '::1' && !ip.startsWith('fe80::')
+  }
+
   return (
     <>
-      <PageHeader title="登录日志">
-        <Button variant="outline" size="sm" onClick={() => loadData()}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          刷新
-        </Button>
-      </PageHeader>
+      <PageHeader title="登录日志" />
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
         {/* 统计卡片 */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
@@ -249,201 +242,72 @@ export default function LoginLogsPage() {
           </Card>
         </div>
 
-        {/* 筛选器 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">筛选器</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="搜索用户、IP、浏览器..."
-                  className="pl-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="状态" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">所有状态</SelectItem>
-                    <SelectItem value="success">成功</SelectItem>
-                    <SelectItem value="failure">失败</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={selectedIPType} onValueChange={setSelectedIPType}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="IP类型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">所有IP</SelectItem>
-                    <SelectItem value="normal">内网IP</SelectItem>
-                    <SelectItem value="abnormal">外网IP</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={selectedUser} onValueChange={setSelectedUser}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="用户" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">所有用户</SelectItem>
-                    {uniqueUsers.map(user => (
-                      <SelectItem key={user} value={user}>{user}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* 登录日志表格 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">登录日志</CardTitle>
-            <CardDescription>
-              显示 {filteredLogs.length} 条记录，共 {logs.length} 条
-            </CardDescription>
+        <Card className="flex-1 min-h-0">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">登录日志</CardTitle>
+              <CardDescription>
+                显示 {filteredLogs.length} 条记录，共 {logs.length} 条
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <ColumnVisibility
+                columns={[
+                  { id: 'created_at', label: '时间' },
+                  { id: 'username', label: '用户' },
+                  { id: 'status', label: '状态' },
+                  { id: 'ip', label: 'IP地址' },
+                  { id: 'location', label: '位置' },
+                  { id: 'user_agent', label: '浏览器' },
+                  { id: 'details', label: '详情' },
+                ].map(column => ({
+                  id: column.id,
+                  label: column.label,
+                  visible: columnVisibility[column.id as keyof typeof columnVisibility] ?? true,
+                  onToggle: () => setColumnVisibility(prev => ({
+                    ...prev,
+                    [column.id as keyof typeof columnVisibility]: !prev[column.id as keyof typeof columnVisibility]
+                  }))
+                }))}
+              />
+              <Button variant="outline" size="sm" onClick={() => handleExportAll("csv")}>
+                导出CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleExportAll("json")}>
+                导出JSON
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => loadData()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                刷新
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : logs.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                暂无登录日志
-              </div>
-            ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>时间</TableHead>
-                      <TableHead>用户</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>IP地址</TableHead>
-                      <TableHead>位置</TableHead>
-                      <TableHead>浏览器</TableHead>
-                      <TableHead>详情</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredLogs.map(log => {
-                      const { date, time } = formatTimestamp(log.created_at)
-                      const isAbnormal = isAbnormalIP(log.ip)
-                      const browser = getBrowserInfo(log.user_agent || "")
-
-                      return (
-                        <TableRow key={log.id}>
-                          <TableCell className="font-mono text-sm">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <div>
-                                <div>{time}</div>
-                                <div className="text-xs text-muted-foreground">{date}</div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4 text-muted-foreground" />
-                              {log.username}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Badge className={statusColors[log.status]}>
-                                {log.status === "success" ? "成功" : "失败"}
-                              </Badge>
-                              {log.status === "failure" && (
-                                <AlertTriangle className="h-4 w-4 text-red-500" />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className={isAbnormal ? "text-orange-600 font-medium" : ""}>
-                                {log.ip}
-                              </span>
-                              {isAbnormal && (
-                                <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                  外网
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={isAbnormal ? "destructive" : "secondary"}>
-                              {isAbnormal ? "外部" : "内部"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">{browser}</span>
-                              {log.user_agent && (
-                                <div className="text-xs text-muted-foreground truncate max-w-32" title={log.user_agent}>
-                                  {log.user_agent.length > 20 ? log.user_agent.substring(0, 20) + "..." : log.user_agent}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="max-w-xs">
-                              {log.error_msg && (
-                                <div className="text-sm text-red-600 truncate" title={log.error_msg}>
-                                  {log.error_msg}
-                                </div>
-                              )}
-                              {log.details && !log.error_msg && (
-                                <div className="text-sm truncate" title={log.details}>
-                                  {log.details}
-                                </div>
-                              )}
-                              {!log.error_msg && !log.details && (
-                                <span className="text-muted-foreground">-</span>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-
-            {/* 分页 */}
-            {!loading && totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-muted-foreground">
-                  第 {page} 页，共 {totalPages} 页
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
-                    上一页
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </div>
-            )}
+          <CardContent className="flex-1 min-h-0 p-0">
+            <DataTable
+              data={filteredLogs}
+              loading={loading}
+              columns={loginLogColumns.filter(column =>
+                columnVisibility[column.id as keyof typeof columnVisibility] ?? true
+              )}
+              pageCount={totalPages}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              onPageChange={setPage}
+              emptyMessage="暂无登录日志"
+              className="flex h-full flex-col"
+              scrollContainerClassName="flex-1 overflow-auto"
+              // 启用表头筛选
+              showHeaderFilters={true}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              userFilter={userFilter}
+              onUserFilterChange={setUserFilter}
+              onRefresh={loadData}
+              availableUsers={uniqueUsers}
+            />
           </CardContent>
         </Card>
       </div>
