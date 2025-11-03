@@ -35,13 +35,16 @@ export interface AuditLogListResponse {
  * 审计日志统计响应
  */
 export interface AuditLogStatisticsResponse {
-  total: number
-  success: number
-  failure: number
-  by_action: Record<string, number>
-  by_resource: Record<string, number>
-  by_user: Record<string, number>
+  total_logs: number
+  success_count: number
+  failure_count: number
+  action_stats: Record<string, number>
   recent_failures: AuditLog[]
+  top_users: Array<{
+    user_id: string
+    username: string
+    count: number
+  }>
 }
 
 /**
@@ -53,7 +56,7 @@ export const auditLogsApi = {
    */
   async list(token: string, params?: {
     page?: number
-    limit?: number
+    page_size?: number
     user_id?: string
     server_id?: string
     action?: string
@@ -64,7 +67,7 @@ export const auditLogsApi = {
   }): Promise<AuditLogListResponse> {
     const queryParams = new URLSearchParams()
     if (params?.page) queryParams.set("page", params.page.toString())
-    if (params?.limit) queryParams.set("limit", params.limit.toString())
+    if (params?.page_size) queryParams.set("page_size", params.page_size.toString())
     if (params?.user_id) queryParams.set("user_id", params.user_id)
     if (params?.server_id) queryParams.set("server_id", params.server_id)
     if (params?.action) queryParams.set("action", params.action)
@@ -82,14 +85,14 @@ export const auditLogsApi = {
    */
   async getMyLogs(token: string, params?: {
     page?: number
-    limit?: number
+    page_size?: number
     action?: string
     start_date?: string
     end_date?: string
   }): Promise<AuditLogListResponse> {
     const queryParams = new URLSearchParams()
     if (params?.page) queryParams.set("page", params.page.toString())
-    if (params?.limit) queryParams.set("limit", params.limit.toString())
+    if (params?.page_size) queryParams.set("page_size", params.page_size.toString())
     if (params?.action) queryParams.set("action", params.action)
     if (params?.start_date) queryParams.set("start_date", params.start_date)
     if (params?.end_date) queryParams.set("end_date", params.end_date)
