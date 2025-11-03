@@ -4,11 +4,14 @@ import {
   ColumnFiltersState,
   SortingState,
   VisibilityState,
+  RowSelectionState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   useReactTable,
 } from "@tanstack/react-table"
 
@@ -20,18 +23,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Clock, Loader2, ChevronDown, ChevronUp, Search, Filter, X, RefreshCw } from "lucide-react"
-import { AuditLog } from "@/lib/api/audit-logs"
+import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface DataTableProps {
-  data: AuditLog[]
-  loading: boolean
-  columns: ColumnDef<AuditLog>[]
+interface DataTableProps<TData, TValue = unknown> {
+  data: TData[]
+  columns: ColumnDef<TData, TValue>[]
+  loading?: boolean
   pageCount?: number
   pageSize?: number
   totalRows?: number
@@ -40,20 +41,8 @@ interface DataTableProps {
   emptyMessage?: string
   className?: string
   scrollContainerClassName?: string
-  // 新增筛选相关属性
-  searchTerm?: string
-  onSearchChange?: (value: string) => void
-  statusFilter?: string[]
-  onStatusFilterChange?: (value: string[]) => void
-  userFilter?: string[]
-  onUserFilterChange?: (value: string[]) => void
-  actionFilter?: string[]
-  onActionFilterChange?: (value: string[]) => void
-  resourceFilter?: string[]
-  onResourceFilterChange?: (value: string[]) => void
-  onRefresh?: () => void
-  availableUsers?: Array<{ value: string; label: string }>
-  showHeaderFilters?: boolean
+  enableRowSelection?: boolean
+  toolbar?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode
 }
 
 // 格式化时间
@@ -151,10 +140,10 @@ export function isInternalIP(ip: string): boolean {
   return internalRanges.some(range => range.test(ip))
 }
 
-export function DataTable({
+export function DataTable<TData, TValue = unknown>({
   data,
-  loading,
   columns,
+  loading = false,
   pageCount,
   pageSize = 20,
   totalRows,
@@ -163,25 +152,16 @@ export function DataTable({
   emptyMessage = "暂无数据",
   className,
   scrollContainerClassName,
-  searchTerm = "",
-  onSearchChange,
-  statusFilter = [],
-  onStatusFilterChange,
-  userFilter = [],
-  onUserFilterChange,
-  actionFilter = [],
-  onActionFilterChange,
-  resourceFilter = [],
-  onResourceFilterChange,
-  onRefresh,
-  availableUsers = [],
-  showHeaderFilters = false,
-}: DataTableProps) {
+  enableRowSelection = false,
+  toolbar,
+}: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
   const [currentPage, setCurrentPage] = React.useState(1)
   const [inputPage, setInputPage] = React.useState("")
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
 
   const table = useReactTable({
     data,
@@ -190,13 +170,18 @@ export function DataTable({
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
+    enableRowSelection: enableRowSelection,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      rowSelection,
       pagination: {
         pageIndex: currentPage - 1,
         pageSize,
@@ -217,6 +202,13 @@ export function DataTable({
       onPageSizeChange(pageSize)
     }
   }, [pageSize, onPageSizeChange])
+
+  // 加载时重置滚动位置到顶部
+  React.useEffect(() => {
+    if (loading && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0
+    }
+  }, [loading])
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && pageCount && page <= pageCount) {
@@ -241,154 +233,20 @@ export function DataTable({
 
   const totalPages = pageCount || Math.ceil((totalRows || data.length) / pageSize)
 
-  // 筛选工具函数
-  const handleToggleFilter = (
-    currentFilter: string[],
-    onChange: (value: string[]) => void,
-    value: string
-  ) => {
-    const newFilter = currentFilter.includes(value)
-      ? currentFilter.filter((item) => item !== value)
-      : [...currentFilter, value]
-    onChange(newFilter)
-  }
-
-  // 检查是否有活跃筛选
-  const hasActiveFilters =
-    searchTerm ||
-    statusFilter.length > 0 ||
-    userFilter.length > 0 ||
-    actionFilter.length > 0 ||
-    resourceFilter.length > 0
-
-  // 清除所有筛选
-  const clearAllFilters = () => {
-    onSearchChange?.("")
-    onStatusFilterChange?.([])
-    onUserFilterChange?.([])
-    onActionFilterChange?.([])
-    onResourceFilterChange?.([])
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (data.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        {emptyMessage}
-      </div>
-    )
-  }
-
   return (
     <div className={cn("flex h-full min-h-0 flex-col gap-4", className)}>
       <div className="rounded-md border overflow-hidden flex min-h-0 flex-col">
-        {/* 固定筛选区域 */}
-        {showHeaderFilters && (
-          <div className="bg-muted/30 border-b p-3 flex-shrink-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* 搜索框 */}
-              <div className="relative min-w-[240px] flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索用户名、IP地址、详情等..."
-                  value={searchTerm}
-                  onChange={(e) => onSearchChange?.(e.target.value)}
-                  className="pl-10 h-9"
-                />
-              </div>
+        {/* 工具栏区域 */}
+        {toolbar && toolbar(table)}
 
-              {/* 状态筛选 */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">状态:</span>
-                <div className="flex gap-1">
-                  {["success", "failure"].map((status) => (
-                    <Badge
-                      key={status}
-                      variant={statusFilter.includes(status) ? "default" : "outline"}
-                      className={`cursor-pointer text-xs ${
-                        status === "success"
-                          ? statusFilter.includes(status)
-                            ? "bg-green-100 text-green-800 border-green-200"
-                            : "border-green-200 text-green-700"
-                          : statusFilter.includes(status)
-                          ? "bg-red-100 text-red-800 border-red-200"
-                          : "border-red-200 text-red-700"
-                      }`}
-                      onClick={() =>
-                        onStatusFilterChange &&
-                        handleToggleFilter(statusFilter, onStatusFilterChange, status)
-                      }
-                    >
-                      {status === "success" ? "成功" : "失败"}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              {/* 用户筛选 */}
-              {availableUsers.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">用户:</span>
-                  <Select
-                    value={userFilter[0] || ""}
-                    onValueChange={(value) => onUserFilterChange?.(value ? [value] : [])}
-                  >
-                    <SelectTrigger className="w-32 h-9">
-                      <SelectValue placeholder="选择用户" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableUsers.map((user) => (
-                        <SelectItem key={user.value} value={user.value}>
-                          {user.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* 操作按钮 */}
-              <div className="flex items-center gap-2 ml-auto">
-                {hasActiveFilters && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearAllFilters}
-                    className="h-9 text-xs"
-                  >
-                    <X className="h-3 w-3 mr-1" />
-                    清除筛选
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onRefresh}
-                  disabled={loading}
-                  className="h-9"
-                >
-                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 固定表头和可滚动内容区域 */}
-        <div className="flex-1 overflow-auto">
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background border-b">
+        {/* 固定表头 */}
+        <div className="relative bg-accent">
+          <Table wrapperClassName="overflow-hidden">
+            <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="bg-muted/50">
+                <TableRow key={headerGroup.id} className="bg-accent border-0 hover:bg-accent hover:text-inherit">
                   {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="bg-muted/50 whitespace-nowrap px-4 py-3">
+                    <TableHead key={header.id} className="bg-accent whitespace-nowrap px-3 py-2 h-10">
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -400,15 +258,21 @@ export function DataTable({
                 </TableRow>
               ))}
             </TableHeader>
+          </Table>
+        </div>
+
+        {/* 可滚动内容区域 */}
+        <div ref={scrollContainerRef} className={cn("flex-1 scrollbar-custom relative", loading ? "overflow-hidden" : "overflow-auto")}>
+          <Table>
             <TableBody>
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
-                    className="hover:bg-muted/50 transition-colors"
+                    data-state={row.getIsSelected() && "selected"}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="px-4 py-2">
+                      <TableCell key={cell.id} className="px-3 py-1.5">
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext()
@@ -421,7 +285,7 @@ export function DataTable({
                 <TableRow>
                   <TableCell
                     colSpan={columns.length}
-                    className="h-24 text-center px-4"
+                    className="h-24 text-center px-3"
                   >
                     {emptyMessage}
                   </TableCell>
@@ -429,21 +293,33 @@ export function DataTable({
               )}
             </TableBody>
           </Table>
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-card">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
         </div>
       </div>
 
       {/* 分页控件 */}
       <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          显示第 {Math.min((currentPage - 1) * pageSize + 1, totalRows || data.length)} - {Math.min(currentPage * pageSize, totalRows || data.length)} 项，
-          共 {totalRows || data.length} 项
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div>
+            第 {Math.min((currentPage - 1) * pageSize + 1, totalRows || data.length)} - {Math.min(currentPage * pageSize, totalRows || data.length)} 项，
+            共 {totalRows || data.length} 项
+          </div>
+          {enableRowSelection && table.getFilteredSelectedRowModel().rows.length > 0 && (
+            <div className="flex items-center gap-1">
+              <span>已选择 {table.getFilteredSelectedRowModel().rows.length} 行</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
           {/* 每页显示数量 */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">每页显示</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">每页</span>
             <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(Number(value))}>
-              <SelectTrigger className="w-16 h-8">
+              <SelectTrigger className="w-[70px] h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -453,7 +329,7 @@ export function DataTable({
                 <SelectItem value="100">100</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-sm text-muted-foreground">条</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">条</span>
           </div>
 
           {/* 分页导航 */}

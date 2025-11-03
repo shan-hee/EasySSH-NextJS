@@ -1,15 +1,15 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckCircle, XCircle, Activity, User, RefreshCw } from "lucide-react"
+import { CheckCircle, XCircle, Activity, User, Download } from "lucide-react"
 import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
-import { LogFilters } from "@/components/ui/log-filters"
 import { exportLogsToCSV, exportLogsToJSON, downloadFile } from "@/components/ui/batch-actions"
 import { auditLogColumns } from "./components/audit-log-columns"
 
@@ -21,12 +21,9 @@ export default function AuditLogsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [actionFilter, setActionFilter] = useState<string[]>([])
-  const [resourceFilter, setResourceFilter] = useState<string[]>([])
-  const [statusFilter, setStatusFilter] = useState<string[]>([])
-  const [userFilter, setUserFilter] = useState<string[]>([])
+  const [totalRows, setTotalRows] = useState(0)
   const [columnVisibility, setColumnVisibility] = useState({
+    select: true,
     created_at: true,
     username: true,
     action: true,
@@ -59,16 +56,13 @@ export default function AuditLogsPage() {
         auditLogsApi.list(token, {
           page,
           page_size: pageSize,
-          action: actionFilter.length > 0 ? actionFilter[0] : undefined,
-          resource: resourceFilter.length > 0 ? resourceFilter[0] : undefined,
-          status: statusFilter.length > 0 ? statusFilter[0] as any : undefined,
-          user_id: userFilter.length > 0 ? userFilter[0] : undefined,
         }),
         auditLogsApi.getStatistics(token),
       ])
 
       setLogs(logsResponse.logs || [])
       setTotalPages(logsResponse.total_pages || 1)
+      setTotalRows(logsResponse.total || 0)
       setStatistics(statsResponse)
     } catch (error: any) {
       console.error("操作日志加载失败:", error)
@@ -90,51 +84,15 @@ export default function AuditLogsPage() {
       }
 
       toast.error(errorMessage)
-
-      // 如果是开发环境，输出更详细的调试信息
-      if (process.env.NODE_ENV === 'development') {
-        console.error("API请求详情:", {
-          hasToken: !!getToken(),
-          page,
-          pageSize,
-          actionFilter,
-          resourceFilter,
-          statusFilter,
-          userFilter,
-          error
-        })
-      }
     } finally {
       setLoading(false)
     }
   }
 
-  // 初始加载和筛选变化时重新加载
+  // 初始加载和分页变化时重新加载
   useEffect(() => {
     loadData()
-  }, [page, pageSize, actionFilter, resourceFilter, statusFilter, userFilter])
-
-  // 客户端搜索过滤
-  const filteredLogs = logs.filter(log => {
-    const matchesSearch = !searchTerm ||
-      log.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.resource.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.ip.includes(searchTerm) ||
-      (log.details && log.details.toLowerCase().includes(searchTerm.toLowerCase()))
-
-    const matchesAction = actionFilter.length === 0 || actionFilter.includes(log.action)
-    const matchesResource = resourceFilter.length === 0 || resourceFilter.includes(log.resource)
-    const matchesStatus = statusFilter.length === 0 || statusFilter.includes(log.status)
-    const matchesUser = userFilter.length === 0 || userFilter.includes(log.username)
-
-    return matchesSearch && matchesAction && matchesResource && matchesStatus && matchesUser
-  })
-
-  // 获取唯一用户列表
-  const uniqueUsers = Array.from(new Set(logs.map(log => log.username)))
-    .sort()
-    .map(user => ({ value: user, label: user }))
+  }, [page, pageSize])
 
   // 导出操作函数
   const handleExportAll = (format: "csv" | "json") => {
@@ -144,22 +102,58 @@ export default function AuditLogsPage() {
       let type: string
 
       if (format === "csv") {
-        content = exportLogsToCSV(filteredLogs)
+        content = exportLogsToCSV(logs)
         filename = `操作日志_${new Date().toISOString().split('T')[0]}.csv`
         type = 'text/csv;charset=utf-8'
       } else {
-        content = exportLogsToJSON(filteredLogs)
+        content = exportLogsToJSON(logs)
         filename = `操作日志_${new Date().toISOString().split('T')[0]}.json`
         type = 'application/json;charset=utf-8'
       }
 
       downloadFile(content, filename, type)
-      toast.success(`成功导出 ${filteredLogs.length} 条日志`)
+      toast.success(`成功导出 ${logs.length} 条日志`)
     } catch (error) {
       console.error("导出失败:", error)
       toast.error("导出失败")
     }
   }
+
+  // 筛选选项配置
+  const filterOptions = useMemo(() => {
+    const uniqueActions = Array.from(new Set(logs.map(log => log.action)))
+    const uniqueResources = Array.from(new Set(logs.map(log => log.resource)))
+    const uniqueUsers = Array.from(new Set(logs.map(log => log.username)))
+
+    return {
+      status: [
+        { label: "成功", value: "success", icon: CheckCircle },
+        { label: "失败", value: "failure", icon: XCircle },
+      ],
+      actions: uniqueActions.map(action => ({
+        label: action,
+        value: action,
+        icon: Activity,
+      })),
+      resources: uniqueResources.map(resource => ({
+        label: resource,
+        value: resource,
+      })),
+      users: uniqueUsers.map(user => ({
+        label: user,
+        value: user,
+        icon: User,
+      })),
+    }
+  }, [logs])
+
+  // 可见列配置
+  const visibleColumns = useMemo(() =>
+    auditLogColumns.filter(column =>
+      columnVisibility[column.id as keyof typeof columnVisibility] ?? true
+    ),
+    [columnVisibility]
+  )
 
   return (
     <>
@@ -233,12 +227,13 @@ export default function AuditLogsPage() {
             <div>
               <CardTitle className="text-lg">操作日志</CardTitle>
               <CardDescription>
-                显示 {filteredLogs.length} 条记录，共 {logs.length} 条
+                显示 {logs.length} 条记录
               </CardDescription>
             </div>
             <div className="flex gap-2">
               <ColumnVisibility
                 columns={[
+                  { id: 'select', label: '选择' },
                   { id: 'created_at', label: '时间' },
                   { id: 'username', label: '用户' },
                   { id: 'action', label: '操作' },
@@ -258,42 +253,54 @@ export default function AuditLogsPage() {
                   }))
                 }))}
               />
-              <Button variant="outline" size="sm" onClick={() => handleExportAll("csv")}>
-                导出CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleExportAll("json")}>
-                导出JSON
-              </Button>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 min-h-0 p-0">
+          <CardContent className="flex-1 min-h-0 p-4 pt-0">
             <DataTable
-              data={filteredLogs}
+              data={logs}
+              columns={visibleColumns}
               loading={loading}
-              columns={auditLogColumns.filter(column =>
-                columnVisibility[column.id as keyof typeof columnVisibility] ?? true
-              )}
               pageCount={totalPages}
               pageSize={pageSize}
+              totalRows={totalRows}
               onPageSizeChange={setPageSize}
               onPageChange={setPage}
               emptyMessage="暂无操作日志"
               className="flex h-full flex-col"
-              scrollContainerClassName="flex-1 overflow-auto"
-              // 启用表头筛选
-              showHeaderFilters={true}
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-              userFilter={userFilter}
-              onUserFilterChange={setUserFilter}
-              actionFilter={actionFilter}
-              onActionFilterChange={setActionFilter}
-              resourceFilter={resourceFilter}
-              onResourceFilterChange={setResourceFilter}
-              onRefresh={loadData}
-              availableUsers={uniqueUsers}
+              enableRowSelection={true}
+              toolbar={(table) => (
+                <DataTableToolbar
+                  table={table}
+                  searchKey="username"
+                  searchPlaceholder="搜索用户名..."
+                  filters={[
+                    {
+                      column: "status",
+                      title: "状态",
+                      options: filterOptions.status,
+                    },
+                    {
+                      column: "action",
+                      title: "操作",
+                      options: filterOptions.actions,
+                    },
+                    {
+                      column: "resource",
+                      title: "资源",
+                      options: filterOptions.resources,
+                    },
+                    {
+                      column: "username",
+                      title: "用户",
+                      options: filterOptions.users,
+                    },
+                  ]}
+                  onRefresh={loadData}
+                  onExport={handleExportAll}
+                  showRefresh={true}
+                  showExport={true}
+                />
+              )}
             />
           </CardContent>
         </Card>

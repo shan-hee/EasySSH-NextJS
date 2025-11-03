@@ -1,15 +1,13 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Search, RefreshCw, CheckCircle, XCircle, Shield, AlertTriangle } from "lucide-react"
+import { CheckCircle, XCircle, Shield, AlertTriangle, User } from "lucide-react"
 import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
 import { exportLogsToCSV, exportLogsToJSON, downloadFile } from "@/components/ui/batch-actions"
 import { loginLogColumns } from "../components/login-log-columns"
@@ -21,10 +19,9 @@ export default function LoginLogsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string[]>([])
-  const [userFilter, setUserFilter] = useState<string[]>([])
+  const [totalRows, setTotalRows] = useState(0)
   const [columnVisibility, setColumnVisibility] = useState({
+    select: true,
     created_at: true,
     username: true,
     status: true,
@@ -55,13 +52,12 @@ export default function LoginLogsPage() {
         page,
         page_size: pageSize,
         action: "login",
-        status: statusFilter.length > 0 ? statusFilter[0] as any : undefined,
-        user_id: userFilter.length > 0 ? userFilter[0] : undefined,
       })
 
       const filteredLogs = logsResponse.logs.filter(log => log.action === "login")
       setLogs(filteredLogs || [])
       setTotalPages(logsResponse.total_pages || 1)
+      setTotalRows(logsResponse.total || 0)
 
       // 获取统计信息
       const statsResponse = await auditLogsApi.getStatistics(token)
@@ -87,45 +83,15 @@ export default function LoginLogsPage() {
       }
 
       toast.error(errorMessage)
-
-      // 如果是开发环境，输出更详细的调试信息
-      if (process.env.NODE_ENV === 'development') {
-        console.error("API请求详情:", {
-          hasToken: !!getToken(),
-          page,
-          pageSize,
-          statusFilter,
-          userFilter,
-          error
-        })
-      }
     } finally {
       setLoading(false)
     }
   }
 
-  // 初始加载和筛选变化时重新加载
+  // 初始加载和分页变化时重新加载
   useEffect(() => {
     loadData()
-  }, [page, pageSize, statusFilter, userFilter])
-
-  // 客户端搜索过滤
-  const filteredLogs = logs.filter(log => {
-    const matchesSearch = !searchTerm ||
-      log.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.ip.includes(searchTerm) ||
-      (log.user_agent && log.user_agent.toLowerCase().includes(searchTerm.toLowerCase()))
-
-    const matchesStatus = statusFilter.length === 0 || statusFilter.includes(log.status)
-    const matchesUser = userFilter.length === 0 || userFilter.includes(log.username)
-
-    return matchesSearch && matchesStatus && matchesUser
-  })
-
-  // 获取唯一用户列表
-  const uniqueUsers = Array.from(new Set(logs.map(log => log.username)))
-    .sort()
-    .map(user => ({ value: user, label: user }))
+  }, [page, pageSize])
 
   // 导出操作函数
   const handleExportAll = (format: "csv" | "json") => {
@@ -135,29 +101,21 @@ export default function LoginLogsPage() {
       let type: string
 
       if (format === "csv") {
-        content = exportLogsToCSV(filteredLogs)
+        content = exportLogsToCSV(logs)
         filename = `登录日志_${new Date().toISOString().split('T')[0]}.csv`
         type = 'text/csv;charset=utf-8'
       } else {
-        content = exportLogsToJSON(filteredLogs)
+        content = exportLogsToJSON(logs)
         filename = `登录日志_${new Date().toISOString().split('T')[0]}.json`
         type = 'application/json;charset=utf-8'
       }
 
       downloadFile(content, filename, type)
-      toast.success(`成功导出 ${filteredLogs.length} 条日志`)
+      toast.success(`成功导出 ${logs.length} 条日志`)
     } catch (error) {
       console.error("导出失败:", error)
       toast.error("导出失败")
     }
-  }
-
-  // 计算统计数据
-  const loginStats = {
-    total: logs.length,
-    success: logs.filter(log => log.status === "success").length,
-    failure: logs.filter(log => log.status === "failure").length,
-    abnormalIP: logs.filter(log => isAbnormalIP(log.ip)).length,
   }
 
   // 检测异常IP（简单的内网IP检测）
@@ -175,6 +133,39 @@ export default function LoginLogsPage() {
     const isPrivate = privateRanges.some(range => range.test(ip))
     return !isPrivate && ip !== '::1' && !ip.startsWith('fe80::')
   }
+
+  // 计算统计数据
+  const loginStats = useMemo(() => ({
+    total: logs.length,
+    success: logs.filter(log => log.status === "success").length,
+    failure: logs.filter(log => log.status === "failure").length,
+    abnormalIP: logs.filter(log => isAbnormalIP(log.ip)).length,
+  }), [logs])
+
+  // 筛选选项配置
+  const filterOptions = useMemo(() => {
+    const uniqueUsers = Array.from(new Set(logs.map(log => log.username)))
+
+    return {
+      status: [
+        { label: "成功", value: "success", icon: CheckCircle },
+        { label: "失败", value: "failure", icon: XCircle },
+      ],
+      users: uniqueUsers.map(user => ({
+        label: user,
+        value: user,
+        icon: User,
+      })),
+    }
+  }, [logs])
+
+  // 可见列配置
+  const visibleColumns = useMemo(() =>
+    loginLogColumns.filter(column =>
+      columnVisibility[column.id as keyof typeof columnVisibility] ?? true
+    ),
+    [columnVisibility]
+  )
 
   return (
     <>
@@ -248,12 +239,13 @@ export default function LoginLogsPage() {
             <div>
               <CardTitle className="text-lg">登录日志</CardTitle>
               <CardDescription>
-                显示 {filteredLogs.length} 条记录，共 {logs.length} 条
+                显示 {logs.length} 条记录
               </CardDescription>
             </div>
             <div className="flex gap-2">
               <ColumnVisibility
                 columns={[
+                  { id: 'select', label: '选择' },
                   { id: 'created_at', label: '时间' },
                   { id: 'username', label: '用户' },
                   { id: 'status', label: '状态' },
@@ -271,42 +263,44 @@ export default function LoginLogsPage() {
                   }))
                 }))}
               />
-              <Button variant="outline" size="sm" onClick={() => handleExportAll("csv")}>
-                导出CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleExportAll("json")}>
-                导出JSON
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => loadData()}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                刷新
-              </Button>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 min-h-0 p-0">
+          <CardContent className="flex-1 min-h-0 p-4 pt-0">
             <DataTable
-              data={filteredLogs}
+              data={logs}
+              columns={visibleColumns}
               loading={loading}
-              columns={loginLogColumns.filter(column =>
-                columnVisibility[column.id as keyof typeof columnVisibility] ?? true
-              )}
               pageCount={totalPages}
               pageSize={pageSize}
+              totalRows={totalRows}
               onPageSizeChange={setPageSize}
               onPageChange={setPage}
               emptyMessage="暂无登录日志"
               className="flex h-full flex-col"
-              scrollContainerClassName="flex-1 overflow-auto"
-              // 启用表头筛选
-              showHeaderFilters={true}
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-              userFilter={userFilter}
-              onUserFilterChange={setUserFilter}
-              onRefresh={loadData}
-              availableUsers={uniqueUsers}
+              enableRowSelection={true}
+              toolbar={(table) => (
+                <DataTableToolbar
+                  table={table}
+                  searchKey="username"
+                  searchPlaceholder="搜索用户名..."
+                  filters={[
+                    {
+                      column: "status",
+                      title: "状态",
+                      options: filterOptions.status,
+                    },
+                    {
+                      column: "username",
+                      title: "用户",
+                      options: filterOptions.users,
+                    },
+                  ]}
+                  onRefresh={loadData}
+                  onExport={handleExportAll}
+                  showRefresh={true}
+                  showExport={true}
+                />
+              )}
             />
           </CardContent>
         </Card>

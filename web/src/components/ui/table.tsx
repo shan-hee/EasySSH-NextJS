@@ -8,11 +8,11 @@ interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
 
 const Table = React.forwardRef<HTMLTableElement, TableProps>(
   ({ className, wrapperClassName, ...props }, ref) => (
-    <div className={cn("relative w-full overflow-x-auto", wrapperClassName)}>
+    <div className={cn("relative w-full", wrapperClassName)}>
       <table
         ref={ref}
         className={cn(
-          "w-full caption-bottom text-sm border-separate border-spacing-0",
+          "w-full caption-bottom text-sm",
           className
         )}
         {...props}
@@ -64,7 +64,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+      "border-b transition-colors hover:bg-accent hover:text-accent-foreground data-[state=selected]:bg-accent",
       className
     )}
     {...props}
