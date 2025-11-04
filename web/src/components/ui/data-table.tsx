@@ -239,14 +239,26 @@ export function DataTable<TData, TValue = unknown>({
         {/* 工具栏区域 */}
         {toolbar && toolbar(table)}
 
-        {/* 固定表头 */}
-        <div className="relative bg-accent">
-          <Table wrapperClassName="overflow-hidden">
+        {/* 可滚动内容区域（单表 + 吸顶表头，避免对不齐） */}
+        <div
+          ref={scrollContainerRef}
+          className={cn(
+            "flex-1 scrollbar-custom relative bg-accent",
+            loading ? "overflow-hidden" : "overflow-auto"
+          )}
+        >
+          <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="bg-accent border-0 hover:bg-accent hover:text-inherit">
+                <TableRow
+                  key={headerGroup.id}
+                  className="bg-accent border-0 hover:bg-accent hover:text-inherit"
+                >
                   {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="bg-accent whitespace-nowrap px-3 py-2 h-10">
+                    <TableHead
+                      key={header.id}
+                      className="bg-accent sticky top-0 z-[1] whitespace-nowrap px-3 py-2 h-10"
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -258,12 +270,6 @@ export function DataTable<TData, TValue = unknown>({
                 </TableRow>
               ))}
             </TableHeader>
-          </Table>
-        </div>
-
-        {/* 可滚动内容区域 */}
-        <div ref={scrollContainerRef} className={cn("flex-1 scrollbar-custom relative", loading ? "overflow-hidden" : "overflow-auto")}>
-          <Table>
             <TableBody>
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row) => (
