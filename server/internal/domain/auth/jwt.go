@@ -42,6 +42,12 @@ type JWTService interface {
 
 	// IsBlacklisted 检查令牌是否在黑名单中
 	IsBlacklisted(tokenString string) (bool, error)
+
+	// GenerateTempToken 生成临时令牌（用于 2FA 验证）
+	GenerateTempToken(userID string) (string, error)
+
+	// ValidateTempToken 验证临时令牌
+	ValidateTempToken(tokenString string) (string, error)
 }
 
 // jwtService JWT 服务实现
@@ -186,4 +192,54 @@ func (s *jwtService) IsBlacklisted(tokenString string) (bool, error) {
 	}
 
 	return result == "1", nil
+}
+
+// GenerateTempToken 生成临时令牌（用于 2FA 验证，有效期 5 分钟）
+func (s *jwtService) GenerateTempToken(userID string) (string, error) {
+	now := time.Now()
+	claims := jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)), // 5 分钟有效期
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		Issuer:    "easyssh-api",
+		Subject:   userID,
+		Audience:  jwt.ClaimStrings{"2fa-verification"}, // 特殊标记
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.secretKey)
+}
+
+// ValidateTempToken 验证临时令牌并返回用户 ID
+func (s *jwtService) ValidateTempToken(tokenString string) (string, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// 验证签名算法
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return s.secretKey, nil
+	})
+
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return "", ErrExpiredToken
+		}
+		return "", ErrInvalidToken
+	}
+
+	if !token.Valid {
+		return "", ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok {
+		return "", ErrInvalidToken
+	}
+
+	// 验证是否是 2FA 临时令牌
+	if len(claims.Audience) == 0 || claims.Audience[0] != "2fa-verification" {
+		return "", errors.New("not a 2FA temp token")
+	}
+
+	return claims.Subject, nil
 }

@@ -19,15 +19,24 @@ const (
 
 // User 用户模型
 type User struct {
-	ID        uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Username  string         `gorm:"uniqueIndex;not null;size:50" json:"username"`
-	Email     string         `gorm:"uniqueIndex;not null;size:100" json:"email"`
-	Password  string         `gorm:"not null;size:255" json:"-"` // bcrypt hash，不在 JSON 中返回
-	Role      UserRole       `gorm:"type:varchar(20);default:'user'" json:"role"`
-	Avatar    string         `gorm:"size:255" json:"avatar"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"` // 软删除
+	ID               uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Username         string         `gorm:"uniqueIndex;not null;size:50" json:"username"`
+	Email            string         `gorm:"uniqueIndex;not null;size:100" json:"email"`
+	Password         string         `gorm:"not null;size:255" json:"-"` // bcrypt hash，不在 JSON 中返回
+	Role             UserRole       `gorm:"type:varchar(20);default:'user'" json:"role"`
+	Avatar           string         `gorm:"type:text" json:"avatar"`
+	TwoFactorEnabled bool           `gorm:"default:false" json:"two_factor_enabled"`
+	TwoFactorSecret  string         `gorm:"size:255" json:"-"` // TOTP secret，不在 JSON 中返回
+	BackupCodes      string         `gorm:"type:text" json:"-"` // 备份码列表（JSON 格式），不在 JSON 中返回
+
+	// 通知设置
+	NotifyEmailLogin  bool `gorm:"default:true" json:"notify_email_login"`   // 登录邮件通知
+	NotifyEmailAlert  bool `gorm:"default:true" json:"notify_email_alert"`   // 告警邮件通知
+	NotifyBrowser     bool `gorm:"default:true" json:"notify_browser"`       // 浏览器通知
+
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"` // 软删除
 }
 
 // TableName 指定表名
@@ -69,15 +78,19 @@ func (u *User) IsViewer() bool {
 	return u.Role == RoleViewer
 }
 
-// ToPublic 转换为公开信息（不包含密码）
+// ToPublic 转换为公开信息（不包含密码和敏感信息）
 func (u *User) ToPublic() map[string]interface{} {
 	return map[string]interface{}{
-		"id":         u.ID,
-		"username":   u.Username,
-		"email":      u.Email,
-		"role":       u.Role,
-		"avatar":     u.Avatar,
-		"created_at": u.CreatedAt,
-		"updated_at": u.UpdatedAt,
+		"id":                 u.ID,
+		"username":           u.Username,
+		"email":              u.Email,
+		"role":               u.Role,
+		"avatar":             u.Avatar,
+		"two_factor_enabled": u.TwoFactorEnabled,
+		"notify_email_login": u.NotifyEmailLogin,
+		"notify_email_alert": u.NotifyEmailAlert,
+		"notify_browser":     u.NotifyBrowser,
+		"created_at":         u.CreatedAt,
+		"updated_at":         u.UpdatedAt,
 	}
 }

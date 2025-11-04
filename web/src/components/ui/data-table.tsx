@@ -290,7 +290,7 @@ export function DataTable<TData, TValue = unknown>({
             loading ? "overflow-hidden" : "overflow-auto"
           )}
         >
-          <Table>
+          <Table className={loading ? "invisible" : ""}>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
@@ -349,26 +349,18 @@ export function DataTable<TData, TValue = unknown>({
             </TableBody>
           </Table>
           {loading && (
-            <div className="absolute inset-0 flex flex-col bg-background/95 backdrop-blur-sm">
-              <div className="flex-1 p-4 space-y-3">
-                {Array.from({ length: Math.min(pageSize, 10) }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 animate-pulse"
-                    style={{ animationDelay: `${i * 50}ms` }}
-                  >
-                    <div className="h-8 bg-muted rounded flex-1" />
-                    <div className="h-8 bg-muted rounded w-1/4" />
-                    <div className="h-8 bg-muted rounded w-1/6" />
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center justify-center p-8 border-t">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>加载中...</span>
+            <div className="absolute inset-0 bg-background/95 backdrop-blur-sm p-4 space-y-3 overflow-hidden">
+              {Array.from({ length: Math.min(pageSize, 10) }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 animate-pulse"
+                  style={{ animationDelay: `${i * 50}ms` }}
+                >
+                  <div className="h-8 bg-muted rounded flex-1" />
+                  <div className="h-8 bg-muted rounded w-1/4" />
+                  <div className="h-8 bg-muted rounded w-1/6" />
                 </div>
-              </div>
+              ))}
             </div>
           )}
         </div>

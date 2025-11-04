@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -42,6 +43,32 @@ type Repository interface {
 
 	// CountAdmins 统计管理员数量
 	CountAdmins(ctx context.Context) (int64, error)
+
+	// Session management
+
+	// CreateSession 创建会话
+	CreateSession(ctx context.Context, session *Session) error
+
+	// FindSessionByRefreshToken 根据 refresh token 查找会话
+	FindSessionByRefreshToken(ctx context.Context, tokenHash string) (*Session, error)
+
+	// ListUserSessions 获取用户的所有活跃会话
+	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]*Session, error)
+
+	// UpdateSession 更新会话
+	UpdateSession(ctx context.Context, session *Session) error
+
+	// DeleteSession 删除会话（撤销）
+	DeleteSession(ctx context.Context, sessionID uuid.UUID) error
+
+	// DeleteSessionByRefreshToken 根据 refresh token 删除会话
+	DeleteSessionByRefreshToken(ctx context.Context, tokenHash string) error
+
+	// DeleteAllUserSessions 删除用户的所有会话（登出所有设备）
+	DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) error
+
+	// DeleteExpiredSessions 清理过期会话
+	DeleteExpiredSessions(ctx context.Context) error
 }
 
 // gormRepository GORM 实现
@@ -164,4 +191,78 @@ func (r *gormRepository) CountAdmins(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+// === Session Management ===
+
+var (
+	ErrSessionNotFound = errors.New("session not found")
+)
+
+// CreateSession 创建会话
+func (r *gormRepository) CreateSession(ctx context.Context, session *Session) error {
+	return r.db.WithContext(ctx).Create(session).Error
+}
+
+// FindSessionByRefreshToken 根据 refresh token 查找会话
+func (r *gormRepository) FindSessionByRefreshToken(ctx context.Context, tokenHash string) (*Session, error) {
+	var session Session
+	if err := r.db.WithContext(ctx).Where("refresh_token = ?", tokenHash).First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, err
+	}
+	return &session, nil
+}
+
+// ListUserSessions 获取用户的所有活跃会话（未过期）
+func (r *gormRepository) ListUserSessions(ctx context.Context, userID uuid.UUID) ([]*Session, error) {
+	var sessions []*Session
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND expires_at > ?", userID, time.Now()).
+		Order("last_activity DESC").
+		Find(&sessions).Error; err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// UpdateSession 更新会话
+func (r *gormRepository) UpdateSession(ctx context.Context, session *Session) error {
+	return r.db.WithContext(ctx).Save(session).Error
+}
+
+// DeleteSession 删除会话（撤销）
+func (r *gormRepository) DeleteSession(ctx context.Context, sessionID uuid.UUID) error {
+	result := r.db.WithContext(ctx).Delete(&Session{}, sessionID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+// DeleteSessionByRefreshToken 根据 refresh token 删除会话
+func (r *gormRepository) DeleteSessionByRefreshToken(ctx context.Context, tokenHash string) error {
+	result := r.db.WithContext(ctx).Where("refresh_token = ?", tokenHash).Delete(&Session{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+// DeleteAllUserSessions 删除用户的所有会话（登出所有设备）
+func (r *gormRepository) DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&Session{}).Error
+}
+
+// DeleteExpiredSessions 清理过期会话
+func (r *gormRepository) DeleteExpiredSessions(ctx context.Context) error {
+	return r.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&Session{}).Error
 }

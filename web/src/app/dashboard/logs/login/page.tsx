@@ -46,20 +46,20 @@ export default function LoginLogsPage() {
         throw new Error("未找到认证令牌，请重新登录")
       }
 
-      // 获取登录相关日志
-      const logsResponse = await auditLogsApi.list(token, {
-        page,
-        page_size: pageSize,
-        action: "login",
-      })
+      // 并行加载日志列表和统计信息
+      const [logsResponse, statsResponse] = await Promise.all([
+        auditLogsApi.list(token, {
+          page,
+          page_size: pageSize,
+          action: "login",
+        }),
+        auditLogsApi.getStatistics(token),
+      ])
 
       const filteredLogs = logsResponse.logs.filter(log => log.action === "login")
       setLogs(filteredLogs || [])
       setTotalPages(logsResponse.total_pages || 1)
       setTotalRows(logsResponse.total || 0)
-
-      // 获取统计信息
-      const statsResponse = await auditLogsApi.getStatistics(token)
       setStatistics(statsResponse)
 
     } catch (error: any) {

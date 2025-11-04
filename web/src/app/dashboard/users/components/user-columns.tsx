@@ -5,7 +5,7 @@ import { User, UserRole } from "@/lib/api/users"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,6 +114,7 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<User>
         return (
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
+              <AvatarImage src={user.avatar} alt={user.username} />
               <AvatarFallback>
                 {user.username.charAt(0).toUpperCase()}
               </AvatarFallback>

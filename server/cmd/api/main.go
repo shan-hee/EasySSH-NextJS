@@ -19,10 +19,13 @@ import (
 	"github.com/easyssh/server/internal/domain/filetransfer"
 	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/monitoring"
+	"github.com/easyssh/server/internal/domain/notification"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
 	"github.com/easyssh/server/internal/domain/script"
 	"github.com/easyssh/server/internal/domain/server"
+	"github.com/easyssh/server/internal/domain/settings"
 	"github.com/easyssh/server/internal/domain/ssh"
+	"github.com/easyssh/server/internal/domain/sshkey"
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/domain/user"
 	"github.com/easyssh/server/internal/infra/cache"
@@ -67,6 +70,7 @@ func main() {
 	// 数据库迁移（自动迁移）
 	if err := database.AutoMigrate(
 		&auth.User{},
+		&auth.Session{},              // 用户会话表
 		&server.Server{},
 		&auditlog.AuditLog{},
 		&script.Script{},             // 脚本表
@@ -74,6 +78,8 @@ func main() {
 		&scheduledtask.ScheduledTask{}, // 定时任务表
 		&sshsession.SSHSession{},     // SSH会话表
 		&filetransfer.FileTransfer{}, // 文件传输表
+		&settings.Settings{},         // 系统设置表
+		&sshkey.SSHKey{},             // SSH密钥表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -90,6 +96,44 @@ func main() {
 	// 认证服务
 	authRepo := auth.NewRepository(database)
 	authService := auth.NewService(authRepo, jwtService)
+
+	// 系统设置服务（需要在邮件服务之前初始化）
+	settingsRepo := settings.NewRepository(database)
+	settingsService := settings.NewService(settingsRepo)
+
+	// 邮件服务(支持动态配置)
+	// 从数据库加载 SMTP 配置
+	var emailService notification.EmailService
+	smtpConfig, err := settingsService.GetSMTPConfig(context.Background())
+	if err == nil && smtpConfig != nil && smtpConfig.Enabled {
+		// 从数据库加载成功且启用了邮件服务
+		emailService, err = notification.NewEmailService(&notification.EmailConfig{
+			SMTPHost:     smtpConfig.Host,
+			SMTPPort:     smtpConfig.Port,
+			SMTPUsername: smtpConfig.Username,
+			SMTPPassword: smtpConfig.Password,
+			FromEmail:    smtpConfig.FromEmail,
+			FromName:     smtpConfig.FromName,
+			UseTLS:       smtpConfig.UseTLS,
+		})
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to initialize email service: %v", err)
+		} else {
+			log.Println("✅ Email service initialized from database configuration")
+		}
+	} else {
+		log.Println("ℹ️  Email service is disabled (configure via Web UI: Settings > Notifications > SMTP)")
+	}
+
+	// 注入邮件服务到认证服务
+	if emailService != nil {
+		type emailServiceSetter interface {
+			SetEmailService(auth.EmailService)
+		}
+		if setter, ok := authService.(emailServiceSetter); ok {
+			setter.SetEmailService(emailService)
+		}
+	}
 
 	// 加密器（用于服务器密码和私钥）
 	encryptor, err := crypto.NewEncryptor(cfg.Server.EncryptionKey)
@@ -139,6 +183,10 @@ func main() {
 	userRepo := user.NewRepository(database)
 	userService := user.NewService(userRepo)
 
+	// SSH密钥服务
+	sshKeyRepo := sshkey.NewRepository(database)
+	sshKeyService := sshkey.NewService(sshKeyRepo, cfg.Server.EncryptionKey)
+
 	// SFTP 上传 WebSocket 处理器
 	sftpUploadWSHandler := ws.NewSFTPUploadHandler()
 
@@ -157,6 +205,8 @@ func main() {
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	userHandler := rest.NewUserHandler(userService)
+	settingsHandler := rest.NewSettingsHandler(settingsService)
+	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 
 	// 创建 Gin 路由
 	r := gin.New()
@@ -215,6 +265,7 @@ func main() {
 			authRoutes.POST("/refresh", authHandler.RefreshToken)
 			authRoutes.GET("/admin-status", authHandler.CheckAdminStatus)           // 检查管理员状态
 			authRoutes.POST("/initialize-admin", authHandler.InitializeAdmin)       // 初始化管理员
+			authRoutes.POST("/2fa/verify", authHandler.Verify2FACode)                // 验证 2FA 代码（登录时）
 		}
 
 		// 用户路由（需要认证）
@@ -224,6 +275,19 @@ func main() {
 			userRoutes.GET("/me", authHandler.GetCurrentUser)
 			userRoutes.PUT("/me", authHandler.UpdateProfile)
 			userRoutes.PUT("/me/password", authHandler.ChangePassword)
+
+			// 2FA 相关路由
+			userRoutes.GET("/me/2fa/generate", authHandler.Generate2FASecret)  // 生成 2FA secret
+			userRoutes.POST("/me/2fa/enable", authHandler.Enable2FA)           // 启用 2FA
+			userRoutes.POST("/me/2fa/disable", authHandler.Disable2FA)         // 禁用 2FA
+
+			// 会话管理路由
+			userRoutes.GET("/me/sessions", authHandler.ListSessions)                  // 获取活跃会话列表
+			userRoutes.DELETE("/me/sessions/:session_id", authHandler.RevokeSession)  // 撤销指定会话
+			userRoutes.POST("/me/sessions/revoke-others", authHandler.RevokeAllOtherSessions) // 撤销所有其他会话
+
+			// 通知设置路由
+			userRoutes.PUT("/me/notifications", authHandler.UpdateNotificationSettings) // 更新通知设置
 		}
 
 		// 用户管理路由（需要认证）
@@ -390,6 +454,19 @@ func main() {
 			fileTransferRoutes.GET("/:id", fileTransferHandler.GetByID)              // 传输详情
 			fileTransferRoutes.PUT("/:id", fileTransferHandler.Update)               // 更新传输记录
 			fileTransferRoutes.DELETE("/:id", fileTransferHandler.Delete)            // 删除传输记录
+		}
+
+		// 系统设置路由（需要认证）
+		settingsHandler.RegisterRoutes(v1)
+
+		// SSH密钥路由（需要认证）
+		sshKeyRoutes := v1.Group("/ssh-keys")
+		sshKeyRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			sshKeyRoutes.GET("", sshKeyHandler.GetSSHKeys)           // 获取密钥列表
+			sshKeyRoutes.POST("/generate", sshKeyHandler.GenerateSSHKey) // 生成密钥
+			sshKeyRoutes.POST("/import", sshKeyHandler.ImportSSHKey)     // 导入密钥
+			sshKeyRoutes.DELETE("/:id", sshKeyHandler.DeleteSSHKey)      // 删除密钥
 		}
 	}
 

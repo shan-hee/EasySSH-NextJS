@@ -23,14 +23,10 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { useClientAuth } from "@/components/client-auth-provider"
 
 // This is sample data.
 const data = {
-  user: {
-    name: "管理员",
-    email: "admin@easyssh.com",
-    avatar: "/avatars/admin.jpg",
-  },
   teams: [
     {
       name: "EasySSH",
@@ -113,6 +109,7 @@ const data = {
 }
 
 export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { user } = useClientAuth()
   const memoizedData = React.useMemo(() => data, [])
   const all = memoizedData.navMain
 
@@ -128,6 +125,22 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
   )
   const groupSettings = React.useMemo(() => all.filter((i) => i.title === "系统配置"), [all])
 
+  // 构建真实用户数据
+  const userData = React.useMemo(() => {
+    if (!user) {
+      return {
+        name: "访客",
+        email: "",
+        avatar: "",
+      }
+    }
+    return {
+      name: user.username,
+      email: user.email,
+      avatar: user.avatar || "",
+    }
+  }, [user])
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -142,7 +155,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       </SidebarContent>
       <SidebarFooter>
         <NavExtra />
-        <NavUser user={memoizedData.user} />
+        <NavUser user={userData} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

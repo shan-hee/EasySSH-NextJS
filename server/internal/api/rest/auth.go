@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -60,8 +61,8 @@ type ChangePasswordRequest struct {
 
 // UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
-	Email  string `json:"email,omitempty"`
-	Avatar string `json:"avatar,omitempty"`
+	Email  string  `json:"email,omitempty"`
+	Avatar *string `json:"avatar"` // 使用指针类型区分"未提供"和"空字符串"
 }
 
 // AuthResponse 认证响应
@@ -134,6 +135,25 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.Set("user_id", user.ID.String())
 	c.Set("username", user.Username)
 
+	// 检查是否启用了 2FA
+	if user.TwoFactorEnabled {
+		// 生成临时令牌（用于 2FA 验证）
+		tempToken, err := h.jwtService.GenerateTempToken(user.ID.String())
+		if err != nil {
+			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate temp token")
+			return
+		}
+
+		// 返回需要 2FA 验证的响应
+		RespondSuccess(c, gin.H{
+			"requires_2fa": true,
+			"temp_token":   tempToken,
+			"message":      "请输入双因子认证代码",
+		})
+		return
+	}
+
+	// 未启用 2FA，直接返回令牌
 	RespondSuccess(c, AuthResponse{
 		User:         user.ToPublic(),
 		AccessToken:  accessToken,
@@ -282,8 +302,14 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	uid, _ := userID.(string)
 	parsedUID, _ := parseUUID(uid)
 
+	// 处理 avatar 参数：如果提供了指针，使用其值（可能是空字符串）；否则使用特殊标记表示不更新
+	avatarValue := "\x00" // 特殊标记，表示不更新头像
+	if req.Avatar != nil {
+		avatarValue = *req.Avatar
+	}
+
 	// 更新资料
-	if err := h.authService.UpdateProfile(c.Request.Context(), parsedUID, req.Email, req.Avatar); err != nil {
+	if err := h.authService.UpdateProfile(c.Request.Context(), parsedUID, req.Email, avatarValue); err != nil {
 		RespondError(c, http.StatusInternalServerError, "update_failed", "Failed to update profile")
 		return
 	}
@@ -352,3 +378,420 @@ func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
 func parseUUID(s string) (uuid.UUID, error) {
 	return uuid.Parse(s)
 }
+
+// ============= 2FA 相关 API =============
+
+// Enable2FARequest 启用 2FA 请求
+type Enable2FARequest struct {
+	Code string `json:"code" binding:"required,len=6"` // TOTP 6位数字
+}
+
+// Disable2FARequest 禁用 2FA 请求
+type Disable2FARequest struct {
+	Code string `json:"code" binding:"required"` // 需要验证码确认
+}
+
+// Verify2FACodeRequest 验证 2FA 代码请求
+type Verify2FACodeRequest struct {
+	TempToken string `json:"temp_token" binding:"required"` // 临时令牌
+	Code      string `json:"code" binding:"required"`       // 2FA 代码
+}
+
+// Generate2FAResponse 生成 2FA secret 响应
+type Generate2FAResponse struct {
+	Secret    string `json:"secret"`
+	QRCodeURL string `json:"qr_code_url"`
+}
+
+// Enable2FAResponse 启用 2FA 响应
+type Enable2FAResponse struct {
+	BackupCodes []string `json:"backup_codes"`
+	Message     string   `json:"message"`
+}
+
+// Generate2FASecret 生成 2FA secret（第一步）
+// GET /api/v1/auth/2fa/generate
+func (h *AuthHandler) Generate2FASecret(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+		return
+	}
+
+	uid, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid user ID format")
+		return
+	}
+
+	// 生成 2FA secret
+	secret, qrCodeURL, err := h.authService.Generate2FASecret(c.Request.Context(), uid)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	RespondSuccess(c, Generate2FAResponse{
+		Secret:    secret,
+		QRCodeURL: qrCodeURL,
+	})
+}
+
+// Enable2FA 启用双因子认证（第二步）
+// POST /api/v1/auth/2fa/enable
+func (h *AuthHandler) Enable2FA(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+		return
+	}
+
+	uid, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid user ID format")
+		return
+	}
+
+	var req Enable2FARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 启用 2FA
+	backupCodes, err := h.authService.Enable2FA(c.Request.Context(), uid, req.Code)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid 2FA code") {
+			RespondError(c, http.StatusBadRequest, "invalid_code", "验证码无效，请重试")
+			return
+		}
+		if strings.Contains(err.Error(), "already enabled") {
+			RespondError(c, http.StatusBadRequest, "already_enabled", "双因子认证已启用")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	RespondSuccess(c, Enable2FAResponse{
+		BackupCodes: backupCodes,
+		Message:     "双因子认证已启用，请妥善保管备份码",
+	})
+}
+
+// Disable2FA 禁用双因子认证
+// POST /api/v1/auth/2fa/disable
+func (h *AuthHandler) Disable2FA(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+		return
+	}
+
+	uid, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid user ID format")
+		return
+	}
+
+	var req Disable2FARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 禁用 2FA
+	if err := h.authService.Disable2FA(c.Request.Context(), uid, req.Code); err != nil {
+		if strings.Contains(err.Error(), "invalid code") || strings.Contains(err.Error(), "验证码") {
+			RespondError(c, http.StatusBadRequest, "invalid_code", "验证码错误")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"message": "双因子认证已禁用",
+	})
+}
+
+// Verify2FACode 验证 2FA 代码（用于登录）
+// POST /api/v1/auth/2fa/verify
+func (h *AuthHandler) Verify2FACode(c *gin.Context) {
+	var req Verify2FACodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 验证临时令牌并获取用户 ID
+	userIDStr, err := h.jwtService.ValidateTempToken(req.TempToken)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "invalid_temp_token", "临时令牌无效或已过期")
+		return
+	}
+
+	// 解析用户 ID
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		return
+	}
+
+	// 验证 2FA 代码
+	valid, err := h.authService.Verify2FACode(c.Request.Context(), userID, req.Code)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	if !valid {
+		RespondError(c, http.StatusBadRequest, "invalid_code", "验证码无效")
+		return
+	}
+
+	// 获取用户信息
+	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get user")
+		return
+	}
+
+	// 生成正式令牌
+	accessToken, refreshToken, err := h.jwtService.GenerateTokens(user)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate tokens")
+		return
+	}
+
+	RespondSuccess(c, AuthResponse{
+		User:         user.ToPublic(),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    3600, // 1 hour
+	})
+}
+
+// === Session Management ===
+
+// SessionResponse 会话响应
+type SessionResponse struct {
+	ID           string `json:"id"`
+	DeviceType   string `json:"device_type"`
+	DeviceName   string `json:"device_name"`
+	IPAddress    string `json:"ip_address"`
+	Location     string `json:"location"`
+	LastActivity string `json:"last_activity"`
+	CreatedAt    string `json:"created_at"`
+	IsCurrent    bool   `json:"is_current"` // 是否为当前会话
+}
+
+// RevokeSessionRequest 撤销会话请求
+type RevokeSessionRequest struct {
+	SessionID string `json:"session_id" binding:"required"`
+}
+
+// ListSessions 获取用户的所有活跃会话
+// GET /api/v1/users/me/sessions
+func (h *AuthHandler) ListSessions(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User ID not found")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_user_id", "Invalid user ID")
+		return
+	}
+
+	// 获取用户所有活跃会话
+	sessions, err := h.authService.ListUserSessions(c.Request.Context(), userID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to list sessions")
+		return
+	}
+
+	// 获取当前请求的 token
+	authHeader := c.GetHeader("Authorization")
+	currentToken := ""
+	if authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			currentToken = parts[1]
+		}
+	}
+
+	// 转换为响应格式
+	var response []SessionResponse
+	for _, session := range sessions {
+		isCurrent := false
+		// 这里可以通过比较 token 或其他方式判断是否为当前会话
+		// 简化处理:根据最近活动时间判断(最活跃的会话)
+		if currentToken != "" {
+			// TODO: 更精确的判断方式是比较 refresh token
+			isCurrent = session.LastActivity.After(session.CreatedAt.Add(-1 * time.Minute))
+		}
+
+		response = append(response, SessionResponse{
+			ID:           session.ID.String(),
+			DeviceType:   session.DeviceType,
+			DeviceName:   session.DeviceName,
+			IPAddress:    session.IPAddress,
+			Location:     session.Location,
+			LastActivity: session.LastActivity.Format("2006-01-02 15:04:05"),
+			CreatedAt:    session.CreatedAt.Format("2006-01-02 15:04:05"),
+			IsCurrent:    isCurrent,
+		})
+	}
+
+	RespondSuccess(c, gin.H{
+		"sessions": response,
+		"total":    len(response),
+	})
+}
+
+// RevokeSession 撤销指定会话
+// DELETE /api/v1/users/me/sessions/:session_id
+func (h *AuthHandler) RevokeSession(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User ID not found")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_user_id", "Invalid user ID")
+		return
+	}
+
+	// 从路径参数获取 session ID
+	sessionIDStr := c.Param("session_id")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_session_id", "Invalid session ID")
+		return
+	}
+
+	// 撤销会话
+	if err := h.authService.RevokeSession(c.Request.Context(), userID, sessionID); err != nil {
+		if err.Error() == "session not found or does not belong to user" {
+			RespondError(c, http.StatusNotFound, "session_not_found", err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to revoke session")
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"message": "Session revoked successfully",
+	})
+}
+
+// RevokeAllOtherSessions 撤销除当前会话外的所有其他会话
+// POST /api/v1/users/me/sessions/revoke-others
+func (h *AuthHandler) RevokeAllOtherSessions(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User ID not found")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_user_id", "Invalid user ID")
+		return
+	}
+
+	// TODO: 获取当前会话 ID (需要从 refresh token 或其他方式获取)
+	// 暂时使用一个临时方案:查找最近活动的会话作为当前会话
+	sessions, err := h.authService.ListUserSessions(c.Request.Context(), userID)
+	if err != nil || len(sessions) == 0 {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get current session")
+		return
+	}
+
+	// 使用最近活动的会话作为当前会话
+	currentSessionID := sessions[0].ID
+
+	// 撤销所有其他会话
+	if err := h.authService.RevokeAllOtherSessions(c.Request.Context(), userID, currentSessionID); err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to revoke sessions")
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"message": "All other sessions revoked successfully",
+	})
+}
+
+// === Notification Settings ===
+
+// UpdateNotificationSettingsRequest 更新通知设置请求
+type UpdateNotificationSettingsRequest struct {
+	EmailLogin *bool `json:"email_login"`
+	EmailAlert *bool `json:"email_alert"`
+	Browser    *bool `json:"browser"`
+}
+
+// UpdateNotificationSettings - PUT /api/v1/users/me/notifications
+//
+// @Summary 更新通知设置
+// @Description 更新用户的通知偏好设置
+// @Tags 用户
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body UpdateNotificationSettingsRequest true "通知设置"
+// @Success 200 {object} SuccessResponse "更新成功"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 500 {object} ErrorResponse "内部错误"
+// @Router /users/me/notifications [put]
+func (h *AuthHandler) UpdateNotificationSettings(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User ID not found")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_user_id", "Invalid user ID")
+		return
+	}
+
+	// 解析请求
+	var req UpdateNotificationSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_request", "Invalid request body: "+err.Error())
+		return
+	}
+
+	// 更新通知设置
+	if err := h.authService.UpdateNotificationSettings(
+		c.Request.Context(),
+		userID,
+		req.EmailLogin,
+		req.EmailAlert,
+		req.Browser,
+	); err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to update notification settings: "+err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"message": "Notification settings updated successfully",
+	})
+}
+

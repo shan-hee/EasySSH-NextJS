@@ -9,6 +9,10 @@ export interface User {
   email: string
   role: string
   avatar?: string
+  two_factor_enabled?: boolean
+  notify_email_login?: boolean
+  notify_email_alert?: boolean
+  notify_browser?: boolean
   created_at: string
   updated_at: string
 }

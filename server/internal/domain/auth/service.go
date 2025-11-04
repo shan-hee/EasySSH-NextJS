@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -43,22 +44,68 @@ type Service interface {
 
 	// InitializeAdmin 初始化管理员账户（仅在没有管理员时）
 	InitializeAdmin(ctx context.Context, username, email, password, runMode string) (*User, string, string, error)
+
+	// 2FA 相关方法
+
+	// Enable2FA 启用双因子认证
+	Enable2FA(ctx context.Context, userID uuid.UUID, code string) ([]string, error)
+
+	// Disable2FA 禁用双因子认证
+	Disable2FA(ctx context.Context, userID uuid.UUID, password string) error
+
+	// Generate2FASecret 生成 2FA secret（第一步）
+	Generate2FASecret(ctx context.Context, userID uuid.UUID) (string, string, error)
+
+	// Verify2FACode 验证 2FA 代码
+	Verify2FACode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
+
+	// Session management
+
+	// ListUserSessions 获取用户的所有活跃会话
+	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]*Session, error)
+
+	// RevokeSession 撤销指定会话
+	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error
+
+	// RevokeAllOtherSessions 撤销除当前会话外的所有其他会话
+	RevokeAllOtherSessions(ctx context.Context, userID uuid.UUID, currentSessionID uuid.UUID) error
+
+	// Notification settings
+
+	// UpdateNotificationSettings 更新通知设置
+	UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser *bool) error
 }
 
 // authService 认证服务实现
 type authService struct {
-	repo       Repository
-	jwtService JWTService
-	runMode    string // 存储运行模式
+	repo         Repository
+	jwtService   JWTService
+	totpService  TOTPService
+	emailService EmailService // 可选的邮件服务
+	runMode      string       // 存储运行模式
+}
+
+// EmailService 邮件服务接口（可选依赖）
+type EmailService interface {
+	SendLoginNotification(ctx context.Context, email, username, ipAddress, location, deviceInfo string, loginTime time.Time) error
+	Send2FAEnabledNotification(ctx context.Context, email, username string) error
+	SendPasswordChangedNotification(ctx context.Context, email, username string, changeTime time.Time) error
 }
 
 // NewService 创建认证服务
 func NewService(repo Repository, jwtService JWTService) Service {
 	return &authService{
-		repo:       repo,
-		jwtService: jwtService,
-		runMode:    "production", // 默认生产模式
+		repo:         repo,
+		jwtService:   jwtService,
+		totpService:  NewTOTPService(),
+		emailService: nil, // 默认不启用邮件服务
+		runMode:      "production",
 	}
+}
+
+// SetEmailService 设置邮件服务（可选）
+func (s *authService) SetEmailService(emailService EmailService) {
+	s.emailService = emailService
 }
 
 func (s *authService) Register(ctx context.Context, username, email, password string, role UserRole) (*User, error) {
@@ -113,6 +160,34 @@ func (s *authService) Login(ctx context.Context, username, password string) (*Us
 		return nil, "", "", fmt.Errorf("failed to generate tokens: %w", err)
 	}
 
+	// 异步发送登录通知邮件（不影响登录流程）
+	if s.emailService != nil && user.NotifyEmailLogin {
+		go func() {
+			// 使用新的上下文，避免影响主流程
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			// 获取登录信息（这里简化处理，实际应从请求中获取）
+			ipAddress := "Unknown"
+			location := "Unknown"
+			deviceInfo := "Unknown"
+
+			// 发送邮件
+			if err := s.emailService.SendLoginNotification(
+				notifyCtx,
+				user.Email,
+				user.Username,
+				ipAddress,
+				location,
+				deviceInfo,
+				time.Now(),
+			); err != nil {
+				// 记录错误但不影响登录
+				fmt.Printf("Failed to send login notification email: %v\n", err)
+			}
+		}()
+	}
+
 	return user, accessToken, refreshToken, nil
 }
 
@@ -156,7 +231,28 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 	}
 
 	// 更新用户
-	return s.repo.Update(ctx, user)
+	if err := s.repo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	// 异步发送密码修改通知邮件
+	if s.emailService != nil {
+		go func() {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := s.emailService.SendPasswordChangedNotification(
+				notifyCtx,
+				user.Email,
+				user.Username,
+				time.Now(),
+			); err != nil {
+				fmt.Printf("Failed to send password changed notification email: %v\n", err)
+			}
+		}()
+	}
+
+	return nil
 }
 
 func (s *authService) UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar string) error {
@@ -166,11 +262,13 @@ func (s *authService) UpdateProfile(ctx context.Context, userID uuid.UUID, email
 		return err
 	}
 
-	// 更新字段
+	// 更新邮箱（仅当非空时）
 	if email != "" {
 		user.Email = email
 	}
-	if avatar != "" {
+
+	// 更新头像（\x00 表示不更新，空字符串表示移除，其他值表示设置新头像）
+	if avatar != "\x00" {
 		user.Avatar = avatar
 	}
 
@@ -331,3 +429,229 @@ func (s *authService) initializeProductionMode(ctx context.Context, adminUser *U
 
 	return nil
 }
+
+// Generate2FASecret 生成 2FA secret（第一步：生成但不保存）
+func (s *authService) Generate2FASecret(ctx context.Context, userID uuid.UUID) (string, string, error) {
+	// 查找用户
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 生成 TOTP secret
+	secret, qrCodeURL, err := s.totpService.GenerateSecret(user.Username)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate TOTP secret: %w", err)
+	}
+
+	// 临时保存 secret 到数据库（此时还未启用 2FA）
+	user.TwoFactorSecret = secret
+	if err := s.repo.Update(ctx, user); err != nil {
+		return "", "", fmt.Errorf("failed to save TOTP secret: %w", err)
+	}
+
+	return secret, qrCodeURL, nil
+}
+
+// Enable2FA 启用双因子认证（第二步：验证代码并启用）
+func (s *authService) Enable2FA(ctx context.Context, userID uuid.UUID, code string) ([]string, error) {
+	// 查找用户
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 检查是否已启用
+	if user.TwoFactorEnabled {
+		return nil, errors.New("2FA is already enabled")
+	}
+
+	// 检查是否已生成 secret
+	if user.TwoFactorSecret == "" {
+		return nil, errors.New("2FA secret not generated, please generate first")
+	}
+
+	// 验证 TOTP 代码
+	if !s.totpService.ValidateCode(user.TwoFactorSecret, code) {
+		return nil, errors.New("invalid 2FA code")
+	}
+
+	// 生成备份码
+	backupCodes, err := s.totpService.GenerateBackupCodes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate backup codes: %w", err)
+	}
+
+	// 将备份码序列化为 JSON
+	backupCodesJSON, err := json.Marshal(backupCodes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal backup codes: %w", err)
+	}
+
+	// 启用 2FA
+	user.TwoFactorEnabled = true
+	user.BackupCodes = string(backupCodesJSON)
+
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to enable 2FA: %w", err)
+	}
+
+	// 异步发送 2FA 启用通知邮件
+	if s.emailService != nil {
+		go func() {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := s.emailService.Send2FAEnabledNotification(
+				notifyCtx,
+				user.Email,
+				user.Username,
+			); err != nil {
+				fmt.Printf("Failed to send 2FA enabled notification email: %v\n", err)
+			}
+		}()
+	}
+
+	return backupCodes, nil
+}
+
+// Disable2FA 禁用双因子认证
+func (s *authService) Disable2FA(ctx context.Context, userID uuid.UUID, code string) error {
+	// 查找用户
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// 检查是否启用了 2FA
+	if !user.TwoFactorEnabled {
+		return errors.New("2FA is not enabled")
+	}
+
+	// 验证 2FA 代码
+	if !s.totpService.ValidateCode(user.TwoFactorSecret, code) {
+		return errors.New("invalid 2FA code")
+	}
+
+	// 禁用 2FA
+	user.TwoFactorEnabled = false
+	user.TwoFactorSecret = ""
+	user.BackupCodes = ""
+
+	return s.repo.Update(ctx, user)
+}
+
+// Verify2FACode 验证 2FA 代码（用于登录）
+func (s *authService) Verify2FACode(ctx context.Context, userID uuid.UUID, code string) (bool, error) {
+	// 查找用户
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+
+	// 检查是否启用了 2FA
+	if !user.TwoFactorEnabled {
+		return false, errors.New("2FA is not enabled")
+	}
+
+	// 首先尝试验证 TOTP 代码
+	if s.totpService.ValidateCode(user.TwoFactorSecret, code) {
+		return true, nil
+	}
+
+	// 如果 TOTP 验证失败，尝试验证备份码
+	if user.BackupCodes != "" {
+		valid, updatedCodes, err := s.totpService.VerifyBackupCode(user.BackupCodes, code)
+		if err != nil {
+			return false, fmt.Errorf("failed to verify backup code: %w", err)
+		}
+
+		if valid {
+			// 更新剩余的备份码
+			user.BackupCodes = updatedCodes
+			if err := s.repo.Update(ctx, user); err != nil {
+				return false, fmt.Errorf("failed to update backup codes: %w", err)
+			}
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// === Session Management ===
+
+// ListUserSessions 获取用户的所有活跃会话
+func (s *authService) ListUserSessions(ctx context.Context, userID uuid.UUID) ([]*Session, error) {
+	return s.repo.ListUserSessions(ctx, userID)
+}
+
+// RevokeSession 撤销指定会话
+func (s *authService) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error {
+	// 首先验证会话属于该用户
+	sessions, err := s.repo.ListUserSessions(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to list user sessions: %w", err)
+	}
+
+	// 检查会话是否属于该用户
+	found := false
+	for _, session := range sessions {
+		if session.ID == sessionID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.New("session not found or does not belong to user")
+	}
+
+	// 删除会话
+	return s.repo.DeleteSession(ctx, sessionID)
+}
+
+// RevokeAllOtherSessions 撤销除当前会话外的所有其他会话
+func (s *authService) RevokeAllOtherSessions(ctx context.Context, userID uuid.UUID, currentSessionID uuid.UUID) error {
+	// 获取所有会话
+	sessions, err := s.repo.ListUserSessions(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to list user sessions: %w", err)
+	}
+
+	// 删除除当前会话外的所有会话
+	for _, session := range sessions {
+		if session.ID != currentSessionID {
+			if err := s.repo.DeleteSession(ctx, session.ID); err != nil {
+				return fmt.Errorf("failed to delete session %s: %w", session.ID, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// === Notification Settings ===
+
+// UpdateNotificationSettings 更新通知设置
+func (s *authService) UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser *bool) error {
+	// 查找用户
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// 更新通知设置（仅更新非 nil 的字段）
+	if emailLogin != nil {
+		user.NotifyEmailLogin = *emailLogin
+	}
+	if emailAlert != nil {
+		user.NotifyEmailAlert = *emailAlert
+	}
+	if browser != nil {
+		user.NotifyBrowser = *browser
+	}
+
+	return s.repo.Update(ctx, user)
+}
+
