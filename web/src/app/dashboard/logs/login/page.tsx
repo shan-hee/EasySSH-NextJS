@@ -21,7 +21,6 @@ export default function LoginLogsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalRows, setTotalRows] = useState(0)
   const [columnVisibility, setColumnVisibility] = useState({
-    select: true,
     created_at: true,
     username: true,
     status: true,
@@ -245,7 +244,6 @@ export default function LoginLogsPage() {
             <div className="flex gap-2">
               <ColumnVisibility
                 columns={[
-                  { id: 'select', label: '选择' },
                   { id: 'created_at', label: '时间' },
                   { id: 'username', label: '用户' },
                   { id: 'status', label: '状态' },
@@ -277,7 +275,6 @@ export default function LoginLogsPage() {
               onPageChange={setPage}
               emptyMessage="暂无登录日志"
               className="flex h-full flex-col"
-              enableRowSelection={true}
               toolbar={(table) => (
                 <DataTableToolbar
                   table={table}

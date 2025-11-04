@@ -23,7 +23,6 @@ export default function AuditLogsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalRows, setTotalRows] = useState(0)
   const [columnVisibility, setColumnVisibility] = useState({
-    select: true,
     created_at: true,
     username: true,
     action: true,
@@ -233,7 +232,6 @@ export default function AuditLogsPage() {
             <div className="flex gap-2">
               <ColumnVisibility
                 columns={[
-                  { id: 'select', label: '选择' },
                   { id: 'created_at', label: '时间' },
                   { id: 'username', label: '用户' },
                   { id: 'action', label: '操作' },
@@ -267,7 +265,6 @@ export default function AuditLogsPage() {
               onPageChange={setPage}
               emptyMessage="暂无操作日志"
               className="flex h-full flex-col"
-              enableRowSelection={true}
               toolbar={(table) => (
                 <DataTableToolbar
                   table={table}

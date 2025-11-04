@@ -2,7 +2,6 @@ import React from "react"
 import { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowUpDown, ArrowUp, ArrowDown, Clock, User, Server, Globe, AlertTriangle, CheckCircle } from "lucide-react"
 import { AuditLog } from "@/lib/api/audit-logs"
 import {
@@ -14,30 +13,6 @@ import {
 } from "@/components/ui/data-table"
 
 export const auditLogColumns: ColumnDef<AuditLog>[] = [
-  // 行选择列
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="全选"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="选择行"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-
   // 时间列
   {
     id: "created_at",
