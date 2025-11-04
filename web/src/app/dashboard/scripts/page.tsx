@@ -1,24 +1,20 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Kbd } from "@/components/ui/kbd"
 import { toast } from "sonner"
-import {
- Table,
- TableBody,
- TableCell,
- TableHead,
- TableHeader,
- TableRow,
-} from "@/components/ui/table"
+// DataTable 相关组件
+import { DataTable } from "@/components/ui/data-table"
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
+import { ColumnVisibility } from "@/components/ui/column-visibility"
 import {
  Dialog,
  DialogContent,
@@ -27,38 +23,32 @@ import {
  DialogHeader,
  DialogTitle,
 } from "@/components/ui/dialog"
-import {
- Search,
- Plus,
- FileText,
- Play,
- Edit,
- Trash2,
- X,
- Code2,
- MoreVertical,
- RefreshCw
-} from "lucide-react"
-import {
- DropdownMenu,
- DropdownMenuContent,
- DropdownMenuItem,
- DropdownMenuSeparator,
- DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Plus, X, RefreshCw } from "lucide-react"
 import { scriptsApi, type Script } from "@/lib/api"
-import { SkeletonTable } from "@/components/ui/loading"
+import { createScriptColumns } from "./components/script-columns"
 
 export default function ScriptsPage() {
  const router = useRouter()
  const [scripts, setScripts] = useState<Script[]>([])
  const [loading, setLoading] = useState(true)
- const [searchTerm, setSearchTerm] = useState("")
- const [selectedTag, setSelectedTag] = useState<string | null>(null)
  const [isDialogOpen, setIsDialogOpen] = useState(false)
  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
  const [editingScriptId, setEditingScriptId] = useState<string | null>(null)
  const [refreshing, setRefreshing] = useState(false)
+ // DataTable 分页与列可见性
+ const [page, setPage] = useState(1)
+ const [pageSize, setPageSize] = useState(20)
+ const [totalPages, setTotalPages] = useState(1)
+ const [totalRows, setTotalRows] = useState(0)
+ const [columnVisibility, setColumnVisibility] = useState({
+   name: true,
+   description: true,
+   content: true,
+   tags: true,
+   author: true,
+   updated_at: true,
+   executions: true,
+ })
 
  // 新建脚本表单状态
  const [newScript, setNewScript] = useState({
@@ -97,13 +87,13 @@ export default function ScriptsPage() {
  }
 
  const response = await scriptsApi.list(token, {
- page: 1,
- limit: 100,
- search: searchTerm || undefined,
- tags: selectedTag ? [selectedTag] : undefined,
+   page,
+   limit: pageSize,
  })
 
  setScripts(response.data)
+ setTotalRows(response.total || response.data.length)
+ setTotalPages(response.total_pages || 1)
  } catch (error: any) {
  console.error("加载脚本列表失败:", error)
  if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
@@ -124,10 +114,12 @@ export default function ScriptsPage() {
  await loadScripts()
  }
 
- // 初始加载
- useEffect(() => {
+// 初始加载与分页变化
+useEffect(() => {
+ setLoading(true)
  loadScripts()
- }, [])
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [page, pageSize])
 
  // 自动滚动选中的建议项到可见区域
  useEffect(() => {
@@ -171,13 +163,29 @@ export default function ScriptsPage() {
  )
  : availableEditTags
 
- // 过滤脚本
- const filteredScripts = scripts.filter(script => {
- const matchesSearch = script.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
- script.description.toLowerCase().includes(searchTerm.toLowerCase())
- const matchesTag = !selectedTag || script.tags.includes(selectedTag)
- return matchesSearch && matchesTag
- })
+// DataTable 列定义与可见列
+const columns = useMemo(() => createScriptColumns({
+  onExecute: (id) => handleExecute(id),
+  onEdit: (id) => handleEdit(id),
+  onDelete: (id) => handleDelete(id),
+}), [])
+
+const visibleColumns = useMemo(
+  () => columns.filter((col) =>
+    (col.id ? (columnVisibility as any)[col.id] ?? true : true)
+  ),
+  [columns, columnVisibility]
+)
+
+// 筛选项（根据现有字段：作者、标签）
+const filterOptions = useMemo(() => {
+  const tags = Array.from(new Set((scripts || []).flatMap(s => s.tags || []))) as string[]
+  const authors = Array.from(new Set((scripts || []).map(s => s.author).filter(Boolean))) as string[]
+  return {
+    tags: tags.map(t => ({ label: t, value: t })),
+    authors: authors.map(a => ({ label: a, value: a })),
+  }
+}, [scripts])
 
  const handleExecute = (scriptId: string) => {
  console.log("执行脚本:", scriptId)
@@ -472,164 +480,70 @@ export default function ScriptsPage() {
  新建脚本
  </Button>
  </div>
- </PageHeader>
+</PageHeader>
 
- {loading ? (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
- <SkeletonTable rows={8} columns={4} showActions />
- </div>
- ) : (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
- {/* 搜索和筛选 */}
- <div className="flex flex-col gap-4 shrink-0">
- <div className="flex items-center gap-4">
- <div className="relative flex-1 max-w-md">
- <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
- <Input
- placeholder="搜索脚本..."
- className="pl-10"
- value={searchTerm}
- onChange={(e) => setSearchTerm(e.target.value)}
- />
- </div>
- </div>
-
- {/* 标签筛选 */}
- <div className="flex items-center gap-2 flex-wrap">
- <span className="text-sm text-muted-foreground">标签:</span>
- <Button
- variant={selectedTag === null ? "default" : "outline"}
- size="sm"
- onClick={() => setSelectedTag(null)}
- >
- 全部
- </Button>
- {allTags.map(tag => (
- <Button
- key={tag}
- variant={selectedTag === tag ? "default" : "outline"}
- size="sm"
- onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
- >
- {tag}
- </Button>
- ))}
- </div>
- </div>
-
- {/* 脚本列表 */}
- <Card className="flex-1 min-h-0 flex flex-col">
- <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom">
- <Table>
- <TableHeader>
- <TableRow>
- <TableHead className="w-[200px]">脚本名称</TableHead>
- <TableHead className="w-[250px]">描述</TableHead>
- <TableHead className="min-w-[300px]">脚本内容</TableHead>
- <TableHead className="w-[200px]">标签</TableHead>
- <TableHead className="w-[100px]">作者</TableHead>
- <TableHead className="w-[120px]">更新时间</TableHead>
- <TableHead className="w-[80px] text-center">执行次数</TableHead>
- <TableHead className="w-[100px] text-right">操作</TableHead>
- </TableRow>
- </TableHeader>
- <TableBody>
- {filteredScripts.length === 0 ? (
- <TableRow>
- <TableCell colSpan={8} className="h-32 text-center">
- <div className="flex flex-col items-center justify-center text-muted-foreground">
- <FileText className="h-8 w-8 mb-2" />
- <p className="text-sm">
- {searchTerm || selectedTag ? "暂无匹配的脚本" : "暂无脚本"}
- </p>
- </div>
- </TableCell>
- </TableRow>
- ) : (
- filteredScripts.map(script => (
- <TableRow key={script.id} className="group">
- <TableCell className="font-medium">
- <div className="flex items-center gap-2">
- <Code2 className="h-4 w-4 text-muted-foreground" />
- <span>{script.name}</span>
- </div>
- </TableCell>
- <TableCell>
- <span className="text-sm text-muted-foreground line-clamp-2">
- {script.description}
- </span>
- </TableCell>
- <TableCell>
- <div className="bg-muted rounded-md px-3 py-2 max-w-[400px]">
- <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap line-clamp-3">
- {script.content}
- </pre>
- </div>
- </TableCell>
- <TableCell>
- <div className="flex flex-wrap gap-1">
- {script.tags.map(tag => (
- <Badge key={tag} variant="secondary" className="text-xs">
- {tag}
- </Badge>
- ))}
- </div>
- </TableCell>
- <TableCell>
- <span className="text-sm text-muted-foreground">{script.author}</span>
- </TableCell>
- <TableCell>
- <span className="text-sm text-muted-foreground">{script.updatedAt}</span>
- </TableCell>
- <TableCell className="text-center">
- <span className="text-sm">{script.executions}</span>
- </TableCell>
- <TableCell className="text-right">
- <div className="flex items-center justify-end gap-1">
- <Button
- variant="ghost"
- size="sm"
- onClick={() => handleExecute(script.id)}
- className="h-8 w-8 p-0"
- title="执行脚本">
- <Play className="h-4 w-4" />
- </Button>
- <DropdownMenu>
- <DropdownMenuTrigger asChild>
- <Button
- variant="ghost"
- size="sm"
- className="h-8 w-8 p-0"
- >
- <MoreVertical className="h-4 w-4" />
- </Button>
- </DropdownMenuTrigger>
- <DropdownMenuContent align="end">
- <DropdownMenuItem onClick={() => handleEdit(script.id)}>
- <Edit className="mr-2 h-4 w-4" />
- 编辑
- </DropdownMenuItem>
- <DropdownMenuSeparator />
- <DropdownMenuItem
- onClick={() => handleDelete(script.id)}
- className="text-destructive"
- >
- <Trash2 className="mr-2 h-4 w-4" />
- 删除
- </DropdownMenuItem>
- </DropdownMenuContent>
- </DropdownMenu>
- </div>
- </TableCell>
- </TableRow>
- ))
- )}
- </TableBody>
- </Table>
- </div>
- </Card>
- </div>
- )}
+<div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
+  <Card className="flex-1 min-h-0">
+    <CardHeader className="flex flex-row items-center justify-between">
+      <div>
+        <CardTitle className="text-lg">脚本库</CardTitle>
+        <CardDescription>显示 {scripts.length} 条记录</CardDescription>
+      </div>
+      <div className="flex gap-2">
+        <ColumnVisibility
+          columns={[
+            { id: 'name', label: '名称' },
+            { id: 'description', label: '描述' },
+            { id: 'content', label: '内容' },
+            // 以下列用于筛选，为避免报错，不允许在此处隐藏
+            // { id: 'tags', label: '标签' },
+            // { id: 'language', label: '语言' },
+            // { id: 'author', label: '作者' },
+            { id: 'updated_at', label: '更新时间' },
+            { id: 'executions', label: '执行次数' },
+          ].map(column => ({
+            id: column.id,
+            label: column.label,
+            visible: (columnVisibility as any)[column.id] ?? true,
+            onToggle: () => setColumnVisibility(prev => ({
+              ...prev,
+              [column.id]: !(prev as any)[column.id]
+            }))
+          }))}
+        />
+      </div>
+    </CardHeader>
+    <CardContent className="flex-1 min-h-0 p-4 pt-0">
+      <DataTable
+        data={scripts}
+        columns={visibleColumns}
+        loading={loading}
+        pageCount={totalPages}
+        pageSize={pageSize}
+        totalRows={totalRows}
+        onPageSizeChange={setPageSize}
+        onPageChange={setPage}
+        emptyMessage="暂无脚本"
+        className="flex h-full flex-col"
+        toolbar={(table) => (
+          <DataTableToolbar
+            table={table}
+            searchKey="name"
+            searchPlaceholder="搜索脚本名称或描述..."
+            filters={[
+              { column: 'author', title: '作者', options: filterOptions.authors },
+              { column: 'tags', title: '标签', options: filterOptions.tags },
+            ]}
+            onRefresh={handleRefresh}
+            showRefresh={true}
+          >
+            {/* 可添加额外操作按钮 */}
+          </DataTableToolbar>
+        )}
+      />
+    </CardContent>
+  </Card>
+</div>
 
  {/* 新建脚本弹窗 */}
  <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
@@ -929,4 +843,3 @@ export default function ScriptsPage() {
  </>
  )
 }
-
