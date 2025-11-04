@@ -193,29 +193,40 @@ const SortableSession = React.memo(({ session, children, onCrossSessionDrop }: S
  }, [session.id, onCrossSessionDrop])
 
  // 使用 useMemo 缓存 cloneElement 结果
- const childrenWithDragHandle = React.useMemo(() =>
- React.cloneElement(children as React.ReactElement<any>, {
- dragHandleListeners: listeners,
- dragHandleAttributes: attributes,
- } as any), [children, listeners, attributes])
+ // 仅在子元素为自定义组件时注入拖拽句柄属性，避免把未知属性传到原生 DOM
+ const { childElement, isDomChild } = React.useMemo(() => {
+   const element = children as React.ReactElement<any>
+   const isDom = typeof element?.type === 'string'
+   return {
+     childElement: isDom
+       ? element
+       : React.cloneElement(element, {
+           dragHandleListeners: listeners,
+           dragHandleAttributes: attributes,
+         } as any),
+     isDomChild: isDom,
+   }
+ }, [children, listeners, attributes])
 
  return (
  <div
  ref={setNodeRef}
  style={style}
- className={cn(
- "min-h-0",
- // 拖拽时轻微降低透明度，不影响性能
- isDragging && "opacity-60",
- isDragOver && "ring-2 ring-blue-500 ring-offset-2"
- )}
- data-session-id={session.id}
- onDragOver={handleDragOver}
- onDragLeave={handleDragLeave}
- onDrop={handleDrop}
- >
- {childrenWithDragHandle}
- </div>
+  className={cn(
+    "min-h-0",
+    // 拖拽时轻微降低透明度，不影响性能
+    isDragging && "opacity-60",
+    isDragOver && "ring-2 ring-blue-500 ring-offset-2"
+  )}
+  data-session-id={session.id}
+  // 当子元素是原生 DOM（如欢迎页占位）时，将拖拽监听直接绑定在容器上
+  {...(isDomChild ? { ...attributes, ...listeners } : {})}
+  onDragOver={handleDragOver}
+  onDragLeave={handleDragLeave}
+  onDrop={handleDrop}
+>
+ {childElement}
+</div>
  )
 })
 
