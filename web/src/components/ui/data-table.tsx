@@ -29,6 +29,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+export type TableDensity = "compact" | "standard" | "comfortable"
+
 interface DataTableProps<TData, TValue = unknown> {
   data: TData[]
   columns: ColumnDef<TData, TValue>[]
@@ -43,6 +45,9 @@ interface DataTableProps<TData, TValue = unknown> {
   scrollContainerClassName?: string
   enableRowSelection?: boolean
   toolbar?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode
+  density?: TableDensity
+  onDensityChange?: (density: TableDensity) => void
+  batchActions?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode
 }
 
 // 格式化时间
@@ -140,6 +145,27 @@ export function isInternalIP(ip: string): boolean {
   return internalRanges.some(range => range.test(ip))
 }
 
+// 获取密度对应的样式类名
+function getDensityClasses(density: TableDensity) {
+  switch (density) {
+    case "compact":
+      return {
+        header: "px-2 py-1 h-8 text-xs",
+        cell: "px-2 py-0.5 text-xs",
+      }
+    case "comfortable":
+      return {
+        header: "px-4 py-3 h-12",
+        cell: "px-4 py-2.5",
+      }
+    default: // standard
+      return {
+        header: "px-3 py-2 h-10",
+        cell: "px-3 py-1.5",
+      }
+  }
+}
+
 export function DataTable<TData, TValue = unknown>({
   data,
   columns,
@@ -154,6 +180,9 @@ export function DataTable<TData, TValue = unknown>({
   scrollContainerClassName,
   enableRowSelection = false,
   toolbar,
+  density = "standard",
+  onDensityChange,
+  batchActions,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -162,6 +191,8 @@ export function DataTable<TData, TValue = unknown>({
   const [currentPage, setCurrentPage] = React.useState(1)
   const [inputPage, setInputPage] = React.useState("")
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+
+  const densityClasses = getDensityClasses(density)
 
   const table = useReactTable({
     data,
@@ -190,18 +221,6 @@ export function DataTable<TData, TValue = unknown>({
     manualPagination: !!pageCount,
     pageCount: pageCount,
   })
-
-  React.useEffect(() => {
-    if (onPageChange) {
-      onPageChange(currentPage)
-    }
-  }, [currentPage, onPageChange])
-
-  React.useEffect(() => {
-    if (onPageSizeChange) {
-      onPageSizeChange(pageSize)
-    }
-  }, [pageSize, onPageSizeChange])
 
   // 加载时重置滚动位置到顶部
   React.useEffect(() => {
@@ -239,6 +258,30 @@ export function DataTable<TData, TValue = unknown>({
         {/* 工具栏区域 */}
         {toolbar && toolbar(table)}
 
+        {/* 批量操作工具栏 */}
+        {enableRowSelection && batchActions && table.getFilteredSelectedRowModel().rows.length > 0 && (
+          <div className="border-b bg-muted/50 px-4 py-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">
+                  已选择 {table.getFilteredSelectedRowModel().rows.length} 项
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => table.toggleAllPageRowsSelected(false)}
+                  className="h-7 text-xs"
+                >
+                  取消选择
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                {batchActions(table)}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 可滚动内容区域（单表 + 吸顶表头，避免对不齐） */}
         <div
           ref={scrollContainerRef}
@@ -257,7 +300,10 @@ export function DataTable<TData, TValue = unknown>({
                   {headerGroup.headers.map((header) => (
                     <TableHead
                       key={header.id}
-                      className="bg-accent sticky top-0 z-[1] whitespace-nowrap px-3 py-2 h-10"
+                      className={cn(
+                        "bg-accent sticky top-0 z-[1] whitespace-nowrap",
+                        densityClasses.header
+                      )}
                     >
                       {header.isPlaceholder
                         ? null
@@ -278,7 +324,10 @@ export function DataTable<TData, TValue = unknown>({
                     data-state={row.getIsSelected() && "selected"}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="px-3 py-1.5">
+                      <TableCell
+                        key={cell.id}
+                        className={densityClasses.cell}
+                      >
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext()
@@ -291,7 +340,7 @@ export function DataTable<TData, TValue = unknown>({
                 <TableRow>
                   <TableCell
                     colSpan={columns.length}
-                    className="h-24 text-center px-3"
+                    className={cn("h-24 text-center", densityClasses.cell)}
                   >
                     {emptyMessage}
                   </TableCell>
@@ -300,8 +349,26 @@ export function DataTable<TData, TValue = unknown>({
             </TableBody>
           </Table>
           {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-card">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <div className="absolute inset-0 flex flex-col bg-background/95 backdrop-blur-sm">
+              <div className="flex-1 p-4 space-y-3">
+                {Array.from({ length: Math.min(pageSize, 10) }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 animate-pulse"
+                    style={{ animationDelay: `${i * 50}ms` }}
+                  >
+                    <div className="h-8 bg-muted rounded flex-1" />
+                    <div className="h-8 bg-muted rounded w-1/4" />
+                    <div className="h-8 bg-muted rounded w-1/6" />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-center p-8 border-t">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>加载中...</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
