@@ -72,6 +72,7 @@ import { parseFileSize } from "@/lib/format-utils"
 import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
 import { FileEditor } from "@/components/sftp/file-editor"
+import { LoadingSpinner } from "@/components/ui/loading/loading-spinner"
 import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransfer"
 
 interface FileItem {
@@ -113,6 +114,7 @@ interface SftpManagerProps {
   sessionColor?: string
   isFullscreen?: boolean
   pageContext?: 'sftp' | 'terminal' // 页面上下文
+  isLoading?: boolean // 是否正在加载文件列表
   onNavigate: (path: string) => void
   onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
@@ -151,6 +153,7 @@ export function SftpManager(props: SftpManagerProps) {
     serverName,
     isFullscreen = false,
     pageContext = 'sftp',
+    isLoading = false,
     onNavigate,
     onUpload,
     onDownload,
@@ -194,7 +197,18 @@ export function SftpManager(props: SftpManagerProps) {
   const [newFolderName, setNewFolderName] = useState("")
   const [isDragging, setIsDragging] = useState(false)
   const [dragCounter, setDragCounter] = useState(0)
-  const [viewMode, setViewMode] = useState<"grid" | "list">("list") // 默认列表视图
+  // 视图模式：根据上下文 + 本地偏好初始化
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const key = `easyssh:sftp:viewMode:${pageContext}`
+        const stored = window.localStorage.getItem(key)
+        if (stored === 'grid' || stored === 'list') return stored
+      } catch {}
+    }
+    // 默认：文件管理(sftp)用图标视图；终端(terminal)用列表视图
+    return pageContext === 'terminal' ? 'list' : 'grid'
+  })
   const [showHidden, setShowHidden] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -1050,6 +1064,14 @@ export function SftpManager(props: SftpManagerProps) {
     }
   }, [editingFile, creatingNew])
 
+  // 当用户切换视图时持久化偏好（按上下文区分）
+  useEffect(() => {
+    try {
+      const key = `easyssh:sftp:viewMode:${pageContext}`
+      window.localStorage.setItem(key, viewMode)
+    } catch {}
+  }, [viewMode, pageContext])
+
   // 传输状态图标
   const getStatusIcon = (status: TransferTask["status"]) => {
     switch (status) {
@@ -1491,7 +1513,11 @@ export function SftpManager(props: SftpManagerProps) {
               </div>
             )}
 
-        {filteredFiles.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <LoadingSpinner size="lg" label="正在加载文件列表..." />
+          </div>
+        ) : filteredFiles.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <FolderOpen className={cn(

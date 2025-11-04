@@ -262,6 +262,7 @@ export function TabTerminalContent({
             sessionLabel={session.serverName || 'Session'}
             currentPath={sftpSession.currentPath}
             files={sftpSession.files}
+            isLoading={sftpSession.isLoading}
             onNavigate={sftpSession.navigate}
             onRefresh={sftpSession.refresh}
             onUpload={sftpSession.uploadFiles}

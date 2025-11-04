@@ -21,6 +21,7 @@ interface FileManagerPanelProps {
   files: any[]
   sessionId: string
   sessionLabel: string
+  isLoading?: boolean // 是否正在加载文件列表
   onNavigate: (path: string) => void
   onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
@@ -35,9 +36,9 @@ interface FileManagerPanelProps {
   // 传输任务管理
   transferTasks?: TransferTask[]
   onClearCompletedTransfers?: () => void
-  // 将文件管理器渲染到指定容器（例如终端内部），而非整个页面
+  // 将文件管理器渲染到指定容器(例如终端内部),而非整个页面
   mountContainer?: HTMLElement | null
-  // 面板顶部锚点（用于位于工具栏下方）
+  // 面板顶部锚点(用于位于工具栏下方)
   anchorTop?: number
 }
 

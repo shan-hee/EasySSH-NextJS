@@ -84,6 +84,7 @@ interface SftpSession {
  currentPath: string
  files: ComponentFile[]
  isConnected: boolean
+ isLoading?: boolean // 是否正在加载文件列表
  label: string // 会话自定义标签
  color?: string // 会话标识颜色
 }
@@ -457,6 +458,7 @@ export default function SftpPage() {
  currentPath: initialPath,
  files: [],
  isConnected: false,
+ isLoading: true, // 初始加载状态
  label: `${server.name}`,
  color: sessionColors[(nextSessionId - 1) % sessionColors.length],
  }
@@ -487,7 +489,7 @@ export default function SftpPage() {
  setSessions(prev =>
  prev.map(s =>
  s.id === sessionId
- ? { ...s, isConnected: true, files: filesWithParent }
+ ? { ...s, isConnected: true, isLoading: false, files: filesWithParent }
  : s
  )
  )
@@ -554,6 +556,11 @@ export default function SftpPage() {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) return
 
+ // 设置加载状态
+ setSessions(prev =>
+ prev.map(s => (s.id === sessionId ? { ...s, isLoading: true } : s))
+ )
+
  try {
  const dirResponse = await sftpApi.listDirectory(token, session.serverId, session.currentPath)
  const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
@@ -574,12 +581,15 @@ export default function SftpPage() {
  : convertedFiles
 
  setSessions(prev =>
- prev.map(s => (s.id === sessionId ? { ...s, files: filesWithParent } : s))
+ prev.map(s => (s.id === sessionId ? { ...s, isLoading: false, files: filesWithParent } : s))
  )
 
  toast.success("刷新成功")
  } catch (error: any) {
  console.error("Failed to refresh:", error)
+ setSessions(prev =>
+ prev.map(s => (s.id === sessionId ? { ...s, isLoading: false } : s))
+ )
  toast.error(`刷新失败: ${error?.message || "未知错误"}`)
  }
  }
@@ -603,6 +613,11 @@ export default function SftpPage() {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) return
 
+ // 设置加载状态
+ setSessions(prev =>
+ prev.map(s => (s.id === sessionId ? { ...s, isLoading: true } : s))
+ )
+
  try {
  const dirResponse = await sftpApi.listDirectory(token, session.serverId, path)
  const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
@@ -625,12 +640,15 @@ export default function SftpPage() {
  setSessions(prev =>
  prev.map(s =>
  s.id === sessionId
- ? { ...s, currentPath: path, files: filesWithParent }
+ ? { ...s, currentPath: path, isLoading: false, files: filesWithParent }
  : s
  )
  )
  } catch (error: any) {
  console.error("Failed to navigate:", error)
+ setSessions(prev =>
+ prev.map(s => (s.id === sessionId ? { ...s, isLoading: false } : s))
+ )
  toast.error(`打开目录失败: ${error?.message || "未知错误"}`)
  }
  }
@@ -1041,6 +1059,7 @@ export default function SftpPage() {
  sessionColor={session.color}
  isFullscreen={true}
  pageContext="sftp"
+                isLoading={session.isLoading}
  onNavigate={(path) => handleNavigate(session.id, path)}
  onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
  onDownload={(fileName) => handleDownload(session.id, fileName)}
@@ -1112,6 +1131,7 @@ export default function SftpPage() {
  sessionColor={session.color}
  isFullscreen={false}
  pageContext="sftp"
+                isLoading={session.isLoading}
  onNavigate={(path) => handleNavigate(session.id, path)}
  onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
  onDownload={(fileName) => handleDownload(session.id, fileName)}
