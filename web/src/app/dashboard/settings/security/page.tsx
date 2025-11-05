@@ -25,7 +25,7 @@ export default function SettingsSecurityPage() {
  </Button>
  </PageHeader>
 
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
  <div className="grid gap-4 md:grid-cols-4">
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -212,6 +212,52 @@ export default function SettingsSecurityPage() {
  <div className="space-y-2">
  <Label>最大并发会话数</Label>
  <Input type="number" defaultValue="3" className="w-32" />
+ </div>
+ </CardContent>
+ </Card>
+
+ <Card>
+ <CardHeader>
+ <CardTitle>标签/会话设置</CardTitle>
+ <CardDescription>控制浏览器标签页数量和非活动断开提醒</CardDescription>
+ </CardHeader>
+ <CardContent className="space-y-4">
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+ <div className="space-y-2">
+ <Label htmlFor="maxTabs">最大标签页数</Label>
+ <Input
+ id="maxTabs"
+ type="number"
+ min={1}
+ max={200}
+ defaultValue="50"
+ />
+ <p className="text-xs text-muted-foreground">
+ 限制用户可同时打开的SSH会话标签页数量
+ </p>
+ </div>
+ <div className="space-y-2">
+ <Label htmlFor="inactiveMinutes">非活动断开提醒 (分钟)</Label>
+ <Input
+ id="inactiveMinutes"
+ type="number"
+ min={5}
+ max={1440}
+ defaultValue="60"
+ />
+ <p className="text-xs text-muted-foreground">
+ SSH会话非活动状态超过设定时间后将提醒用户
+ </p>
+ </div>
+ </div>
+ <div className="flex items-center justify-between">
+ <div className="space-y-0.5">
+ <Label>后台标签页休眠</Label>
+ <p className="text-sm text-muted-foreground">
+ 非活动标签页停止渲染终端以释放系统资源
+ </p>
+ </div>
+ <Switch defaultChecked />
  </div>
  </CardContent>
  </Card>

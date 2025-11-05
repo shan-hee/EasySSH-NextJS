@@ -449,7 +449,7 @@ export default function SettingsNotificationsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>邮件服务器配置</CardTitle>
-                    <CardDescription>配置 SMTP 服务器用于发送邮件通知</CardDescription>
+                    <CardDescription>配置 SMTP 服务器用于发送系统邮件通知</CardDescription>
                   </div>
                   <Badge className={smtpConfig.enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
                     {smtpConfig.enabled ? "已启用" : "未启用"}
@@ -571,8 +571,25 @@ export default function SettingsNotificationsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>通知事件</CardTitle>
-                <CardDescription>选择需要发送邮件的事件类型（功能开发中）</CardDescription>
+                <CardTitle>用户通知偏好</CardTitle>
+                <CardDescription>用户可以在个人设置中配置自己的邮件通知偏好</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="rounded-lg bg-muted p-3">
+                  <p className="text-sm text-muted-foreground">
+                    💡 提示：用户可以在个人设置中配置以下通知偏好：
+                    <br />• 登录邮件通知
+                    <br />• 告警邮件通知
+                    <br />• 浏览器推送通知
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>系统通知事件</CardTitle>
+                <CardDescription>配置系统级邮件通知事件（功能开发中）</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex items-center justify-between">

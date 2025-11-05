@@ -334,15 +334,6 @@ func (s *service) SaveSystemConfig(ctx context.Context, config *SystemConfig) er
 	if config.SystemName == "" {
 		return fmt.Errorf("system name is required")
 	}
-	if config.SessionTimeout < 5 || config.SessionTimeout > 1440 {
-		return fmt.Errorf("session timeout must be between 5 and 1440 minutes")
-	}
-	if config.MaxLoginAttempts < 1 || config.MaxLoginAttempts > 10 {
-		return fmt.Errorf("max login attempts must be between 1 and 10")
-	}
-	if config.PasswordMinLength < 6 || config.PasswordMinLength > 32 {
-		return fmt.Errorf("password minimum length must be between 6 and 32")
-	}
 	if config.DefaultPageSize < 10 || config.DefaultPageSize > 100 {
 		return fmt.Errorf("default page size must be between 10 and 100")
 	}

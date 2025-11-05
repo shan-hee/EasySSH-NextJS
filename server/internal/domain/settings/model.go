@@ -58,26 +58,23 @@ const (
 
 // 系统通用配置相关的键名
 const (
-	KeySystemName              = "system.name"
-	KeySystemDescription       = "system.description"
-	KeySystemLogo              = "system.logo"
-	KeySystemFavicon           = "system.favicon"
-	KeyDefaultLanguage         = "system.default_language"
-	KeyDefaultTimezone         = "system.default_timezone"
-	KeyDateFormat              = "system.date_format"
-	KeyEnableUserRegistration  = "system.enable_user_registration"
-	KeyEnableGuestAccess       = "system.enable_guest_access"
-	KeyEnableFileManager       = "system.enable_file_manager"
-	KeyEnableWebTerminal       = "system.enable_web_terminal"
-	KeyEnableMonitoring        = "system.enable_monitoring"
-	KeySessionTimeout          = "system.session_timeout"
-	KeyMaxLoginAttempts        = "system.max_login_attempts"
-	KeyPasswordMinLength       = "system.password_min_length"
-	KeyRequireTwoFactor        = "system.require_two_factor"
-	KeyDefaultPageSize         = "system.default_page_size"
-	KeyMaxFileUploadSize       = "system.max_file_upload_size"
-	KeyEnableSystemStats       = "system.enable_system_stats"
-	KeyEnableMaintenanceMode   = "system.enable_maintenance_mode"
+	KeySystemName            = "system.name"
+	KeySystemDescription     = "system.description"
+	KeySystemLogo            = "system.logo"
+	KeySystemFavicon         = "system.favicon"
+	KeyDefaultLanguage       = "system.default_language"
+	KeyDefaultTimezone       = "system.default_timezone"
+	KeyDateFormat            = "system.date_format"
+	KeyDefaultPageSize       = "system.default_page_size"
+	KeyMaxFileUploadSize     = "system.max_file_upload_size"
+	KeyEnableSystemStats     = "system.enable_system_stats"
+)
+
+// 标签/会话配置相关的键名
+const (
+	KeyTabMaxTabs        = "tabsession.max_tabs"
+	KeyTabInactiveMinutes = "tabsession.inactive_minutes"
+	KeyTabHibernate      = "tabsession.hibernate"
 )
 
 // SMTPConfig SMTP 配置结构
@@ -126,22 +123,15 @@ type SystemConfig struct {
 	DefaultTimezone string `json:"default_timezone"`
 	DateFormat      string `json:"date_format"`
 
-	// 功能设置
-	EnableUserRegistration bool `json:"enable_user_registration"`
-	EnableGuestAccess      bool `json:"enable_guest_access"`
-	EnableFileManager      bool `json:"enable_file_manager"`
-	EnableWebTerminal      bool `json:"enable_web_terminal"`
-	EnableMonitoring       bool `json:"enable_monitoring"`
-
-	// 安全设置
-	SessionTimeout    int `json:"session_timeout"`
-	MaxLoginAttempts  int `json:"max_login_attempts"`
-	PasswordMinLength int `json:"password_min_length"`
-	RequireTwoFactor  bool `json:"require_two_factor"`
-
 	// 其他设置
-	DefaultPageSize         int  `json:"default_page_size"`
-	MaxFileUploadSize       int  `json:"max_file_upload_size"`
-	EnableSystemStats       bool `json:"enable_system_stats"`
-	EnableMaintenanceMode   bool `json:"enable_maintenance_mode"`
+	DefaultPageSize       int  `json:"default_page_size"`
+	MaxFileUploadSize     int  `json:"max_file_upload_size"`
+	EnableSystemStats     bool `json:"enable_system_stats"`
+}
+
+// TabSessionConfig 标签/会话配置结构
+type TabSessionConfig struct {
+	MaxTabs        int  `json:"max_tabs"`         // 最大标签页数
+	InactiveMinutes int  `json:"inactive_minutes"` // 非活动断开提醒时间（分钟）
+	Hibernate      bool `json:"hibernate"`       // 是否启用后台标签页休眠
 }

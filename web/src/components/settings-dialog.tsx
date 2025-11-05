@@ -21,6 +21,7 @@ import {
   LogOut,
   Info,
   Paintbrush,
+  Mail,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -1128,13 +1129,38 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                 {activeSection === "通知偏好" && (
                   <div className="space-y-4">
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">邮件通知</h4>
-                      <p className="text-sm text-muted-foreground mb-3">选择接收邮件通知的事件类型</p>
+                      <h4 className="font-medium mb-2">通知概览</h4>
+                      <p className="text-sm text-muted-foreground mb-3">管理您的个人通知偏好和接收渠道</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
+                          <Mail className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">邮件通知</p>
+                            <p className="text-xs text-muted-foreground">
+                              {notifyEmailLogin || notifyEmailAlert ? "部分启用" : "已禁用"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
+                          <Bell className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">浏览器通知</p>
+                            <p className="text-xs text-muted-foreground">
+                              {notifyBrowser ? "已启用" : "已禁用"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-muted/50 rounded-xl p-4">
+                      <h4 className="font-medium mb-2">邮件通知偏好</h4>
+                      <p className="text-sm text-muted-foreground mb-3">选择需要接收邮件通知的事件类型</p>
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
                             <Label htmlFor="email-login">登录通知</Label>
-                            <p className="text-sm text-muted-foreground">账户登录时发送邮件</p>
+                            <p className="text-sm text-muted-foreground">账户登录时发送邮件提醒</p>
                           </div>
                           <Switch
                             id="email-login"
@@ -1149,7 +1175,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
                             <Label htmlFor="email-alerts">告警通知</Label>
-                            <p className="text-sm text-muted-foreground">服务器告警时发送邮件</p>
+                            <p className="text-sm text-muted-foreground">服务器告警时发送邮件提醒</p>
                           </div>
                           <Switch
                             id="email-alerts"
@@ -1162,7 +1188,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                           />
                         </div>
                       </div>
+                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg">
+                        <p className="text-xs text-blue-800 dark:text-blue-200">
+                          💡 提示：邮件服务器由系统管理员配置，您只需选择需要接收的通知类型
+                        </p>
+                      </div>
                     </div>
+
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">浏览器通知</h4>
                       <p className="text-sm text-muted-foreground mb-3">管理浏览器推送通知</p>
@@ -1170,7 +1202,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
                             <Label htmlFor="browser-notifications">启用浏览器通知</Label>
-                            <p className="text-sm text-muted-foreground">接收实时浏览器推送</p>
+                            <p className="text-sm text-muted-foreground">接收实时浏览器推送通知</p>
                           </div>
                           <Switch
                             id="browser-notifications"
@@ -1181,6 +1213,31 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             }}
                             disabled={notificationLoading}
                           />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-muted/50 rounded-xl p-4">
+                      <h4 className="font-medium mb-2">其他通知渠道</h4>
+                      <p className="text-sm text-muted-foreground mb-3">系统管理员可以配置更多通知渠道</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-3 bg-background rounded-lg border">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                            <p className="text-sm font-medium">钉钉通知</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            需要管理员配置钉钉机器人
+                          </p>
+                        </div>
+                        <div className="p-3 bg-background rounded-lg border">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                            <p className="text-sm font-medium">企业微信通知</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            需要管理员配置企业微信机器人
+                          </p>
                         </div>
                       </div>
                     </div>

@@ -340,24 +340,10 @@ func (r *repository) GetSystemConfig(ctx context.Context) (*SystemConfig, error)
 		DefaultTimezone: getOrDefault(configMap, KeyDefaultTimezone, "Asia/Shanghai"),
 		DateFormat:      getOrDefault(configMap, KeyDateFormat, "YYYY-MM-DD HH:mm:ss"),
 
-		// 功能设置
-		EnableUserRegistration: getBoolOrDefault(configMap, KeyEnableUserRegistration, false),
-		EnableGuestAccess:      getBoolOrDefault(configMap, KeyEnableGuestAccess, false),
-		EnableFileManager:      getBoolOrDefault(configMap, KeyEnableFileManager, true),
-		EnableWebTerminal:      getBoolOrDefault(configMap, KeyEnableWebTerminal, true),
-		EnableMonitoring:       getBoolOrDefault(configMap, KeyEnableMonitoring, true),
-
-		// 安全设置
-		SessionTimeout:    getIntOrDefault(configMap, KeySessionTimeout, 30),
-		MaxLoginAttempts:  getIntOrDefault(configMap, KeyMaxLoginAttempts, 5),
-		PasswordMinLength: getIntOrDefault(configMap, KeyPasswordMinLength, 8),
-		RequireTwoFactor:  getBoolOrDefault(configMap, KeyRequireTwoFactor, false),
-
 		// 其他设置
-		DefaultPageSize:         getIntOrDefault(configMap, KeyDefaultPageSize, 20),
-		MaxFileUploadSize:       getIntOrDefault(configMap, KeyMaxFileUploadSize, 100),
-		EnableSystemStats:       getBoolOrDefault(configMap, KeyEnableSystemStats, true),
-		EnableMaintenanceMode:   getBoolOrDefault(configMap, KeyEnableMaintenanceMode, false),
+		DefaultPageSize:     getIntOrDefault(configMap, KeyDefaultPageSize, 20),
+		MaxFileUploadSize:   getIntOrDefault(configMap, KeyMaxFileUploadSize, 100),
+		EnableSystemStats:   getBoolOrDefault(configMap, KeyEnableSystemStats, true),
 	}
 
 	return config, nil
@@ -369,28 +355,18 @@ func (r *repository) SaveSystemConfig(ctx context.Context, config *SystemConfig)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		repo := &repository{db: tx}
 
-		// 保存各个配置项
+		// 保存各个配置项 - 只保留必要的系统设置
 		settings := map[string]string{
-			KeySystemName:              config.SystemName,
-			KeySystemDescription:       config.SystemDescription,
-			KeySystemLogo:              config.SystemLogo,
-			KeySystemFavicon:           config.SystemFavicon,
-			KeyDefaultLanguage:         config.DefaultLanguage,
-			KeyDefaultTimezone:         config.DefaultTimezone,
-			KeyDateFormat:              config.DateFormat,
-			KeyEnableUserRegistration:  fmt.Sprintf("%t", config.EnableUserRegistration),
-			KeyEnableGuestAccess:       fmt.Sprintf("%t", config.EnableGuestAccess),
-			KeyEnableFileManager:       fmt.Sprintf("%t", config.EnableFileManager),
-			KeyEnableWebTerminal:       fmt.Sprintf("%t", config.EnableWebTerminal),
-			KeyEnableMonitoring:        fmt.Sprintf("%t", config.EnableMonitoring),
-			KeySessionTimeout:          fmt.Sprintf("%d", config.SessionTimeout),
-			KeyMaxLoginAttempts:        fmt.Sprintf("%d", config.MaxLoginAttempts),
-			KeyPasswordMinLength:       fmt.Sprintf("%d", config.PasswordMinLength),
-			KeyRequireTwoFactor:        fmt.Sprintf("%t", config.RequireTwoFactor),
-			KeyDefaultPageSize:         fmt.Sprintf("%d", config.DefaultPageSize),
-			KeyMaxFileUploadSize:       fmt.Sprintf("%d", config.MaxFileUploadSize),
-			KeyEnableSystemStats:       fmt.Sprintf("%t", config.EnableSystemStats),
-			KeyEnableMaintenanceMode:   fmt.Sprintf("%t", config.EnableMaintenanceMode),
+			KeySystemName:        config.SystemName,
+			KeySystemDescription: config.SystemDescription,
+			KeySystemLogo:        config.SystemLogo,
+			KeySystemFavicon:     config.SystemFavicon,
+			KeyDefaultLanguage:   config.DefaultLanguage,
+			KeyDefaultTimezone:   config.DefaultTimezone,
+			KeyDateFormat:        config.DateFormat,
+			KeyDefaultPageSize:   fmt.Sprintf("%d", config.DefaultPageSize),
+			KeyMaxFileUploadSize: fmt.Sprintf("%d", config.MaxFileUploadSize),
+			KeyEnableSystemStats: fmt.Sprintf("%t", config.EnableSystemStats),
 		}
 
 		for key, value := range settings {

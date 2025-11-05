@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -474,24 +473,10 @@ type SaveSystemConfigRequest struct {
 	DefaultTimezone string `json:"default_timezone"`
 	DateFormat      string `json:"date_format"`
 
-	// 功能设置
-	EnableUserRegistration bool `json:"enable_user_registration"`
-	EnableGuestAccess      bool `json:"enable_guest_access"`
-	EnableFileManager      bool `json:"enable_file_manager"`
-	EnableWebTerminal      bool `json:"enable_web_terminal"`
-	EnableMonitoring       bool `json:"enable_monitoring"`
-
-	// 安全设置
-	SessionTimeout    int  `json:"session_timeout"`
-	MaxLoginAttempts  int  `json:"max_login_attempts"`
-	PasswordMinLength int  `json:"password_min_length"`
-	RequireTwoFactor  bool `json:"require_two_factor"`
-
 	// 其他设置
-	DefaultPageSize         int  `json:"default_page_size"`
-	MaxFileUploadSize       int  `json:"max_file_upload_size"`
-	EnableSystemStats       bool `json:"enable_system_stats"`
-	EnableMaintenanceMode   bool `json:"enable_maintenance_mode"`
+	DefaultPageSize     int  `json:"default_page_size"`
+	MaxFileUploadSize   int  `json:"max_file_upload_size"`
+	EnableSystemStats   bool `json:"enable_system_stats"`
 }
 
 // GetSystemConfig 获取系统配置
@@ -538,24 +523,10 @@ func (h *SettingsHandler) SaveSystemConfig(c *gin.Context) {
 		DefaultTimezone: req.DefaultTimezone,
 		DateFormat:      req.DateFormat,
 
-		// 功能设置
-		EnableUserRegistration: req.EnableUserRegistration,
-		EnableGuestAccess:      req.EnableGuestAccess,
-		EnableFileManager:      req.EnableFileManager,
-		EnableWebTerminal:      req.EnableWebTerminal,
-		EnableMonitoring:       req.EnableMonitoring,
-
-		// 安全设置
-		SessionTimeout:    req.SessionTimeout,
-		MaxLoginAttempts:  req.MaxLoginAttempts,
-		PasswordMinLength: req.PasswordMinLength,
-		RequireTwoFactor:  req.RequireTwoFactor,
-
 		// 其他设置
-		DefaultPageSize:         req.DefaultPageSize,
-		MaxFileUploadSize:       req.MaxFileUploadSize,
-		EnableSystemStats:       req.EnableSystemStats,
-		EnableMaintenanceMode:   req.EnableMaintenanceMode,
+		DefaultPageSize:     req.DefaultPageSize,
+		MaxFileUploadSize:   req.MaxFileUploadSize,
+		EnableSystemStats:   req.EnableSystemStats,
 	}
 
 	if err := h.settingsService.SaveSystemConfig(c.Request.Context(), config); err != nil {

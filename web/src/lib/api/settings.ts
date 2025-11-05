@@ -84,24 +84,9 @@ export interface SystemConfig {
   default_timezone: string
   date_format: string
 
-  // 功能设置
-  enable_user_registration: boolean
-  enable_guest_access: boolean
-  enable_file_manager: boolean
-  enable_web_terminal: boolean
-  enable_monitoring: boolean
-
-  // 安全设置
-  session_timeout: number
-  max_login_attempts: number
-  password_min_length: number
-  require_two_factor: boolean
-
   // 其他设置
   default_page_size: number
   max_file_upload_size: number
-  enable_system_stats: boolean
-  enable_maintenance_mode: boolean
 }
 
 /**
@@ -109,6 +94,22 @@ export interface SystemConfig {
  */
 export interface GetSystemConfigResponse {
   config: SystemConfig
+}
+
+/**
+ * 标签/会话设置
+ */
+export interface TabSessionConfig {
+  max_tabs: number
+  inactive_minutes: number
+  hibernate: boolean
+}
+
+/**
+ * 获取标签/会话设置响应
+ */
+export interface GetTabSessionConfigResponse {
+  config: TabSessionConfig
 }
 
 /**
@@ -294,5 +295,27 @@ export const settingsApi = {
       },
     })
     return response
+  },
+
+  /**
+   * 获取标签/会话设置
+   */
+  async getTabSessionConfig(token: string): Promise<TabSessionConfig> {
+    const response = await apiFetch<GetTabSessionConfigResponse>("/settings/tabsession", {
+      method: "GET",
+      token,
+    })
+    return response.config
+  },
+
+  /**
+   * 保存标签/会话设置
+   */
+  async saveTabSessionConfig(token: string, config: TabSessionConfig): Promise<void> {
+    return apiFetch<void>("/settings/tabsession", {
+      method: "POST",
+      token,
+      body: config,
+    })
   },
 }

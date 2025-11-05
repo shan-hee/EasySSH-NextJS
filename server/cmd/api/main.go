@@ -27,6 +27,7 @@ import (
 	"github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshkey"
 	"github.com/easyssh/server/internal/domain/sshsession"
+	"github.com/easyssh/server/internal/domain/tabsession"
 	"github.com/easyssh/server/internal/domain/user"
 	"github.com/easyssh/server/internal/infra/cache"
 	"github.com/easyssh/server/internal/infra/config"
@@ -80,6 +81,7 @@ func main() {
 		&filetransfer.FileTransfer{}, // 文件传输表
 		&settings.Settings{},         // 系统设置表
 		&sshkey.SSHKey{},             // SSH密钥表
+		&tabsession.TabSessionSettings{}, // 标签/会话设置表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
