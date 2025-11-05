@@ -2,9 +2,13 @@ package auth
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -119,11 +123,20 @@ func (s *authService) Register(ctx context.Context, username, email, password st
 		return nil, errors.New("password must be at least 6 characters")
 	}
 
+	// 生成头像
+	avatar, err := s.generateAvatarForUser(username, email)
+	if err != nil {
+		// 头像生成失败不应该阻止用户注册，记录日志但继续
+		fmt.Printf("Warning: failed to generate avatar for user %s: %v\n", username, err)
+		avatar = ""
+	}
+
 	// 创建用户
 	user := &User{
 		Username: username,
 		Email:    email,
 		Role:     role,
+		Avatar:   avatar,
 	}
 
 	// 设置密码（bcrypt 加密）
@@ -653,5 +666,75 @@ func (s *authService) UpdateNotificationSettings(ctx context.Context, userID uui
 	}
 
 	return s.repo.Update(ctx, user)
+}
+
+// generateAvatarForUser 为用户生成头像
+func (s *authService) generateAvatarForUser(username, email string) (string, error) {
+	// 生成确定性种子
+	seed := s.generateUserSeed(username, email)
+
+	// 调用DiceBear API生成头像
+	return s.generateDiceBearAvatar(seed)
+}
+
+// generateUserSeed 基于用户信息生成确定性种子
+func (s *authService) generateUserSeed(username, email string) string {
+	// 使用用户名作为主要种子
+	seedInput := strings.ToLower(username)
+
+	// 如果有邮箱，组合使用以增加唯一性
+	if email != "" {
+		seedInput += strings.ToLower(email)
+	}
+
+	// 使用MD5哈希生成确定性种子
+	hash := md5.Sum([]byte(seedInput))
+	return fmt.Sprintf("%x", hash)
+}
+
+// generateDiceBearAvatar 生成DiceBear头像
+func (s *authService) generateDiceBearAvatar(seed string) (string, error) {
+	// DiceBear API URL - 使用notionists-neutral风格
+	dicebearUrl := fmt.Sprintf("https://api.dicebear.com/7.x/notionists-neutral/svg?seed=%s", seed)
+
+	// 发起HTTP请求获取SVG
+	resp, err := http.Get(dicebearUrl)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch avatar from DiceBear API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("DiceBear API returned status %d", resp.StatusCode)
+	}
+
+	// 读取SVG内容
+	svgBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read SVG content: %w", err)
+	}
+
+	svgText := string(svgBytes)
+
+	// 对SVG内容进行URL编码，转换为data URL格式
+	encodedSVG := urlEncodeSVG(svgText)
+
+	return fmt.Sprintf("data:image/svg+xml,%s", encodedSVG), nil
+}
+
+// urlEncodeSVG 对SVG内容进行URL编码
+func urlEncodeSVG(svg string) string {
+	// 替换特殊字符
+	svg = strings.ReplaceAll(svg, "<", "%3C")
+	svg = strings.ReplaceAll(svg, ">", "%3E")
+	svg = strings.ReplaceAll(svg, "#", "%23")
+	svg = strings.ReplaceAll(svg, " ", "%20")
+	svg = strings.ReplaceAll(svg, "\"", "%22")
+	svg = strings.ReplaceAll(svg, "'", "%27")
+	svg = strings.ReplaceAll(svg, "\n", "")
+	svg = strings.ReplaceAll(svg, "\r", "")
+	svg = strings.ReplaceAll(svg, "\t", "")
+
+	return svg
 }
 

@@ -207,6 +207,7 @@ func main() {
 	userHandler := rest.NewUserHandler(userService)
 	settingsHandler := rest.NewSettingsHandler(settingsService)
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
+	avatarHandler := rest.NewAvatarHandler()
 
 	// 创建 Gin 路由
 	r := gin.New()
@@ -467,6 +468,13 @@ func main() {
 			sshKeyRoutes.POST("/generate", sshKeyHandler.GenerateSSHKey) // 生成密钥
 			sshKeyRoutes.POST("/import", sshKeyHandler.ImportSSHKey)     // 导入密钥
 			sshKeyRoutes.DELETE("/:id", sshKeyHandler.DeleteSSHKey)      // 删除密钥
+		}
+
+		// 头像生成路由（需要认证）
+		avatarRoutes := v1.Group("/avatar")
+		avatarRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			avatarRoutes.POST("/generate", avatarHandler.GenerateAvatar) // 生成头像
 		}
 	}
 
