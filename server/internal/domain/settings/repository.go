@@ -32,6 +32,10 @@ type Repository interface {
 	// 企业微信配置专用方法
 	GetWeComConfig(ctx context.Context) (*WeComConfig, error)
 	SaveWeComConfig(ctx context.Context, config *WeComConfig) error
+
+	// 系统通用配置专用方法
+	GetSystemConfig(ctx context.Context) (*SystemConfig, error)
+	SaveSystemConfig(ctx context.Context, config *SystemConfig) error
 }
 
 type repository struct {
@@ -307,4 +311,119 @@ func (r *repository) SaveWeComConfig(ctx context.Context, config *WeComConfig) e
 
 		return nil
 	})
+}
+
+// GetSystemConfig 获取系统通用配置
+func (r *repository) GetSystemConfig(ctx context.Context) (*SystemConfig, error) {
+	// 获取所有系统相关的设置
+	settings, err := r.GetByCategory(ctx, "system")
+	if err != nil {
+		return nil, err
+	}
+
+	// 构建配置映射
+	configMap := make(map[string]string)
+	for _, setting := range settings {
+		configMap[setting.Key] = setting.Value
+	}
+
+	// 解析配置，设置默认值
+	config := &SystemConfig{
+		// 基本设置
+		SystemName:        getOrDefault(configMap, KeySystemName, "EasySSH"),
+		SystemDescription: getOrDefault(configMap, KeySystemDescription, "简单易用的SSH管理平台"),
+		SystemLogo:        getOrDefault(configMap, KeySystemLogo, "/logo.svg"),
+		SystemFavicon:     getOrDefault(configMap, KeySystemFavicon, "/favicon.ico"),
+
+		// 国际化设置
+		DefaultLanguage: getOrDefault(configMap, KeyDefaultLanguage, "zh-CN"),
+		DefaultTimezone: getOrDefault(configMap, KeyDefaultTimezone, "Asia/Shanghai"),
+		DateFormat:      getOrDefault(configMap, KeyDateFormat, "YYYY-MM-DD HH:mm:ss"),
+
+		// 功能设置
+		EnableUserRegistration: getBoolOrDefault(configMap, KeyEnableUserRegistration, false),
+		EnableGuestAccess:      getBoolOrDefault(configMap, KeyEnableGuestAccess, false),
+		EnableFileManager:      getBoolOrDefault(configMap, KeyEnableFileManager, true),
+		EnableWebTerminal:      getBoolOrDefault(configMap, KeyEnableWebTerminal, true),
+		EnableMonitoring:       getBoolOrDefault(configMap, KeyEnableMonitoring, true),
+
+		// 安全设置
+		SessionTimeout:    getIntOrDefault(configMap, KeySessionTimeout, 30),
+		MaxLoginAttempts:  getIntOrDefault(configMap, KeyMaxLoginAttempts, 5),
+		PasswordMinLength: getIntOrDefault(configMap, KeyPasswordMinLength, 8),
+		RequireTwoFactor:  getBoolOrDefault(configMap, KeyRequireTwoFactor, false),
+
+		// 其他设置
+		DefaultPageSize:         getIntOrDefault(configMap, KeyDefaultPageSize, 20),
+		MaxFileUploadSize:       getIntOrDefault(configMap, KeyMaxFileUploadSize, 100),
+		EnableSystemStats:       getBoolOrDefault(configMap, KeyEnableSystemStats, true),
+		EnableMaintenanceMode:   getBoolOrDefault(configMap, KeyEnableMaintenanceMode, false),
+	}
+
+	return config, nil
+}
+
+// SaveSystemConfig 保存系统通用配置
+func (r *repository) SaveSystemConfig(ctx context.Context, config *SystemConfig) error {
+	// 使用事务确保原子性
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repo := &repository{db: tx}
+
+		// 保存各个配置项
+		settings := map[string]string{
+			KeySystemName:              config.SystemName,
+			KeySystemDescription:       config.SystemDescription,
+			KeySystemLogo:              config.SystemLogo,
+			KeySystemFavicon:           config.SystemFavicon,
+			KeyDefaultLanguage:         config.DefaultLanguage,
+			KeyDefaultTimezone:         config.DefaultTimezone,
+			KeyDateFormat:              config.DateFormat,
+			KeyEnableUserRegistration:  fmt.Sprintf("%t", config.EnableUserRegistration),
+			KeyEnableGuestAccess:       fmt.Sprintf("%t", config.EnableGuestAccess),
+			KeyEnableFileManager:       fmt.Sprintf("%t", config.EnableFileManager),
+			KeyEnableWebTerminal:       fmt.Sprintf("%t", config.EnableWebTerminal),
+			KeyEnableMonitoring:        fmt.Sprintf("%t", config.EnableMonitoring),
+			KeySessionTimeout:          fmt.Sprintf("%d", config.SessionTimeout),
+			KeyMaxLoginAttempts:        fmt.Sprintf("%d", config.MaxLoginAttempts),
+			KeyPasswordMinLength:       fmt.Sprintf("%d", config.PasswordMinLength),
+			KeyRequireTwoFactor:        fmt.Sprintf("%t", config.RequireTwoFactor),
+			KeyDefaultPageSize:         fmt.Sprintf("%d", config.DefaultPageSize),
+			KeyMaxFileUploadSize:       fmt.Sprintf("%d", config.MaxFileUploadSize),
+			KeyEnableSystemStats:       fmt.Sprintf("%t", config.EnableSystemStats),
+			KeyEnableMaintenanceMode:   fmt.Sprintf("%t", config.EnableMaintenanceMode),
+		}
+
+		for key, value := range settings {
+			if err := repo.Set(ctx, key, value, "system", true); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+// 辅助函数
+func getOrDefault(configMap map[string]string, key, defaultValue string) string {
+	if value, ok := configMap[key]; ok && value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getBoolOrDefault(configMap map[string]string, key string, defaultValue bool) bool {
+	if value, ok := configMap[key]; ok {
+		return value == "true"
+	}
+	return defaultValue
+}
+
+func getIntOrDefault(configMap map[string]string, key string, defaultValue int) int {
+	if value, ok := configMap[key]; ok && value != "" {
+		var intValue int
+		if _, err := fmt.Sscanf(value, "%d", &intValue); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
 }

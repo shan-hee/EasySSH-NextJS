@@ -19,56 +19,77 @@ import {
  Shield,
  Mail,
  Server,
- Image as ImageIcon
+ Image as ImageIcon,
+ Loader2,
+ RotateCcw
 } from "lucide-react"
+import { settingsApi, type SystemConfig } from "@/lib/api/settings"
+import { getAccessToken } from "@/contexts/auth-context"
+import { toast } from "sonner"
 
 export default function SettingsGeneralPage() {
- const [settings, setSettings] = useState({
- // 基本设置
- systemName: "EasySSH",
- systemDescription: "简单易用的SSH管理平台",
- systemLogo: "/logo.svg",
- favicon: "/favicon.ico",
+ const [settings, setSettings] = useState<SystemConfig>({
+  // 基本设置
+  system_name: "EasySSH",
+  system_description: "简单易用的SSH管理平台",
+  system_logo: "/logo.svg",
+  system_favicon: "/favicon.ico",
 
- // 国际化设置
- defaultLanguage: "zh-CN",
- defaultTimezone: "Asia/Shanghai",
- dateFormat: "YYYY-MM-DD HH:mm:ss",
+  // 国际化设置
+  default_language: "zh-CN",
+  default_timezone: "Asia/Shanghai",
+  date_format: "YYYY-MM-DD HH:mm:ss",
 
- // 功能设置
- enableUserRegistration: false,
- enableGuestAccess: false,
- enableFileManager: true,
- enableWebTerminal: true,
- enableMonitoring: true,
+  // 功能设置
+  enable_user_registration: false,
+  enable_guest_access: false,
+  enable_file_manager: true,
+  enable_web_terminal: true,
+  enable_monitoring: true,
 
- // 安全设置
- sessionTimeout: 30,
- maxLoginAttempts: 5,
- passwordMinLength: 8,
- requireTwoFactor: false,
+  // 安全设置
+  session_timeout: 30,
+  max_login_attempts: 5,
+  password_min_length: 8,
+  require_two_factor: false,
 
- // 邮件设置
- smtpHost: "",
- smtpPort: 587,
- smtpUser: "",
- smtpPassword: "",
- smtpFrom: "",
- enableEmailNotifications: false,
-
- // 其他设置
- defaultPageSize: 20,
- maxFileUploadSize: 100,
- enableSystemStats: true,
- enableMaintenanceMode: false,
+  // 其他设置
+  default_page_size: 20,
+  max_file_upload_size: 100,
+  enable_system_stats: true,
+  enable_maintenance_mode: false,
  })
 
+ const [isLoading, setIsLoading] = useState(true)
  const [isSaving, setIsSaving] = useState(false)
  const [tabSettings, setTabSettings] = useState({
  maxTabs: 50,
  inactiveMinutes: 60,
  hibernate: true,
  })
+
+ // 载入系统配置
+ useEffect(() => {
+ const loadSettings = async () => {
+   try {
+     const token = await getAccessToken()
+     if (!token) {
+       toast.error("未找到访问令牌")
+       return
+     }
+
+     const config = await settingsApi.getSystemConfig(token)
+     setSettings(config)
+   } catch (error) {
+     console.error("Failed to load system settings:", error)
+     toast.error("加载系统配置失败")
+   } finally {
+     setIsLoading(false)
+   }
+ }
+
+ loadSettings()
+ }, [])
 
  // 载入页签设置
  useEffect(() => {
@@ -85,24 +106,169 @@ export default function SettingsGeneralPage() {
  }, [])
 
  const handleSettingChange = (key: string, value: string | boolean | number) => {
+ // 基本验证
+ if (typeof value === 'string') {
+  switch (key) {
+   case 'system_name':
+    if (value.length > 100) {
+     toast.error('系统名称不能超过100个字符')
+     return
+    }
+    break
+   case 'system_description':
+    if (value.length > 500) {
+     toast.error('系统描述不能超过500个字符')
+     return
+    }
+    break
+  }
+ } else if (typeof value === 'number') {
+  switch (key) {
+   case 'session_timeout':
+    if (value < 5 || value > 1440) {
+     toast.error('会话超时时间必须在5-1440分钟之间')
+     return
+    }
+    break
+   case 'max_login_attempts':
+    if (value < 1 || value > 10) {
+     toast.error('最大登录尝试次数必须在1-10之间')
+     return
+    }
+    break
+   case 'password_min_length':
+    if (value < 6 || value > 32) {
+     toast.error('密码最小长度必须在6-32之间')
+     return
+    }
+    break
+   case 'default_page_size':
+    if (value < 10 || value > 100) {
+     toast.error('默认分页大小必须在10-100之间')
+     return
+    }
+    break
+   case 'max_file_upload_size':
+    if (value < 1 || value > 1024) {
+     toast.error('文件上传大小限制必须在1-1024MB之间')
+     return
+    }
+    break
+  }
+ }
+
  setSettings(prev => ({
- ...prev,
- [key]: value
+  ...prev,
+  [key]: value
  }))
  }
 
  const handleSave = async () => {
- setIsSaving(true)
- // 模拟保存
- setTimeout(() => {
- setIsSaving(false)
- console.log("设置已保存:", settings)
- }, 1000)
+ // 保存前验证
+ if (!settings.system_name.trim()) {
+  toast.error("系统名称不能为空")
+  return
  }
 
- const handleLogoUpload = () => {
- console.log("上传Logo")
- // 这里应该打开文件选择对话框
+ if (settings.system_name.length > 100) {
+  toast.error("系统名称不能超过100个字符")
+  return
+ }
+
+ if (settings.system_description.length > 500) {
+  toast.error("系统描述不能超过500个字符")
+  return
+ }
+
+ if (settings.session_timeout < 5 || settings.session_timeout > 1440) {
+  toast.error("会话超时时间必须在5-1440分钟之间")
+  return
+ }
+
+ if (settings.max_login_attempts < 1 || settings.max_login_attempts > 10) {
+  toast.error("最大登录尝试次数必须在1-10之间")
+  return
+ }
+
+ if (settings.password_min_length < 6 || settings.password_min_length > 32) {
+  toast.error("密码最小长度必须在6-32之间")
+  return
+ }
+
+ if (settings.default_page_size < 10 || settings.default_page_size > 100) {
+  toast.error("默认分页大小必须在10-100之间")
+  return
+ }
+
+ if (settings.max_file_upload_size < 1 || settings.max_file_upload_size > 1024) {
+  toast.error("文件上传大小限制必须在1-1024MB之间")
+  return
+ }
+
+ setIsSaving(true)
+ try {
+   const token = await getAccessToken()
+   if (!token) {
+     toast.error("未找到访问令牌")
+     return
+   }
+
+   await settingsApi.saveSystemConfig(token, settings)
+   toast.success("系统配置保存成功")
+ } catch (error) {
+   console.error("Failed to save system settings:", error)
+   toast.error("保存系统配置失败")
+ } finally {
+   setIsSaving(false)
+ }
+ }
+
+ const handleLogoUpload = async () => {
+ // 创建文件输入元素
+ const input = document.createElement("input")
+ input.type = "file"
+ input.accept = "image/*"
+
+ input.onchange = async (e) => {
+   const file = (e.target as HTMLInputElement).files?.[0]
+   if (!file) return
+
+   // 验证文件类型
+   if (!file.type.startsWith("image/")) {
+     toast.error("请选择图片文件")
+     return
+   }
+
+   // 验证文件大小 (10MB)
+   if (file.size > 10 * 1024 * 1024) {
+     toast.error("文件大小不能超过10MB")
+     return
+   }
+
+   try {
+     const token = await getAccessToken()
+     if (!token) {
+       toast.error("未找到访问令牌")
+       return
+     }
+
+     // 上传文件
+     const result = await settingsApi.uploadLogo(token, file)
+
+     // 更新设置中的Logo URL
+     setSettings(prev => ({
+       ...prev,
+       system_logo: result.file_url
+     }))
+
+     toast.success("Logo上传成功")
+   } catch (error) {
+     console.error("Failed to upload logo:", error)
+     toast.error("Logo上传失败")
+   }
+ }
+
+ input.click()
  }
 
  const handleSaveTabs = async () => {
@@ -110,19 +276,88 @@ export default function SettingsGeneralPage() {
  localStorage.setItem("tab.maxTabs", String(tabSettings.maxTabs))
  localStorage.setItem("tab.inactiveMinutes", String(tabSettings.inactiveMinutes))
  localStorage.setItem("tab.hibernate", String(tabSettings.hibernate))
- } catch {}
+ toast.success("页签设置保存成功")
+ } catch {
+ toast.error("页签设置保存失败")
+ }
+ }
+
+ const handleResetToDefaults = async () => {
+ // 重置为默认值
+ const defaultSettings: SystemConfig = {
+  // 基本设置
+  system_name: "EasySSH",
+  system_description: "简单易用的SSH管理平台",
+  system_logo: "/logo.svg",
+  system_favicon: "/favicon.ico",
+
+  // 国际化设置
+  default_language: "zh-CN",
+  default_timezone: "Asia/Shanghai",
+  date_format: "YYYY-MM-DD HH:mm:ss",
+
+  // 功能设置
+  enable_user_registration: false,
+  enable_guest_access: false,
+  enable_file_manager: true,
+  enable_web_terminal: true,
+  enable_monitoring: true,
+
+  // 安全设置
+  session_timeout: 30,
+  max_login_attempts: 5,
+  password_min_length: 8,
+  require_two_factor: false,
+
+  // 其他设置
+  default_page_size: 20,
+  max_file_upload_size: 100,
+  enable_system_stats: true,
+  enable_maintenance_mode: false,
+ }
+
+ setSettings(defaultSettings)
+ toast.info("已重置为默认配置，请点击保存按钮生效")
  }
 
  return (
  <>
  <PageHeader title="通用设置">
- <Button onClick={handleSave} disabled={isSaving}>
- <Save className="mr-2 h-4 w-4" />
- {isSaving ? "保存中..." : "保存设置"}
+ <div className="flex gap-2">
+ <Button
+ variant="outline"
+ onClick={handleResetToDefaults}
+ disabled={isSaving || isLoading}
+ >
+ <RotateCcw className="mr-2 h-4 w-4" />
+ 重置默认
  </Button>
+ <Button onClick={handleSave} disabled={isSaving || isLoading}>
+ {isSaving ? (
+ <>
+ <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+ 保存中...
+ </>
+ ) : (
+ <>
+ <Save className="mr-2 h-4 w-4" />
+ 保存设置
+ </>
+ )}
+ </Button>
+ </div>
  </PageHeader>
 
- <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
+ <div className="flex flex-col gap-4 p-4 pt-0 h-full overflow-auto">
+ {isLoading && (
+  <div className="flex items-center justify-center py-8">
+   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+   <span className="ml-2 text-muted-foreground">加载系统配置中...</span>
+  </div>
+ )}
+
+ {!isLoading && (
+  <>
  {/* 基本设置 */}
  <Card>
  <CardHeader>
@@ -140,16 +375,18 @@ export default function SettingsGeneralPage() {
  <Label htmlFor="systemName">系统名称</Label>
  <Input
  id="systemName"
- value={settings.systemName}
- onChange={(e) => handleSettingChange("systemName", e.target.value)}
+ value={settings.system_name}
+ onChange={(e) => handleSettingChange("system_name", e.target.value)}
  placeholder="输入系统名称"
+ disabled={isLoading}
  />
  </div>
  <div className="space-y-2">
  <Label htmlFor="defaultLanguage">默认语言</Label>
  <Select
- value={settings.defaultLanguage}
- onValueChange={(value) => handleSettingChange("defaultLanguage", value)}
+ value={settings.default_language}
+ onValueChange={(value) => handleSettingChange("default_language", value)}
+ disabled={isLoading}
  >
  <SelectTrigger>
  <SelectValue />
@@ -167,24 +404,38 @@ export default function SettingsGeneralPage() {
  <Label htmlFor="systemDescription">系统描述</Label>
  <Textarea
  id="systemDescription"
- value={settings.systemDescription}
- onChange={(e) => handleSettingChange("systemDescription", e.target.value)}
+ value={settings.system_description}
+ onChange={(e) => handleSettingChange("system_description", e.target.value)}
  placeholder="输入系统描述"
  rows={3}
+ disabled={isLoading}
  />
  </div>
 
  <div className="space-y-2">
  <Label>系统Logo</Label>
  <div className="flex items-center gap-4">
- <div className="w-16 h-16 border rounded-lg flex items-center justify-center bg-muted">
+ <div className="w-16 h-16 border rounded-lg flex items-center justify-center bg-muted overflow-hidden">
+ {settings.system_logo && settings.system_logo !== "/logo.svg" ? (
+ <img
+ src={settings.system_logo}
+ alt="系统Logo"
+ className="w-full h-full object-cover"
+ onError={(e) => {
+ // 图片加载失败时显示默认图标
+ e.currentTarget.style.display = 'none'
+ e.currentTarget.parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image h-8 w-8 text-muted-foreground"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></div>'
+ }}
+ />
+ ) : (
  <ImageIcon className="h-8 w-8 text-muted-foreground" />
+ )}
  </div>
  <div className="flex-1">
  <p className="text-sm text-muted-foreground mb-2">
- 推荐尺寸: 64x64px，支持 PNG, JPG, SVG 格式
+ 推荐尺寸: 64x64px，支持 PNG, JPG, SVG, WebP 格式，最大10MB
  </p>
- <Button variant="outline" size="sm" onClick={handleLogoUpload}>
+ <Button variant="outline" size="sm" onClick={handleLogoUpload} disabled={isLoading}>
  <Upload className="mr-2 h-4 w-4" />
  上传Logo
  </Button>
@@ -210,8 +461,8 @@ export default function SettingsGeneralPage() {
  <div className="space-y-2">
  <Label htmlFor="defaultTimezone">默认时区</Label>
  <Select
- value={settings.defaultTimezone}
- onValueChange={(value) => handleSettingChange("defaultTimezone", value)}
+ value={settings.default_timezone || "Asia/Shanghai"}
+ onValueChange={(value) => handleSettingChange("default_timezone", value)}
  >
  <SelectTrigger>
  <SelectValue />
@@ -227,8 +478,8 @@ export default function SettingsGeneralPage() {
  <div className="space-y-2">
  <Label htmlFor="dateFormat">日期格式</Label>
  <Select
- value={settings.dateFormat}
- onValueChange={(value) => handleSettingChange("dateFormat", value)}
+ value={settings.date_format || "YYYY-MM-DD HH:mm:ss"}
+ onValueChange={(value) => handleSettingChange("date_format", value)}
  >
  <SelectTrigger>
  <SelectValue />
@@ -266,8 +517,8 @@ export default function SettingsGeneralPage() {
  </p>
  </div>
  <Switch
- checked={settings.enableUserRegistration}
- onCheckedChange={(checked) => handleSettingChange("enableUserRegistration", checked)}
+ checked={settings.enable_user_registration}
+ onCheckedChange={(checked) => handleSettingChange("enable_user_registration", checked)}
  />
  </div>
 
@@ -279,8 +530,8 @@ export default function SettingsGeneralPage() {
  </p>
  </div>
  <Switch
- checked={settings.enableGuestAccess}
- onCheckedChange={(checked) => handleSettingChange("enableGuestAccess", checked)}
+ checked={settings.enable_guest_access}
+ onCheckedChange={(checked) => handleSettingChange("enable_guest_access", checked)}
  />
  </div>
 
@@ -292,8 +543,8 @@ export default function SettingsGeneralPage() {
  </p>
  </div>
  <Switch
- checked={settings.enableFileManager}
- onCheckedChange={(checked) => handleSettingChange("enableFileManager", checked)}
+ checked={settings.enable_file_manager}
+ onCheckedChange={(checked) => handleSettingChange("enable_file_manager", checked)}
  />
  </div>
  </div>
@@ -307,8 +558,8 @@ export default function SettingsGeneralPage() {
  </p>
  </div>
  <Switch
- checked={settings.enableWebTerminal}
- onCheckedChange={(checked) => handleSettingChange("enableWebTerminal", checked)}
+ checked={settings.enable_web_terminal}
+ onCheckedChange={(checked) => handleSettingChange("enable_web_terminal", checked)}
  />
  </div>
 
@@ -320,8 +571,8 @@ export default function SettingsGeneralPage() {
  </p>
  </div>
  <Switch
- checked={settings.enableMonitoring}
- onCheckedChange={(checked) => handleSettingChange("enableMonitoring", checked)}
+ checked={settings.enable_monitoring}
+ onCheckedChange={(checked) => handleSettingChange("enable_monitoring", checked)}
  />
  </div>
 
@@ -333,8 +584,8 @@ export default function SettingsGeneralPage() {
  </p>
  </div>
  <Switch
- checked={settings.enableMaintenanceMode}
- onCheckedChange={(checked) => handleSettingChange("enableMaintenanceMode", checked)}
+ checked={settings.enable_maintenance_mode}
+ onCheckedChange={(checked) => handleSettingChange("enable_maintenance_mode", checked)}
  />
  </div>
  </div>
@@ -360,8 +611,8 @@ export default function SettingsGeneralPage() {
  <Input
  id="sessionTimeout"
  type="number"
- value={settings.sessionTimeout}
- onChange={(e) => handleSettingChange("sessionTimeout", parseInt(e.target.value))}
+ value={settings.session_timeout || 30}
+ onChange={(e) => handleSettingChange("session_timeout", parseInt(e.target.value))}
  min="5"
  max="1440"
  />
@@ -371,8 +622,8 @@ export default function SettingsGeneralPage() {
  <Input
  id="maxLoginAttempts"
  type="number"
- value={settings.maxLoginAttempts}
- onChange={(e) => handleSettingChange("maxLoginAttempts", parseInt(e.target.value))}
+ value={settings.max_login_attempts || 5}
+ onChange={(e) => handleSettingChange("max_login_attempts", parseInt(e.target.value))}
  min="1"
  max="10"
  />
@@ -382,8 +633,8 @@ export default function SettingsGeneralPage() {
  <Input
  id="passwordMinLength"
  type="number"
- value={settings.passwordMinLength}
- onChange={(e) => handleSettingChange("passwordMinLength", parseInt(e.target.value))}
+ value={settings.password_min_length || 8}
+ onChange={(e) => handleSettingChange("password_min_length", parseInt(e.target.value))}
  min="6"
  max="32"
  />
@@ -391,8 +642,8 @@ export default function SettingsGeneralPage() {
  <div className="flex items-center space-x-2 pt-6">
  <Switch
  id="requireTwoFactor"
- checked={settings.requireTwoFactor}
- onCheckedChange={(checked) => handleSettingChange("requireTwoFactor", checked)}
+ checked={settings.require_two_factor}
+ onCheckedChange={(checked) => handleSettingChange("require_two_factor", checked)}
  />
  <Label htmlFor="requireTwoFactor">强制双因子认证</Label>
  </div>
@@ -492,8 +743,8 @@ export default function SettingsGeneralPage() {
  <div className="space-y-2">
  <Label htmlFor="defaultPageSize">默认分页大小</Label>
  <Select
- value={settings.defaultPageSize.toString()}
- onValueChange={(value) => handleSettingChange("defaultPageSize", parseInt(value))}
+ value={settings.default_page_size?.toString() || "20"}
+ onValueChange={(value) => handleSettingChange("default_page_size", parseInt(value))}
  >
  <SelectTrigger>
  <SelectValue />
@@ -511,8 +762,8 @@ export default function SettingsGeneralPage() {
  <Input
  id="maxFileUploadSize"
  type="number"
- value={settings.maxFileUploadSize}
- onChange={(e) => handleSettingChange("maxFileUploadSize", parseInt(e.target.value))}
+ value={settings.max_file_upload_size || 100}
+ onChange={(e) => handleSettingChange("max_file_upload_size", parseInt(e.target.value))}
  min="1"
  max="1024"
  />
@@ -524,8 +775,8 @@ export default function SettingsGeneralPage() {
  <div className="flex items-center space-x-2">
  <Switch
  id="enableSystemStats"
- checked={settings.enableSystemStats}
- onCheckedChange={(checked) => handleSettingChange("enableSystemStats", checked)}
+ checked={settings.enable_system_stats}
+ onCheckedChange={(checked) => handleSettingChange("enable_system_stats", checked)}
  />
  <Label htmlFor="enableSystemStats">启用系统统计信息收集</Label>
  </div>
@@ -583,6 +834,8 @@ export default function SettingsGeneralPage() {
  </div>
  </CardContent>
  </Card>
+ </>
+ )}
  </div>
  </>
  )

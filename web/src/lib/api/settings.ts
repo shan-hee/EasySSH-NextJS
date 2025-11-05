@@ -70,6 +70,57 @@ export interface GetWeComConfigResponse {
 }
 
 /**
+ * 系统通用配置
+ */
+export interface SystemConfig {
+  // 基本设置
+  system_name: string
+  system_description: string
+  system_logo: string
+  system_favicon: string
+
+  // 国际化设置
+  default_language: string
+  default_timezone: string
+  date_format: string
+
+  // 功能设置
+  enable_user_registration: boolean
+  enable_guest_access: boolean
+  enable_file_manager: boolean
+  enable_web_terminal: boolean
+  enable_monitoring: boolean
+
+  // 安全设置
+  session_timeout: number
+  max_login_attempts: number
+  password_min_length: number
+  require_two_factor: boolean
+
+  // 其他设置
+  default_page_size: number
+  max_file_upload_size: number
+  enable_system_stats: boolean
+  enable_maintenance_mode: boolean
+}
+
+/**
+ * 获取系统配置响应
+ */
+export interface GetSystemConfigResponse {
+  config: SystemConfig
+}
+
+/**
+ * Logo上传响应
+ */
+export interface UploadLogoResponse {
+  message: string
+  file_url: string
+  file_name: string
+}
+
+/**
  * 系统设置 API 服务
  */
 export const settingsApi = {
@@ -203,5 +254,45 @@ export const settingsApi = {
       token,
       body: config,
     })
+  },
+
+  /**
+   * 获取系统配置
+   */
+  async getSystemConfig(token: string): Promise<SystemConfig> {
+    const response = await apiFetch<GetSystemConfigResponse>("/settings/system", {
+      method: "GET",
+      token,
+    })
+    return response.config
+  },
+
+  /**
+   * 保存系统配置
+   */
+  async saveSystemConfig(token: string, config: SystemConfig): Promise<void> {
+    return apiFetch<void>("/settings/system", {
+      method: "POST",
+      token,
+      body: config,
+    })
+  },
+
+  /**
+   * 上传Logo文件
+   */
+  async uploadLogo(token: string, file: File): Promise<UploadLogoResponse> {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    const response = await apiFetch<UploadLogoResponse>("/settings/upload/logo", {
+      method: "POST",
+      token,
+      body: formData,
+      headers: {
+        // 不要设置 Content-Type，让浏览器自动设置 multipart/form-data
+      },
+    })
+    return response
   },
 }

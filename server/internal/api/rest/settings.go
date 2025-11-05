@@ -1,7 +1,14 @@
 package rest
 
 import (
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/easyssh/server/internal/domain/settings"
 	"github.com/gin-gonic/gin"
@@ -42,6 +49,11 @@ func (h *SettingsHandler) RegisterRoutes(r *gin.RouterGroup) {
 		settingsGroup.GET("/wechat", h.GetWeComConfig)
 		settingsGroup.POST("/wechat", h.SaveWeComConfig)
 		settingsGroup.POST("/wechat/test", h.TestWeComConnection)
+
+		// 系统通用配置相关
+		settingsGroup.GET("/system", h.GetSystemConfig)
+		settingsGroup.POST("/system", h.SaveSystemConfig)
+		settingsGroup.POST("/upload/logo", h.UploadLogo)
 
 		// 通用设置
 		settingsGroup.GET("/:category", h.GetSettingsByCategory)
@@ -440,4 +452,217 @@ func (h *SettingsHandler) TestWeComConnection(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "WeChat Work connection test successful"})
+}
+
+// === 系统通用配置相关 ===
+
+// GetSystemConfigResponse 系统配置响应
+type GetSystemConfigResponse struct {
+	Config *settings.SystemConfig `json:"config"`
+}
+
+// SaveSystemConfigRequest 保存系统配置请求
+type SaveSystemConfigRequest struct {
+	// 基本设置
+	SystemName        string `json:"system_name"`
+	SystemDescription string `json:"system_description"`
+	SystemLogo        string `json:"system_logo"`
+	SystemFavicon     string `json:"system_favicon"`
+
+	// 国际化设置
+	DefaultLanguage string `json:"default_language"`
+	DefaultTimezone string `json:"default_timezone"`
+	DateFormat      string `json:"date_format"`
+
+	// 功能设置
+	EnableUserRegistration bool `json:"enable_user_registration"`
+	EnableGuestAccess      bool `json:"enable_guest_access"`
+	EnableFileManager      bool `json:"enable_file_manager"`
+	EnableWebTerminal      bool `json:"enable_web_terminal"`
+	EnableMonitoring       bool `json:"enable_monitoring"`
+
+	// 安全设置
+	SessionTimeout    int  `json:"session_timeout"`
+	MaxLoginAttempts  int  `json:"max_login_attempts"`
+	PasswordMinLength int  `json:"password_min_length"`
+	RequireTwoFactor  bool `json:"require_two_factor"`
+
+	// 其他设置
+	DefaultPageSize         int  `json:"default_page_size"`
+	MaxFileUploadSize       int  `json:"max_file_upload_size"`
+	EnableSystemStats       bool `json:"enable_system_stats"`
+	EnableMaintenanceMode   bool `json:"enable_maintenance_mode"`
+}
+
+// GetSystemConfig 获取系统配置
+// @Summary 获取系统配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetSystemConfigResponse
+// @Router /api/v1/settings/system [get]
+func (h *SettingsHandler) GetSystemConfig(c *gin.Context) {
+	config, err := h.settingsService.GetSystemConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetSystemConfigResponse{Config: config})
+}
+
+// SaveSystemConfig 保存系统配置
+// @Summary 保存系统配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SaveSystemConfigRequest true "系统配置"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/system [post]
+func (h *SettingsHandler) SaveSystemConfig(c *gin.Context) {
+	var req SaveSystemConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	config := &settings.SystemConfig{
+		// 基本设置
+		SystemName:        req.SystemName,
+		SystemDescription: req.SystemDescription,
+		SystemLogo:        req.SystemLogo,
+		SystemFavicon:     req.SystemFavicon,
+
+		// 国际化设置
+		DefaultLanguage: req.DefaultLanguage,
+		DefaultTimezone: req.DefaultTimezone,
+		DateFormat:      req.DateFormat,
+
+		// 功能设置
+		EnableUserRegistration: req.EnableUserRegistration,
+		EnableGuestAccess:      req.EnableGuestAccess,
+		EnableFileManager:      req.EnableFileManager,
+		EnableWebTerminal:      req.EnableWebTerminal,
+		EnableMonitoring:       req.EnableMonitoring,
+
+		// 安全设置
+		SessionTimeout:    req.SessionTimeout,
+		MaxLoginAttempts:  req.MaxLoginAttempts,
+		PasswordMinLength: req.PasswordMinLength,
+		RequireTwoFactor:  req.RequireTwoFactor,
+
+		// 其他设置
+		DefaultPageSize:         req.DefaultPageSize,
+		MaxFileUploadSize:       req.MaxFileUploadSize,
+		EnableSystemStats:       req.EnableSystemStats,
+		EnableMaintenanceMode:   req.EnableMaintenanceMode,
+	}
+
+	if err := h.settingsService.SaveSystemConfig(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "System configuration saved successfully"})
+}
+
+// UploadLogo 上传Logo文件
+// @Summary 上传Logo文件
+// @Tags 系统设置
+// @Accept multipart/form-data
+// @Produce json
+// @Param file formData file true "Logo文件"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/upload/logo [post]
+func (h *SettingsHandler) UploadLogo(c *gin.Context) {
+	// 限制文件大小 (10MB)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10<<20)
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无法获取上传文件"})
+		return
+	}
+	defer file.Close()
+
+	// 检查文件类型
+	allowedTypes := map[string]bool{
+		"image/jpeg": true,
+		"image/jpg":  true,
+		"image/png":  true,
+		"image/svg+xml": true,
+		"image/webp": true,
+	}
+
+	// 读取文件头512字节来检测文件类型
+	buffer := make([]byte, 512)
+	_, err = file.Read(buffer)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无法读取文件"})
+		return
+	}
+
+	// 重置文件指针
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件处理失败"})
+		return
+	}
+
+	contentType := http.DetectContentType(buffer)
+	if !allowedTypes[contentType] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的文件类型，仅支持 JPG、PNG、SVG、WebP 格式"})
+		return
+	}
+
+	// 检查文件扩展名
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	validExtensions := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".svg":  true,
+		".webp": true,
+	}
+
+	if !validExtensions[ext] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的文件扩展名"})
+		return
+	}
+
+	// 创建上传目录
+	uploadDir := filepath.Join("..", "..", "web", "public", "uploads")
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法创建上传目录"})
+		return
+	}
+
+	// 生成唯一文件名
+	timestamp := time.Now().Unix()
+	fileName := fmt.Sprintf("logo_%d%s", timestamp, ext)
+	filePath := filepath.Join(uploadDir, fileName)
+
+	// 创建目标文件
+	dst, err := os.Create(filePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法创建文件"})
+		return
+	}
+	defer dst.Close()
+
+	// 复制文件内容
+	_, err = io.Copy(dst, file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "文件保存失败"})
+		return
+	}
+
+	// 返回文件URL
+	fileURL := fmt.Sprintf("/uploads/%s", fileName)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "Logo上传成功",
+		"file_url": fileURL,
+		"file_name": fileName,
+	})
 }

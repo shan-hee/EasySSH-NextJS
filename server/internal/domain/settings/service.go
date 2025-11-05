@@ -37,6 +37,10 @@ type Service interface {
 	GetWeComConfig(ctx context.Context) (*WeComConfig, error)
 	SaveWeComConfig(ctx context.Context, config *WeComConfig) error
 	TestWeComConnection(ctx context.Context, config *WeComConfig) error
+
+	// 系统通用配置
+	GetSystemConfig(ctx context.Context) (*SystemConfig, error)
+	SaveSystemConfig(ctx context.Context, config *SystemConfig) error
 }
 
 type service struct {
@@ -317,4 +321,34 @@ func (s *service) TestWeComConnection(ctx context.Context, config *WeComConfig) 
 	}
 
 	return notification.TestWeComConnection(notificationConfig)
+}
+
+// GetSystemConfig 获取系统通用配置
+func (s *service) GetSystemConfig(ctx context.Context) (*SystemConfig, error) {
+	return s.repo.GetSystemConfig(ctx)
+}
+
+// SaveSystemConfig 保存系统通用配置
+func (s *service) SaveSystemConfig(ctx context.Context, config *SystemConfig) error {
+	// 验证配置
+	if config.SystemName == "" {
+		return fmt.Errorf("system name is required")
+	}
+	if config.SessionTimeout < 5 || config.SessionTimeout > 1440 {
+		return fmt.Errorf("session timeout must be between 5 and 1440 minutes")
+	}
+	if config.MaxLoginAttempts < 1 || config.MaxLoginAttempts > 10 {
+		return fmt.Errorf("max login attempts must be between 1 and 10")
+	}
+	if config.PasswordMinLength < 6 || config.PasswordMinLength > 32 {
+		return fmt.Errorf("password minimum length must be between 6 and 32")
+	}
+	if config.DefaultPageSize < 10 || config.DefaultPageSize > 100 {
+		return fmt.Errorf("default page size must be between 10 and 100")
+	}
+	if config.MaxFileUploadSize < 1 || config.MaxFileUploadSize > 1024 {
+		return fmt.Errorf("max file upload size must be between 1 and 1024 MB")
+	}
+
+	return s.repo.SaveSystemConfig(ctx, config)
 }
