@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useMemo, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import { generateBreadcrumbs, type BreadcrumbItem } from '@/config/breadcrumb-config'
+import { useSystemConfig } from '@/contexts/system-config-context'
 
 /**
  * 面包屑上下文接口
@@ -30,13 +31,14 @@ const BreadcrumbContext = createContext<BreadcrumbContextValue | undefined>(unde
  */
 export function BreadcrumbProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const { config } = useSystemConfig()
 
   // 缓存面包屑生成函数
   const getBreadcrumbs = useCallback(
     (pathname: string, pageTitle: string) => {
-      return generateBreadcrumbs(pathname, pageTitle)
+      return generateBreadcrumbs(pathname, pageTitle, config?.system_name || "EasySSH")
     },
-    []
+    [config?.system_name]
   )
 
   // Context 值（仅在 pathname 变化时更新）

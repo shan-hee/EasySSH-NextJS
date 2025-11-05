@@ -103,6 +103,10 @@ func main() {
 	settingsRepo := settings.NewRepository(database)
 	settingsService := settings.NewService(settingsRepo)
 
+	// 标签/会话配置服务
+	tabSessionRepo := tabsession.NewRepository(database)
+	tabSessionService := tabsession.NewService(tabSessionRepo)
+
 	// 邮件服务(支持动态配置)
 	// 从数据库加载 SMTP 配置
 	var emailService notification.EmailService
@@ -207,7 +211,7 @@ func main() {
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	userHandler := rest.NewUserHandler(userService)
-	settingsHandler := rest.NewSettingsHandler(settingsService)
+	settingsHandler := rest.NewSettingsHandler(settingsService, tabSessionService)
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 	avatarHandler := rest.NewAvatarHandler()
 

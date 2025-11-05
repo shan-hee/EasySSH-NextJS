@@ -28,6 +28,7 @@ import {
 } from "./terminal-settings-dialog"
 import { TabTerminalContent } from "./tab-terminal-content"
 import { useTabUIStore } from "@/stores/tab-ui-store"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -63,6 +64,7 @@ export function TerminalComponent({
   serversLoading,
   externalActiveSessionId,
 }: TerminalComponentProps) {
+  const { config } = useSystemConfig()
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
   const [isFullscreen, setIsFullscreen] = useState(false)
   // ==================== 方案A：多页签并发加载状态管理 ====================
@@ -319,14 +321,14 @@ export function TerminalComponent({
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
                   <BreadcrumbLink asChild>
-                    <Link href="/dashboard">EasySSH 控制台</Link>
+                    <Link href="/dashboard">{config?.system_name || "EasySSH"} 控制台</Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
                   <BreadcrumbPage>快速连接</BreadcrumbPage>
                 </BreadcrumbItem>
-                {/* 根据需求：终端内操作不再把服务器名称或标签加入面包屑，仅保留到“快速连接” */}
+                {/* 根据需求：终端内操作不再把服务器名称或标签加入面包屑，仅保留到"快速连接" */}
               </BreadcrumbList>
             </Breadcrumb>
           </div>

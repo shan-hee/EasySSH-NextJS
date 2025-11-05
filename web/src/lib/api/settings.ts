@@ -75,7 +75,6 @@ export interface GetWeComConfigResponse {
 export interface SystemConfig {
   // 基本设置
   system_name: string
-  system_description: string
   system_logo: string
   system_favicon: string
 
@@ -110,15 +109,6 @@ export interface TabSessionConfig {
  */
 export interface GetTabSessionConfigResponse {
   config: TabSessionConfig
-}
-
-/**
- * Logo上传响应
- */
-export interface UploadLogoResponse {
-  message: string
-  file_url: string
-  file_name: string
 }
 
 /**
@@ -277,24 +267,6 @@ export const settingsApi = {
       token,
       body: config,
     })
-  },
-
-  /**
-   * 上传Logo文件
-   */
-  async uploadLogo(token: string, file: File): Promise<UploadLogoResponse> {
-    const formData = new FormData()
-    formData.append("file", file)
-
-    const response = await apiFetch<UploadLogoResponse>("/settings/upload/logo", {
-      method: "POST",
-      token,
-      body: formData,
-      headers: {
-        // 不要设置 Content-Type，让浏览器自动设置 multipart/form-data
-      },
-    })
-    return response
   },
 
   /**

@@ -1,8 +1,13 @@
+"use client"
+
 import Link from "next/link"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 export function PagePlaceholder({ title, description }: { title: string; description?: string }) {
+  const { config } = useSystemConfig()
+
   return (
     <>
       <header className="flex h-16 shrink-0 items-center gap-2 sticky top-0 z-10 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:duration-200 group-data-[ready=true]/sidebar-wrapper:ease-in-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
@@ -11,7 +16,7 @@ export function PagePlaceholder({ title, description }: { title: string; descrip
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
                 <BreadcrumbLink asChild>
-                  <Link href="/dashboard">EasySSH 控制台</Link>
+                  <Link href="/dashboard">{config?.system_name || "EasySSH"} 控制台</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />

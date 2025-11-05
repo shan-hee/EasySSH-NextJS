@@ -198,18 +198,22 @@ export function getBreadcrumbConfig(pathname: string): BreadcrumbConfig {
 }
 
 /**
- * 生成完整的面包屑路径（包含根级）
+ * 生成完整的面包屑路径(包含根级)
+ * @param pathname - 当前路径
+ * @param pageTitle - 页面标题
+ * @param systemName - 系统名称(默认为 "EasySSH")
  */
 export function generateBreadcrumbs(
   pathname: string,
-  pageTitle: string
+  pageTitle: string,
+  systemName: string = "EasySSH"
 ): BreadcrumbItem[] {
   const config = getBreadcrumbConfig(pathname)
   const items: BreadcrumbItem[] = []
 
   // 添加根级
   items.push({
-    title: 'EasySSH 控制台',
+    title: `${systemName} 控制台`,
     href: pathname === '/dashboard' ? undefined : '/dashboard',
   })
 

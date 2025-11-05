@@ -32,6 +32,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 interface SessionTabBarProps {
   sessions: TerminalSession[]
@@ -167,6 +168,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
     hideBreadcrumb = false,
   } = props
 
+  const { config } = useSystemConfig()
   const [menu, setMenu] = useState<MenuState>({ open: false, x: 0, y: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -278,7 +280,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
                   <BreadcrumbLink asChild>
-                    <Link href="/dashboard">EasySSH 控制台</Link>
+                    <Link href="/dashboard">{config?.system_name || "EasySSH"} 控制台</Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />

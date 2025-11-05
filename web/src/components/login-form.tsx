@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Eye, EyeOff, Lock, User, Shield, KeyRound } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
 import { useAuth } from "@/contexts/auth-context"
+import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
 import { twoFactorApi } from "@/lib/api/2fa"
 
@@ -31,6 +32,7 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
   const router = useRouter()
   const { login, isLoading: authLoading } = useAuth()
+  const { config } = useSystemConfig()
 
   // 预取控制台页面，加速跳转
   useEffect(() => {
@@ -152,8 +154,8 @@ export function LoginForm({
             <div className="flex flex-col items-center gap-3">
               <div className="flex size-16 items-center justify-center">
                 <img
-                  src="/logo.svg"
-                  alt="EasySSH Logo"
+                  src={config?.system_logo || "/logo.svg"}
+                  alt={`${config?.system_name || "EasySSH"} Logo`}
                   className="size-16 transition-opacity duration-200"
                   loading="eager"
                   decoding="async"
@@ -169,13 +171,13 @@ export function LoginForm({
               </div>
               <div className="space-y-1">
                 <h1 className="text-2xl font-bold text-zinc-50">
-                  {requires2FA ? "双因子认证" : "欢迎使用 EasySSH"}
+                  {requires2FA ? "双因子认证" : `欢迎使用 ${config?.system_name || "EasySSH"}`}
                 </h1>
-                <p className="text-sm text-zinc-400">
-                  {requires2FA
-                    ? "请输入认证应用中的验证码"
-                    : "安全高效的远程服务器管理平台"}
-                </p>
+                {requires2FA && (
+                  <p className="text-sm text-zinc-400">
+                    请输入认证应用中的验证码
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -361,11 +363,6 @@ export function LoginForm({
           {/* 底部提示 */}
           {!requires2FA && (
             <div className="space-y-3">
-            {/* 安全提示 */}
-            <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
-              <Shield className="h-3 w-3" />
-              <span>您的连接已通过 SSL 加密保护</span>
-            </div>
 
             {/* 注册提示 */}
             <div className="text-center text-sm text-zinc-400">
@@ -386,7 +383,7 @@ export function LoginForm({
 
             {/* 版本信息 */}
             <div className="text-center text-xs text-zinc-600">
-              EasySSH v1.0.0 | © 2025 All rights reserved
+              {config?.system_name || "EasySSH"} v1.0.0 | © 2025 All rights reserved
             </div>
           </div>
           )}

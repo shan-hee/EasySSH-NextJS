@@ -330,10 +330,9 @@ func (r *repository) GetSystemConfig(ctx context.Context) (*SystemConfig, error)
 	// 解析配置，设置默认值
 	config := &SystemConfig{
 		// 基本设置
-		SystemName:        getOrDefault(configMap, KeySystemName, "EasySSH"),
-		SystemDescription: getOrDefault(configMap, KeySystemDescription, "简单易用的SSH管理平台"),
-		SystemLogo:        getOrDefault(configMap, KeySystemLogo, "/logo.svg"),
-		SystemFavicon:     getOrDefault(configMap, KeySystemFavicon, "/favicon.ico"),
+		SystemName:    getOrDefault(configMap, KeySystemName, "EasySSH"),
+		SystemLogo:    getOrDefault(configMap, KeySystemLogo, "/logo.svg"),
+		SystemFavicon: getOrDefault(configMap, KeySystemFavicon, "/logo.svg"),
 
 		// 国际化设置
 		DefaultLanguage: getOrDefault(configMap, KeyDefaultLanguage, "zh-CN"),
@@ -341,9 +340,8 @@ func (r *repository) GetSystemConfig(ctx context.Context) (*SystemConfig, error)
 		DateFormat:      getOrDefault(configMap, KeyDateFormat, "YYYY-MM-DD HH:mm:ss"),
 
 		// 其他设置
-		DefaultPageSize:     getIntOrDefault(configMap, KeyDefaultPageSize, 20),
-		MaxFileUploadSize:   getIntOrDefault(configMap, KeyMaxFileUploadSize, 100),
-		EnableSystemStats:   getBoolOrDefault(configMap, KeyEnableSystemStats, true),
+		DefaultPageSize:   getIntOrDefault(configMap, KeyDefaultPageSize, 20),
+		MaxFileUploadSize: getIntOrDefault(configMap, KeyMaxFileUploadSize, 100),
 	}
 
 	return config, nil
@@ -357,16 +355,14 @@ func (r *repository) SaveSystemConfig(ctx context.Context, config *SystemConfig)
 
 		// 保存各个配置项 - 只保留必要的系统设置
 		settings := map[string]string{
-			KeySystemName:        config.SystemName,
-			KeySystemDescription: config.SystemDescription,
-			KeySystemLogo:        config.SystemLogo,
-			KeySystemFavicon:     config.SystemFavicon,
-			KeyDefaultLanguage:   config.DefaultLanguage,
-			KeyDefaultTimezone:   config.DefaultTimezone,
-			KeyDateFormat:        config.DateFormat,
-			KeyDefaultPageSize:   fmt.Sprintf("%d", config.DefaultPageSize),
+			KeySystemName:      config.SystemName,
+			KeySystemLogo:      config.SystemLogo,
+			KeySystemFavicon:   config.SystemFavicon,
+			KeyDefaultLanguage: config.DefaultLanguage,
+			KeyDefaultTimezone: config.DefaultTimezone,
+			KeyDateFormat:      config.DateFormat,
+			KeyDefaultPageSize: fmt.Sprintf("%d", config.DefaultPageSize),
 			KeyMaxFileUploadSize: fmt.Sprintf("%d", config.MaxFileUploadSize),
-			KeyEnableSystemStats: fmt.Sprintf("%t", config.EnableSystemStats),
 		}
 
 		for key, value := range settings {

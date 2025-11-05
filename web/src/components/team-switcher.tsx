@@ -11,6 +11,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 export const TeamSwitcher = React.memo(function TeamSwitcher({
   teams,
@@ -23,6 +24,7 @@ export const TeamSwitcher = React.memo(function TeamSwitcher({
 }) {
   const { toggleSidebar, state } = useSidebar()
   const router = useRouter()
+  const { config } = useSystemConfig()
   const activeTeam = teams[0]
 
   const handleToggleSidebar = React.useCallback(() => {
@@ -56,8 +58,8 @@ export const TeamSwitcher = React.memo(function TeamSwitcher({
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg relative">
               {/* 默认显示的logo */}
               <Image
-                src="/logo.svg"
-                alt="EasySSH Logo"
+                src={config?.system_logo || "/logo.svg"}
+                alt={`${config?.system_name || "EasySSH"} Logo`}
                 width={24}
                 height={24}
                 className="size-6 group-data-[collapsible=icon]:group-hover:opacity-0 transition-opacity"

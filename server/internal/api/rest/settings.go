@@ -1,27 +1,24 @@
 package rest
 
 import (
-	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/easyssh/server/internal/domain/settings"
+	"github.com/easyssh/server/internal/domain/tabsession"
 	"github.com/gin-gonic/gin"
 )
 
 // SettingsHandler 系统设置处理器
 type SettingsHandler struct {
-	settingsService settings.Service
+	settingsService   settings.Service
+	tabSessionService tabsession.Service
 }
 
 // NewSettingsHandler 创建设置处理器
-func NewSettingsHandler(settingsService settings.Service) *SettingsHandler {
+func NewSettingsHandler(settingsService settings.Service, tabSessionService tabsession.Service) *SettingsHandler {
 	return &SettingsHandler{
-		settingsService: settingsService,
+		settingsService:   settingsService,
+		tabSessionService: tabSessionService,
 	}
 }
 
@@ -52,7 +49,10 @@ func (h *SettingsHandler) RegisterRoutes(r *gin.RouterGroup) {
 		// 系统通用配置相关
 		settingsGroup.GET("/system", h.GetSystemConfig)
 		settingsGroup.POST("/system", h.SaveSystemConfig)
-		settingsGroup.POST("/upload/logo", h.UploadLogo)
+
+		// 标签/会话配置相关
+		settingsGroup.GET("/tabsession", h.GetTabSessionConfig)
+		settingsGroup.POST("/tabsession", h.SaveTabSessionConfig)
 
 		// 通用设置
 		settingsGroup.GET("/:category", h.GetSettingsByCategory)
@@ -463,10 +463,9 @@ type GetSystemConfigResponse struct {
 // SaveSystemConfigRequest 保存系统配置请求
 type SaveSystemConfigRequest struct {
 	// 基本设置
-	SystemName        string `json:"system_name"`
-	SystemDescription string `json:"system_description"`
-	SystemLogo        string `json:"system_logo"`
-	SystemFavicon     string `json:"system_favicon"`
+	SystemName    string `json:"system_name"`
+	SystemLogo    string `json:"system_logo"`
+	SystemFavicon string `json:"system_favicon"`
 
 	// 国际化设置
 	DefaultLanguage string `json:"default_language"`
@@ -474,9 +473,8 @@ type SaveSystemConfigRequest struct {
 	DateFormat      string `json:"date_format"`
 
 	// 其他设置
-	DefaultPageSize     int  `json:"default_page_size"`
-	MaxFileUploadSize   int  `json:"max_file_upload_size"`
-	EnableSystemStats   bool `json:"enable_system_stats"`
+	DefaultPageSize   int `json:"default_page_size"`
+	MaxFileUploadSize int `json:"max_file_upload_size"`
 }
 
 // GetSystemConfig 获取系统配置
@@ -524,9 +522,8 @@ func (h *SettingsHandler) SaveSystemConfig(c *gin.Context) {
 		DateFormat:      req.DateFormat,
 
 		// 其他设置
-		DefaultPageSize:     req.DefaultPageSize,
-		MaxFileUploadSize:   req.MaxFileUploadSize,
-		EnableSystemStats:   req.EnableSystemStats,
+		DefaultPageSize:   req.DefaultPageSize,
+		MaxFileUploadSize: req.MaxFileUploadSize,
 	}
 
 	if err := h.settingsService.SaveSystemConfig(c.Request.Context(), config); err != nil {
@@ -537,103 +534,62 @@ func (h *SettingsHandler) SaveSystemConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "System configuration saved successfully"})
 }
 
-// UploadLogo 上传Logo文件
-// @Summary 上传Logo文件
+// === 标签/会话配置相关 ===
+
+// GetTabSessionConfigResponse 标签/会话配置响应
+type GetTabSessionConfigResponse struct {
+	Config *tabsession.TabSessionSettings `json:"config"`
+}
+
+// SaveTabSessionConfigRequest 保存标签/会话配置请求
+type SaveTabSessionConfigRequest struct {
+	MaxTabs         int  `json:"max_tabs"`
+	InactiveMinutes int  `json:"inactive_minutes"`
+	Hibernate       bool `json:"hibernate"`
+}
+
+// GetTabSessionConfig 获取标签/会话配置
+// @Summary 获取标签/会话配置
 // @Tags 系统设置
-// @Accept multipart/form-data
+// @Accept json
 // @Produce json
-// @Param file formData file true "Logo文件"
+// @Success 200 {object} GetTabSessionConfigResponse
+// @Router /api/v1/settings/tabsession [get]
+func (h *SettingsHandler) GetTabSessionConfig(c *gin.Context) {
+	config, err := h.tabSessionService.GetTabSessionConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetTabSessionConfigResponse{Config: config})
+}
+
+// SaveTabSessionConfig 保存标签/会话配置
+// @Summary 保存标签/会话配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SaveTabSessionConfigRequest true "标签/会话配置"
 // @Success 200 {object} map[string]string
-// @Router /api/v1/settings/upload/logo [post]
-func (h *SettingsHandler) UploadLogo(c *gin.Context) {
-	// 限制文件大小 (10MB)
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10<<20)
-
-	file, header, err := c.Request.FormFile("file")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无法获取上传文件"})
-		return
-	}
-	defer file.Close()
-
-	// 检查文件类型
-	allowedTypes := map[string]bool{
-		"image/jpeg": true,
-		"image/jpg":  true,
-		"image/png":  true,
-		"image/svg+xml": true,
-		"image/webp": true,
-	}
-
-	// 读取文件头512字节来检测文件类型
-	buffer := make([]byte, 512)
-	_, err = file.Read(buffer)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无法读取文件"})
+// @Router /api/v1/settings/tabsession [post]
+func (h *SettingsHandler) SaveTabSessionConfig(c *gin.Context) {
+	var req SaveTabSessionConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// 重置文件指针
-	_, err = file.Seek(0, 0)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "文件处理失败"})
+	config := &tabsession.TabSessionSettings{
+		MaxTabs:         req.MaxTabs,
+		InactiveMinutes: req.InactiveMinutes,
+		Hibernate:       req.Hibernate,
+	}
+
+	if err := h.tabSessionService.SaveTabSessionConfig(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	contentType := http.DetectContentType(buffer)
-	if !allowedTypes[contentType] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的文件类型，仅支持 JPG、PNG、SVG、WebP 格式"})
-		return
-	}
-
-	// 检查文件扩展名
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	validExtensions := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".svg":  true,
-		".webp": true,
-	}
-
-	if !validExtensions[ext] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的文件扩展名"})
-		return
-	}
-
-	// 创建上传目录
-	uploadDir := filepath.Join("..", "..", "web", "public", "uploads")
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法创建上传目录"})
-		return
-	}
-
-	// 生成唯一文件名
-	timestamp := time.Now().Unix()
-	fileName := fmt.Sprintf("logo_%d%s", timestamp, ext)
-	filePath := filepath.Join(uploadDir, fileName)
-
-	// 创建目标文件
-	dst, err := os.Create(filePath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法创建文件"})
-		return
-	}
-	defer dst.Close()
-
-	// 复制文件内容
-	_, err = io.Copy(dst, file)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "文件保存失败"})
-		return
-	}
-
-	// 返回文件URL
-	fileURL := fmt.Sprintf("/uploads/%s", fileName)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "Logo上传成功",
-		"file_url": fileURL,
-		"file_name": fileName,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Tab session configuration saved successfully"})
 }

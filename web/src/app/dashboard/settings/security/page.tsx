@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,12 +9,78 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Shield, Lock, Key, Globe, Clock, AlertTriangle, CheckCircle, Save } from "lucide-react"
+import { Shield, Lock, Key, Globe, Clock, AlertTriangle, CheckCircle, Save, Loader2 } from "lucide-react"
+import { settingsApi, type TabSessionConfig } from "@/lib/api/settings"
+import { getAccessToken } from "@/contexts/auth-context"
+import { toast } from "sonner"
 
 export default function SettingsSecurityPage() {
  const [twoFactorEnabled, setTwoFactorEnabled] = useState(true)
  const [ipWhitelistEnabled, setIpWhitelistEnabled] = useState(false)
  const [sessionTimeout, setSessionTimeout] = useState("30")
+
+ // TabSession 配置状态
+ const [tabSessionSettings, setTabSessionSettings] = useState<TabSessionConfig>({
+   max_tabs: 50,
+   inactive_minutes: 60,
+   hibernate: true
+ })
+ const [isLoadingTabSession, setIsLoadingTabSession] = useState(true)
+ const [isSavingTabSession, setIsSavingTabSession] = useState(false)
+
+ // 加载 TabSession 配置
+ useEffect(() => {
+   const loadTabSessionConfig = async () => {
+     try {
+       const token = await getAccessToken()
+       if (!token) {
+         toast.error("未找到访问令牌")
+         return
+       }
+
+       const config = await settingsApi.getTabSessionConfig(token)
+       setTabSessionSettings(config)
+     } catch (error) {
+       console.error("Failed to load tab session config:", error)
+       toast.error("加载标签会话配置失败")
+     } finally {
+       setIsLoadingTabSession(false)
+     }
+   }
+
+   loadTabSessionConfig()
+ }, [])
+
+ // 保存 TabSession 配置
+ const handleSaveTabSession = async () => {
+   // 验证
+   if (tabSessionSettings.max_tabs < 1 || tabSessionSettings.max_tabs > 200) {
+     toast.error("最大标签页数必须在1-200之间")
+     return
+   }
+
+   if (tabSessionSettings.inactive_minutes < 5 || tabSessionSettings.inactive_minutes > 1440) {
+     toast.error("非活动断开提醒必须在5-1440分钟之间")
+     return
+   }
+
+   setIsSavingTabSession(true)
+   try {
+     const token = await getAccessToken()
+     if (!token) {
+       toast.error("未找到访问令牌")
+       return
+     }
+
+     await settingsApi.saveTabSessionConfig(token, tabSessionSettings)
+     toast.success("标签会话配置保存成功")
+   } catch (error) {
+     console.error("Failed to save tab session config:", error)
+     toast.error("保存标签会话配置失败")
+   } finally {
+     setIsSavingTabSession(false)
+   }
+ }
 
  return (
  <>
@@ -222,6 +288,13 @@ export default function SettingsSecurityPage() {
  <CardDescription>控制浏览器标签页数量和非活动断开提醒</CardDescription>
  </CardHeader>
  <CardContent className="space-y-4">
+ {isLoadingTabSession ? (
+ <div className="flex items-center justify-center py-4">
+ <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+ <span className="ml-2 text-muted-foreground">加载配置中...</span>
+ </div>
+ ) : (
+ <>
  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
  <div className="space-y-2">
  <Label htmlFor="maxTabs">最大标签页数</Label>
@@ -230,7 +303,12 @@ export default function SettingsSecurityPage() {
  type="number"
  min={1}
  max={200}
- defaultValue="50"
+ value={tabSessionSettings.max_tabs}
+ onChange={(e) => setTabSessionSettings(prev => ({
+ ...prev,
+ max_tabs: parseInt(e.target.value) || 1
+ }))}
+ disabled={isSavingTabSession}
  />
  <p className="text-xs text-muted-foreground">
  限制用户可同时打开的SSH会话标签页数量
@@ -243,7 +321,12 @@ export default function SettingsSecurityPage() {
  type="number"
  min={5}
  max={1440}
- defaultValue="60"
+ value={tabSessionSettings.inactive_minutes}
+ onChange={(e) => setTabSessionSettings(prev => ({
+ ...prev,
+ inactive_minutes: parseInt(e.target.value) || 5
+ }))}
+ disabled={isSavingTabSession}
  />
  <p className="text-xs text-muted-foreground">
  SSH会话非活动状态超过设定时间后将提醒用户
@@ -257,8 +340,36 @@ export default function SettingsSecurityPage() {
  非活动标签页停止渲染终端以释放系统资源
  </p>
  </div>
- <Switch defaultChecked />
+ <Switch
+ checked={tabSessionSettings.hibernate}
+ onCheckedChange={(checked) => setTabSessionSettings(prev => ({
+ ...prev,
+ hibernate: checked
+ }))}
+ disabled={isSavingTabSession}
+ />
  </div>
+ <div className="flex justify-end pt-2">
+ <Button
+ onClick={handleSaveTabSession}
+ disabled={isSavingTabSession}
+ size="sm"
+ >
+ {isSavingTabSession ? (
+ <>
+ <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+ 保存中...
+ </>
+ ) : (
+ <>
+ <Save className="mr-2 h-4 w-4" />
+ 保存配置
+ </>
+ )}
+ </Button>
+ </div>
+ </>
+ )}
  </CardContent>
  </Card>
  </TabsContent>

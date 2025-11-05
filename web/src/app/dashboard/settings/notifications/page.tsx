@@ -14,8 +14,10 @@ import { Bell, Mail, MessageSquare, Webhook, Send, Save, Loader2 } from "lucide-
 import { settingsApi, type SMTPConfig, type WebhookConfig, type DingTalkConfig, type WeComConfig } from "@/lib/api/settings"
 import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 export default function SettingsNotificationsPage() {
+  const { config } = useSystemConfig()
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [dingdingEnabled, setDingdingEnabled] = useState(false)
   const [webhookEnabled, setWebhookEnabled] = useState(false)
@@ -30,7 +32,7 @@ export default function SettingsNotificationsPage() {
     username: "",
     password: "",
     from_email: "",
-    from_name: "EasySSH",
+    from_name: config?.system_name || "EasySSH",
     use_tls: true,
   })
   const [smtpLoading, setSmtpLoading] = useState(false)
@@ -540,7 +542,7 @@ export default function SettingsNotificationsPage() {
                             <div className="space-y-2">
                               <Label>发件人名称</Label>
                               <Input
-                                placeholder="EasySSH 系统"
+                                placeholder={`${config?.system_name || "EasySSH"} 系统`}
                                 value={smtpConfig.from_name}
                                 onChange={(e) => setSmtpConfig((prev) => ({ ...prev, from_name: e.target.value }))}
                               />

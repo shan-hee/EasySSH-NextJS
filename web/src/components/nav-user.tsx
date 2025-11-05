@@ -31,7 +31,7 @@ export const NavUser = React.memo(function NavUser({
   user: {
     name: string
     email: string
-    avatar: string
+    avatar?: string
   }
 }) {
   const { isMobile } = useSidebar()
@@ -61,7 +61,7 @@ export const NavUser = React.memo(function NavUser({
             >
               <SmartAvatar
                 className="h-8 w-8 rounded-lg"
-                src={user.avatar}
+                src={user.avatar || undefined}
                 displayName={user.name}
                 username={user.name}
                 email={user.email}
@@ -83,7 +83,7 @@ export const NavUser = React.memo(function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <SmartAvatar
                   className="h-8 w-8 rounded-lg"
-                  src={user.avatar}
+                  src={user.avatar || undefined}
                   displayName={user.name}
                   username={user.name}
                   email={user.email}

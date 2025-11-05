@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useAuth } from "@/contexts/auth-context"
 import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
 import { twoFactorApi } from "@/lib/api/2fa"
 import { sessionsApi, type Session } from "@/lib/api/sessions"
@@ -94,6 +95,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 使用 ClientAuthProvider 获取用户数据（dashboard 中使用）
   const { user, refreshUser, logout } = useClientAuth()
+
+  // 使用系统配置
+  const { config } = useSystemConfig()
 
   // 个人信息表单状态
   const [profileForm, setProfileForm] = React.useState({
@@ -1512,14 +1516,14 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       <div className="mb-4">
                         <div className="inline-flex items-center justify-center w-16 h-16 mb-3">
                           <Image
-                            src="/logo.svg"
-                            alt="EasySSH Logo"
+                            src={config?.system_logo || "/logo.svg"}
+                            alt={`${config?.system_name || "EasySSH"} Logo`}
                             width={64}
                             height={64}
                             className="w-16 h-16"
                           />
                         </div>
-                        <h3 className="text-2xl font-bold">EasySSH</h3>
+                        <h3 className="text-2xl font-bold">{config?.system_name || "EasySSH"}</h3>
                         <p className="text-sm text-muted-foreground mt-1">现代化 SSH 管理平台</p>
                       </div>
                       <div className="space-y-2 text-sm">
@@ -1567,7 +1571,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">开源信息</h4>
                       <p className="text-sm text-muted-foreground mb-3">
-                        EasySSH 是一个开源项目，遵循 MIT 协议
+                        {config?.system_name || "EasySSH"} 是一个开源项目，遵循 MIT 协议
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -1595,7 +1599,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     </div>
 
                     <div className="text-center text-xs text-muted-foreground pt-2">
-                      <p>© 2025 EasySSH. All rights reserved.</p>
+                      <p>© 2025 {config?.system_name || "EasySSH"}. All rights reserved.</p>
                       <p className="mt-1">Built with ❤️ by Claude & Developer</p>
                     </div>
                   </div>

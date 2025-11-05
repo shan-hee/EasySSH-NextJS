@@ -59,7 +59,6 @@ const (
 // 系统通用配置相关的键名
 const (
 	KeySystemName            = "system.name"
-	KeySystemDescription     = "system.description"
 	KeySystemLogo            = "system.logo"
 	KeySystemFavicon         = "system.favicon"
 	KeyDefaultLanguage       = "system.default_language"
@@ -67,7 +66,6 @@ const (
 	KeyDateFormat            = "system.date_format"
 	KeyDefaultPageSize       = "system.default_page_size"
 	KeyMaxFileUploadSize     = "system.max_file_upload_size"
-	KeyEnableSystemStats     = "system.enable_system_stats"
 )
 
 // 标签/会话配置相关的键名
@@ -113,10 +111,9 @@ type WeComConfig struct {
 // SystemConfig 系统通用配置结构
 type SystemConfig struct {
 	// 基本设置
-	SystemName        string `json:"system_name"`
-	SystemDescription string `json:"system_description"`
-	SystemLogo        string `json:"system_logo"`
-	SystemFavicon     string `json:"system_favicon"`
+	SystemName    string `json:"system_name"`
+	SystemLogo    string `json:"system_logo"`
+	SystemFavicon string `json:"system_favicon"`
 
 	// 国际化设置
 	DefaultLanguage string `json:"default_language"`
@@ -124,9 +121,8 @@ type SystemConfig struct {
 	DateFormat      string `json:"date_format"`
 
 	// 其他设置
-	DefaultPageSize       int  `json:"default_page_size"`
-	MaxFileUploadSize     int  `json:"max_file_upload_size"`
-	EnableSystemStats     bool `json:"enable_system_stats"`
+	DefaultPageSize   int `json:"default_page_size"`
+	MaxFileUploadSize int `json:"max_file_upload_size"`
 }
 
 // TabSessionConfig 标签/会话配置结构
