@@ -87,16 +87,56 @@ $AIR_PATH &
 SERVER_PID=$!
 cd ..
 
-# 等待后端启动
-sleep 3
+# 等待后端完全启动并就绪
+echo -e "${YELLOW}⏳ 等待后端服务完全启动...${NC}"
+MAX_WAIT=60
+WAIT_COUNT=0
+BACKEND_READY=false
 
-# 检查后端是否成功启动
-if ! kill -0 $SERVER_PID 2>/dev/null; then
-    echo -e "${RED}❌ 后端启动失败，请检查数据库配置${NC}"
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    # 检查后端进程是否还在运行
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+        echo -e "${RED}❌ 后端启动失败，请检查数据库配置${NC}"
+        exit 1
+    fi
+
+    # 检查后端端口是否就绪（假设后端运行在 8521 端口）
+    if command_exists curl; then
+        if curl -s --connect-timeout 2 http://localhost:8521/health >/dev/null 2>&1 || \
+           curl -s --connect-timeout 2 http://localhost:8521/api/health >/dev/null 2>&1 || \
+           curl -s --connect-timeout 2 http://localhost:8521/ >/dev/null 2>&1; then
+            BACKEND_READY=true
+            break
+        fi
+    elif command_exists nc; then
+        if nc -z localhost 8521 2>/dev/null; then
+            # 再等待2秒确保服务完全就绪
+            sleep 2
+            BACKEND_READY=true
+            break
+        fi
+    else
+        # 如果没有 curl 或 nc，使用简单的时间等待
+        if [ $WAIT_COUNT -ge 10 ]; then  # 等待10秒后认为后端已就绪
+            BACKEND_READY=true
+            break
+        fi
+    fi
+
+    echo -n "."
+    sleep 1
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+done
+
+echo ""
+
+if [ "$BACKEND_READY" = true ]; then
+    echo -e "${GREEN}✅ 后端服务已完全就绪 (等待了 ${WAIT_COUNT} 秒)${NC}\n"
+else
+    echo -e "${RED}❌ 后端启动超时 (等待了 ${MAX_WAIT} 秒)${NC}"
+    echo -e "${YELLOW}请检查后端日志或手动启动后端服务${NC}"
     exit 1
 fi
-
-echo -e "${GREEN}✅ 后端启动成功${NC}\n"
 
 # 启动前端
 echo -e "${GREEN}⚛️  启动 Next.js 前端...${NC}"
