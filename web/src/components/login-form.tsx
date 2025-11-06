@@ -25,6 +25,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
 import { twoFactorApi } from "@/lib/api/2fa"
+import { FadeSlideIn } from "@/components/ui/fade-slide-in"
 
 export function LoginForm({
   className,
@@ -150,53 +151,56 @@ export function LoginForm({
       <form onSubmit={requires2FA ? handle2FASubmit : handleSubmit}>
         <FieldGroup>
           {/* Logo 和标题 */}
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex size-16 items-center justify-center">
-                <img
-                  src={config?.system_logo || "/logo.svg"}
-                  alt={`${config?.system_name || "EasySSH"} Logo`}
-                  className="size-16 transition-opacity duration-200"
-                  loading="eager"
-                  decoding="async"
-                  fetchPriority="high"
-                  style={{
-                    // 防止闪烁: 设置固定尺寸避免布局偏移
-                    width: '64px',
-                    height: '64px',
-                    // 使用 will-change 提示浏览器优化
-                    willChange: 'opacity',
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <h1 className="text-2xl font-bold text-zinc-50">
-                  {requires2FA ? "双因子认证" : `欢迎使用 ${config?.system_name || "EasySSH"}`}
-                </h1>
-                {requires2FA && (
-                  <p className="text-sm text-zinc-400">
-                    请输入认证应用中的验证码
-                  </p>
-                )}
+          <FadeSlideIn delay={0}>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex size-16 items-center justify-center">
+                  <img
+                    src={config?.system_logo || "/logo.svg"}
+                    alt={`${config?.system_name || "EasySSH"} Logo`}
+                    className="size-16 transition-opacity duration-200"
+                    loading="eager"
+                    decoding="async"
+                    fetchPriority="high"
+                    style={{
+                      // 防止闪烁: 设置固定尺寸避免布局偏移
+                      width: '64px',
+                      height: '64px',
+                      // 使用 will-change 提示浏览器优化
+                      willChange: 'opacity',
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-2xl font-bold text-zinc-50">
+                    {requires2FA ? "双因子认证" : `欢迎使用 ${config?.system_name || "EasySSH"}`}
+                  </h1>
+                  {requires2FA && (
+                    <p className="text-sm text-zinc-400">
+                      请输入认证应用中的验证码
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          </FadeSlideIn>
 
           {/* 表单卡片：去掉背景色与边框/阴影 */}
           <div className="rounded-xl p-6 bg-transparent">
             {requires2FA ? (
               // 2FA 验证表单
               <div className="space-y-4">
-                <Field>
-                  <FieldLabel htmlFor="2fa-code" className="text-zinc-200">
-                    验证码
-                  </FieldLabel>
-                  <div className="flex justify-center">
-                    <InputOTP
-                      maxLength={6}
-                      value={twoFactorCode}
-                      onChange={(value) => setTwoFactorCode(value)}
-                      autoFocus
+                <FadeSlideIn delay={0.1}>
+                  <Field>
+                    <FieldLabel htmlFor="2fa-code" className="text-zinc-200">
+                      验证码
+                    </FieldLabel>
+                    <div className="flex justify-center">
+                      <InputOTP
+                        maxLength={6}
+                        value={twoFactorCode}
+                        onChange={(value) => setTwoFactorCode(value)}
+                        autoFocus
                     >
                       <InputOTPGroup>
                         <InputOTPSlot index={0} />
@@ -215,147 +219,162 @@ export function LoginForm({
                     打开认证应用（如 Google Authenticator）获取验证码
                   </FieldDescription>
                 </Field>
+              </FadeSlideIn>
 
                 {/* 验证按钮 */}
-                <Field>
-                  <Button
-                    type="submit"
-                    disabled={isLoading || twoFactorCode.length !== 6}
-                    className="w-full"
-                    size="lg"
-                  >
-                    {isLoading ? (
-                      <>
-                        <span className="mr-2">验证中</span>
-                        <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                      </>
-                    ) : (
-                      "验证"
-                    )}
-                  </Button>
-                </Field>
+                <FadeSlideIn delay={0.2}>
+                  <Field>
+                    <Button
+                      type="submit"
+                      disabled={isLoading || twoFactorCode.length !== 6}
+                      className="w-full"
+                      size="lg"
+                    >
+                      {isLoading ? (
+                        <>
+                          <span className="mr-2">验证中</span>
+                          <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                        </>
+                      ) : (
+                        "验证"
+                      )}
+                    </Button>
+                  </Field>
+                </FadeSlideIn>
 
                 {/* 返回按钮 */}
-                <Field>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleBack}
-                    className="w-full"
-                    disabled={isLoading}
-                  >
-                    返回登录
-                  </Button>
-                </Field>
+                <FadeSlideIn delay={0.3}>
+                  <Field>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleBack}
+                      className="w-full"
+                      disabled={isLoading}
+                    >
+                      返回登录
+                    </Button>
+                  </Field>
+                </FadeSlideIn>
 
                 {/* 备份码提示 */}
-                <div className="text-center text-xs text-zinc-500">
-                  无法访问认证应用？使用备份码登录
-                </div>
+                <FadeSlideIn delay={0.4}>
+                  <div className="text-center text-xs text-zinc-500">
+                    无法访问认证应用？使用备份码登录
+                  </div>
+                </FadeSlideIn>
               </div>
             ) : (
               // 账号密码登录表单
               <div className="space-y-4">
               {/* 账号输入 */}
-              <Field>
-                <FieldLabel htmlFor="username" className="text-zinc-200">
-                  账号
-                </FieldLabel>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                  <Input
-                    id="username"
-                    type="text"
-                    placeholder="请输入账号"
-                    name="username"
-                    autoComplete="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
-                    required
-                  />
-                </div>
-              </Field>
+              <FadeSlideIn delay={0.1}>
+                <Field>
+                  <FieldLabel htmlFor="username" className="text-zinc-200">
+                    账号
+                  </FieldLabel>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                    <Input
+                      id="username"
+                      type="text"
+                      placeholder="请输入账号"
+                      name="username"
+                      autoComplete="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
+                      required
+                    />
+                  </div>
+                </Field>
+              </FadeSlideIn>
 
               {/* 密码输入 */}
-              <Field>
-                <FieldLabel htmlFor="password" className="text-zinc-200">
-                  密码
-                </FieldLabel>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="请输入密码"
-                    name="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </Field>
+              <FadeSlideIn delay={0.2}>
+                <Field>
+                  <FieldLabel htmlFor="password" className="text-zinc-200">
+                    密码
+                  </FieldLabel>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="请输入密码"
+                      name="password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="pl-10 pr-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </Field>
+              </FadeSlideIn>
 
               {/* 记住密码和忘记密码 */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                  />
-                  <Label
-                    htmlFor="remember"
-                    className="text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors"
+              <FadeSlideIn delay={0.3}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="remember"
+                      checked={rememberMe}
+                      onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                    />
+                    <Label
+                      htmlFor="remember"
+                      className="text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors"
+                    >
+                      记住密码
+                    </Label>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="text-sm text-zinc-400 hover:text-zinc-200 p-0 h-auto no-underline hover:no-underline transition-colors"
+                    onClick={() => {
+                      toast.info("忘记密码", {
+                        description: "请联系管理员重置密码",
+                      })
+                    }}
                   >
-                    记住密码
-                  </Label>
+                    忘记密码？
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="link"
-                  className="text-sm text-zinc-400 hover:text-zinc-200 p-0 h-auto no-underline hover:no-underline transition-colors"
-                  onClick={() => {
-                    toast.info("忘记密码", {
-                      description: "请联系管理员重置密码",
-                    })
-                  }}
-                >
-                  忘记密码？
-                </Button>
-              </div>
+              </FadeSlideIn>
 
               {/* 登录按钮 */}
-              <Field>
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full"
-                  size="lg"
-                >
-                  {isLoading ? (
-                    <>
-                      <span className="mr-2">登录中</span>
-                      <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                    </>
-                  ) : (
-                    "登录"
-                  )}
-                </Button>
-              </Field>
+              <FadeSlideIn delay={0.4}>
+                <Field>
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {isLoading ? (
+                      <>
+                        <span className="mr-2">登录中</span>
+                        <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                      </>
+                    ) : (
+                      "登录"
+                    )}
+                  </Button>
+                </Field>
+              </FadeSlideIn>
             </div>
             )}
           </div>
@@ -365,26 +384,30 @@ export function LoginForm({
             <div className="space-y-3">
 
             {/* 注册提示 */}
-            <div className="text-center text-sm text-zinc-400">
-              还没有账号？
-              <Button
-                type="button"
-                variant="link"
-                className="text-zinc-400 hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
-                onClick={() => {
-                  toast.info("申请开通账号", {
-                    description: "请联系管理员开通账号权限",
-                  })
-                }}
-              >
-                申请开通
-              </Button>
-            </div>
+            <FadeSlideIn delay={0.5}>
+              <div className="text-center text-sm text-zinc-400">
+                还没有账号？
+                <Button
+                  type="button"
+                  variant="link"
+                  className="text-zinc-400 hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
+                  onClick={() => {
+                    toast.info("申请开通账号", {
+                      description: "请联系管理员开通账号权限",
+                    })
+                  }}
+                >
+                  申请开通
+                </Button>
+              </div>
+            </FadeSlideIn>
 
             {/* 版本信息 */}
-            <div className="text-center text-xs text-zinc-600">
-              {config?.system_name || "EasySSH"} v1.0.0 | © 2025 All rights reserved
-            </div>
+            <FadeSlideIn delay={0.6}>
+              <div className="text-center text-xs text-zinc-600">
+                {config?.system_name || "EasySSH"} v1.0.0 | © 2025 All rights reserved
+              </div>
+            </FadeSlideIn>
           </div>
           )}
         </FieldGroup>
