@@ -80,6 +80,7 @@ func main() {
 		&sshsession.SSHSession{},     // SSH会话表
 		&filetransfer.FileTransfer{}, // 文件传输表
 		&settings.Settings{},         // 系统设置表
+		&settings.IPWhitelist{},      // IP白名单表
 		&sshkey.SSHKey{},             // SSH密钥表
 		&tabsession.TabSessionSettings{}, // 标签/会话设置表
 	); err != nil {
@@ -102,6 +103,10 @@ func main() {
 	// 系统设置服务（需要在邮件服务之前初始化）
 	settingsRepo := settings.NewRepository(database)
 	settingsService := settings.NewService(settingsRepo)
+
+	// IP 白名单服务
+	ipWhitelistRepo := settings.NewIPWhitelistRepository(database)
+	ipWhitelistService := settings.NewIPWhitelistService(ipWhitelistRepo)
 
 	// 标签/会话配置服务
 	tabSessionRepo := tabsession.NewRepository(database)
@@ -211,7 +216,7 @@ func main() {
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	userHandler := rest.NewUserHandler(userService)
-	settingsHandler := rest.NewSettingsHandler(settingsService, tabSessionService)
+	settingsHandler := rest.NewSettingsHandler(settingsService, ipWhitelistService, tabSessionService)
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 	avatarHandler := rest.NewAvatarHandler()
 
@@ -224,6 +229,7 @@ func main() {
 	r.Use(middleware.RequestID())                                    // 请求 ID
 	r.Use(middleware.CORS())                                         // 跨域
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
+	r.Use(middleware.OptionalIPWhitelistMiddleware(ipWhitelistService)) // IP 白名单验证（可选）
 
 	// API v1 路由组
 	v1 := r.Group("/api/v1")

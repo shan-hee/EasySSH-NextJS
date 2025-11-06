@@ -8,13 +8,15 @@ import (
 
 // TabSessionSettings 标签/会话配置模型
 type TabSessionSettings struct {
-	ID               uint           `gorm:"primarykey" json:"id"`
-	MaxTabs          int            `gorm:"not null;default:50;check:max_tabs > 0 AND max_tabs <= 200" json:"max_tabs"`
-	InactiveMinutes  int            `gorm:"not null;default:60;check:inactive_minutes >= 5 AND inactive_minutes <= 1440" json:"inactive_minutes"`
-	Hibernate        bool           `gorm:"not null;default:true" json:"hibernate"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
+	ID              uint           `gorm:"primarykey" json:"id"`
+	MaxTabs         int            `gorm:"not null;default:50;check:max_tabs > 0 AND max_tabs <= 200" json:"max_tabs"`
+	InactiveMinutes int            `gorm:"not null;default:60;check:inactive_minutes >= 5 AND inactive_minutes <= 1440" json:"inactive_minutes"`
+	Hibernate       bool           `gorm:"not null;default:true" json:"hibernate"`
+	SessionTimeout  int            `gorm:"not null;default:30;check:session_timeout >= 5 AND session_timeout <= 1440" json:"session_timeout"`    // 会话超时时间（分钟）
+	RememberLogin   bool           `gorm:"not null;default:true" json:"remember_login"`                                                            // 是否允许记住登录状态
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // TableName 指定表名
@@ -28,6 +30,8 @@ func DefaultTabSessionSettings() *TabSessionSettings {
 		MaxTabs:         50,
 		InactiveMinutes: 60,
 		Hibernate:       true,
+		SessionTimeout:  30,
+		RememberLogin:   true,
 	}
 }
 
@@ -39,6 +43,9 @@ func (t *TabSessionSettings) Validate() error {
 	if t.InactiveMinutes < 5 || t.InactiveMinutes > 1440 {
 		return ErrInvalidInactiveMinutes
 	}
+	if t.SessionTimeout < 5 || t.SessionTimeout > 1440 {
+		return ErrInvalidSessionTimeout
+	}
 	return nil
 }
 
@@ -46,6 +53,7 @@ func (t *TabSessionSettings) Validate() error {
 var (
 	ErrInvalidMaxTabs         = NewValidationError("max_tabs", "最大标签页数必须在1-200之间")
 	ErrInvalidInactiveMinutes = NewValidationError("inactive_minutes", "非活动时间必须在5-1440分钟之间")
+	ErrInvalidSessionTimeout  = NewValidationError("session_timeout", "会话超时时间必须在5-1440分钟之间")
 )
 
 // ValidationError 验证错误

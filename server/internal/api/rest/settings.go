@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/easyssh/server/internal/domain/settings"
@@ -10,15 +11,17 @@ import (
 
 // SettingsHandler 系统设置处理器
 type SettingsHandler struct {
-	settingsService   settings.Service
-	tabSessionService tabsession.Service
+	settingsService        settings.Service
+	ipWhitelistService     settings.IPWhitelistService
+	tabSessionService      tabsession.Service
 }
 
 // NewSettingsHandler 创建设置处理器
-func NewSettingsHandler(settingsService settings.Service, tabSessionService tabsession.Service) *SettingsHandler {
+func NewSettingsHandler(settingsService settings.Service, ipWhitelistService settings.IPWhitelistService, tabSessionService tabsession.Service) *SettingsHandler {
 	return &SettingsHandler{
-		settingsService:   settingsService,
-		tabSessionService: tabSessionService,
+		settingsService:       settingsService,
+		ipWhitelistService:    ipWhitelistService,
+		tabSessionService:     tabSessionService,
 	}
 }
 
@@ -53,6 +56,15 @@ func (h *SettingsHandler) RegisterRoutes(r *gin.RouterGroup) {
 		// 标签/会话配置相关
 		settingsGroup.GET("/tabsession", h.GetTabSessionConfig)
 		settingsGroup.POST("/tabsession", h.SaveTabSessionConfig)
+
+		// IP 白名单配置相关
+		settingsGroup.GET("/ip-whitelist", h.GetIPWhitelistConfig)
+		settingsGroup.GET("/ip-whitelist/list", h.GetIPWhitelistList)
+		settingsGroup.POST("/ip-whitelist", h.CreateIPWhitelist)
+		settingsGroup.PUT("/ip-whitelist/:id", h.UpdateIPWhitelist)
+		settingsGroup.DELETE("/ip-whitelist/:id", h.DeleteIPWhitelist)
+		settingsGroup.POST("/ip-whitelist/:id/toggle", h.ToggleIPWhitelist)
+		settingsGroup.POST("/ip-whitelist/check", h.CheckIPAllowed)
 
 		// 通用设置
 		settingsGroup.GET("/:category", h.GetSettingsByCategory)
@@ -511,10 +523,9 @@ func (h *SettingsHandler) SaveSystemConfig(c *gin.Context) {
 
 	config := &settings.SystemConfig{
 		// 基本设置
-		SystemName:        req.SystemName,
-		SystemDescription: req.SystemDescription,
-		SystemLogo:        req.SystemLogo,
-		SystemFavicon:     req.SystemFavicon,
+		SystemName:    req.SystemName,
+		SystemLogo:    req.SystemLogo,
+		SystemFavicon: req.SystemFavicon,
 
 		// 国际化设置
 		DefaultLanguage: req.DefaultLanguage,
@@ -546,6 +557,8 @@ type SaveTabSessionConfigRequest struct {
 	MaxTabs         int  `json:"max_tabs"`
 	InactiveMinutes int  `json:"inactive_minutes"`
 	Hibernate       bool `json:"hibernate"`
+	SessionTimeout  int  `json:"session_timeout"`
+	RememberLogin   bool `json:"remember_login"`
 }
 
 // GetTabSessionConfig 获取标签/会话配置
@@ -584,6 +597,8 @@ func (h *SettingsHandler) SaveTabSessionConfig(c *gin.Context) {
 		MaxTabs:         req.MaxTabs,
 		InactiveMinutes: req.InactiveMinutes,
 		Hibernate:       req.Hibernate,
+		SessionTimeout:  req.SessionTimeout,
+		RememberLogin:   req.RememberLogin,
 	}
 
 	if err := h.tabSessionService.SaveTabSessionConfig(c.Request.Context(), config); err != nil {
@@ -592,4 +607,226 @@ func (h *SettingsHandler) SaveTabSessionConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Tab session configuration saved successfully"})
+}
+
+// === IP 白名单配置相关 ===
+
+// GetIPWhitelistConfigResponse IP 白名单配置响应
+type GetIPWhitelistConfigResponse struct {
+	Config *settings.IPWhitelistConfig `json:"config"`
+}
+
+// CreateIPWhitelistRequest 创建 IP 白名单请求
+type CreateIPWhitelistRequest struct {
+	IPAddress   string `json:"ip_address" binding:"required"`
+	Description string `json:"description"`
+}
+
+// UpdateIPWhitelistRequest 更新 IP 白名单请求
+type UpdateIPWhitelistRequest struct {
+	IPAddress   string `json:"ip_address"`
+	Description string `json:"description"`
+}
+
+// CheckIPRequest 检查 IP 请求
+type CheckIPRequest struct {
+	IP string `json:"ip" binding:"required"`
+}
+
+// CheckIPResponse 检查 IP 响应
+type CheckIPResponse struct {
+	Allowed bool   `json:"allowed"`
+	Message string `json:"message"`
+}
+
+// GetIPWhitelistConfig 获取 IP 白名单配置
+// @Summary 获取 IP 白名单配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetIPWhitelistConfigResponse
+// @Router /api/v1/settings/ip-whitelist [get]
+func (h *SettingsHandler) GetIPWhitelistConfig(c *gin.Context) {
+	config, err := h.ipWhitelistService.GetIPWhitelistConfig()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetIPWhitelistConfigResponse{Config: config})
+}
+
+// GetIPWhitelistList 获取 IP 白名单列表
+// @Summary 获取 IP 白名单列表
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} []settings.IPWhitelist
+// @Router /api/v1/settings/ip-whitelist/list [get]
+func (h *SettingsHandler) GetIPWhitelistList(c *gin.Context) {
+	whitelists, err := h.ipWhitelistService.GetAllIPWhitelists()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, whitelists)
+}
+
+// CreateIPWhitelist 创建 IP 白名单
+// @Summary 创建 IP 白名单
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body CreateIPWhitelistRequest true "IP 白名单"
+// @Success 201 {object} settings.IPWhitelist
+// @Router /api/v1/settings/ip-whitelist [post]
+func (h *SettingsHandler) CreateIPWhitelist(c *gin.Context) {
+	var req CreateIPWhitelistRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// TODO: 从 JWT token 中获取用户 ID
+	var userID uint = 1 // 临时使用固定值
+
+	ipWhitelist := &settings.IPWhitelist{
+		IPAddress:   req.IPAddress,
+		Description: req.Description,
+		Enabled:     true,
+		CreatedBy:   userID,
+	}
+
+	if err := h.ipWhitelistService.CreateIPWhitelist(ipWhitelist); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, ipWhitelist)
+}
+
+// UpdateIPWhitelist 更新 IP 白名单
+// @Summary 更新 IP 白名单
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param id path int true "IP 白名单 ID"
+// @Param request body UpdateIPWhitelistRequest true "IP 白名单"
+// @Success 200 {object} settings.IPWhitelist
+// @Router /api/v1/settings/ip-whitelist/{id} [put]
+func (h *SettingsHandler) UpdateIPWhitelist(c *gin.Context) {
+	idParam := c.Param("id")
+	var id uint
+	if _, err := fmt.Sscanf(idParam, "%d", &id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	var req UpdateIPWhitelistRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	updates := make(map[string]interface{})
+	if req.IPAddress != "" {
+		updates["ip_address"] = req.IPAddress
+	}
+	if req.Description != "" {
+		updates["description"] = req.Description
+	}
+
+	if err := h.ipWhitelistService.UpdateIPWhitelist(id, updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	whitelist, err := h.ipWhitelistService.GetIPWhitelistByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, whitelist)
+}
+
+// DeleteIPWhitelist 删除 IP 白名单
+// @Summary 删除 IP 白名单
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param id path int true "IP 白名单 ID"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/ip-whitelist/{id} [delete]
+func (h *SettingsHandler) DeleteIPWhitelist(c *gin.Context) {
+	idParam := c.Param("id")
+	var id uint
+	if _, err := fmt.Sscanf(idParam, "%d", &id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	if err := h.ipWhitelistService.DeleteIPWhitelist(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "IP whitelist deleted successfully"})
+}
+
+// ToggleIPWhitelist 切换 IP 白名单状态
+// @Summary 切换 IP 白名单状态
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param id path int true "IP 白名单 ID"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/ip-whitelist/{id}/toggle [post]
+func (h *SettingsHandler) ToggleIPWhitelist(c *gin.Context) {
+	idParam := c.Param("id")
+	var id uint
+	if _, err := fmt.Sscanf(idParam, "%d", &id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	if err := h.ipWhitelistService.ToggleIPWhitelist(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "IP whitelist status toggled successfully"})
+}
+
+// CheckIPAllowed 检查 IP 是否被允许
+// @Summary 检查 IP 是否被允许
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body CheckIPRequest true "IP 地址"
+// @Success 200 {object} CheckIPResponse
+// @Router /api/v1/settings/ip-whitelist/check [post]
+func (h *SettingsHandler) CheckIPAllowed(c *gin.Context) {
+	var req CheckIPRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	allowed, err := h.ipWhitelistService.IsIPAllowed(req.IP)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	message := "IP is allowed"
+	if !allowed {
+		message = "IP is not in whitelist"
+	}
+
+	c.JSON(http.StatusOK, CheckIPResponse{
+		Allowed: allowed,
+		Message: message,
+	})
 }

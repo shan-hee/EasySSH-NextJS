@@ -70,9 +70,11 @@ const (
 
 // 标签/会话配置相关的键名
 const (
-	KeyTabMaxTabs        = "tabsession.max_tabs"
+	KeyTabMaxTabs         = "tabsession.max_tabs"
 	KeyTabInactiveMinutes = "tabsession.inactive_minutes"
-	KeyTabHibernate      = "tabsession.hibernate"
+	KeyTabHibernate       = "tabsession.hibernate"
+	KeySessionTimeout     = "tabsession.session_timeout"     // 会话超时时间（分钟）
+	KeyRememberLogin      = "tabsession.remember_login"      // 是否允许记住登录状态
 )
 
 // SMTPConfig SMTP 配置结构
@@ -127,7 +129,9 @@ type SystemConfig struct {
 
 // TabSessionConfig 标签/会话配置结构
 type TabSessionConfig struct {
-	MaxTabs        int  `json:"max_tabs"`         // 最大标签页数
-	InactiveMinutes int  `json:"inactive_minutes"` // 非活动断开提醒时间（分钟）
-	Hibernate      bool `json:"hibernate"`       // 是否启用后台标签页休眠
+	MaxTabs         int  `json:"max_tabs"`          // 最大标签页数
+	InactiveMinutes int  `json:"inactive_minutes"`  // 非活动断开提醒时间（分钟）
+	Hibernate       bool `json:"hibernate"`         // 是否启用后台标签页休眠
+	SessionTimeout  int  `json:"session_timeout"`   // 会话超时时间（分钟）
+	RememberLogin   bool `json:"remember_login"`    // 是否允许记住登录状态
 }

@@ -102,6 +102,8 @@ export interface TabSessionConfig {
   max_tabs: number
   inactive_minutes: number
   hibernate: boolean
+  session_timeout: number
+  remember_login: boolean
 }
 
 /**
@@ -109,6 +111,74 @@ export interface TabSessionConfig {
  */
 export interface GetTabSessionConfigResponse {
   config: TabSessionConfig
+}
+
+/**
+ * IP 白名单项
+ */
+export interface IPWhitelist {
+  id: number
+  ip_address: string
+  description: string
+  enabled: boolean
+  created_by: number
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * IP 白名单配置
+ */
+export interface IPWhitelistConfig {
+  enabled: boolean
+  ips: IPWhitelistItem[]
+}
+
+/**
+ * IP 白名单项（简化版）
+ */
+export interface IPWhitelistItem {
+  ip_address: string
+  description: string
+  enabled: boolean
+}
+
+/**
+ * 获取 IP 白名单配置响应
+ */
+export interface GetIPWhitelistConfigResponse {
+  config: IPWhitelistConfig
+}
+
+/**
+ * 创建 IP 白名单请求
+ */
+export interface CreateIPWhitelistRequest {
+  ip_address: string
+  description: string
+}
+
+/**
+ * 更新 IP 白名单请求
+ */
+export interface UpdateIPWhitelistRequest {
+  ip_address?: string
+  description?: string
+}
+
+/**
+ * 检查 IP 请求
+ */
+export interface CheckIPRequest {
+  ip: string
+}
+
+/**
+ * 检查 IP 响应
+ */
+export interface CheckIPResponse {
+  allowed: boolean
+  message: string
 }
 
 /**
@@ -288,6 +358,82 @@ export const settingsApi = {
       method: "POST",
       token,
       body: config,
+    })
+  },
+
+  // === IP 白名单相关 API ===
+
+  /**
+   * 获取 IP 白名单配置
+   */
+  async getIPWhitelistConfig(token: string): Promise<IPWhitelistConfig> {
+    const response = await apiFetch<GetIPWhitelistConfigResponse>("/settings/ip-whitelist", {
+      method: "GET",
+      token,
+    })
+    return response.config
+  },
+
+  /**
+   * 获取 IP 白名单列表
+   */
+  async getIPWhitelistList(token: string): Promise<IPWhitelist[]> {
+    return apiFetch<IPWhitelist[]>("/settings/ip-whitelist/list", {
+      method: "GET",
+      token,
+    })
+  },
+
+  /**
+   * 创建 IP 白名单项
+   */
+  async createIPWhitelist(token: string, request: CreateIPWhitelistRequest): Promise<IPWhitelist> {
+    return apiFetch<IPWhitelist>("/settings/ip-whitelist", {
+      method: "POST",
+      token,
+      body: request,
+    })
+  },
+
+  /**
+   * 更新 IP 白名单项
+   */
+  async updateIPWhitelist(token: string, id: number, request: UpdateIPWhitelistRequest): Promise<IPWhitelist> {
+    return apiFetch<IPWhitelist>(`/settings/ip-whitelist/${id}`, {
+      method: "PUT",
+      token,
+      body: request,
+    })
+  },
+
+  /**
+   * 删除 IP 白名单项
+   */
+  async deleteIPWhitelist(token: string, id: number): Promise<void> {
+    return apiFetch<void>(`/settings/ip-whitelist/${id}`, {
+      method: "DELETE",
+      token,
+    })
+  },
+
+  /**
+   * 切换 IP 白名单项状态
+   */
+  async toggleIPWhitelist(token: string, id: number): Promise<void> {
+    return apiFetch<void>(`/settings/ip-whitelist/${id}/toggle`, {
+      method: "POST",
+      token,
+    })
+  },
+
+  /**
+   * 检查 IP 是否被允许
+   */
+  async checkIPAllowed(token: string, request: CheckIPRequest): Promise<CheckIPResponse> {
+    return apiFetch<CheckIPResponse>("/settings/ip-whitelist/check", {
+      method: "POST",
+      token,
+      body: request,
     })
   },
 }
