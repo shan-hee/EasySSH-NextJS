@@ -55,7 +55,7 @@ import {
  AlertTriangle,
  Zap,
  Copy,
- Server,
+ Server as ServerIcon,
  RefreshCw,
  Loader2,
  Terminal,
@@ -512,7 +512,7 @@ export default function AutomationSchedulesPage() {
  case "batch":
  return <Zap className="h-4 w-4" />
  default:
- return <Server className="h-4 w-4" />
+ return <ServerIcon className="h-4 w-4" />
  }
  }
 

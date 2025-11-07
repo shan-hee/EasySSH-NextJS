@@ -91,7 +91,7 @@ export default function TerminalPage() {
  port: server.port,
  username: server.username,
  isConnected: true,
- status: "connected",
+ status: "connected" as const,
  group: server.group,
  tags: server.tags,
  }

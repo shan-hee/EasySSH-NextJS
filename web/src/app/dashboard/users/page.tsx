@@ -175,7 +175,7 @@ export default function UsersPage() {
     setEditUser({
       username: user.username,
       email: user.email,
-      role: user.role,
+      role: user.role as UserRole,
     })
     setIsEditDialogOpen(true)
   }
@@ -391,7 +391,7 @@ export default function UsersPage() {
           {/* DataTable */}
           <DataTable
             data={users}
-            columns={columns}
+            columns={columns as any}
             loading={refreshing}
             emptyMessage="暂无用户"
             enableRowSelection={true}

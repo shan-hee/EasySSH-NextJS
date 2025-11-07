@@ -122,7 +122,6 @@ export default function ServersHistoryPage() {
       duration: session.duration,
       bytesSent: session.bytes_sent,
       bytesReceived: session.bytes_received,
-      commandsCount: session.commands_count,
       errorMessage: session.error_message,
       exportTime: new Date().toISOString(),
     }

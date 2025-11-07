@@ -111,11 +111,6 @@ export default function SettingsGeneralPage() {
       return
     }
 
-    if (settings.system_description.length > 500) {
-      toast.error("系统描述不能超过500个字符")
-      return
-    }
-
     if (settings.default_page_size < 10 || settings.default_page_size > 100) {
       toast.error("默认分页大小必须在10-100之间")
       return

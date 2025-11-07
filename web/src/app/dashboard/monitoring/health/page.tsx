@@ -134,8 +134,8 @@ export default function MonitoringHealthPage() {
  })
 
  // 3. 磁盘检查
- const totalDiskUsed = diskInfo.disks.reduce((sum, disk) => sum + disk.used, 0)
- const totalDiskSize = diskInfo.disks.reduce((sum, disk) => sum + disk.total, 0)
+ const totalDiskUsed = diskInfo.reduce((sum, disk) => sum + disk.used, 0)
+ const totalDiskSize = diskInfo.reduce((sum, disk) => sum + disk.total, 0)
  const diskUsagePercent = totalDiskSize > 0 ? (totalDiskUsed / totalDiskSize) * 100 : 0
  const diskStatus =
  diskUsagePercent < 70 ? "healthy" :
@@ -161,14 +161,14 @@ export default function MonitoringHealthPage() {
  })
 
  // 5. 网络检查（检查是否有网络接口）
- const hasActiveNetwork = networkInfo.interfaces.some(
+ const hasActiveNetwork = networkInfo.some(
  iface => iface.bytes_sent > 0 || iface.bytes_recv > 0
  )
  checks.push({
  name: "网络",
  status: hasActiveNetwork ? "healthy" : "warning",
  value: hasActiveNetwork ? "活跃" : "未检测到流量",
- details: `${networkInfo.interfaces.length} 个接口`,
+ details: `${networkInfo.length} 个接口`,
  icon: <Wifi className="h-4 w-4" />
  })
 

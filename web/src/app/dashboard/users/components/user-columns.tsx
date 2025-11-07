@@ -67,7 +67,7 @@ interface UserColumnsOptions {
   onChangePassword?: (userId: string) => void
 }
 
-export function createUserColumns(options?: UserColumnsOptions): ColumnDef<User>[] {
+export function createUserColumns(options?: UserColumnsOptions): ColumnDef<User, unknown>[] {
   return [
     // 多选列
     {

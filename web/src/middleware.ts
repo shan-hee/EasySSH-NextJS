@@ -9,12 +9,6 @@ const getApiBaseUrl = () => {
     : "http://localhost:8521/api/v1"
 }
 
-// 公开路由(不需要认证)
-const PUBLIC_ROUTES = ["/login", "/setup"]
-
-// 受保护路由(需要认证)
-const PROTECTED_ROUTES = ["/dashboard"]
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 

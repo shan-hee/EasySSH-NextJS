@@ -144,7 +144,6 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
   },
 
   setConnection: (serverId: string, state: MonitorConnectionState) => {
-    const currentRefCount = get().refCount.get(serverId) || 0
     set((storeState) => {
       const newConnections = new Map(storeState.connections)
       newConnections.set(serverId, state)

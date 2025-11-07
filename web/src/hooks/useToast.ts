@@ -27,7 +27,7 @@ export function useToast() {
       setToasts((prev) => [...prev, newToast]);
 
       // 自动移除
-      if (newToast.duration > 0) {
+      if (newToast.duration && newToast.duration > 0) {
         setTimeout(() => {
           removeToast(id);
         }, newToast.duration);

@@ -682,7 +682,7 @@ export default function SettingsNotificationsPage() {
                             <br />1. 在钉钉群聊中创建自定义机器人
                             <br />2. 复制 Webhook URL 填写到上方
                             <br />3. 如果启用了加签,填写密钥
-                            <br />4. 点击"发送测试消息"验证配置
+                            <br />4. 点击&ldquo;发送测试消息&rdquo;验证配置
                           </p>
                         </div>
                       </>
@@ -748,7 +748,7 @@ export default function SettingsNotificationsPage() {
                             💡 配置步骤:
                             <br />1. 在企业微信群聊中创建群机器人
                             <br />2. 复制 Webhook URL 填写到上方
-                            <br />3. 点击"发送测试消息"验证配置
+                            <br />3. 点击&ldquo;发送测试消息&rdquo;验证配置
                           </p>
                         </div>
                       </>
@@ -840,7 +840,7 @@ export default function SettingsNotificationsPage() {
                             💡 提示:
                             <br />• 系统会将事件通知发送到配置的 URL
                             <br />• 如果配置了密钥,请求头会包含 HMAC-SHA256 签名
-                            <br />• 请求格式: {"{"}"event": "test", "data": {"{...}"}{"}"}
+                            <br />• 请求格式: {`{"event": "test", "data": {...}}`}
                             <br />• 支持自动重试(最多3次)
                           </p>
                         </div>

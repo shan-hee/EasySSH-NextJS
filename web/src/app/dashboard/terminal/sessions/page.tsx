@@ -274,7 +274,7 @@ export default function TerminalSessionsPage() {
                             </div>
                           </TableCell>
                           <TableCell className="font-medium">
-                            {session.commands_count}
+                            N/A
                           </TableCell>
                           <TableCell>
                             <Badge className={statusColors[session.status as keyof typeof statusColors]}>

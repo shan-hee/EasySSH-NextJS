@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/tabs"
 import {
  Play,
- Server,
+ Server as ServerIcon,
  Terminal,
  FileText,
  CheckCircle,
@@ -126,10 +126,10 @@ export default function AutomationBatchPage() {
  setServers(Array.isArray(serversList) ? serversList : [])
  setScripts(Array.isArray(scriptsList) ? scriptsList : [])
  setStatistics({
- total: statsData.total_tasks || statsData.total || 0,
- running: statsData.running_tasks || statsData.running || 0,
- completed: statsData.completed_tasks || statsData.completed || 0,
- failed: statsData.failed_tasks || statsData.failed || 0,
+ total: statsData.total_tasks || 0,
+ running: statsData.running_tasks || 0,
+ completed: statsData.completed_tasks || 0,
+ failed: statsData.failed_tasks || 0,
  })
  } catch (error: any) {
  console.error("加载数据失败:", error)
@@ -424,7 +424,7 @@ export default function AutomationBatchPage() {
  case "script":
  return <Zap className="h-4 w-4" />
  default:
- return <Server className="h-4 w-4" />
+ return <ServerIcon className="h-4 w-4" />
  }
  }
 
@@ -495,7 +495,7 @@ export default function AutomationBatchPage() {
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
  <CardTitle className="text-sm font-medium">总任务数</CardTitle>
- <Server className="h-4 w-4 text-muted-foreground" />
+ <ServerIcon className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold">{statistics.total}</div>
@@ -985,7 +985,7 @@ export default function AutomationBatchPage() {
  <TableRow>
  <TableCell colSpan={8} className="h-32 text-center">
  <div className="flex flex-col items-center justify-center text-muted-foreground">
- <Server className="h-8 w-8 mb-2" />
+ <ServerIcon className="h-8 w-8 mb-2" />
  <p className="text-sm">暂无执行历史</p>
  </div>
  </TableCell>

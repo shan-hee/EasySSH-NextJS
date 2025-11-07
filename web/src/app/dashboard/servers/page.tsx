@@ -241,7 +241,7 @@ export default function ServersPage() {
  limit: 100
  })
 
- let serverList = Array.isArray(response)
+ const serverList = Array.isArray(response)
  ? response
  : (response?.data || [])
 

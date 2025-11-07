@@ -324,7 +324,7 @@ export function WebTerminal({
     key: string
   }
 
-  const shortcutsRef = useRef<{ copy: ParsedShortcut; paste: ParsedShortcut; clear: ParsedShortcut }>()
+  const shortcutsRef = useRef<{ copy: ParsedShortcut; paste: ParsedShortcut; clear: ParsedShortcut } | null>(null)
 
   const parseShortcut = useCallback((shortcut: string): ParsedShortcut => {
     const parts = shortcut.split('+').map((s) => s.trim().toLowerCase())

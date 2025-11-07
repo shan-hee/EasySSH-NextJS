@@ -50,9 +50,10 @@ export function useNetworkLatency(options: UseNetworkLatencyOptions = {}): Netwo
   const { sshLatencyMs = 0, enabled = true, interval = 5000, localLatencyMsOverride } = options;
 
   // 优先使用来自 WS 的 RTT；否则回退到 HTTP HEAD /ping
+  const serverLatency = useServerLatency({ interval, enabled });
   const localLatency = typeof localLatencyMsOverride === 'number'
     ? localLatencyMsOverride
-    : useServerLatency({ interval, enabled });
+    : serverLatency;
 
   // 计算并生成节点数据
   return useMemo(() => {

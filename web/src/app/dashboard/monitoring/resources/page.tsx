@@ -117,13 +117,13 @@ export default function MonitoringResourcesPage() {
  ])
 
  // 计算总磁盘使用情况
- const totalDiskUsed = diskInfo.disks.reduce((sum, disk) => sum + disk.used, 0)
- const totalDiskSize = diskInfo.disks.reduce((sum, disk) => sum + disk.total, 0)
+ const totalDiskUsed = diskInfo.reduce((sum, disk) => sum + disk.used, 0)
+ const totalDiskSize = diskInfo.reduce((sum, disk) => sum + disk.total, 0)
  const diskUsagePercent = totalDiskSize > 0 ? Math.round((totalDiskUsed / totalDiskSize) * 100) : 0
 
  // 计算网络速度（假设取第一个网卡，或者所有网卡的总和）
- const rxSpeed = networkInfo.interfaces.reduce((sum, iface) => sum + (iface.bytes_recv || 0), 0)
- const txSpeed = networkInfo.interfaces.reduce((sum, iface) => sum + (iface.bytes_sent || 0), 0)
+ const rxSpeed = networkInfo.reduce((sum, iface) => sum + (iface.bytes_recv || 0), 0)
+ const txSpeed = networkInfo.reduce((sum, iface) => sum + (iface.bytes_sent || 0), 0)
  const rxFormatted = formatNetworkSpeed(rxSpeed / 60) // 假设是每分钟的数据，除以60得到每秒
  const txFormatted = formatNetworkSpeed(txSpeed / 60)
 

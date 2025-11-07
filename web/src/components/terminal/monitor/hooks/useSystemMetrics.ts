@@ -194,7 +194,7 @@ export function useSystemMetrics() {
   }, []);
 
   // 组装完整数据
-  const metrics: SystemMetrics = useMemo(() => {
+  const metrics = useMemo(() => {
     const currentCPU = cpuHistory[cpuHistory.length - 1]?.usage || 0;
     const currentNet = networkHistory[networkHistory.length - 1] || { download: 0, upload: 0 };
 
