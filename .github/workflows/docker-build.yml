@@ -1,6 +1,26 @@
 name: Docker Build & Push
 
 on:
+  workflow_dispatch:  # 支持手动触发
+    inputs:
+      version:
+        description: '版本号 (可选,留空则使用 VERSION 文件)'
+        required: false
+        type: string
+      update-latest:
+        description: '是否更新 latest 标签'
+        required: true
+        type: boolean
+        default: false
+      platforms:
+        description: '构建平台'
+        required: true
+        type: choice
+        default: 'linux/amd64,linux/arm64'
+        options:
+          - 'linux/amd64,linux/arm64'
+          - 'linux/amd64'
+          - 'linux/arm64'
   push:
     branches:
       - main
@@ -28,17 +48,21 @@ jobs:
       - name: 📥 检出代码
         uses: actions/checkout@v4
 
-      - name: 📖 读取 VERSION 文件
+      - name: 📖 读取/设置版本号
         id: version
         run: |
-          if [ -f "VERSION" ]; then
+          # 优先使用手动输入的版本号
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            echo "使用手动输入的版本号: $VERSION"
+          elif [ -f "VERSION" ]; then
             VERSION=$(cat VERSION | tr -d '[:space:]')
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "版本号: $VERSION"
+            echo "使用 VERSION 文件中的版本号: $VERSION"
           else
-            echo "version=dev" >> $GITHUB_OUTPUT
-            echo "未找到 VERSION 文件，使用默认版本: dev"
+            VERSION="dev"
+            echo "未找到版本号,使用默认版本: dev"
           fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: 🏷️ 提取 Docker 元数据
         id: meta
@@ -46,6 +70,9 @@ jobs:
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
+            # 手动触发 -> v版本号 + 可选的 latest
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.update-latest == 'true' }}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
             # VERSION 文件变化触发 -> latest + v版本号
             type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -81,7 +108,7 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          platforms: ${{ env.PLATFORMS }}
+          platforms: ${{ github.event.inputs.platforms || env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
