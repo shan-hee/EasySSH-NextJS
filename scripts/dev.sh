@@ -60,16 +60,28 @@ if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
         cp .env.example .env
         echo -e "${GREEN}✅ 已从 .env.example 创建 .env${NC}"
-        echo -e "${YELLOW}⚠️  请编辑 .env 文件，配置您的数据库信息${NC}"
-        echo -e "${YELLOW}   配置完成后重新运行此脚本${NC}\n"
-        exit 1
     else
         echo -e "${RED}❌ 错误: .env.example 文件不存在${NC}"
         exit 1
     fi
 fi
 
-echo -e "${GREEN}✅ 配置文件检查通过${NC}\n"
+# 自动调整为开发环境配置
+echo -e "${BLUE}🔧 配置开发环境参数...${NC}"
+
+# 将生产环境配置修改为开发环境
+sed -i 's/^DB_HOST=postgres$/DB_HOST=localhost/' .env
+sed -i 's/^REDIS_HOST=redis$/REDIS_HOST=localhost/' .env
+sed -i 's/^ENV=production$/ENV=development/' .env
+sed -i 's/^GIN_MODE=release$/GIN_MODE=debug/' .env
+sed -i 's/^DB_DEBUG=false$/DB_DEBUG=true/' .env
+
+echo -e "${GREEN}✅ 开发环境配置完成${NC}"
+echo -e "${YELLOW}   DB_HOST: localhost${NC}"
+echo -e "${YELLOW}   REDIS_HOST: localhost${NC}"
+echo -e "${YELLOW}   ENV: development${NC}"
+echo -e "${YELLOW}   GIN_MODE: debug${NC}"
+echo -e "${YELLOW}   DB_DEBUG: true${NC}\n"
 
 # 检查前端依赖
 if [ ! -d "web/node_modules" ]; then

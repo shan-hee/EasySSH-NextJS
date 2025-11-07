@@ -1,5 +1,16 @@
 # EasySSH
 
+<div align="center">
+
+[![Docker Image Version](https://img.shields.io/docker/v/shanheee/easyssh?label=Docker&logo=docker&sort=semver)](https://hub.docker.com/r/shanheee/easyssh)
+[![Docker Image Size](https://img.shields.io/docker/image-size/shanheee/easyssh/latest?logo=docker)](https://hub.docker.com/r/shanheee/easyssh)
+[![Docker Pulls](https://img.shields.io/docker/pulls/shanheee/easyssh?logo=docker)](https://hub.docker.com/r/shanheee/easyssh)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/shan-hee/EasySSH-NextJS/docker-build.yml?branch=main&logo=github)](https://github.com/shan-hee/EasySSH-NextJS/actions)
+[![Security Scan](https://img.shields.io/github/actions/workflow/status/shan-hee/EasySSH-NextJS/docker-build.yml?label=security&logo=github)](https://github.com/shan-hee/EasySSH-NextJS/security)
+[![License](https://img.shields.io/github/license/shan-hee/EasySSH-NextJS)](LICENSE)
+
+</div>
+
 现代化的 SSH 管理平台，提供直观的 Web 界面进行远程服务器管理。
 
 ## 项目架构
@@ -46,27 +57,19 @@ EasySSH-NextJS/
 
 ### 开发环境启动
 
-#### 1. 配置数据库连接
-
-编辑 `server/.env` 配置数据库连接：
+#### 1. 准备配置文件
 
 ```bash
-cd server
+# 复制环境变量模板（如果还没有 .env 文件）
 cp .env.example .env
-# 编辑 .env 文件，配置数据库信息
+
+# 配置数据库密码和安全密钥（可选，开发环境可使用默认值）
+# 如需修改，编辑 .env 文件
 ```
 
-#### 2. 安装依赖
+**说明**：`.env.example` 默认是生产环境配置，但 `dev.sh` 脚本会自动将其调整为开发环境配置（localhost、debug 模式等）。
 
-```bash
-# 安装前端依赖
-cd web
-pnpm install
-
-# 后端依赖会在运行时自动下载
-```
-
-#### 3. 启动服务
+#### 2. 启动服务
 
 ```bash
 # 在项目根目录运行
@@ -75,12 +78,23 @@ pnpm install
 
 脚本会自动：
 - ✅ 检查必需的工具（Go、pnpm）
-- ✅ 检查配置文件是否存在
+- ✅ 创建 .env 文件（如果不存在）
+- ✅ **自动配置开发环境参数**（DB_HOST=localhost, ENV=development 等）
 - ✅ 安装前端依赖（如果需要）
-- ✅ 启动后端服务（端口 8521,支持热重载）
+- ✅ 启动后端服务（端口 8521，支持热重载）
 - ✅ 启动前端服务（端口 8520）
 
-## 如果脚本无法运行，可以手动启动：
+#### 3. 访问应用
+
+- **前端**: http://localhost:8520
+- **后端 API**: http://localhost:8521
+
+按 `Ctrl+C` 停止所有服务。
+
+---
+
+**如果脚本无法运行，可以手动启动：**
+
 ```bash
 # 启动后端（热重载模式）
 cd server
@@ -88,54 +102,88 @@ make dev  # 推荐: 自动使用 Air 热重载,未安装时降级为普通模式
 # 或者直接: /root/go/bin/air
 # 或者无热重载: go run cmd/api/main.go
 ```
+
 ```bash
 # 启动前端
 cd web
 pnpm dev
 ```
 
-#### 4. 访问应用
-
-- **前端**: http://localhost:8520
-- **后端 API**: http://localhost:8521
-
-按 `Ctrl+C` 停止所有服务。
+---
 
 ### 生产环境部署（Docker）
 
+#### 🐳 方式一：使用 Docker Hub 镜像（推荐）
+
+**单容器快速启动**：
+
 ```bash
+docker run -d \
+  --name easyssh \
+  -p 8520:8520 \
+  -p 8521:8521 \
+  -e DB_HOST=your-postgres-host \
+  -e DB_PORT=5432 \
+  -e DB_USER=easyssh \
+  -e DB_PASSWORD=your-secure-password \
+  -e DB_NAME=easyssh \
+  -e REDIS_HOST=your-redis-host \
+  -e REDIS_PORT=6379 \
+  -e JWT_SECRET=your-long-random-secret-at-least-64-chars \
+  -e ENCRYPTION_KEY=your-32-byte-encryption-key-here \
+  shanheee/easyssh:latest
+```
+
+**使用 Docker Compose**（包含数据库）：
+
+```bash
+# 1. 下载配置文件
+wget https://raw.githubusercontent.com/shan-hee/EasySSH-NextJS/main/docker/docker-compose.yml
+wget https://raw.githubusercontent.com/shan-hee/EasySSH-NextJS/main/.env.example
+
+# 2. 配置环境变量并自动生成安全密钥
+cp .env.example .env
+sed -i "s|JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 48)|" .env
+sed -i "s|ENCRYPTION_KEY=.*|ENCRYPTION_KEY=$(openssl rand -base64 24)|" .env
+sed -i "s|DB_PASSWORD=easyssh_dev_password|DB_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=')|g" .env
+
+# 3. 启动所有服务（进入 docker 目录）
 cd docker
 docker compose up -d
 ```
 
+**⚠️ 说明**：上述命令会自动生成安全的随机密钥。如需手动配置其他选项，可编辑 `.env` 文件
+
+**支持的架构**：
+- `linux/amd64` (x86_64)
+- `linux/arm64` (ARM64/Apple Silicon)
+
 **部署后访问**: http://your-server:8520
 
-#### 自定义配置
+---
 
-编辑 `docker/docker-compose.yml` 修改以下配置：
+**升级版本**
 
-1. **修改密码和密钥**（生产环境必改）:
-```yaml
-environment:
-  DB_PASSWORD: your-secure-password        # 数据库密码
-  JWT_SECRET: your-long-random-secret      # JWT 密钥
-  ENCRYPTION_KEY: your-32-byte-key         # 加密密钥
+```bash
+# 进入部署目录
+cd easyssh
+
+# 拉取最新镜像
+docker compose pull
+
+# 重启服务
+docker compose up -d
 ```
 
-2. **使用外部数据库**（可选）:
-```yaml
-environment:
-  DB_HOST: your-postgres-host              # 外部 PostgreSQL 地址
-  DB_PORT: 5432
-  DB_USER: your-username
-  DB_PASSWORD: your-password
-  DB_NAME: your-database
-  REDIS_HOST: your-redis-host              # 外部 Redis 地址
-  REDIS_PORT: 6379
-  REDIS_PASSWORD: your-redis-password
-```
 
-如果使用外部数据库，可以注释掉 `docker-compose.yml` 中的 `postgres` 和 `redis` 服务。
+#### 📦 方式二：从源码构建
+
+```bash
+cd docker
+cp .env.example .env
+vi .env  # 修改配置
+docker compose up -d
+```
 
 #### 常用命令
 

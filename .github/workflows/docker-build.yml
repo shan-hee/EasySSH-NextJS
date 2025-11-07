@@ -1,0 +1,150 @@
+name: Docker Build & Push
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'VERSION'  # 只有 VERSION 文件变化时才触发 main 分支构建
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+env:
+  DOCKER_IMAGE: shanheee/easyssh
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 📖 读取 VERSION 文件
+        id: version
+        run: |
+          if [ -f "VERSION" ]; then
+            VERSION=$(cat VERSION | tr -d '[:space:]')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "版本号: $VERSION"
+          else
+            echo "version=dev" >> $GITHUB_OUTPUT
+            echo "未找到 VERSION 文件，使用默认版本: dev"
+          fi
+
+      - name: 🏷️ 提取 Docker 元数据
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            # VERSION 文件变化触发 -> latest + v版本号
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            # 标签推送 -> v1.0.0
+            type=semver,pattern=v{{version}}
+            # 标签推送 -> v1.0
+            type=semver,pattern=v{{major}}.{{minor}}
+            # 标签推送 -> v1
+            type=semver,pattern=v{{major}}
+            # PR 推送 -> pr-123
+            type=ref,event=pr,prefix=pr-
+
+      - name: 🔧 设置 QEMU (多架构支持)
+        uses: docker/setup-qemu-action@v3
+
+      - name: 🔧 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: 🔐 登录 Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🏗️ 构建并推送 Docker 镜像
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: 🔍 运行 Trivy 安全扫描
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: 📤 上传 Trivy 扫描结果到 GitHub Security
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: 📊 生成扫描摘要
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## 🐳 Docker 镜像构建成功" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**镜像标签:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**支持架构:** ${{ env.PLATFORMS }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**镜像摘要:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 快速启动" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.DOCKER_IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # 安全扫描详细报告 (可选)
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: 🔍 运行 Trivy 漏洞扫描 (详细)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: 🔍 运行 Trivy 配置扫描
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
+          scan-type: 'config'
+          format: 'table'

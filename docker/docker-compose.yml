@@ -4,29 +4,11 @@ services:
   easyssh:
     image: shanheee/easyssh:latest
     container_name: easyssh
-    restart: always
+    restart: unless-stopped
     ports:
       - "8520:8520"
-    environment:
-      DB_HOST: postgres   #your-postgres-host
-      DB_PORT: 5432       #your-postgres-port
-      DB_USER: easyssh    #your-username
-      DB_PASSWORD: easyssh_dev_password #your-password
-      DB_NAME: Easyssh_db  #your-database
-      DB_SSLMODE: disable #disable, require, verify-ca, verify-full
-      REDIS_HOST: redis   #your-redis-host
-      REDIS_PORT: 6379    #your-redis-port
-      REDIS_PASSWORD: ""  #your-redis-password, leave empty if no password
-      REDIS_DB: 0         #redis database index
-      ENV: production
-      GIN_MODE: release
-      # Security Configuration
-      # ⚠️ CRITICAL: Must change these in production!
-      JWT_SECRET: CHANGE-ME-random-secret-at-least-64-chars
-      JWT_ACCESS_EXPIRE_HOURS: 1
-      JWT_REFRESH_EXPIRE_HOURS: 168
-      ENCRYPTION_KEY: CHANGE-ME-32-byte-key-for-encryption
-
+    env_file:
+      - ../.env
     depends_on:
       - postgres
       - redis
@@ -36,11 +18,9 @@ services:
   postgres:
     image: postgres:16
     container_name: Easyssh_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: easyssh
-      POSTGRES_PASSWORD: easyssh_dev_password
-      POSTGRES_DB: Easyssh_db
+    restart: unless-stopped
+    env_file:
+      - ../.env
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     networks:
@@ -49,7 +29,7 @@ services:
   redis:
     image: redis:7
     container_name: Easyssh_redis
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./data/redis:/data
     command: redis-server --appendonly yes

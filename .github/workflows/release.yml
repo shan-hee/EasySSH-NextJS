@@ -1,0 +1,140 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📝 生成 Release Notes
+        id: release_notes
+        run: |
+          # 获取当前标签和前一个标签
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "$CURRENT_TAG^" 2>/dev/null || echo "")
+
+          echo "当前标签: $CURRENT_TAG"
+          echo "前一个标签: $PREVIOUS_TAG"
+
+          # 生成更新日志
+          {
+            echo "## 🚀 更新内容"
+            echo ""
+
+            if [ -z "$PREVIOUS_TAG" ]; then
+              echo "### ✨ 新功能"
+              git log --pretty=format:"- %s (%h)" --no-merges | head -20
+            else
+              # 提取功能变更
+              echo "### ✨ 新功能"
+              git log "$PREVIOUS_TAG..$CURRENT_TAG" --pretty=format:"%s" --no-merges | \
+                grep -iE "^feat|^feature" | sed 's/^feat\(.*\): /- /' | sed 's/^feature\(.*\): /- /' || echo "- 无新功能"
+
+              echo ""
+              echo "### 🐛 Bug 修复"
+              git log "$PREVIOUS_TAG..$CURRENT_TAG" --pretty=format:"%s" --no-merges | \
+                grep -iE "^fix|^bugfix" | sed 's/^fix\(.*\): /- /' | sed 's/^bugfix\(.*\): /- /' || echo "- 无 Bug 修复"
+
+              echo ""
+              echo "### 📚 文档更新"
+              git log "$PREVIOUS_TAG..$CURRENT_TAG" --pretty=format:"%s" --no-merges | \
+                grep -iE "^docs|^doc" | sed 's/^docs\(.*\): /- /' | sed 's/^doc\(.*\): /- /' || echo "- 无文档更新"
+
+              echo ""
+              echo "### ♻️ 代码重构"
+              git log "$PREVIOUS_TAG..$CURRENT_TAG" --pretty=format:"%s" --no-merges | \
+                grep -iE "^refactor" | sed 's/^refactor\(.*\): /- /' || echo "- 无重构"
+
+              echo ""
+              echo "### 🎨 样式优化"
+              git log "$PREVIOUS_TAG..$CURRENT_TAG" --pretty=format:"%s" --no-merges | \
+                grep -iE "^style|^ui" | sed 's/^style\(.*\): /- /' | sed 's/^ui\(.*\): /- /' || echo "- 无样式优化"
+            fi
+
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 🐳 Docker 镜像"
+            echo ""
+            echo "### 拉取镜像"
+            echo '```bash'
+            echo "docker pull shanheee/easyssh:$CURRENT_TAG"
+            echo "docker pull shanheee/easyssh:latest"
+            echo '```'
+            echo ""
+            echo "### 支持架构"
+            echo "- \`linux/amd64\`"
+            echo "- \`linux/arm64\`"
+            echo ""
+            echo "## 📦 快速部署"
+            echo ""
+            echo "### Docker Compose"
+            echo '```bash'
+            echo "# 下载 docker-compose.yml"
+            echo "wget https://raw.githubusercontent.com/shan-hee/EasySSH-NextJS/$CURRENT_TAG/docker/docker-compose.yml"
+            echo ""
+            echo "# 修改配置"
+            echo "vi docker-compose.yml"
+            echo ""
+            echo "# 启动服务"
+            echo "docker-compose up -d"
+            echo '```'
+            echo ""
+            echo "### 单容器运行"
+            echo '```bash'
+            echo "docker run -d \\"
+            echo "  --name easyssh \\"
+            echo "  -p 8520:8520 \\"
+            echo "  -e DB_HOST=your-postgres-host \\"
+            echo "  -e REDIS_HOST=your-redis-host \\"
+            echo "  shanheee/easyssh:$CURRENT_TAG"
+            echo '```'
+            echo ""
+            echo "## 📖 文档"
+            echo ""
+            echo "- [部署文档](https://github.com/shan-hee/EasySSH-NextJS/blob/main/docs/deployment.md)"
+            echo "- [环境变量配置](https://github.com/shan-hee/EasySSH-NextJS/blob/main/.env.example)"
+            echo "- [更新日志](https://github.com/shan-hee/EasySSH-NextJS/releases)"
+            echo ""
+            echo "## 🔒 安全"
+            echo ""
+            echo "所有镜像已通过 Trivy 安全扫描。查看 [Security](https://github.com/shan-hee/EasySSH-NextJS/security) 标签页了解详情。"
+            echo ""
+            echo "---"
+            echo ""
+            echo "**完整更新日志:** [\`$PREVIOUS_TAG...$CURRENT_TAG\`](https://github.com/shan-hee/EasySSH-NextJS/compare/$PREVIOUS_TAG...$CURRENT_TAG)"
+          } > release_notes.md
+
+          cat release_notes.md
+
+      - name: 🎉 创建 GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: false
+          files: |
+            docker/docker-compose.yml
+            .env.example
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📊 生成摘要
+        run: |
+          echo "## ✅ Release 创建成功" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**版本:** \`${GITHUB_REF#refs/tags/}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**查看 Release:** [点击这里](https://github.com/shan-hee/EasySSH-NextJS/releases/tag/${GITHUB_REF#refs/tags/})" >> $GITHUB_STEP_SUMMARY

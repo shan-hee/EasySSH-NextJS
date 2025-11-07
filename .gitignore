@@ -65,8 +65,9 @@ next-env.d.ts
 # Docker & Infrastructure
 # ========================================
 
-# Docker volumes
+# Docker volumes and data
 /docker/volumes/
+/docker/data/
 
 # ========================================
 # IDE & System
