@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { SftpManager } from "@/components/sftp/sftp-manager"
 import { FolderOpen, Server, Plus, ChevronDown, GripVertical } from "lucide-react"
@@ -205,7 +205,7 @@ const SortableSession = React.memo(({ session, children, onCrossSessionDrop }: S
        : React.cloneElement(element, {
            dragHandleListeners: listeners,
            dragHandleAttributes: attributes,
-         }),
+         } as React.Attributes),
      isDomChild: isDom,
    }
  }, [children, listeners, attributes])
@@ -260,11 +260,7 @@ export default function SftpPage() {
  ]
 
  // 加载服务器列表
- useEffect(() => {
- loadServers()
- }, [])
-
- async function loadServers() {
+ const loadServers = useCallback(async () => {
  try {
  setLoading(true)
  const accessToken = localStorage.getItem("easyssh_access_token")
@@ -294,7 +290,11 @@ export default function SftpPage() {
  } finally {
  setLoading(false)
  }
- }
+ }, [router])
+
+ useEffect(() => {
+ loadServers()
+ }, [loadServers])
 
  // 配置拖拽传感器 - 最小化激活约束
  const sensors = useSensors(
@@ -319,8 +319,8 @@ export default function SftpPage() {
 
  if (over && active.id !== over.id) {
  setSessions((items) => {
- const oldIndex = items.findIndex((item) => item.id === active.id)
- const newIndex = items.findIndex((item) => item.id === over.id)
+ const oldIndex = items.findIndex((item) => item.id === String(active.id))
+ const newIndex = items.findIndex((item) => item.id === String(over.id))
 
  return arrayMove(items, oldIndex, newIndex)
  })
@@ -776,7 +776,8 @@ export default function SftpPage() {
  // 虚拟化滚动 - 仅在会话数量 >= 10 时启用
  const useVirtualization = sessions.length >= 10
 
- const virtualizer = useVirtualizer({
+ // 虚拟化对象（预留用于后续优化大量会话的渲染性能）
+ const _virtualizer = useVirtualizer({
  count: sessions.length,
  getScrollElement: () => parentRef.current,
  estimateSize: () => 500, // 估计每个会话项的高度
@@ -784,7 +785,7 @@ export default function SftpPage() {
  })
 
  // 连接中占位符（理论上不会显示，因为新会话直接连接）
- const renderWelcomePage = (_sessionId: string) => (
+ const renderWelcomePage = () => (
  <div className="h-full flex flex-col rounded-xl border bg-card overflow-hidden">
  <div className="flex-1 flex items-center justify-center">
  <div className="text-center space-y-3 py-8">
@@ -1025,7 +1026,7 @@ export default function SftpPage() {
  clipboard={clipboard}
  />
  ) : (
- renderWelcomePage(session.id)
+ renderWelcomePage()
  )}
  </div>
  ))}
@@ -1097,7 +1098,7 @@ export default function SftpPage() {
  clipboard={clipboard}
  />
  ) : (
- renderWelcomePage(session.id)
+ renderWelcomePage()
  )}
  </SortableSession>
  ))}

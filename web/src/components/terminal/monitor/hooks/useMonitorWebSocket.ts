@@ -110,16 +110,17 @@ export function useMonitorWebSocket({
   const subscribe = useMonitorStore(state => state.subscribe)
   const notifySubscribers = useMonitorStore(state => state.notifySubscribers)
 
-  // 从 Store 同步现有连接 - 使用订阅模式
-  // 注意：这里不再直接复制 wsRef，而是通过订阅机制接收数据
-  const existingConnection = getConnection(serverId)
-  const shouldUseSubscription = existingConnection?.ws &&
-    (existingConnection.ws.readyState === WebSocket.CONNECTING ||
-     existingConnection.ws.readyState === WebSocket.OPEN)
-
   // ==================== 订阅监控数据更新 ====================
   useEffect(() => {
-    if (!enabled || !serverId || !shouldUseSubscription) return
+    if (!enabled || !serverId) return
+
+    // 从 Store 同步现有连接 - 使用订阅模式
+    const existingConnection = getConnection(serverId)
+    const shouldUseSubscription = existingConnection?.ws &&
+      (existingConnection.ws.readyState === WebSocket.CONNECTING ||
+       existingConnection.ws.readyState === WebSocket.OPEN)
+
+    if (!shouldUseSubscription) return
 
     // 注册订阅者，接收监控数据更新
     const unsubscribe = subscribe(serverId, (newMetrics) => {
@@ -190,7 +191,7 @@ export function useMonitorWebSocket({
     return () => {
       unsubscribe()
     }
-  }, [enabled, serverId, shouldUseSubscription, subscribe])
+  }, [enabled, serverId, subscribe, getConnection])
 
   // 连接 WebSocket
   const connect = useCallback(() => {

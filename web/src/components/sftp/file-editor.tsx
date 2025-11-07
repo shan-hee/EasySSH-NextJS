@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom"
 import Editor from "@monaco-editor/react"
 import { useTheme } from "next-themes"
@@ -17,8 +17,6 @@ import {
   Minimize2,
   Search,
   Replace,
-  WrapText,
-  Copy,
   FileCode,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -112,7 +110,7 @@ export function FileEditor({
   }
 
   // 保存文件
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     setIsSaving(true)
     try {
       await onSave(content || '')
@@ -120,7 +118,7 @@ export function FileEditor({
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [content, onSave])
 
   // 重置内容
   const handleReset = () => {
@@ -128,27 +126,27 @@ export function FileEditor({
     setIsModified(false)
   }
 
-  // 切换自动换行
-  const toggleWordWrap = () => {
+  // 切换自动换行（预留功能）
+  const _toggleWordWrap = () => {
     setWordWrap(prev => prev === 'on' ? 'off' : 'on')
   }
 
-  // 调整字体大小
-  const increaseFontSize = () => {
+  // 调整字体大小（预留功能）
+  const _increaseFontSize = () => {
     setFontSize(prev => Math.min(prev + 1, 24))
   }
 
-  const decreaseFontSize = () => {
+  const _decreaseFontSize = () => {
     setFontSize(prev => Math.max(prev - 1, 10))
   }
 
-  // 切换小地图
-  const toggleMinimap = () => {
+  // 切换小地图（预留功能）
+  const _toggleMinimap = () => {
     setShowMinimap(prev => !prev)
   }
 
-  // 复制全部内容
-  const copyAll = () => {
+  // 复制全部内容（预留功能）
+  const _copyAll = () => {
     navigator.clipboard.writeText(content)
   }
 
@@ -182,7 +180,7 @@ export function FileEditor({
   }
 
   // 键盘快捷键
-  const handleKeyDown = (e: KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Cmd/Ctrl + S 保存
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault()
@@ -199,14 +197,14 @@ export function FileEditor({
         onClose()
       }
     }
-  }
+  }, [isModified, isFullscreen, handleSave, onClose])
 
   useEffect(() => {
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown)
       return () => window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen, isModified, content, isFullscreen])
+  }, [isOpen, handleKeyDown])
 
   if (!isOpen) return null
 

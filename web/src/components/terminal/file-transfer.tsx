@@ -38,7 +38,6 @@ import {
   Search,
   ArrowLeft,
   Home,
-  MoreHorizontal,
   Eye,
   Edit,
   Copy
@@ -73,7 +72,6 @@ export function FileTransfer({
   onDownload,
   onDelete,
   onCreateFolder,
-  onRename
 }: FileTransferProps) {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState("")

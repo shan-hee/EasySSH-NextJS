@@ -145,7 +145,7 @@ const MessageItem = memo(({ message }: { message: Message }) => (
 
 MessageItem.displayName = 'MessageItem'
 
-export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
+export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
   // ========== 状态管理 ==========
   const [input, setInput] = useState("")
   const [model, setModel] = useState("auto")

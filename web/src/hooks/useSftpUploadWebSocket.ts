@@ -65,6 +65,22 @@ export function useSftpUploadWebSocket({
     enabledRef.current = enabled;
   }, [enabled]);
 
+  // 断开 WebSocket
+  const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    if (wsRef.current) {
+      console.log('[SftpUploadWS] Manually disconnecting:', taskId);
+      wsRef.current.close(1000, 'Client disconnecting');
+      wsRef.current = null;
+    }
+
+    setStatus(WSStatus.DISCONNECTED);
+  }, [taskId]);
+
   // 连接 WebSocket
   const connect = useCallback(() => {
     // 如果已经连接或正在连接，直接返回
@@ -164,23 +180,7 @@ export function useSftpUploadWebSocket({
       setStatus(WSStatus.ERROR);
       onError?.('Failed to create WebSocket connection');
     }
-  }, [taskId, onProgress, onComplete, onError]);
-
-  // 断开 WebSocket
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (wsRef.current) {
-      console.log('[SftpUploadWS] Manually disconnecting:', taskId);
-      wsRef.current.close(1000, 'Client disconnecting');
-      wsRef.current = null;
-    }
-
-    setStatus(WSStatus.DISCONNECTED);
-  }, [taskId]);
+  }, [taskId, onProgress, onComplete, onError, disconnect]);
 
   // 挂载和卸载处理
   useEffect(() => {

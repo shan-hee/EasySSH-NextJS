@@ -15,6 +15,10 @@ export interface ToastMessage {
 export function useToast() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   const showToast = useCallback(
     (toast: Omit<ToastMessage, 'id'>) => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -35,12 +39,8 @@ export function useToast() {
 
       return id;
     },
-    []
+    [removeToast]
   );
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
 
   const success = useCallback(
     (title: string, description?: string) => {

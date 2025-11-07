@@ -412,8 +412,8 @@ export default function ServersPage() {
  }
 
  // 拖拽开始
- const handleDragStart = (event: { active: { id: number } }) => {
- const server = servers.find(s => s.id === event.active.id)
+ const handleDragStart = (event: { active: { id: string | number } }) => {
+ const server = servers.find(s => s.id === String(event.active.id))
  setDraggedServer(server || null)
  }
 
@@ -424,8 +424,8 @@ export default function ServersPage() {
 
  if (!over || active.id === over.id) return
 
- const oldIndex = servers.findIndex(s => s.id === active.id)
- const newIndex = servers.findIndex(s => s.id === over.id)
+ const oldIndex = servers.findIndex(s => s.id === String(active.id))
+ const newIndex = servers.findIndex(s => s.id === String(over.id))
 
  if (oldIndex !== -1 && newIndex !== -1) {
  const newOrder = arrayMove(servers, oldIndex, newIndex)

@@ -47,8 +47,6 @@ import {
   Copy,
   FolderPlus,
   ChevronRight,
-  HardDrive,
-  Globe,
   Activity,
   XCircle,
   X,
@@ -196,7 +194,7 @@ export function SftpManager(props: SftpManagerProps) {
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [isDragging, setIsDragging] = useState(false)
-  const [dragCounter, setDragCounter] = useState(0)
+  const [_dragCounter, setDragCounter] = useState(0)
   // 视图模式：根据上下文 + 本地偏好初始化
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window !== 'undefined') {
@@ -478,7 +476,7 @@ export function SftpManager(props: SftpManagerProps) {
           return
         }
       }
-    } catch (error) {
+    } catch {
       // 不是JSON数据,继续处理本会话拖拽
     }
 
@@ -499,17 +497,17 @@ export function SftpManager(props: SftpManagerProps) {
     setDraggedFileName(null)
   }
 
-  // 文件拖拽处理（用于拖入文件夹）
-  const handleFileDragStart = (fileName: string) => {
+  // 文件拖拽处理（用于拖入文件夹）- 预留功能
+  const _handleFileDragStart = (fileName: string) => {
     setDraggedFileName(fileName)
   }
 
-  const handleFileDragEnd = () => {
+  const _handleFileDragEnd = () => {
     setDraggedFileName(null)
     setDragOverFolder(null)
   }
 
-  const handleFileDragOver = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", targetIndex: number) => {
+  const _handleFileDragOver = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", _targetIndex: number) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -526,16 +524,16 @@ export function SftpManager(props: SftpManagerProps) {
     } else {
       // 如果目标是文件，显示插入位置（用于排序）
       setDragOverFolder(null)
-      setDragOverIndex(targetIndex)
+      setDragOverIndex(_targetIndex)
     }
   }
 
-  const handleFileDragLeave = () => {
+  const _handleFileDragLeave = () => {
     setDragOverFolder(null)
     setDragOverIndex(null)
   }
 
-  const handleFileDrop = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", targetIndex: number) => {
+  const _handleFileDrop = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", _targetIndex: number) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -634,7 +632,7 @@ export function SftpManager(props: SftpManagerProps) {
           return
         }
       }
-    } catch (error) {
+    } catch {
       // 不是JSON数据,继续检查其他类型
     }
 
@@ -673,13 +671,13 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 完成重命名
-  const finishRename = () => {
+  const finishRename = useCallback(() => {
     if (editingFile && editingFileName.trim() && editingFileName !== editingFile) {
       onRename(editingFile, editingFileName.trim())
     }
     setEditingFile(null)
     setEditingFileName("")
-  }
+  }, [editingFile, editingFileName, onRename])
 
   // 取消重命名
   const cancelRename = () => {
@@ -713,7 +711,31 @@ export function SftpManager(props: SftpManagerProps) {
       // 其他情况立即完成
       blurTimeoutRef.current = setTimeout(() => finishRename(), 50)
     }
-  }, [])
+  }, [finishRename])
+
+  // 完成创建
+  const finishCreate = useCallback(async () => {
+    if (editingFileName.trim()) {
+      if (creatingNew === "folder") {
+        onCreateFolder(editingFileName.trim())
+      } else if (creatingNew === "file") {
+        // 创建空文件
+        if (onCreateFile) {
+          onCreateFile(editingFileName.trim())
+        } else if (onSaveFile) {
+          // 回退方案:使用saveFile创建空文件
+          try {
+            await onSaveFile(editingFileName.trim(), "")
+            onRefresh()
+          } catch (error) {
+            console.error("创建文件失败:", error)
+          }
+        }
+      }
+    }
+    setCreatingNew(null)
+    setEditingFileName("")
+  }, [editingFileName, creatingNew, onCreateFolder, onCreateFile, onSaveFile, onRefresh])
 
   // 延迟处理创建失焦
   const handleCreateBlur = useCallback((e: React.FocusEvent) => {
@@ -737,37 +759,13 @@ export function SftpManager(props: SftpManagerProps) {
     } else {
       blurTimeoutRef.current = setTimeout(() => finishCreate(), 50)
     }
-  }, [])
+  }, [finishCreate])
 
   // 开始创建新文件/文件夹
   const startCreateNew = (type: "file" | "folder") => {
     setCreatingNew(type)
     const newName = type === "folder" ? "新建文件夹" : "新建文件.txt"
     setEditingFileName(newName)
-  }
-
-  // 完成创建
-  const finishCreate = async () => {
-    if (editingFileName.trim()) {
-      if (creatingNew === "folder") {
-        onCreateFolder(editingFileName.trim())
-      } else if (creatingNew === "file") {
-        // 创建空文件
-        if (onCreateFile) {
-          onCreateFile(editingFileName.trim())
-        } else if (onSaveFile) {
-          // 回退方案:使用saveFile创建空文件
-          try {
-            await onSaveFile(editingFileName.trim(), "")
-            onRefresh()
-          } catch (error) {
-            console.error("创建文件失败:", error)
-          }
-        }
-      }
-    }
-    setCreatingNew(null)
-    setEditingFileName("")
   }
 
   // 取消创建
@@ -830,18 +828,18 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 批量下载 - 移除内部进度管理
-  const handleBatchDownload = () => {
+  const handleBatchDownload = useCallback(() => {
     selectedFiles.forEach(fileName => {
       onDownload(fileName)
     })
     setSelectedFiles([])
-  }
+  }, [selectedFiles, onDownload])
 
   // 批量删除
-  const handleBatchDelete = () => {
+  const handleBatchDelete = useCallback(() => {
     selectedFiles.forEach(fileName => onDelete(fileName))
     setSelectedFiles([])
-  }
+  }, [selectedFiles, onDelete])
 
   // 清除已完成任务 - 使用外部传入的处理函数
   const handleClearCompleted = () => {
@@ -945,6 +943,9 @@ export function SftpManager(props: SftpManagerProps) {
     onCopyFiles,
     onPasteFiles,
     onRefresh,
+    handleBatchDelete,
+    handleBatchDownload,
+    handleSelectAll,
   ])
 
   // 获取文件类型信息（用于 3D File 组件）
@@ -1030,8 +1031,8 @@ export function SftpManager(props: SftpManagerProps) {
     return <FileText className="h-4 w-4 text-muted-foreground" />
   }
 
-  // 文件大小格式化
-  const formatFileSize = (bytes: number): string => {
+  // 文件大小格式化（预留功能）
+  const _formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 B"
     const k = 1024
     const sizes = ["B", "KB", "MB", "GB", "TB"]
@@ -1580,7 +1581,7 @@ export function SftpManager(props: SftpManagerProps) {
               </div>
             )}
 
-            {filteredFiles.map((file, index) => {
+            {filteredFiles.map((file) => {
               const isSelected = selectedFiles.includes(file.name)
               const isEditing = editingFile === file.name
               const isDraggedOver = dragOverFolder === file.name
@@ -1781,7 +1782,7 @@ export function SftpManager(props: SftpManagerProps) {
                 </TableRow>
               )}
 
-              {filteredFiles.map((file, index) => {
+              {filteredFiles.map((file) => {
                 const isDraggedOver = dragOverFolder === file.name
                 return (
                   <TableRow

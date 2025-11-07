@@ -76,6 +76,34 @@ import * as sshKeysApi from "@/lib/api/ssh-keys"
 import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
 
+/**
+ * 从错误对象安全提取错误消息
+ */
+function getErrorMessage(error: unknown, defaultMessage = "操作失败，请重试"): string {
+  if (error && typeof error === 'object') {
+    // 检查 error.detail
+    if ('detail' in error) {
+      const detail = error.detail
+      if (typeof detail === 'string') {
+        return detail
+      }
+      if (detail && typeof detail === 'object') {
+        if ('message' in detail && typeof detail.message === 'string') {
+          return detail.message
+        }
+        if ('error' in detail && typeof detail.error === 'string') {
+          return detail.error
+        }
+      }
+    }
+    // 检查 error.message
+    if ('message' in error && typeof error.message === 'string') {
+      return error.message
+    }
+  }
+  return defaultMessage
+}
+
 const data = {
   nav: [
     { name: "个人信息", icon: User },
@@ -354,23 +382,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       await refreshUser()
       setAvatarFile(null) // 清除文件选择状态
       toast.success("个人信息已保存")
-    } catch (error: any) {
-      // 获取后端返回的详细错误信息
-      let errorMessage = "保存失败，请重试"
-
-      if (error?.detail) {
-        if (typeof error.detail === 'string') {
-          errorMessage = error.detail
-        } else if (error.detail.message) {
-          errorMessage = error.detail.message
-        } else if (error.detail.error) {
-          errorMessage = error.detail.error
-        }
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "保存失败，请重试"))
     } finally {
       setProfileLoading(false)
     }
@@ -419,28 +432,15 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setTimeout(() => {
         logout()
       }, 2000)
-    } catch (error: any) {
-      // 获取后端返回的详细错误信息
-      let errorMessage = "修改密码失败"
+    } catch (error: unknown) {
+      // 获取错误消息并进行特殊翻译
+      let errorMessage = getErrorMessage(error, "修改密码失败")
 
-      if (error?.detail) {
-        if (typeof error.detail === 'string') {
-          errorMessage = error.detail
-        } else if (error.detail.message) {
-          // 翻译常见的英文错误信息
-          const msg = error.detail.message
-          if (msg === 'invalid old password') {
-            errorMessage = "当前密码错误，请检查后重试"
-          } else if (msg.includes('password must be at least')) {
-            errorMessage = "新密码长度不足，至少需要6位"
-          } else {
-            errorMessage = error.detail.message
-          }
-        } else if (error.detail.error) {
-          errorMessage = error.detail.error
-        }
-      } else if (error.message) {
-        errorMessage = error.message
+      // 翻译常见的英文错误信息
+      if (errorMessage === 'invalid old password') {
+        errorMessage = "当前密码错误，请检查后重试"
+      } else if (errorMessage.includes('password must be at least')) {
+        errorMessage = "新密码长度不足，至少需要6位"
       }
 
       toast.error(errorMessage)
@@ -464,12 +464,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setTotpSecret(response.secret)
       setQrCodeDialogOpen(true)
       toast.success("请使用认证应用扫描二维码")
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.detail?.error || error?.message || "生成 2FA Secret 失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "生成 2FA Secret 失败"))
     } finally {
       setTwoFactorLoading(false)
     }
@@ -497,12 +493,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setVerificationCode("")
       await refreshUser()
       toast.success("双因子认证已启用")
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.detail?.error || error?.message || "启用失败，请检查验证码"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "启用失败，请检查验证码"))
     } finally {
       setTwoFactorLoading(false)
     }
@@ -535,12 +527,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setDisableCode("")
       await refreshUser()
       toast.success("双因子认证已禁用")
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.detail?.error || error?.message || "禁用失败，请检查验证码"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "禁用失败，请检查验证码"))
     } finally {
       setTwoFactorLoading(false)
     }
@@ -577,12 +565,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     try {
       const response = await sessionsApi.list(token)
       setSessions(response.sessions || [])
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "加载会话列表失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "加载会话列表失败"))
     } finally {
       setSessionsLoading(false)
     }
@@ -600,12 +584,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       await sessionsApi.revoke(token, sessionId)
       toast.success("会话已撤销")
       loadSessions() // 刷新列表
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "撤销会话失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "撤销会话失败"))
     }
   }, [loadSessions])
 
@@ -621,12 +601,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       await sessionsApi.revokeAllOthers(token)
       toast.success("已撤销所有其他会话")
       loadSessions() // 刷新列表
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "撤销会话失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "撤销会话失败"))
     }
   }, [loadSessions])
 
@@ -645,12 +621,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         toast.success("通知设置已更新")
         // 刷新用户数据
         await refreshUser()
-      } catch (error: any) {
-        const errorMessage =
-          typeof error?.detail === "string"
-            ? error.detail
-            : error?.detail?.message || error?.message || "更新通知设置失败"
-        toast.error(errorMessage)
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "更新通知设置失败"))
         // 恢复原值
         if (field === "email_login") setNotifyEmailLogin(!value)
         if (field === "email_alert") setNotifyEmailAlert(!value)
@@ -671,12 +643,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     try {
       const keys = await sshKeysApi.getSSHKeys(token)
       setSshKeys(keys)
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "加载SSH密钥失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "加载SSH密钥失败"))
     } finally {
       setSshKeysLoading(false)
     }
@@ -704,12 +672,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setGenerateDialogOpen(false)
       setGenerateForm({ name: "", algorithm: "ed25519", key_size: 2048 })
       loadSSHKeys() // 刷新列表
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "生成SSH密钥失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "生成SSH密钥失败"))
     } finally {
       setGenerateLoading(false)
     }
@@ -741,12 +705,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setImportDialogOpen(false)
       setImportForm({ name: "", private_key: "" })
       loadSSHKeys() // 刷新列表
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "导入SSH密钥失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "导入SSH密钥失败"))
     } finally {
       setImportLoading(false)
     }
@@ -768,12 +728,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       await sshKeysApi.deleteSSHKey(token, keyId)
       toast.success("SSH密钥已删除")
       loadSSHKeys() // 刷新列表
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "删除SSH密钥失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "删除SSH密钥失败"))
     }
   }, [loadSSHKeys])
 
@@ -782,7 +738,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     try {
       await navigator.clipboard.writeText(text)
       toast.success(`${label}已复制到剪贴板`)
-    } catch (error) {
+    } catch {
       toast.error("复制失败，请手动复制")
     }
   }, [])
@@ -858,9 +814,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                           onClick={() => fileInputRef.current?.click()}
                         >
                           {avatarPreview ? (
-                            <img
+                            <Image
                               src={avatarPreview}
                               alt="头像预览"
+                              width={80}
+                              height={80}
                               className="h-full w-full object-cover"
                             />
                           ) : (

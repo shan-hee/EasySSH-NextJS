@@ -5,7 +5,7 @@ import { Table } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter"
-import { RefreshCw, Download, Eye } from "lucide-react"
+import { RefreshCw, Download } from "lucide-react"
 
 interface DataTableToolbarProps<TData> {
   table: Table<TData>
@@ -35,7 +35,6 @@ export function DataTableToolbar<TData>({
   filters = [],
   onRefresh,
   onExport,
-  showColumnVisibility = false,
   showExport = false,
   showRefresh = true,
   children,

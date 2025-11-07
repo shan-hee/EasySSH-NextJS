@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
-import { Button } from "@/components/ui/button"
 import { X, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SftpManager } from "@/components/sftp/sftp-manager"

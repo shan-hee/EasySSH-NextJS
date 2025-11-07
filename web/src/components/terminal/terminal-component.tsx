@@ -1,18 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import { WebTerminal } from "./web-terminal"
-import { ConnectionLoader } from "./connection-loader"
-import { QuickConnect, QuickServer } from "./quick-connect"
+import { QuickServer } from "./quick-connect"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
 import { TerminalSession } from "@/components/terminal/types"
-import { Maximize2, Minimize2, Settings, FolderOpen, Globe, Activity, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTerminalStore } from "@/stores/terminal-store"
-import { useMonitorStore } from "@/stores/monitor-store"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -305,7 +299,7 @@ export function TerminalComponent({
         return next
       })
     }
-  }, [shouldForceLoading, active?.id, loadingSessionIds])
+  }, [shouldForceLoading, active, loadingSessionIds])
 
   // 键盘快捷键支持
   // AI 助手快捷键（Ctrl+K）已移至 TabTerminalContent 组件内部

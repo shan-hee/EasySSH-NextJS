@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
@@ -150,8 +150,6 @@ export default function TerminalPage() {
  if (!isNaN(mt)) setMaxTabs(mt)
  const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
  if (!isNaN(im)) setInactiveMinutes(im)
- const hb = localStorage.getItem("tab.hibernate")
- if (hb != null) setHibernateBackground(hb === "true")
  } catch {}
  }, [])
 
@@ -277,7 +275,7 @@ export default function TerminalPage() {
  }
 
  // 关闭会话
- const handleCloseSession = (sessionId: string) => {
+ const handleCloseSession = useCallback((sessionId: string) => {
  // 若这次关闭会导致页签为空，则立刻跳转上一级，避免出现"无页签"中间态
  if (sessions.length <= 1) {
  router.replace("/dashboard")
@@ -299,7 +297,7 @@ export default function TerminalPage() {
 
  // 然后过滤掉要关闭的会话
  setSessions(prev => prev.filter(s => s.id !== sessionId))
- }
+ }, [sessions, activeSessionId, router])
 
  const handleDuplicateSession = (sessionId: string) => {
  const src = sessions.find(s => s.id === sessionId)
@@ -368,7 +366,7 @@ export default function TerminalPage() {
  })
  }, 60 * 1000)
  return () => clearInterval(t)
- }, [sessions, inactiveMinutes])
+ }, [sessions, inactiveMinutes, handleCloseSession])
 
  // 会话初始化中（等待 sessions 被设置）
  // 现在始终有初始会话，不需要这个检查了

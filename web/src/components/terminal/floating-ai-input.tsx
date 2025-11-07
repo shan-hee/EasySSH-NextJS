@@ -6,7 +6,6 @@ import {
   PromptInputTextarea,
   PromptInputToolbar,
   PromptInputTools,
-  PromptInputButton,
   PromptInputSubmit,
   PromptInputModelSelect,
   PromptInputModelSelectTrigger,
@@ -19,10 +18,9 @@ import { Sparkles } from "lucide-react"
 
 interface FloatingAiInputProps {
   isOpen: boolean
-  onClose?: () => void
 }
 
-export function FloatingAiInput({ isOpen, onClose }: FloatingAiInputProps) {
+export function FloatingAiInput({ isOpen }: FloatingAiInputProps) {
   const [input, setInput] = useState("")
   const [model, setModel] = useState("auto")
   const inputRef = useRef<HTMLTextAreaElement>(null)

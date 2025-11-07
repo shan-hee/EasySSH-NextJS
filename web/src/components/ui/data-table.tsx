@@ -172,15 +172,12 @@ export function DataTable<TData, TValue = unknown>({
   pageCount,
   pageSize = 20,
   totalRows,
-  onPageChange,
   onPageSizeChange,
   emptyMessage = "暂无数据",
   className,
-  scrollContainerClassName,
   enableRowSelection = false,
   toolbar,
   density = "standard",
-  onDensityChange,
   batchActions,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])

@@ -162,8 +162,6 @@ export function SessionTabBar(props: SessionTabBarProps) {
     onCloseAll,
     onTogglePin,
     onReorder,
-    isFullscreen,
-    onToggleFullscreen,
     onOpenSettings,
     hideBreadcrumb = false,
   } = props
@@ -239,8 +237,8 @@ export function SessionTabBar(props: SessionTabBarProps) {
 
     if (!over || active.id === over.id) return
 
-    const oldIndex = sessions.findIndex((s) => s.id === active.id)
-    const newIndex = sessions.findIndex((s) => s.id === over.id)
+    const oldIndex = sessions.findIndex((s) => s.id === String(active.id))
+    const newIndex = sessions.findIndex((s) => s.id === String(over.id))
 
     if (oldIndex !== -1 && newIndex !== -1) {
       const newOrder = arrayMove(sessions, oldIndex, newIndex).map((s) => s.id)
@@ -249,8 +247,8 @@ export function SessionTabBar(props: SessionTabBarProps) {
   }
 
   // 拖拽开始处理
-  const handleDragStart = (event: any) => {
-    const session = sessions.find((s) => s.id === event.active.id)
+  const handleDragStart = (event: { active: { id: string | number } }) => {
+    const session = sessions.find((s) => s.id === String(event.active.id))
     if (session) {
       setDraggedSession(session)
     }
@@ -525,7 +523,10 @@ export function SessionTabBar(props: SessionTabBarProps) {
             className={cn(
               "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
             )}
-            onClick={() => { menu.targetId && onDuplicateSession(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
+            onClick={() => {
+              if (menu.targetId) onDuplicateSession(menu.targetId)
+              setMenu(m => ({ ...m, open: false }))
+            }}
           >
             <span className={cn(
               "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
@@ -536,7 +537,10 @@ export function SessionTabBar(props: SessionTabBarProps) {
             className={cn(
               "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
             )}
-            onClick={() => { menu.targetId && onCloseOthers(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
+            onClick={() => {
+              if (menu.targetId) onCloseOthers(menu.targetId)
+              setMenu(m => ({ ...m, open: false }))
+            }}
           >
             <span className={cn(
               "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
@@ -560,7 +564,10 @@ export function SessionTabBar(props: SessionTabBarProps) {
             className={cn(
               "w-full text-left text-sm px-3 py-2 rounded-md hover:bg-blue-500/20 hover:text-blue-400 transition-colors flex items-center gap-2 text-zinc-600 dark:text-zinc-400",
             )}
-            onClick={() => { menu.targetId && onTogglePin(menu.targetId); setMenu(m => ({ ...m, open: false })) }}
+            onClick={() => {
+              if (menu.targetId) onTogglePin(menu.targetId)
+              setMenu(m => ({ ...m, open: false }))
+            }}
           >
             固定/取消固定
           </button>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
 import { twoFactorApi } from "@/lib/api/2fa"
 import { FadeSlideIn } from "@/components/ui/fade-slide-in"
+import { getErrorMessage } from "@/lib/error-utils"
 
 export function LoginForm({
   className,
@@ -82,15 +83,14 @@ export function LoginForm({
     } catch (error: unknown) {
       console.error("Login error:", error)
       toast.error("登录失败", {
-        description: error?.detail?.error || error?.message || "请检查输入信息并重试",
+        description: getErrorMessage(error, "请检查输入信息并重试"),
       })
       setIsLoading(false)
     }
   }
 
-  // 处理 2FA 验证
-  const handle2FASubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // 处理 2FA 验证逻辑
+  const verify2FACode = useCallback(async () => {
     if (isLoading) return
 
     if (!twoFactorCode || twoFactorCode.length !== 6) {
@@ -119,16 +119,18 @@ export function LoginForm({
       router.replace("/dashboard")
     } catch (error: unknown) {
       console.error("2FA verification error:", error)
-      const errorDescription =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.detail?.error || error?.message || "验证码错误，请重试"
       toast.error("验证失败", {
-        description: errorDescription,
+        description: getErrorMessage(error, "验证码错误，请重试"),
       })
     } finally {
       setIsLoading(false)
     }
+  }, [isLoading, twoFactorCode, tempToken, router])
+
+  // 处理 2FA 表单提交
+  const handle2FASubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await verify2FACode()
   }
 
   // 返回到账号密码登录
@@ -142,9 +144,9 @@ export function LoginForm({
   // 监听 2FA 验证码输入，自动提交
   useEffect(() => {
     if (twoFactorCode.length === 6 && requires2FA && !isLoading && !authLoading) {
-      handle2FASubmit(new Event("submit") as React.FormEvent<HTMLFormElement>)
+      verify2FACode()
     }
-  }, [twoFactorCode, requires2FA, isLoading, authLoading])
+  }, [twoFactorCode, requires2FA, isLoading, authLoading, verify2FACode])
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
