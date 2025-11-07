@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react"
 import { toast } from "@/components/ui/sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import { TerminalSession } from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"
 import { useRouter, useSearchParams } from "next/navigation"
 import { serversApi, type Server } from "@/lib/api"
-import { Loader2 } from "lucide-react"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { useTabUIStore } from "@/stores/tab-ui-store"
 
@@ -60,7 +60,6 @@ export default function TerminalPage() {
  ]
  })
 
- const [hibernateBackground, setHibernateBackground] = useState(true)
  const [maxTabs, setMaxTabs] = useState(50)
  const [inactiveMinutes, setInactiveMinutes] = useState(60)
  const inactivityNotifiedRef = useRef<Set<string>>(new Set())
@@ -141,6 +140,7 @@ export default function TerminalPage() {
  // 加载服务器列表
  useEffect(() => {
  loadServers()
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
  // 读取通用设置（仅使用本地存储集成）
@@ -190,15 +190,9 @@ export default function TerminalPage() {
  }))
 
  setServers(quickServers)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to load servers:", error)
-
- if (error?.status === 401) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error("加载服务器列表失败: " + (error?.message || "未知错误"))
- }
+ toast.error(getErrorMessage(error, "加载服务器列表失败"))
  } finally {
  setLoading(false)
  }

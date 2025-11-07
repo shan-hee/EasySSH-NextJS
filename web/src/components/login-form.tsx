@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/input-otp"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { Eye, EyeOff, Lock, User, Shield, KeyRound } from "lucide-react"
+import { Eye, EyeOff, Lock, User } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
 import { useAuth } from "@/contexts/auth-context"
 import { useSystemConfig } from "@/contexts/system-config-context"
@@ -64,8 +64,8 @@ export function LoginForm({
       const response = await authApi.login({ username, password })
 
       // 检查是否需要 2FA
-      if ((response as any).requires_2fa) {
-        setTempToken((response as any).temp_token)
+      if (response.requires_2fa) {
+        setTempToken(response.temp_token || '')
         setRequires2FA(true)
         toast.info("需要双因子认证", {
           description: "请输入认证应用中的 6 位验证码",
@@ -79,7 +79,7 @@ export function LoginForm({
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Login error:", error)
       toast.error("登录失败", {
         description: error?.detail?.error || error?.message || "请检查输入信息并重试",
@@ -117,7 +117,7 @@ export function LoginForm({
 
       // 跳转到控制台
       router.replace("/dashboard")
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("2FA verification error:", error)
       const errorDescription =
         typeof error?.detail === "string"
@@ -142,7 +142,7 @@ export function LoginForm({
   // 监听 2FA 验证码输入，自动提交
   useEffect(() => {
     if (twoFactorCode.length === 6 && requires2FA && !isLoading && !authLoading) {
-      handle2FASubmit(new Event("submit") as any)
+      handle2FASubmit(new Event("submit") as React.FormEvent<HTMLFormElement>)
     }
   }, [twoFactorCode, requires2FA, isLoading, authLoading])
 
@@ -155,6 +155,7 @@ export function LoginForm({
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex flex-col items-center gap-3">
                 <div className="flex size-16 items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={config?.system_logo || "/logo.svg"}
                     alt={`${config?.system_name || "EasySSH"} Logo`}

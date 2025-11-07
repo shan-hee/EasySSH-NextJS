@@ -8,7 +8,7 @@ interface LogTableProps {
   logs: AuditLog[]
   filteredLogs: AuditLog[]
   loading: boolean
-  searchTerm: string
+  searchTerm?: string
   page: number
   totalPages: number
   onPageChange: (page: number) => void
@@ -48,7 +48,6 @@ export function LogTable({
   logs,
   filteredLogs,
   loading,
-  searchTerm,
   page,
   totalPages,
   onPageChange,

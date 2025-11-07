@@ -36,7 +36,6 @@ const Folder: React.FC<FolderProps> = ({ color = '#5227FF', size = 1, items = []
 
   // 禁用展开功能 - 始终保持关闭状态
   const open = false;
-  const paperOffsets = Array.from({ length: maxItems }, () => ({ x: 0, y: 0 }));
 
   const folderBackColor = darkenColor(color, 0.08);
   const paper1 = darkenColor('#ffffff', 0.1);

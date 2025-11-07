@@ -28,7 +28,6 @@ export default function SettingsSecurityPage() {
 
  // IP 白名单状态
  const [ipWhitelists, setIpWhitelists] = useState<IPWhitelist[]>([])
- const [isLoadingIPWhitelist, setIsLoadingIPWhitelist] = useState(true)
  const [newIPAddress, setNewIPAddress] = useState("")
  const [newIPDescription, setNewIPDescription] = useState("")
  const [isAddingIP, setIsAddingIP] = useState(false)
@@ -71,8 +70,6 @@ export default function SettingsSecurityPage() {
      } catch (error) {
        console.error("Failed to load IP whitelist config:", error)
        toast.error("加载 IP 白名单配置失败")
-     } finally {
-       setIsLoadingIPWhitelist(false)
      }
    }
 

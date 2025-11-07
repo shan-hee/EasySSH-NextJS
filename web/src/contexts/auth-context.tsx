@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userData = await authApi.getCurrentUser(token)
       setUser(userData)
-    } catch (error) {
+    } catch (_error) {
       // 令牌可能过期,尝试刷新
       const refreshToken = getRefreshToken()
       if (refreshToken) {
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setTokens(access_token, refresh_token)
           const userData = await authApi.getCurrentUser(access_token)
           setUser(userData)
-        } catch (refreshError) {
+        } catch (_refreshError) {
           // 刷新失败,清除令牌并重定向到登录页
           clearTokens()
           setUser(null)
@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isPublicRoute) {
       setIsLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [pathname])
 
   return (

@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Kbd } from "@/components/ui/kbd"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import {
  Dialog,
  DialogContent,
@@ -45,16 +45,13 @@ import {
  Search,
  MoreHorizontal,
  Calendar,
- Clock,
  Play,
  Pause,
  Edit,
  Trash2,
  CheckCircle,
  XCircle,
- AlertTriangle,
  Zap,
- Copy,
  Server as ServerIcon,
  RefreshCw,
  Loader2,
@@ -124,10 +121,8 @@ export default function AutomationSchedulesPage() {
  })
 
  // 服务器选择器状态
- const [serverSearchTerm, setServerSearchTerm] = useState("")
+ const serverSearchTerm = "" // TODO: 实现服务器搜索功能
  const [scriptSearchTerm, setScriptSearchTerm] = useState("")
- const [showServerDropdown, setShowServerDropdown] = useState(false)
- const serverInputRef = useRef<HTMLInputElement>(null)
 
  // 加载所有数据
  const loadData = async () => {
@@ -168,7 +163,7 @@ export default function AutomationSchedulesPage() {
  disabled: statsData.disabled_tasks || 0,
  totalRuns: statsData.total_runs || 0,
  })
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("加载数据失败:", error)
 
  // 确保状态为空数组，避免undefined错误
@@ -176,12 +171,7 @@ export default function AutomationSchedulesPage() {
  setServers([])
  setScripts([])
 
- if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error(`加载数据失败: ${error.message}`)
- }
+ toast.error(getErrorMessage(error, "加载数据失败"))
  } finally {
  setLoading(false)
  setRefreshing(false)
@@ -197,6 +187,7 @@ export default function AutomationSchedulesPage() {
  // 初始加载
  useEffect(() => {
  loadData()
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
  // 过滤任务
@@ -351,9 +342,9 @@ export default function AutomationSchedulesPage() {
 
  // 重新加载任务列表
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("创建定时任务失败:", error)
- toast.error(`创建定时任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "创建定时任务失败"))
  }
  }
 
@@ -416,9 +407,9 @@ export default function AutomationSchedulesPage() {
 
  // 重新加载任务列表
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("更新定时任务失败:", error)
- toast.error(`更新定时任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "更新定时任务失败"))
  }
  }
 
@@ -439,9 +430,9 @@ export default function AutomationSchedulesPage() {
  await scheduledTasksApi.delete(token, taskId)
  toast.success("定时任务删除成功")
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("删除定时任务失败:", error)
- toast.error(`删除定时任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "删除定时任务失败"))
  }
  }
 
@@ -458,9 +449,9 @@ export default function AutomationSchedulesPage() {
  await scheduledTasksApi.toggle(token, taskId, !enabled)
  toast.success(enabled ? "任务已禁用" : "任务已启用")
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("切换任务状态失败:", error)
- toast.error(`切换任务状态失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "切换任务状态失败"))
  }
  }
 
@@ -477,9 +468,9 @@ export default function AutomationSchedulesPage() {
  await scheduledTasksApi.trigger(token, taskId)
  toast.success("任务已手动触发")
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("触发任务失败:", error)
- toast.error(`触发任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "触发任务失败"))
  }
  }
 

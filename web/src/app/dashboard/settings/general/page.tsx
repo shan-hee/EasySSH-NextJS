@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Save,
@@ -217,6 +216,7 @@ export default function SettingsGeneralPage() {
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 border rounded-lg flex items-center justify-center bg-muted overflow-hidden shrink-0">
                       {settings.system_logo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={settings.system_logo}
                           alt="系统Logo"
@@ -249,6 +249,7 @@ export default function SettingsGeneralPage() {
                   <div className="flex items-center gap-4">
                     <div className="w-8 h-8 border rounded flex items-center justify-center bg-muted overflow-hidden shrink-0">
                       {settings.system_favicon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={settings.system_favicon}
                           alt="系统Favicon"

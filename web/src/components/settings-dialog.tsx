@@ -13,11 +13,9 @@ import {
   X,
   Copy,
   Check,
-  QrCode,
   Monitor,
   Smartphone,
   Tablet,
-  Chrome,
   LogOut,
   Info,
   Paintbrush,
@@ -68,7 +66,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useAuth } from "@/contexts/auth-context"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
@@ -109,7 +106,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   // 头像上传状态
   const [avatarFile, setAvatarFile] = React.useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = React.useState<string>("")
-  const [avatarUploading, setAvatarUploading] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   // 密码修改表单状态
@@ -186,6 +182,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     if (activeSection === "账户安全" && open) {
       loadSessions()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, open])
 
   // 当切换到SSH密钥标签时加载密钥数据
@@ -193,6 +190,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     if (activeSection === "SSH密钥" && open) {
       loadSSHKeys()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, open])
 
   // 处理头像文件选择

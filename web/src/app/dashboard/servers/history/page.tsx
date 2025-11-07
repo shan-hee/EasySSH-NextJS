@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Clock, Activity, ArrowUpDown, ArrowDownUp } from "lucide-react"
 import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
+import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
@@ -62,8 +62,8 @@ export default function ServersHistoryPage() {
       setTotalPages(sessionsResponse.total_pages || 1)
       setTotalCount(sessionsResponse.total || 0)
       setStatistics(statsResponse.data)
-    } catch (error: any) {
-      toast.error(error.message || "无法加载历史连接")
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "无法加载历史连接"))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -73,6 +73,7 @@ export default function ServersHistoryPage() {
   // 初始加载
   useEffect(() => {
     loadData(page, pageSize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 刷新数据
@@ -104,8 +105,8 @@ export default function ServersHistoryPage() {
       await sshSessionsApi.delete(token, id)
       toast.success("会话记录已删除")
       await loadData(page, pageSize)
-    } catch (error: any) {
-      toast.error(error.message || "无法删除会话记录")
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "无法删除会话记录"))
     }
   }
 

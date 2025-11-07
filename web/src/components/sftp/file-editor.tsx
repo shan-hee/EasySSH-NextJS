@@ -17,7 +17,6 @@ import {
   Minimize2,
   Search,
   Replace,
-  Type,
   WrapText,
   Copy,
   FileCode,

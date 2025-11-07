@@ -6,8 +6,7 @@ import { authApi } from "@/lib/api/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldLabel } from "@/components/ui/field"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { User, Mail, Lock, Check, Loader2, Shield, Settings, Rocket, Play, Code, Server } from "lucide-react"
+import { User, Mail, Lock, Check, Loader2, Settings, Rocket, Play, Code, Server } from "lucide-react"
 import LightRays from "@/components/LightRays"
 
 type RunMode = "demo" | "development" | "production"
@@ -171,6 +170,7 @@ export default function SetupPage() {
             {/* Logo 和标题 */}
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex size-16 items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/logo.svg"
                   alt="EasySSH Logo"

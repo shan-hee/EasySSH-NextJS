@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
 import { sftpApi } from '@/lib/api/sftp';
-import { useSftpUploadWebSocket } from './useSftpUploadWebSocket';
 import { getWsUrl } from '@/lib/config';
 
 /**
@@ -207,10 +206,11 @@ export function useFileTransfer() {
         }
         // 如果有 WebSocket，等待 SFTP 完成消息（由 WebSocket onmessage 处理）
 
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : '上传失败';
         updateTaskProgress(task.id, {
           status: 'failed',
-          error: error.message || '上传失败',
+          error: errorMessage,
         });
         throw error;
       } finally {

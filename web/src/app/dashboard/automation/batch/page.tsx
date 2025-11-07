@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import {
  Dialog,
  DialogContent,
@@ -56,7 +57,6 @@ import {
  Loader2,
  RefreshCw,
  Trash2,
- XCircle
 } from "lucide-react"
 import { batchTasksApi, scriptsApi, serversApi, type BatchTask, type Script, type Server } from "@/lib/api"
 
@@ -131,7 +131,7 @@ export default function AutomationBatchPage() {
  completed: statsData.completed_tasks || 0,
  failed: statsData.failed_tasks || 0,
  })
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("加载数据失败:", error)
 
  // 确保状态为空数组，避免undefined错误
@@ -139,12 +139,7 @@ export default function AutomationBatchPage() {
  setServers([])
  setScripts([])
 
- if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error(`加载数据失败: ${error.message}`)
- }
+ toast.error(getErrorMessage(error, "加载数据失败"))
  } finally {
  setLoading(false)
  setRefreshing(false)
@@ -160,6 +155,7 @@ export default function AutomationBatchPage() {
  // 初始加载
  useEffect(() => {
  loadData()
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
  // 过滤服务器
@@ -241,9 +237,9 @@ export default function AutomationBatchPage() {
 
  // 重新加载任务列表
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("创建任务失败:", error)
- toast.error(`创建任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "创建任务失败"))
  } finally {
  setIsExecuting(false)
  }
@@ -292,9 +288,9 @@ export default function AutomationBatchPage() {
 
  // 重新加载任务列表
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("创建任务失败:", error)
- toast.error(`创建任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "创建任务失败"))
  } finally {
  setIsExecuting(false)
  }
@@ -342,9 +338,9 @@ export default function AutomationBatchPage() {
 
  // 重新加载任务列表
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("创建任务失败:", error)
- toast.error(`创建任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "创建任务失败"))
  } finally {
  setIsExecuting(false)
  }
@@ -375,9 +371,9 @@ export default function AutomationBatchPage() {
  await batchTasksApi.delete(token, taskId)
  toast.success("任务删除成功")
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("删除任务失败:", error)
- toast.error(`删除任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "删除任务失败"))
  }
  }
 
@@ -394,9 +390,9 @@ export default function AutomationBatchPage() {
  await batchTasksApi.start(token, taskId)
  toast.success("任务已启动")
  await loadData()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("启动任务失败:", error)
- toast.error(`启动任务失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "启动任务失败"))
  }
  }
 

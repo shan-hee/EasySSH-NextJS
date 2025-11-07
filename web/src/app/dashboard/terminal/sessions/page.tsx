@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, RefreshCw, Activity, Server, ArrowUpDown, ArrowDownUp, Loader2, XCircle } from "lucide-react"
 import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
 import { toast } from "@/components/ui/sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 
 const statusColors = {
   active: "bg-green-100 text-green-800",
@@ -77,8 +78,8 @@ export default function TerminalSessionsPage() {
 
       setSessions(sessionsResponse.data || [])
       setStatistics(statsResponse.data)
-    } catch (error: any) {
-      toast.error(error.message || "无法加载活动会话")
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "无法加载活动会话"))
     } finally {
       setLoading(false)
     }
@@ -87,6 +88,7 @@ export default function TerminalSessionsPage() {
   // 初始加载
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 客户端搜索过滤
@@ -107,8 +109,8 @@ export default function TerminalSessionsPage() {
       await sshSessionsApi.delete(token, id)
       toast.success("会话记录已删除")
       loadData()
-    } catch (error: any) {
-      toast.error(error.message || "无法删除会话记录")
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "无法删除会话记录"))
     }
   }
 

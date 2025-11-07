@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { CheckCircle, XCircle, Activity, User, Download } from "lucide-react"
+import { CheckCircle, XCircle, Activity, User } from "lucide-react"
 import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
+import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
@@ -63,26 +63,9 @@ export default function AuditLogsPage() {
       setTotalPages(logsResponse.total_pages || 1)
       setTotalRows(logsResponse.total || 0)
       setStatistics(statsResponse)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("操作日志加载失败:", error)
-
-      let errorMessage = "无法加载操作日志"
-      if (error.message) {
-        errorMessage = error.message
-      }
-
-      // 根据错误状态提供更详细的信息
-      if (error.status === 401) {
-        errorMessage = "认证失败，请重新登录"
-      } else if (error.status === 403) {
-        errorMessage = "权限不足，无法查看操作日志"
-      } else if (error.status === 404) {
-        errorMessage = "API接口不存在，请检查服务器配置"
-      } else if (error.status >= 500) {
-        errorMessage = "服务器内部错误，请联系管理员"
-      }
-
-      toast.error(errorMessage)
+      toast.error(getErrorMessage(error, "无法加载操作日志"))
     } finally {
       setLoading(false)
     }
@@ -91,6 +74,7 @@ export default function AuditLogsPage() {
   // 初始加载和分页变化时重新加载
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize])
 
   // 导出操作函数

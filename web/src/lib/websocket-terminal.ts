@@ -89,12 +89,12 @@ export class TerminalWebSocket {
         }
       }
 
-      this.ws.onerror = (event) => {
-        console.error("[TerminalWS] WebSocket 错误:", event)
+      this.ws.onerror = () => {
+        console.error("[TerminalWS] WebSocket 错误")
         this.onError?.(new Error("WebSocket 连接错误"))
       }
 
-      this.ws.onclose = (event) => {
+      this.ws.onclose = () => {
         this.stopPing()
 
         const remaining = this.decoder.decode()
@@ -201,14 +201,14 @@ export class TerminalWebSocket {
   /**
    * 处理控制消息
    */
-  private handleControlMessage(message: any): void {
+  private handleControlMessage(message: { type: string; data?: { message?: string } }): void {
     switch (message.type) {
       case "connected":
         // 会话已建立
         break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)
-        this.onError?.(new Error(message.data.message || "服务器错误"))
+        this.onError?.(new Error(message.data?.message || "服务器错误"))
         break
       case "closed":
         // 服务器关闭连接

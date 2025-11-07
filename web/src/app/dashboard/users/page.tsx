@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import {
   Dialog,
   DialogContent,
@@ -105,18 +106,13 @@ export default function UsersPage() {
         normalUsers: statsData.by_role?.user || 0,
         viewerUsers: statsData.by_role?.viewer || 0,
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("加载用户列表失败:", error)
 
       // 确保状态为空数组
       setUsers([])
 
-      if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
-        toast.error("登录已过期，请重新登录")
-        router.push("/login")
-      } else {
-        toast.error(`加载用户列表失败: ${error.message}`)
-      }
+      toast.error(getErrorMessage(error, "加载用户列表失败"))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -132,6 +128,7 @@ export default function UsersPage() {
   // 初始加载
   useEffect(() => {
     loadUsers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 创建用户
@@ -163,9 +160,9 @@ export default function UsersPage() {
 
       // 重新加载列表
       await loadUsers()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("创建用户失败:", error)
-      toast.error(`创建用户失败: ${error.message}`)
+      toast.error(getErrorMessage(error, "创建用户失败"))
     }
   }
 
@@ -204,9 +201,9 @@ export default function UsersPage() {
 
       // 重新加载列表
       await loadUsers()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("更新用户失败:", error)
-      toast.error(`更新用户失败: ${error.message}`)
+      toast.error(getErrorMessage(error, "更新用户失败"))
     }
   }
 
@@ -227,9 +224,9 @@ export default function UsersPage() {
       await usersApi.delete(token, userId)
       toast.success("用户删除成功")
       await loadUsers()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("删除用户失败:", error)
-      toast.error(`删除用户失败: ${error.message}`)
+      toast.error(getErrorMessage(error, "删除用户失败"))
     }
   }
 
@@ -250,9 +247,9 @@ export default function UsersPage() {
       await Promise.all(userIds.map(id => usersApi.delete(token, id)))
       toast.success(`成功删除 ${userIds.length} 个用户`)
       await loadUsers()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("批量删除用户失败:", error)
-      toast.error(`批量删除用户失败: ${error.message}`)
+      toast.error(getErrorMessage(error, "批量删除用户失败"))
     }
   }
 
@@ -278,9 +275,9 @@ export default function UsersPage() {
       setIsPasswordDialogOpen(false)
       setPasswordUserId(null)
       setNewPassword("")
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("修改密码失败:", error)
-      toast.error(`修改密码失败: ${error.message}`)
+      toast.error(getErrorMessage(error, "修改密码失败"))
     }
   }
 
@@ -391,7 +388,7 @@ export default function UsersPage() {
           {/* DataTable */}
           <DataTable
             data={users}
-            columns={columns as any}
+            columns={columns}
             loading={refreshing}
             emptyMessage="暂无用户"
             enableRowSelection={true}

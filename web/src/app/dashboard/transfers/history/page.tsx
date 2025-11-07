@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown } from "lucide-react"
 import { fileTransfersApi, type FileTransfer, type FileTransferStatistics } from "@/lib/api/file-transfers"
 import { toast } from "@/components/ui/sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createTransferColumns } from "./components/transfer-columns"
@@ -57,8 +58,8 @@ export default function TransfersHistoryPage() {
       setTotalPages(transfersResponse.total_pages || 1)
       setTotalCount(transfersResponse.total || 0)
       setStatistics(statsResponse.data)
-    } catch (error: any) {
-      toast.error(error.message || "无法加载传输记录")
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "无法加载传输记录"))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -68,6 +69,7 @@ export default function TransfersHistoryPage() {
   // 初始加载
   useEffect(() => {
     loadData(page, pageSize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 刷新数据
@@ -99,8 +101,8 @@ export default function TransfersHistoryPage() {
       await fileTransfersApi.delete(token, id)
       toast.success("传输记录已删除")
       await loadData(page, pageSize)
-    } catch (error: any) {
-      toast.error(error.message || "无法删除传输记录")
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "无法删除传输记录"))
     }
   }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useLayoutEffect, DragEvent, useMemo, useCallback, useDeferredValue, startTransition } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, DragEvent, useMemo, useCallback, useDeferredValue } from "react"
 import { createPortal } from "react-dom"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"

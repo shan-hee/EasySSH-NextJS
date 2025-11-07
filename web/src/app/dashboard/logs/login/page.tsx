@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, XCircle, Shield, AlertTriangle, User } from "lucide-react"
-import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
+import { auditLogsApi, type AuditLog } from "@/lib/api/audit-logs"
+import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
@@ -14,7 +15,6 @@ import { loginLogColumns } from "../components/login-log-columns"
 
 export default function LoginLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([])
-  const [statistics, setStatistics] = useState<AuditLogStatisticsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -46,42 +46,21 @@ export default function LoginLogsPage() {
         throw new Error("未找到认证令牌，请重新登录")
       }
 
-      // 并行加载日志列表和统计信息
-      const [logsResponse, statsResponse] = await Promise.all([
-        auditLogsApi.list(token, {
-          page,
-          page_size: pageSize,
-          action: "login",
-        }),
-        auditLogsApi.getStatistics(token),
-      ])
+      // 加载日志列表
+      const logsResponse = await auditLogsApi.list(token, {
+        page,
+        page_size: pageSize,
+        action: "login",
+      })
 
       const filteredLogs = logsResponse.logs.filter(log => log.action === "login")
       setLogs(filteredLogs || [])
       setTotalPages(logsResponse.total_pages || 1)
       setTotalRows(logsResponse.total || 0)
-      setStatistics(statsResponse)
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("登录日志加载失败:", error)
-
-      let errorMessage = "无法加载登录日志"
-      if (error.message) {
-        errorMessage = error.message
-      }
-
-      // 根据错误状态提供更详细的信息
-      if (error.status === 401) {
-        errorMessage = "认证失败，请重新登录"
-      } else if (error.status === 403) {
-        errorMessage = "权限不足，无法查看登录日志"
-      } else if (error.status === 404) {
-        errorMessage = "API接口不存在，请检查服务器配置"
-      } else if (error.status >= 500) {
-        errorMessage = "服务器内部错误，请联系管理员"
-      }
-
-      toast.error(errorMessage)
+      toast.error(getErrorMessage(error, "无法加载登录日志"))
     } finally {
       setLoading(false)
     }
@@ -90,6 +69,7 @@ export default function LoginLogsPage() {
   // 初始加载和分页变化时重新加载
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize])
 
   // 导出操作函数

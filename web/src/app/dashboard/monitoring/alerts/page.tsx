@@ -6,10 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Plus, Search, MoreHorizontal, Bell, BellOff, Edit, Trash2, AlertTriangle, TrendingUp, Cpu, HardDrive } from "lucide-react"
+import { Plus, Search, MoreHorizontal, Bell, BellOff, Edit, Trash2, AlertTriangle, TrendingUp } from "lucide-react"
 
 const mockAlertRules = [
  { id: 1, name: "CPU使用率过高", metric: "CPU", condition: "> 85%", duration: "5分钟", severity: "high", status: "active", servers: ["All Servers"], notifications: ["邮件", "钉钉"], lastTriggered: "2024-01-15 14:30", triggerCount: 3 },

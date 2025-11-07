@@ -14,6 +14,7 @@ import { Bell, Mail, MessageSquare, Webhook, Send, Save, Loader2 } from "lucide-
 import { settingsApi, type SMTPConfig, type WebhookConfig, type DingTalkConfig, type WeComConfig } from "@/lib/api/settings"
 import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import { useSystemConfig } from "@/contexts/system-config-context"
 
 export default function SettingsNotificationsPage() {
@@ -84,12 +85,8 @@ export default function SettingsNotificationsPage() {
       const config = await settingsApi.getSMTPConfig(token)
       setSmtpConfig(config)
       setEmailEnabled(config.enabled)
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "加载 SMTP 配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "加载 SMTP 配置失败"))
     } finally {
       setSmtpLoading(false)
     }
@@ -108,12 +105,8 @@ export default function SettingsNotificationsPage() {
       await settingsApi.saveSMTPConfig(token, smtpConfig)
       toast.success("SMTP 配置已保存")
       await loadSMTPConfig() // 重新加载配置
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "保存 SMTP 配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "保存 SMTP 配置失败"))
     } finally {
       setIsSaving(false)
     }
@@ -131,12 +124,8 @@ export default function SettingsNotificationsPage() {
     try {
       await settingsApi.testSMTPConnection(token, smtpConfig)
       toast.success("SMTP 连接测试成功")
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "SMTP 连接测试失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "SMTP 连接测试失败"))
     } finally {
       setSmtpTesting(false)
     }
@@ -152,12 +141,8 @@ export default function SettingsNotificationsPage() {
       const config = await settingsApi.getWebhookConfig(token)
       setWebhookConfig(config)
       setWebhookEnabled(config.enabled)
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "加载 Webhook 配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "加载 Webhook 配置失败"))
     } finally {
       setWebhookLoading(false)
     }
@@ -176,12 +161,8 @@ export default function SettingsNotificationsPage() {
       await settingsApi.saveWebhookConfig(token, webhookConfig)
       toast.success("Webhook 配置已保存")
       await loadWebhookConfig()
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "保存 Webhook 配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "保存 Webhook 配置失败"))
     } finally {
       setIsSaving(false)
     }
@@ -199,12 +180,8 @@ export default function SettingsNotificationsPage() {
     try {
       await settingsApi.testWebhookConnection(token, webhookConfig)
       toast.success("Webhook 连接测试成功")
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "Webhook 连接测试失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Webhook 连接测试失败"))
     } finally {
       setWebhookTesting(false)
     }
@@ -220,12 +197,8 @@ export default function SettingsNotificationsPage() {
       const config = await settingsApi.getDingTalkConfig(token)
       setDingTalkConfig(config)
       setDingdingEnabled(config.enabled)
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "加载钉钉配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "加载钉钉配置失败"))
     } finally {
       setDingTalkLoading(false)
     }
@@ -244,12 +217,8 @@ export default function SettingsNotificationsPage() {
       await settingsApi.saveDingTalkConfig(token, dingTalkConfig)
       toast.success("钉钉配置已保存")
       await loadDingTalkConfig()
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "保存钉钉配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "保存钉钉配置失败"))
     } finally {
       setIsSaving(false)
     }
@@ -267,12 +236,8 @@ export default function SettingsNotificationsPage() {
     try {
       await settingsApi.testDingTalkConnection(token, dingTalkConfig)
       toast.success("钉钉连接测试成功")
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "钉钉连接测试失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "钉钉连接测试失败"))
     } finally {
       setDingTalkTesting(false)
     }
@@ -288,12 +253,8 @@ export default function SettingsNotificationsPage() {
       const config = await settingsApi.getWeComConfig(token)
       setWeComConfig(config)
       setWechatEnabled(config.enabled)
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "加载企业微信配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "加载企业微信配置失败"))
     } finally {
       setWeComLoading(false)
     }
@@ -312,12 +273,8 @@ export default function SettingsNotificationsPage() {
       await settingsApi.saveWeComConfig(token, weComConfig)
       toast.success("企业微信配置已保存")
       await loadWeComConfig()
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "保存企业微信配置失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "保存企业微信配置失败"))
     } finally {
       setIsSaving(false)
     }
@@ -335,12 +292,8 @@ export default function SettingsNotificationsPage() {
     try {
       await settingsApi.testWeComConnection(token, weComConfig)
       toast.success("企业微信连接测试成功")
-    } catch (error: any) {
-      const errorMessage =
-        typeof error?.detail === "string"
-          ? error.detail
-          : error?.detail?.message || error?.message || "企业微信连接测试失败"
-      toast.error(errorMessage)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "企业微信连接测试失败"))
     } finally {
       setWeComTesting(false)
     }

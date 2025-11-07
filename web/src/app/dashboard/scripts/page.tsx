@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Kbd } from "@/components/ui/kbd"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 // DataTable 相关组件
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
@@ -40,7 +41,7 @@ export default function ScriptsPage() {
  const [pageSize, setPageSize] = useState(20)
  const [totalPages, setTotalPages] = useState(1)
  const [totalRows, setTotalRows] = useState(0)
- const [columnVisibility, setColumnVisibility] = useState({
+ const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
    name: true,
    description: true,
    content: true,
@@ -94,14 +95,9 @@ export default function ScriptsPage() {
  setScripts(response.data)
  setTotalRows(response.total || response.data.length)
  setTotalPages(response.total_pages || 1)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("加载脚本列表失败:", error)
- if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error(`加载脚本失败: ${error.message}`)
- }
+ toast.error(getErrorMessage(error, "加载脚本失败"))
  } finally {
  setLoading(false)
  setRefreshing(false)
@@ -168,11 +164,12 @@ const columns = useMemo(() => createScriptColumns({
   onExecute: (id) => handleExecute(id),
   onEdit: (id) => handleEdit(id),
   onDelete: (id) => handleDelete(id),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }), [])
 
 const visibleColumns = useMemo(
   () => columns.filter((col) =>
-    (col.id ? (columnVisibility as any)[col.id] ?? true : true)
+    (col.id ? columnVisibility[col.id] ?? true : true)
   ),
   [columns, columnVisibility]
 )
@@ -223,9 +220,9 @@ const filterOptions = useMemo(() => {
  await scriptsApi.delete(token, scriptId)
  toast.success("脚本删除成功")
  await loadScripts()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("删除脚本失败:", error)
- toast.error(`删除脚本失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "删除脚本失败"))
  }
  }
 
@@ -378,9 +375,9 @@ const filterOptions = useMemo(() => {
 
  // 重新加载列表
  await loadScripts()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("创建脚本失败:", error)
- toast.error(`创建脚本失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "创建脚本失败"))
  }
  }
 
@@ -441,9 +438,9 @@ const filterOptions = useMemo(() => {
 
  // 重新加载列表
  await loadScripts()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("更新脚本失败:", error)
- toast.error(`更新脚本失败: ${error.message}`)
+ toast.error(getErrorMessage(error, "更新脚本失败"))
  }
  }
 
@@ -504,10 +501,10 @@ const filterOptions = useMemo(() => {
           ].map(column => ({
             id: column.id,
             label: column.label,
-            visible: (columnVisibility as any)[column.id] ?? true,
+            visible: columnVisibility[column.id] ?? true,
             onToggle: () => setColumnVisibility(prev => ({
               ...prev,
-              [column.id]: !(prev as any)[column.id]
+              [column.id]: !prev[column.id]
             }))
           }))}
         />

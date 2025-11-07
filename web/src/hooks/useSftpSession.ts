@@ -82,9 +82,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
       const fileItems = response.files.map(convertFileInfo);
       setFiles(fileItems);
       setCurrentPath(response.path);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[useSftpSession] 加载目录失败:', err);
-      setError(err.message || '加载目录失败');
+      const errorMessage = err instanceof Error ? err.message : '加载目录失败';
+      setError(errorMessage);
       setFiles([]);
     } finally {
       setIsLoading(false);

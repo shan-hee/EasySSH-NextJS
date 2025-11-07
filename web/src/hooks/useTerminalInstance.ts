@@ -1,15 +1,14 @@
 /**
  * 终端实例管理 Hook
- * 负责从全局 Store 获取或创建终端实例，并处理 DOM 挂载
+ * 负责从全局 Store 获取或创建终端实例,并处理 DOM 挂载
  */
 
 import { useEffect, useRef, useState } from 'react'
-import type { Terminal } from '@xterm/xterm'
-import type { FitAddon } from '@xterm/addon-fit'
 import { useTerminalStore, type TerminalInstanceState } from '@/stores/terminal-store'
+import type { TerminalTheme } from '@/components/terminal/terminal-themes'
 
 export interface TerminalConfig {
-  theme: any
+  theme: TerminalTheme
   fontSize: number
   fontFamily: string
   cursorStyle: 'block' | 'underline' | 'bar'
@@ -129,7 +128,7 @@ export function useTerminalInstance(
             })
 
             terminal.loadAddon(webglAddon)
-          } catch (error) {
+          } catch (_error) {
             // WebGL 不可用时自动降级到 Canvas 渲染器
           }
         })

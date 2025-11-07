@@ -5,7 +5,6 @@ import { Plus, Search, Zap, Bot } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   SidebarGroup,
@@ -19,7 +18,6 @@ import {
 
 export function QuickAccess() {
   const [searchQuery, setSearchQuery] = React.useState("")
-  const { state } = useSidebar()
   const pathname = usePathname()
 
   const quickActions: Array<{

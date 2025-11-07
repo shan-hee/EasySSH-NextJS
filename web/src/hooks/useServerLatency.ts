@@ -50,9 +50,9 @@ export function useServerLatency(options: UseServerLatencyOptions = {}) {
 
         const rtt = Math.round(performance.now() - start);
         setLatency(rtt);
-      } catch (error: any) {
+      } catch (error: unknown) {
         // 忽略 abort 错误
-        if (error.name !== 'AbortError') {
+        if (error instanceof Error && error.name !== 'AbortError') {
           console.error('[useServerLatency] 测量失败:', error);
           setLatency(-1); // 错误标记
         }

@@ -2,6 +2,25 @@ import { env } from "@/lib/env"
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
+/**
+ * API 错误类型
+ */
+export interface ApiError extends Error {
+  status: number
+  detail: unknown
+}
+
+/**
+ * 类型守卫:检查是否为 ApiError
+ */
+export function isApiError(error: unknown): error is ApiError {
+  return (
+    error instanceof Error &&
+    'status' in error &&
+    typeof (error as ApiError).status === 'number'
+  )
+}
+
 type ApiFetchOptions = {
   method?: HttpMethod
   headers?: HeadersInit

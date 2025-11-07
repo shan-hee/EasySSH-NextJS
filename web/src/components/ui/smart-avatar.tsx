@@ -28,7 +28,7 @@ interface SmartAvatarProps extends React.HTMLAttributes<HTMLDivElement> {
  * 3. 字母头像 (基于displayName或username的首字母)
  */
 export const SmartAvatar = React.forwardRef<HTMLDivElement, SmartAvatarProps>(
-  ({ className, src, username, displayName, email, onAvatarError, onAvatarLoad, ...props }, ref) => {
+  ({ className, src, username, displayName, onAvatarError, onAvatarLoad, ...props }, ref) => {
     // 生成字母头像内容
     const avatarFallback = React.useMemo(() => {
       const name = displayName || username || "U"
@@ -39,14 +39,14 @@ export const SmartAvatar = React.forwardRef<HTMLDivElement, SmartAvatarProps>(
       return name.charAt(0).toUpperCase()
     }, [displayName, username])
 
-    // 检查是否为生成的头像 (DiceBear等)
-    const isGeneratedAvatar = React.useMemo(() => {
-      if (!src) return false
-      return src.includes('dicebear.com') ||
-             src.includes('data:image/svg+xml') ||
-             src.includes('avatar') ||
-             src.includes('generated')
-    }, [src])
+    // 检查是否为生成的头像 (DiceBear等) - 暂未使用,保留用于未来功能
+    // const isGeneratedAvatar = React.useMemo(() => {
+    //   if (!src) return false
+    //   return src.includes('dicebear.com') ||
+    //          src.includes('data:image/svg+xml') ||
+    //          src.includes('avatar') ||
+    //          src.includes('generated')
+    // }, [src])
 
     // 生成渐变背景className (用于字母头像)
     const gradientClass = React.useMemo(() => {

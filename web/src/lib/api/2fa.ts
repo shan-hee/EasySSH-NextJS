@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
+import type { User } from "@/lib/api/auth"
 
 /**
  * 生成 2FA secret 响应
@@ -14,6 +15,17 @@ export interface Generate2FAResponse {
 export interface Enable2FAResponse {
   backup_codes: string[]
   message: string
+}
+
+/**
+ * 2FA 验证响应
+ */
+export interface Verify2FAResponse {
+  user: User
+  access_token: string
+  refresh_token: string
+  token_type: string
+  expires_in: number
 }
 
 /**
@@ -55,20 +67,8 @@ export const twoFactorApi = {
   async verify(
     tempToken: string,
     code: string
-  ): Promise<{
-    user: any
-    access_token: string
-    refresh_token: string
-    token_type: string
-    expires_in: number
-  }> {
-    return apiFetch<{
-      user: any
-      access_token: string
-      refresh_token: string
-      token_type: string
-      expires_in: number
-    }>("/auth/2fa/verify", {
+  ): Promise<Verify2FAResponse> {
+    return apiFetch<Verify2FAResponse>("/auth/2fa/verify", {
       method: "POST",
       body: JSON.stringify({
         temp_token: tempToken,

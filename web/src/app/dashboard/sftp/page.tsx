@@ -38,6 +38,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { createPortal } from 'react-dom'
 import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import { useRouter } from "next/navigation"
 
 // 将后端FileInfo转换为组件使用的文件格式
@@ -196,7 +197,7 @@ const SortableSession = React.memo(({ session, children, onCrossSessionDrop }: S
  // 使用 useMemo 缓存 cloneElement 结果
  // 仅在子元素为自定义组件时注入拖拽句柄属性，避免把未知属性传到原生 DOM
  const { childElement, isDomChild } = React.useMemo(() => {
-   const element = children as React.ReactElement<any>
+   const element = children as React.ReactElement
    const isDom = typeof element?.type === 'string'
    return {
      childElement: isDom
@@ -204,7 +205,7 @@ const SortableSession = React.memo(({ session, children, onCrossSessionDrop }: S
        : React.cloneElement(element, {
            dragHandleListeners: listeners,
            dragHandleAttributes: attributes,
-         } as any),
+         }),
      isDomChild: isDom,
    }
  }, [children, listeners, attributes])
@@ -286,15 +287,10 @@ export default function SftpPage() {
  : (response?.data || [])
 
  setServers(serverList)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to load servers:", error)
 
- if (error?.status === 401) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error("加载服务器列表失败: " + (error?.message || "未知错误"))
- }
+ toast.error(getErrorMessage(error, "加载服务器列表失败"))
  } finally {
  setLoading(false)
  }
@@ -493,61 +489,12 @@ export default function SftpPage() {
  : s
  )
  )
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to load directory:", error)
- toast.error(`加载目录失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "加载目录失败"))
 
  // 连接失败，移除会话
  setSessions(prev => prev.filter(s => s.id !== sessionId))
- }
- }
-
- // 连接到服务器
- const handleConnectToServer = async (sessionId: string, serverId: string) => {
- const server = servers.find(s => s.id === serverId)
- if (!server) return
-
- if (server.status !== "online") {
- toast.error("服务器离线，无法连接")
- return
- }
-
- try {
- const dirResponse = await sftpApi.listDirectory(token, serverId, "/")
- const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
-
- const filesWithParent: ComponentFile[] = dirResponse.parent
- ? [
- {
- name: "..",
- type: "directory" as const,
- size: "-",
- modified: "",
- permissions: "drwxr-xr-x",
- owner: "root",
- group: "root",
- },
- ...convertedFiles,
- ]
- : convertedFiles
-
- setSessions(prev =>
- prev.map(session =>
- session.id === sessionId
- ? {
- ...session,
- serverId,
- serverName: server.name,
- host: server.host,
- isConnected: true,
- files: filesWithParent,
- }
- : session
- )
- )
- } catch (error: any) {
- console.error("Failed to connect:", error)
- toast.error(`连接失败: ${error?.message || "未知错误"}`)
  }
  }
 
@@ -585,12 +532,12 @@ export default function SftpPage() {
  )
 
  toast.success("刷新成功")
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to refresh:", error)
  setSessions(prev =>
  prev.map(s => (s.id === sessionId ? { ...s, isLoading: false } : s))
  )
- toast.error(`刷新失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "刷新失败"))
  }
  }
 
@@ -644,12 +591,12 @@ export default function SftpPage() {
  : s
  )
  )
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to navigate:", error)
  setSessions(prev =>
  prev.map(s => (s.id === sessionId ? { ...s, isLoading: false } : s))
  )
- toast.error(`打开目录失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "打开目录失败"))
  }
  }
 
@@ -680,7 +627,7 @@ export default function SftpPage() {
      : undefined
  )
  successCount++
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error(`Failed to upload ${file.name}:`, error)
  failCount++
  }
@@ -729,9 +676,9 @@ export default function SftpPage() {
 
  // 刷新文件列表
  await handleRefreshSession(sessionId)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to delete:", error)
- toast.error(`删除失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "删除失败"))
  }
  }
 
@@ -748,9 +695,9 @@ export default function SftpPage() {
 
  // 刷新文件列表
  await handleRefreshSession(sessionId)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to create folder:", error)
- toast.error(`创建文件夹失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "创建文件夹失败"))
  }
  }
 
@@ -768,9 +715,9 @@ export default function SftpPage() {
 
  // 刷新文件列表
  await handleRefreshSession(sessionId)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to rename:", error)
- toast.error(`重命名失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "重命名失败"))
  }
  }
 
@@ -786,9 +733,9 @@ export default function SftpPage() {
  try {
  const content = await sftpApi.readFile(token, session.serverId, filePath)
  return content
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to read file:", error)
- toast.error(`读取文件失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "读取文件失败"))
  throw error
  }
  }
@@ -808,9 +755,9 @@ export default function SftpPage() {
 
  // 刷新文件列表（文件大小可能变化）
  await handleRefreshSession(sessionId)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to save file:", error)
- toast.error(`保存文件失败: ${error?.message || "未知错误"}`)
+ toast.error(getErrorMessage(error, "保存文件失败"))
  throw error
  }
  }
@@ -837,7 +784,7 @@ export default function SftpPage() {
  })
 
  // 连接中占位符（理论上不会显示，因为新会话直接连接）
- const renderWelcomePage = (sessionId: string) => (
+ const renderWelcomePage = (_sessionId: string) => (
  <div className="h-full flex flex-col rounded-xl border bg-card overflow-hidden">
  <div className="flex-1 flex items-center justify-center">
  <div className="text-center space-y-3 py-8">

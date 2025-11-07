@@ -16,8 +16,9 @@ import {
  AlertTriangle,
  RefreshCw
 } from "lucide-react"
-import { serversApi, monitoringApi, type Server as ApiServer, type SystemInfo, type CPUInfo, type MemoryInfo, type DiskInfo, type NetworkInterface } from "@/lib/api"
+import { serversApi, monitoringApi, type Server as ApiServer } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import { useRouter } from "next/navigation"
 import { SkeletonCard } from "@/components/ui/loading"
 
@@ -59,10 +60,10 @@ export default function MonitoringResourcesPage() {
  const [servers, setServers] = useState<ServerResource[]>([])
  const [loading, setLoading] = useState(true)
  const [isRefreshing, setIsRefreshing] = useState(false)
- const [token, setToken] = useState<string>("")
 
  useEffect(() => {
  loadData()
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
  async function loadData() {
@@ -74,8 +75,6 @@ export default function MonitoringResourcesPage() {
  router.push("/login")
  return
  }
-
- setToken(accessToken)
 
  // 加载服务器列表
  const serverListResponse = await serversApi.list(accessToken, {
@@ -181,15 +180,9 @@ export default function MonitoringResourcesPage() {
 
  const resourcesData = await Promise.all(resourcesPromises)
  setServers(resourcesData)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to load monitoring data:", error)
-
- if (error?.status === 401) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error("加载监控数据失败: " + (error?.message || "未知错误"))
- }
+ toast.error(getErrorMessage(error, "加载监控数据失败"))
  } finally {
  setLoading(false)
  }

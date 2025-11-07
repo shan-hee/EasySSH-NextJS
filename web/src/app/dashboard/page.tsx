@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import Link from "next/link"
-import { serversApi, auditLogsApi, type AuditLogStatisticsResponse } from "@/lib/api"
+import { serversApi, auditLogsApi } from "@/lib/api"
+import { getErrorMessage } from "@/lib/error-utils"
 import { Server, Activity, History } from "lucide-react"
 import { SkeletonCard } from "@/components/ui/loading"
 import { useRouter } from "next/navigation"
@@ -30,6 +31,7 @@ export default function Page() {
 
  useEffect(() => {
  loadDashboardData()
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
  async function loadDashboardData() {
@@ -60,7 +62,7 @@ export default function Page() {
  const offlineCount = servers.filter(s => s.status === "offline").length
 
  // 防御性检查：处理审计日志统计数据
-    const statsData = logsStats?.action_stats ? logsStats : ((logsStats as any)?.data || null)
+    const statsData = logsStats?.action_stats ? logsStats : (logsStats as unknown as { data?: typeof logsStats })?.data || null
 
  // 统计今日连接（根据操作日志中的登录操作）
  const todayConnections = statsData?.action_stats
@@ -77,15 +79,9 @@ export default function Page() {
  todayConnections,
  recentLogsCount,
  })
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to load dashboard data:", error)
-
- if (error?.status === 401) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error("加载仪表盘数据失败: " + (error?.message || "未知错误"))
- }
+ toast.error(getErrorMessage(error, "无法加载仪表盘数据"))
  } finally {
  setLoading(false)
  }

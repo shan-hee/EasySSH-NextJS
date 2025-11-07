@@ -4,7 +4,6 @@ import { ColumnDef } from "@tanstack/react-table"
 import { FileTransfer } from "@/lib/api/file-transfers"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Clock, XCircle, Upload, Download, ArrowUpDown } from "lucide-react"
 
 // 类型颜色映射

@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import {
   DndContext,
   DragEndEvent,
@@ -189,9 +190,6 @@ export default function ServersPage() {
    })
  )
 
- // 拖拽动画配置
- const [activeId, setActiveId] = useState<string | null>(null)
-
  // 客户端挂载检测
  useEffect(() => {
    setIsMounted(true)
@@ -201,6 +199,7 @@ export default function ServersPage() {
  useEffect(() => {
  loadServers()
  loadStatistics()
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
  // 根据搜索词和激活的标签过滤服务器
@@ -247,15 +246,9 @@ export default function ServersPage() {
 
  setServers(serverList)
  setFilteredServers(serverList)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to load servers:", error)
-
- if (error?.status === 401) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error("加载服务器列表失败: " + (error?.message || "未知错误"))
- }
+ toast.error(getErrorMessage(error, "加载服务器列表失败"))
  } finally {
  setLoading(false)
  }
@@ -319,8 +312,8 @@ export default function ServersPage() {
 
  await loadStatistics()
  }
- } catch (error: any) {
- toast.error("测试失败: " + (error?.message || "未知错误"))
+ } catch (error: unknown) {
+ toast.error(getErrorMessage(error, "测试失败"))
 
  // 异常时标记为错误状态
  setServers(prev => prev.map(s =>
@@ -370,7 +363,7 @@ export default function ServersPage() {
  } else {
  failCount++
  }
- } catch (error) {
+ } catch {
  failCount++
  setServers(prev => prev.map(s =>
  s.id === server.id ? { ...s, status: 'error' as const } : s
@@ -412,14 +405,14 @@ export default function ServersPage() {
 
  await loadServers()
  await loadStatistics()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to delete server:", error)
- toast.error("删除失败: " + (error?.message || "未知错误"))
+ toast.error(getErrorMessage(error, "删除失败"))
  }
  }
 
  // 拖拽开始
- const handleDragStart = (event: any) => {
+ const handleDragStart = (event: { active: { id: number } }) => {
  const server = servers.find(s => s.id === event.active.id)
  setDraggedServer(server || null)
  }
@@ -451,9 +444,9 @@ export default function ServersPage() {
  const serverIds = newOrder.map(s => s.id)
  await serversApi.reorder(token, serverIds)
  toast.success("排序已保存")
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to save server order:", error)
- toast.error("保存排序失败: " + (error?.message || "未知错误"))
+ toast.error(getErrorMessage(error, "保存排序失败"))
  // 错误时重新加载服务器列表
  await loadServers()
  }
@@ -499,21 +492,9 @@ export default function ServersPage() {
 
  await loadServers()
  await loadStatistics()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to add server:", error)
-
- let errorMessage = "未知错误"
- if (error?.detail) {
- if (typeof error.detail === 'object' && error.detail.message) {
- errorMessage = error.detail.message
- } else if (typeof error.detail === 'string') {
- errorMessage = error.detail
- }
- } else if (error?.message) {
- errorMessage = error.message
- }
-
- toast.error(`添加服务器失败: ${errorMessage}`)
+ toast.error(getErrorMessage(error, "添加服务器失败"))
  }
  }
 
@@ -549,21 +530,9 @@ export default function ServersPage() {
 
  await loadServers()
  await loadStatistics()
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("Failed to update server:", error)
-
- let errorMessage = "未知错误"
- if (error?.detail) {
- if (typeof error.detail === 'object' && error.detail.message) {
- errorMessage = error.detail.message
- } else if (typeof error.detail === 'string') {
- errorMessage = error.detail
- }
- } else if (error?.message) {
- errorMessage = error.message
- }
-
- toast.error(`更新服务器失败: ${errorMessage}`)
+ toast.error(getErrorMessage(error, "更新服务器失败"))
  }
  }
 

@@ -20,15 +20,11 @@ import {
  RefreshCw
 } from "lucide-react"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import {
  serversApi,
  monitoringApi,
  type Server as ApiServer,
- type SystemInfo,
- type CPUInfo,
- type MemoryInfo,
- type DiskInfo,
- type NetworkInterface
 } from "@/lib/api"
 import { SkeletonCard } from "@/components/ui/loading"
 
@@ -222,7 +218,7 @@ export default function MonitoringHealthPage() {
  lastCheck: new Date().toLocaleString("zh-CN"),
  uptime: formatUptime(systemInfo.uptime),
  }
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error(`加载服务器 ${server.name} 健康检查数据失败:`, error)
  return {
  id: server.id,
@@ -238,14 +234,9 @@ export default function MonitoringHealthPage() {
 
  const healthChecksData = await Promise.all(healthChecksPromises)
  setHealthChecks(healthChecksData)
- } catch (error: any) {
+ } catch (error: unknown) {
  console.error("加载健康检查数据失败:", error)
- if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
- toast.error("登录已过期，请重新登录")
- router.push("/login")
- } else {
- toast.error(`加载健康检查数据失败: ${error.message}`)
- }
+ toast.error(getErrorMessage(error, "加载健康检查数据失败"))
  } finally {
  setLoading(false)
  setRefreshing(false)
@@ -261,6 +252,7 @@ export default function MonitoringHealthPage() {
  // 初始加载
  useEffect(() => {
  loadData()
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
  // 计算总体统计
