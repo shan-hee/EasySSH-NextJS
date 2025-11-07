@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Search, RefreshCw, Activity, Server, ArrowUpDown, ArrowDownUp, Loader2, XCircle } from "lucide-react"
-import { sshSessionsApi, type SSHSession, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
+import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
 import { toast } from "@/components/ui/sonner"
 
 const statusColors = {
@@ -50,7 +50,7 @@ function formatTimestamp(timestamp: string): { date: string; time: string } {
 }
 
 export default function TerminalSessionsPage() {
-  const [sessions, setSessions] = useState<SSHSession[]>([])
+  const [sessions, setSessions] = useState<SSHSessionDetail[]>([])
   const [statistics, setStatistics] = useState<SSHSessionStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")

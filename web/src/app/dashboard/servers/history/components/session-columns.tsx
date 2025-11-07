@@ -1,7 +1,7 @@
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
-import { SSHSession } from "@/lib/api/ssh-sessions"
+import { SSHSessionDetail } from "@/lib/api/ssh-sessions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowUpDown, ArrowDownUp, Download, XCircle } from "lucide-react"
@@ -61,11 +61,11 @@ function formatClientIP(ip: string) {
 }
 
 interface SessionColumnsOptions {
-  onExport?: (session: SSHSession) => void
+  onExport?: (session: SSHSessionDetail) => void
   onDelete?: (sessionId: string) => void
 }
 
-export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef<SSHSession>[] {
+export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef<SSHSessionDetail>[] {
   return [
     // 服务器信息列
     {

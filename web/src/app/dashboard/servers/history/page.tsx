@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Clock, Activity, ArrowUpDown, ArrowDownUp } from "lucide-react"
-import { sshSessionsApi, type SSHSession, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
+import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
@@ -21,7 +21,7 @@ function formatBytes(bytes: number): string {
 }
 
 export default function ServersHistoryPage() {
-  const [sessions, setSessions] = useState<SSHSession[]>([])
+  const [sessions, setSessions] = useState<SSHSessionDetail[]>([])
   const [statistics, setStatistics] = useState<SSHSessionStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -110,7 +110,7 @@ export default function ServersHistoryPage() {
   }
 
   // 导出会话数据
-  const handleExportSession = (session: SSHSession) => {
+  const handleExportSession = (session: SSHSessionDetail) => {
     const data = {
       sessionId: session.session_id,
       clientIp: session.client_ip,

@@ -1,7 +1,10 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
 
-// SSH会话类型定义
-export interface SSHSession {
+/**
+ * SSH会话详细信息(用于会话历史管理)
+ * 注意: 与 ssh.ts 中的 SSHSession 不同,这是完整的会话记录
+ */
+export interface SSHSessionDetail {
   id: string
   user_id: string
   server_id: string
@@ -31,7 +34,7 @@ export interface ListSSHSessionsParams {
 }
 
 export interface ListSSHSessionsResponse {
-  data: SSHSession[]
+  data: SSHSessionDetail[]
   total: number
   page: number
   limit: number
@@ -83,7 +86,7 @@ export const sshSessionsApi = {
   /**
    * 获取SSH会话详情
    */
-  async getById(token: string, id: string): Promise<{ data: SSHSession }> {
+  async getById(token: string, id: string): Promise<{ data: SSHSessionDetail }> {
     const response = await fetch(`${API_BASE_URL}/ssh-sessions/${id}`, {
       method: "GET",
       headers: {

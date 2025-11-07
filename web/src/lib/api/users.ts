@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
+import type { User } from "./auth"
 
 /**
  * 用户角色
@@ -6,16 +7,10 @@ import { apiFetch } from "@/lib/api-client"
 export type UserRole = "admin" | "user" | "viewer"
 
 /**
- * 用户信息
+ * 用户详细信息(扩展基础User类型)
  */
-export interface User {
-  id: string
-  username: string
-  email: string
+export interface UserDetail extends User {
   role: UserRole
-  avatar: string
-  created_at: string
-  updated_at: string
   last_login_at?: string
 }
 
@@ -35,7 +30,7 @@ export interface UserStatistics {
  * 用户列表响应
  */
 export interface UserListResponse {
-  data: User[]
+  data: UserDetail[]
   total: number
   page: number
   limit: number
@@ -96,15 +91,15 @@ export const usersApi = {
   /**
    * 获取用户详情
    */
-  async getById(token: string, userId: string): Promise<{ data: User }> {
-    return apiFetch<{ data: User }>(`/users/${userId}`, { token })
+  async getById(token: string, userId: string): Promise<{ data: UserDetail }> {
+    return apiFetch<{ data: UserDetail }>(`/users/${userId}`, { token })
   },
 
   /**
    * 创建用户
    */
-  async create(token: string, data: CreateUserRequest): Promise<{ data: User; message: string }> {
-    return apiFetch<{ data: User; message: string }>(`/users`, {
+  async create(token: string, data: CreateUserRequest): Promise<{ data: UserDetail; message: string }> {
+    return apiFetch<{ data: UserDetail; message: string }>(`/users`, {
       token,
       method: "POST",
       body: JSON.stringify(data),
@@ -118,8 +113,8 @@ export const usersApi = {
     token: string,
     userId: string,
     data: UpdateUserRequest
-  ): Promise<{ data: User; message: string }> {
-    return apiFetch<{ data: User; message: string }>(`/users/${userId}`, {
+  ): Promise<{ data: UserDetail; message: string }> {
+    return apiFetch<{ data: UserDetail; message: string }>(`/users/${userId}`, {
       token,
       method: "PUT",
       body: JSON.stringify(data),

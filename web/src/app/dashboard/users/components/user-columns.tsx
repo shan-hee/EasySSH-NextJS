@@ -1,7 +1,7 @@
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
-import { User, UserRole } from "@/lib/api/users"
+import { UserDetail, UserRole } from "@/lib/api/users"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -62,12 +62,12 @@ function formatDate(dateString: string) {
 }
 
 interface UserColumnsOptions {
-  onEdit?: (user: User) => void
+  onEdit?: (user: UserDetail) => void
   onDelete?: (userId: string, username: string) => void
   onChangePassword?: (userId: string) => void
 }
 
-export function createUserColumns(options?: UserColumnsOptions): ColumnDef<User, unknown>[] {
+export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserDetail, unknown>[] {
   return [
     // 多选列
     {

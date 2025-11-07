@@ -1,13 +1,13 @@
 import { apiFetch } from "@/lib/api-client"
 
 /**
- * 用户信息
+ * 用户基础信息
  */
 export interface User {
   id: string
   username: string
   email: string
-  role: string
+  role: string  // 基础类型使用string,UserDetail中会强化为UserRole
   avatar?: string
   two_factor_enabled?: boolean
   notify_email_login?: boolean

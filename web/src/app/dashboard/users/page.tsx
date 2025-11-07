@@ -30,7 +30,7 @@ import {
   Eye,
   Trash2,
 } from "lucide-react"
-import { usersApi, type User, type UserRole } from "@/lib/api"
+import { usersApi, type UserDetail, type UserRole } from "@/lib/api"
 import { SkeletonCard } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
@@ -40,7 +40,7 @@ export default function UsersPage() {
   const router = useRouter()
 
   // 数据状态
-  const [users, setUsers] = useState<User[]>([])
+  const [users, setUsers] = useState<UserDetail[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -170,7 +170,7 @@ export default function UsersPage() {
   }
 
   // 编辑用户
-  const handleEdit = (user: User) => {
+  const handleEdit = (user: UserDetail) => {
     setEditingUserId(user.id)
     setEditUser({
       username: user.username,
