@@ -79,15 +79,11 @@ fi
 echo -e "${BLUE}🔧 配置开发环境参数...${NC}"
 
 # 将生产环境配置修改为开发环境
-sed -i 's/^DB_HOST=postgres$/DB_HOST=localhost/' .env
-sed -i 's/^REDIS_HOST=redis$/REDIS_HOST=localhost/' .env
 sed -i 's/^ENV=production$/ENV=development/' .env
 sed -i 's/^GIN_MODE=release$/GIN_MODE=debug/' .env
 sed -i 's/^DB_DEBUG=false$/DB_DEBUG=true/' .env
 
 echo -e "${GREEN}✅ 开发环境配置完成${NC}"
-echo -e "${YELLOW}   DB_HOST: localhost${NC}"
-echo -e "${YELLOW}   REDIS_HOST: localhost${NC}"
 echo -e "${YELLOW}   ENV: development${NC}"
 echo -e "${YELLOW}   GIN_MODE: debug${NC}"
 echo -e "${YELLOW}   DB_DEBUG: true${NC}\n"
@@ -162,7 +158,7 @@ fi
 # 启动前端
 echo -e "${GREEN}⚛️  启动 Next.js 前端...${NC}"
 cd web
-pnpm dev &
+PORT=$FRONTEND_PORT pnpm dev &
 WEB_PID=$!
 cd ..
 

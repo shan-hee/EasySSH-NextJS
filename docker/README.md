@@ -124,21 +124,40 @@ services:
 
 ⚠️ **注意**：容器内部端口（冒号后）保持不变，只修改宿主机端口（冒号前）。
 
-## 📦 独立构建镜像
+## 📦 镜像仓库
 
-### 构建后端镜像
+### Docker Hub 镜像
+
+本项目提供两个独立的 Docker 镜像：
+
+- **后端镜像**: [`shanheee/easyssh-backend`](https://hub.docker.com/r/shanheee/easyssh-backend)
+- **前端镜像**: [`shanheee/easyssh-frontend`](https://hub.docker.com/r/shanheee/easyssh-frontend)
+
+### 拉取镜像
 
 ```bash
-cd /path/to/EasySSH-NextJS
-docker build -f docker/Dockerfile.server -t easyssh-backend:latest .
+# 拉取最新版本
+docker pull shanheee/easyssh-backend:latest
+docker pull shanheee/easyssh-frontend:latest
+
+# 拉取指定版本
+docker pull shanheee/easyssh-backend:v1.0.0
+docker pull shanheee/easyssh-frontend:v1.0.0
 ```
 
-### 构建前端镜像
+### 本地构建镜像（可选）
+
+如果需要自定义构建：
 
 ```bash
 cd /path/to/EasySSH-NextJS
+
+# 构建后端镜像
+docker build -f docker/Dockerfile.server -t easyssh-backend:latest .
+
+# 构建前端镜像
 docker build -f docker/Dockerfile.web \
-  --build-arg NEXT_PUBLIC_API_BASE=http://localhost:8521 \
+  --build-arg NEXT_PUBLIC_API_BASE=http://backend:8521 \
   -t easyssh-frontend:latest .
 ```
 
@@ -195,7 +214,33 @@ docker compose logs --since=10m frontend
 
 ## 🔄 更新部署
 
-### 更新代码后重新部署
+### 拉取最新镜像并重启
+
+```bash
+cd docker
+
+# 拉取最新镜像
+docker compose pull
+
+# 重启服务
+docker compose up -d
+```
+
+### 更新到指定版本
+
+```bash
+# 编辑 docker-compose.yml，修改镜像标签
+# backend:
+#   image: shanheee/easyssh-backend:v1.0.1
+# frontend:
+#   image: shanheee/easyssh-frontend:v1.0.1
+
+# 拉取并重启
+docker compose pull
+docker compose up -d
+```
+
+### 本地构建并部署（开发者）
 
 ```bash
 cd docker
@@ -214,10 +259,12 @@ docker compose up -d --build
 
 ```bash
 # 仅更新后端
-docker compose up -d --build backend
+docker compose pull backend
+docker compose up -d backend
 
 # 仅更新前端
-docker compose up -d --build frontend
+docker compose pull frontend
+docker compose up -d frontend
 ```
 
 ## 💾 数据持久化
@@ -475,6 +522,47 @@ A:
 2. 检查健康状态：`docker compose ps`
 3. 查看本文档的故障排查部分
 4. 提交 Issue：[GitHub Issues](https://github.com/yourusername/easyssh/issues)
+
+## 🔖 版本号管理（开发者）
+
+### 发布新版本
+
+项目使用统一的 `VERSION` 文件管理版本号。更新版本号会自动触发 GitHub Actions 构建新的 Docker 镜像。
+
+```bash
+# 使用版本号管理脚本（推荐）
+./scripts/bump-version.sh 1.0.1
+
+# 或手动更新
+echo "1.0.1" > VERSION
+git add VERSION
+git commit -m "chore: bump version to 1.0.1"
+git push  # 触发 CI/CD 构建
+```
+
+### CI/CD 流程
+
+```
+更新 VERSION 文件 → 提交推送
+    ↓
+GitHub Actions 自动触发
+    ↓
+并行构建前后端镜像
+    ↓
+推送到 Docker Hub
+    ↓
+shanheee/easyssh-backend:v1.0.1
+shanheee/easyssh-backend:latest
+shanheee/easyssh-frontend:v1.0.1
+shanheee/easyssh-frontend:latest
+```
+
+### 查看构建状态
+
+- [后端构建](https://github.com/yourusername/easyssh/actions/workflows/docker-build-backend.yml)
+- [前端构建](https://github.com/yourusername/easyssh/actions/workflows/docker-build-frontend.yml)
+
+---
 
 ## 📄 许可证
 

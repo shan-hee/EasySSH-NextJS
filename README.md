@@ -106,7 +106,7 @@ make dev  # 推荐: 自动使用 Air 热重载,未安装时降级为普通模式
 ```bash
 # 启动前端
 cd web
-pnpm dev
+pnpm dev # 或者指定端口: pnpm dev -p 8520
 ```
 
 ---

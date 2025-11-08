@@ -5,10 +5,7 @@ services:
   # 后端服务 (Go API)
   # ================================
   backend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.server
-    image: easyssh-backend:latest
+    image: shanheee/easyssh-backend:latest
     container_name: easyssh-backend
     restart: unless-stopped
     ports:
@@ -60,13 +57,7 @@ services:
   # 前端服务 (Next.js)
   # ================================
   frontend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.web
-      args:
-        # 构建时环境变量（Next.js 需要在构建时注入）
-        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8521}
-    image: easyssh-frontend:latest
+    image: shanheee/easyssh-frontend:latest
     container_name: easyssh-frontend
     restart: unless-stopped
     ports:

@@ -1,17 +1,24 @@
-name: Docker Build & Push
+name: Build Frontend Docker Image
 
 on:
-  workflow_dispatch:  # 支持手动触发
+  push:
+    branches: [main]
+    paths:
+      - 'VERSION'                                     # 版本号变化
+      - 'docker/Dockerfile.web'                       # Dockerfile 变化
+      - '.github/workflows/docker-build-frontend.yml' # Workflow 自身变化
+
+  workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (可选,留空则使用 VERSION 文件)'
+        description: '版本号 (留空则使用 VERSION 文件)'
         required: false
         type: string
       update-latest:
         description: '是否更新 latest 标签'
         required: true
         type: boolean
-        default: false
+        default: true
       platforms:
         description: '构建平台'
         required: true
@@ -21,19 +28,14 @@ on:
           - 'linux/amd64,linux/arm64'
           - 'linux/amd64'
           - 'linux/arm64'
-  push:
-    branches:
-      - main
-    paths:
-      - 'VERSION'  # 只有 VERSION 文件变化时才触发 main 分支构建
-    tags:
-      - 'v*'
-  pull_request:
-    branches:
-      - main
+      api_base:
+        description: '后端 API 地址 (构建时注入)'
+        required: false
+        type: string
+        default: 'http://backend:8521'
 
 env:
-  DOCKER_IMAGE: shanheee/easyssh
+  DOCKER_IMAGE: shanheee/easyssh-frontend
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
@@ -77,14 +79,6 @@ jobs:
             # VERSION 文件变化触发 -> latest + v版本号
             type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-            # 标签推送 -> v1.0.0
-            type=semver,pattern=v{{version}}
-            # 标签推送 -> v1.0
-            type=semver,pattern=v{{major}}.{{minor}}
-            # 标签推送 -> v1
-            type=semver,pattern=v{{major}}
-            # PR 推送 -> pr-123
-            type=ref,event=pr,prefix=pr-
 
       - name: 🔧 设置 QEMU (多架构支持)
         uses: docker/setup-qemu-action@v3
@@ -97,68 +91,59 @@ jobs:
             network=host
 
       - name: 🔐 登录 Docker Hub
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 🏗️ 构建并推送 Docker 镜像
+      - name: 🏗️ 构建并推送前端 Docker 镜像
         id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/Dockerfile
+          file: ./docker/Dockerfile.web
           platforms: ${{ github.event.inputs.platforms || env.PLATFORMS }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
+            NEXT_PUBLIC_API_BASE=${{ github.event.inputs.api_base || 'http://backend:8521' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
 
       - name: 🔍 运行 Trivy 安全扫描
-        if: github.event_name != 'pull_request'
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
+          image-ref: ${{ env.DOCKER_IMAGE }}:latest
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
 
       - name: 📤 上传 Trivy 扫描结果到 GitHub Security
-        if: github.event_name != 'pull_request'
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: 🔍 运行 Trivy 漏洞扫描 (详细)
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-
-      - name: 📊 生成扫描摘要
-        if: github.event_name != 'pull_request'
+      - name: 📊 生成构建摘要
         run: |
-          echo "## 🐳 Docker 镜像构建成功" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 前端 Docker 镜像构建成功" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**镜像标签:**" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**支持架构:** ${{ env.PLATFORMS }}" >> $GITHUB_STEP_SUMMARY
+          echo "**支持架构:** ${{ github.event.inputs.platforms || env.PLATFORMS }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**镜像摘要:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**API 地址:** \`${{ github.event.inputs.api_base || 'http://backend:8521' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 快速启动" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${DOCKER_IMAGE}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${DOCKER_IMAGE}:latest" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
