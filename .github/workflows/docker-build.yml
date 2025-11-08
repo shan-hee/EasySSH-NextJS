@@ -144,15 +144,6 @@ jobs:
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
 
-      - name: 🔍 运行 Trivy 配置扫描
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
-          scan-type: 'config'
-          format: 'table'
-
       - name: 📊 生成扫描摘要
         if: github.event_name != 'pull_request'
         run: |
