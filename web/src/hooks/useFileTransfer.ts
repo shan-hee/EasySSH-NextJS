@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
 import { sftpApi } from '@/lib/api/sftp';
-import { getWsUrl } from '@/lib/config';
+import { getWsUrl, getApiUrl } from '@/lib/config';
 
 /**
  * 传输任务接口
@@ -309,7 +309,7 @@ export function useFileTransfer() {
         });
 
         // 发送请求
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8521/api/v1';
+        const apiUrl = getApiUrl();
         const url = `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(remotePath)}`;
         xhr.open('GET', url);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);

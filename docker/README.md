@@ -21,24 +21,25 @@ docker-compose up -d
 
 ## 重要提示
 
-⚠️ **生产环境部署前必须修改以下密码**：
+⚠️ **生产环境部署前必须修改以下配置**：
 
 编辑 `docker-compose.yml`：
 
 ```yaml
-# 数据库密码
+# 数据库密码（两处需保持一致）
 DB_PASSWORD: your-strong-password
 POSTGRES_PASSWORD: your-strong-password
 
-# Redis 密码
-REDIS_PASSWORD: your-redis-password
-command: redis-server --requirepass your-redis-password
-
 # JWT 密钥（至少 64 字符）
+# 生成: openssl rand -base64 48
 JWT_SECRET: your-very-long-random-jwt-secret-key
 
 # 加密密钥（必须 32 字节）
+# 生成: openssl rand -base64 24
 ENCRYPTION_KEY: your-32-byte-encryption-key!!
+
+# 前端 API 地址（生产环境需修改为实际域名）
+NEXT_PUBLIC_API_BASE: https://api.yourdomain.com
 ```
 
 ### 方式 2: 使用环境变量
@@ -78,10 +79,11 @@ REDIS_DB: 0               # Redis 数据库编号
 
 **应用配置**：
 ```yaml
-SERVER_PORT: 8521         # 后端端口
-WEB_PORT: 8520           # 前端端口
-ENV: production          # 环境：production/development
-GIN_MODE: release        # Gin 模式
+PORT: 8521                        # 后端端口
+WEB_PORT: 8520                    # 前端端口
+ENV: production                   # 环境：production/development
+GIN_MODE: release                 # Gin 模式
+NEXT_PUBLIC_API_BASE: http://localhost:8521  # 前端 API 地址
 ```
 
 **安全配置**（必须修改）：

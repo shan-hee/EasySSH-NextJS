@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // 反向代理配置 - 将 API 请求转发到后端服务
   async rewrites() {
-    // 后端服务地址（仅在服务端使用）
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:8521";
+    // 后端服务地址（统一使用 NEXT_PUBLIC_API_BASE）
+    const backendUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8521";
 
     return [
       {

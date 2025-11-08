@@ -12,18 +12,7 @@
  * 支持客户端和服务端使用
  */
 export function getApiBase(): string {
-  // 优先使用新的统一配置
-  if (process.env.NEXT_PUBLIC_API_BASE) {
-    return process.env.NEXT_PUBLIC_API_BASE
-  }
-
-  // 兼容旧配置
-  if (process.env.BACKEND_URL) {
-    return process.env.BACKEND_URL
-  }
-
-  // 默认值
-  return 'http://localhost:8521'
+  return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8521'
 }
 
 /**

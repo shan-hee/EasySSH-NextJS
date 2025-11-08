@@ -7,8 +7,39 @@ services:
     restart: unless-stopped
     ports:
       - "8520:8520"
-    env_file:
-      - ../.env
+    environment:
+      # 数据库配置
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: easyssh
+      DB_PASSWORD: easyssh_dev_password  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 16
+      DB_NAME: Easyssh_db
+      DB_SSLMODE: disable
+      DB_DEBUG: false
+
+      # Redis 配置
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_PASSWORD: ""  # 留空表示无密码 | 生成: openssl rand -base64 16
+
+      # 应用配置
+      ENV: production
+      GIN_MODE: release
+      PORT: 8521
+      WEB_PORT: 8520
+
+      # 前端配置
+      NEXT_PUBLIC_API_BASE: http://localhost:8521
+
+      # 安全配置 ⚠️ 生产环境必须修改
+      JWT_SECRET: easyssh-secret-change-in-production  # 生成: openssl rand -base64 48
+      JWT_ACCESS_EXPIRE_HOURS: 1
+      JWT_REFRESH_EXPIRE_HOURS: 168
+      ENCRYPTION_KEY: easyssh-encryption-key-32bytes!!  # 生成: openssl rand -base64 24
+
+      # AI 配置（可选）
+      OPENAI_API_KEY: your_openai_api_key_here
     depends_on:
       - postgres
       - redis
@@ -19,8 +50,10 @@ services:
     image: postgres:16
     container_name: Easyssh_postgres
     restart: unless-stopped
-    env_file:
-      - ../.env
+    environment:
+      POSTGRES_USER: easyssh
+      POSTGRES_PASSWORD: easyssh_dev_password  # ⚠️ 和 DB_PASSWORD 一致
+      POSTGRES_DB: Easyssh_db
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     networks:

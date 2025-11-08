@@ -76,16 +76,16 @@ OpenAPI 规范定义了以下模块：
 
 ```typescript
 async rewrites() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521";
+  const backendUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8521";
 
   return [
     {
       source: "/api/:path*",
-      destination: `${apiUrl}/api/:path*`,
+      destination: `${backendUrl}/api/v1/:path*`,
     },
     {
       source: "/ws/:path*",
-      destination: `${apiUrl}/ws/:path*`,
+      destination: `${backendUrl}/ws/:path*`,
     },
   ];
 }
@@ -93,11 +93,11 @@ async rewrites() {
 
 ### 环境变量配置
 
-**开发环境**: `web/.env.local`
+**统一配置文件**: 项目根目录 `.env`
 
 ```bash
 # 后端 API 地址
-NEXT_PUBLIC_API_URL=http://localhost:8521
+NEXT_PUBLIC_API_BASE=http://localhost:8521
 
 # AI 配置（可选）
 OPENAI_API_KEY=your_api_key
@@ -107,7 +107,7 @@ OPENAI_API_KEY=your_api_key
 
 在部署时设置环境变量：
 ```bash
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+NEXT_PUBLIC_API_BASE=https://api.yourdomain.com
 ```
 
 ### 前端 API 调用示例

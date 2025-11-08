@@ -309,46 +309,62 @@ make test
 
 ## 环境变量配置
 
-### 前端 (web/.env.local)
+### 统一配置文件 (.env)
+
+项目使用统一的 `.env` 文件进行配置，位于项目根目录。
 
 ```bash
-# API 地址
-NEXT_PUBLIC_API_URL=http://localhost:8521/api/v1
-
-# AI 配置（可选）
-OPENAI_API_KEY=your_api_key
-```
-
-### 后端 (server/.env)
-
-```bash
-# 服务器配置
-PORT=8521
-ENV=development
-ENCRYPTION_KEY=easyssh-encryption-key-32bytes!!
-
-# 数据库配置
-DB_HOST=localhost
+# ================================
+# 数据库配置 (PostgreSQL)
+# ================================
+DB_HOST=localhost              # Docker: postgres | 开发: localhost
 DB_PORT=5432
 DB_USER=easyssh
-DB_PASSWORD=easyssh_dev_password
-DB_NAME=easyssh
+DB_PASSWORD=easyssh_dev_password  # ⚠️ 生产环境请修改
+DB_NAME=Easyssh_db
 DB_SSLMODE=disable
-DB_DEBUG=true
+DB_DEBUG=false
 
-# Redis 配置
-REDIS_HOST=localhost
+# ================================
+# 缓存配置 (Redis)
+# ================================
+REDIS_HOST=localhost           # Docker: redis | 开发: localhost
 REDIS_PORT=6379
-REDIS_PASSWORD=
 REDIS_DB=0
+REDIS_PASSWORD=                # 留空表示无密码
 
-# JWT 配置
+# ================================
+# 应用配置
+# ================================
+ENV=development                # development | production
+GIN_MODE=debug                 # debug | release
+PORT=8521                      # 后端端口
+WEB_PORT=8520                  # 前端端口
+
+# 前端 API 地址
+NEXT_PUBLIC_API_BASE=http://localhost:8521
+
+# ================================
+# 安全配置 ⚠️ 生产环境必须修改
+# ================================
+# JWT 签名密钥（生成: openssl rand -base64 48）
 JWT_SECRET=easyssh-secret-change-in-production
 JWT_ACCESS_EXPIRE_HOURS=1
 JWT_REFRESH_EXPIRE_HOURS=168
+
+# 数据加密密钥（生成: openssl rand -base64 24）
+ENCRYPTION_KEY=easyssh-encryption-key-32bytes!!
+
+# ================================
+# AI 配置（可选）
+# ================================
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-**注意**: 生产环境请务必修改 `JWT_SECRET` 和 `ENCRYPTION_KEY`！
+**配置说明**：
+- **开发环境**：`dev.sh` 脚本会自动调整配置为开发环境
+- **Docker 部署**：配置已内置在 `docker-compose.yml` 中
+- **生产环境**：务必修改 `JWT_SECRET`、`ENCRYPTION_KEY` 和 `DB_PASSWORD`
 
 ## 贡献指南
 

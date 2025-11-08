@@ -1,4 +1,4 @@
-import { env } from "@/lib/env"
+import { getApiUrl } from "@/lib/config"
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
@@ -32,17 +32,19 @@ type ApiFetchOptions = {
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   // 构建请求URL
   // 如果path是完整URL则直接使用
-  // 如果apiBaseUrl是相对路径,直接拼接(用于反向代理)
-  // 如果apiBaseUrl是完整URL,使用URL构造器拼接
+  // 否则使用统一的API URL配置
   let url: string
   if (path.startsWith("http")) {
     url = path
-  } else if (env.apiBaseUrl.startsWith("http")) {
-    // 完整URL: http://localhost:8521/api/v1
-    url = new URL(`${env.apiBaseUrl}${path}`).toString()
   } else {
-    // 相对路径: /api/v1
-    url = `${env.apiBaseUrl}${path}`
+    const apiUrl = getApiUrl()
+    if (apiUrl.startsWith("http")) {
+      // 完整URL: http://localhost:8521/api/v1
+      url = new URL(`${apiUrl}${path}`).toString()
+    } else {
+      // 相对路径: /api/v1
+      url = `${apiUrl}${path}`
+    }
   }
 
   const headers: HeadersInit = {

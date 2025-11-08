@@ -9,14 +9,14 @@ import { type User } from "@/lib/api/auth"
 const TOKEN_KEY = "easyssh_access_token"
 const REFRESH_TOKEN_KEY = "easyssh_refresh_token"
 
+import { getApiUrl } from "./config"
+
 /**
  * 从环境变量获取API基础URL
  * 服务端需要使用完整的后端URL，不能用相对路径
  */
 function getApiBaseUrl(): string {
-  return process.env.BACKEND_URL
-    ? `${process.env.BACKEND_URL}/api/v1`
-    : "http://localhost:8521/api/v1"
+  return getApiUrl()
 }
 
 /**

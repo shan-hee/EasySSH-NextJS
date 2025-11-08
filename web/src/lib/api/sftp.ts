@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
+import { getApiUrl } from "../config"
 
 /**
  * 文件信息
@@ -119,7 +120,7 @@ export const sftpApi = {
    */
   async readFile(token: string, serverId: string, path: string): Promise<string> {
     // 注意: 后端返回的是纯文本(text/plain),不是JSON
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
+    const apiUrl = getApiUrl()
     const response = await fetch(`${apiUrl}/sftp/${serverId}/read?path=${encodeURIComponent(path)}`, {
       method: "GET",
       headers: {
@@ -160,7 +161,7 @@ export const sftpApi = {
    * 获取下载URL
    */
   getDownloadUrl(serverId: string, path: string, token: string): string {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
+    const apiUrl = getApiUrl()
     return `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(path)}&token=${token}`
   },
 
@@ -179,7 +180,7 @@ export const sftpApi = {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
+      const apiUrl = getApiUrl()
 
       // 监听上传进度事件（HTTP 阶段）
       if (onProgress) {

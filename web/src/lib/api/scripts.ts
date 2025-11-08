@@ -2,7 +2,9 @@
  * 脚本管理 API 客户端
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
+import { getApiUrl } from "../config"
+
+const API_BASE_URL = getApiUrl()
 
 // 脚本类型定义
 export interface Script {

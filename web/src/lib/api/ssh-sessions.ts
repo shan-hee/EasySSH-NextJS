@@ -1,4 +1,6 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8521/api/v1"
+import { getApiUrl } from "../config"
+
+const API_BASE_URL = getApiUrl()
 
 /**
  * SSH会话详细信息(用于会话历史管理)

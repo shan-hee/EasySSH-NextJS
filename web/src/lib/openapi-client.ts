@@ -1,10 +1,10 @@
 import createClient from "openapi-fetch"
 import type { paths } from "@/types/openapi"
-import { env } from "@/lib/env"
+import { getApiUrl } from "@/lib/config"
 
 export function getOpenAPIClient(token?: string) {
   return createClient<paths>({
-    baseUrl: env.apiBaseUrl,
+    baseUrl: getApiUrl(),
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 }
