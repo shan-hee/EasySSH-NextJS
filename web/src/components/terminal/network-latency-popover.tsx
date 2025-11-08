@@ -83,8 +83,8 @@ export function NetworkLatencyPopover() {
           className="h-7 rounded-md transition-colors flex items-center gap-2 px-2.5 text-foreground hover:bg-accent hover:text-accent-foreground"
           aria-label="网络延迟"
         >
-          <Globe className="h-3.5 w-3.5" />
-          <div className="flex flex-col items-start leading-none text-left">
+          <Globe className="h-3.5 w-3.5 shrink-0" />
+          <div className="flex flex-col items-start leading-none text-left min-w-[3.5rem]">
             <span className="text-[9px] uppercase font-semibold text-muted-foreground">
               RTT
             </span>
@@ -95,7 +95,7 @@ export function NetworkLatencyPopover() {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto min-w-[320px] p-4"
+        className="w-[340px] p-4"
         align="center"
         sideOffset={8}
       >
@@ -103,7 +103,7 @@ export function NetworkLatencyPopover() {
           {/* 标题 - 居中对齐 */}
           <div className="text-center">
             <h4 className="text-sm font-medium text-foreground">
-              网络延迟: <span className={status.textColor}>{currentLatency} ms</span>
+              网络延迟: <span className={`${status.textColor} inline-block min-w-[4.5rem] text-center tabular-nums`}>{currentLatency} ms</span>
             </h4>
           </div>
 
@@ -119,26 +119,26 @@ export function NetworkLatencyPopover() {
                 return (
                   <div key={node.name} className="flex items-start">
                     {/* 节点 */}
-                    <div className="flex flex-col items-center gap-3">
+                    <div className="flex flex-col items-center gap-3 w-[3.5rem]">
                       {/* 节点图标 */}
-                      <div className="text-foreground relative z-10 bg-background">
+                      <div className="text-foreground relative z-10 bg-background w-[14px] h-[14px] flex items-center justify-center">
                         {getNodeIcon(node.icon)}
                       </div>
 
                       {/* 节点名称 */}
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap text-center w-full">
                         {node.name}
                       </span>
                     </div>
 
                     {/* 连接线和延迟 */}
                     {!isLast && (
-                      <div className="flex flex-col items-center pt-[7px] px-4">
+                      <div className="flex flex-col items-center pt-[7px] w-[80px]">
                         {/* 连接线 */}
                         <div className="w-full h-px bg-border mb-1.5" />
 
-                        {/* 延迟信息 */}
-                        <span className={`text-xs font-mono tabular-nums ${getLatencyStatus(segmentLatency).textColor}`}>
+                        {/* 延迟信息 - 固定宽度，居中对齐 */}
+                        <span className={`text-xs font-mono tabular-nums text-center ${getLatencyStatus(segmentLatency).textColor}`}>
                           ~ {segmentLatency} ms
                         </span>
                       </div>
