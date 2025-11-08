@@ -10,6 +10,9 @@
 /**
  * 获取后端基础地址
  * 支持客户端和服务端使用
+ *
+ * @returns 后端基础地址，例如: http://localhost:8521
+ * @note 默认值仅用于开发环境，生产环境必须配置 NEXT_PUBLIC_API_BASE
  */
 export function getApiBase(): string {
   return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8521'

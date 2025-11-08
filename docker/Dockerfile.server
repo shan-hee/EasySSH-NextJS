@@ -36,6 +36,8 @@ RUN chown -R appuser:appuser /app
 
 USER appuser
 
+# 暴露端口（默认 8521，可通过环境变量 PORT 覆盖）
 EXPOSE 8521
 
+# 启动应用（端口通过环境变量 PORT 配置）
 CMD ["./easyssh-api"]

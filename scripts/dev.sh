@@ -14,6 +14,15 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}🚀 启动 EasySSH 开发环境...${NC}\n"
 
+# 加载环境变量
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | grep -v '^$' | xargs)
+fi
+
+# 设置默认端口（如果环境变量未设置）
+BACKEND_PORT=${PORT:-8521}
+FRONTEND_PORT=${WEB_PORT:-8520}
+
 # 函数：检查命令是否存在
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -112,16 +121,16 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
         exit 1
     fi
 
-    # 检查后端端口是否就绪（假设后端运行在 8521 端口）
+    # 检查后端端口是否就绪
     if command_exists curl; then
-        if curl -s --connect-timeout 2 http://localhost:8521/health >/dev/null 2>&1 || \
-           curl -s --connect-timeout 2 http://localhost:8521/api/health >/dev/null 2>&1 || \
-           curl -s --connect-timeout 2 http://localhost:8521/ >/dev/null 2>&1; then
+        if curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/health" >/dev/null 2>&1 || \
+           curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/api/health" >/dev/null 2>&1 || \
+           curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/" >/dev/null 2>&1; then
             BACKEND_READY=true
             break
         fi
     elif command_exists nc; then
-        if nc -z localhost 8521 2>/dev/null; then
+        if nc -z localhost ${BACKEND_PORT} 2>/dev/null; then
             # 再等待2秒确保服务完全就绪
             sleep 2
             BACKEND_READY=true
@@ -180,8 +189,8 @@ trap cleanup EXIT INT TERM
 echo ""
 echo -e "${GREEN}✅ 开发环境启动完成！${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}前端:${NC}    http://localhost:8520"
-echo -e "${GREEN}后端:${NC}    http://localhost:8521"
+echo -e "${GREEN}前端:${NC}    http://localhost:${FRONTEND_PORT}"
+echo -e "${GREEN}后端:${NC}    http://localhost:${BACKEND_PORT}"
 echo -e "${GREEN}配置:${NC}   使用根目录 .env 中的配置"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "\n${YELLOW}按 Ctrl+C 停止所有服务${NC}\n"

@@ -15,6 +15,14 @@ RUN pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
+# 接收构建参数
+ARG NEXT_PUBLIC_API_BASE
+ARG NEXT_PUBLIC_WS_HOST
+
+# 设置构建时环境变量（Next.js 需要在构建时注入 NEXT_PUBLIC_* 变量）
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+ENV NEXT_PUBLIC_WS_HOST=${NEXT_PUBLIC_WS_HOST}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY web/ ./
 
@@ -36,8 +44,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
+# 暴露端口（默认 8520，可通过环境变量覆盖）
 EXPOSE 8520
 
+# 运行时环境变量（可通过 docker-compose 覆盖）
 ENV PORT=8520
 ENV HOSTNAME="0.0.0.0"
 

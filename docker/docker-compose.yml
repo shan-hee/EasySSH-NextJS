@@ -1,75 +1,160 @@
 version: '3.8'
 
 services:
-  easyssh:
-    image: shanheee/easyssh:latest
-    container_name: easyssh
+  # ================================
+  # 后端服务 (Go API)
+  # ================================
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    image: easyssh-backend:latest
+    container_name: easyssh-backend
     restart: unless-stopped
     ports:
-      - "8520:8520"
+      - "${PORT:-8521}:8521"
     environment:
       # 数据库配置
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: easyssh
-      DB_PASSWORD: easyssh_dev_password  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 16
-      DB_NAME: Easyssh_db
-      DB_SSLMODE: disable
-      DB_DEBUG: false
+      DB_USER: ${DB_USER:-easyssh}
+      DB_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 16
+      DB_NAME: ${DB_NAME:-Easyssh_db}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      DB_DEBUG: ${DB_DEBUG:-false}
 
       # Redis 配置
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_DB: 0
-      REDIS_PASSWORD: ""  # 留空表示无密码 | 生成: openssl rand -base64 16
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}  # 留空表示无密码 | 生成: openssl rand -base64 16
 
       # 应用配置
-      ENV: production
-      GIN_MODE: release
+      ENV: ${ENV:-production}
+      GIN_MODE: ${GIN_MODE:-release}
       PORT: 8521
-      WEB_PORT: 8520
-
-      # 前端配置
-      NEXT_PUBLIC_API_BASE: http://localhost:8521
 
       # 安全配置 ⚠️ 生产环境必须修改
-      JWT_SECRET: easyssh-secret-change-in-production  # 生成: openssl rand -base64 48
-      JWT_ACCESS_EXPIRE_HOURS: 1
-      JWT_REFRESH_EXPIRE_HOURS: 168
-      ENCRYPTION_KEY: easyssh-encryption-key-32bytes!!  # 生成: openssl rand -base64 24
+      JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-production}  # 生成: openssl rand -base64 48
+      JWT_ACCESS_EXPIRE_HOURS: ${JWT_ACCESS_EXPIRE_HOURS:-1}
+      JWT_REFRESH_EXPIRE_HOURS: ${JWT_REFRESH_EXPIRE_HOURS:-168}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # 生成: openssl rand -base64 24
 
       # AI 配置（可选）
-      OPENAI_API_KEY: your_openai_api_key_here
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - easyssh-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8521/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
+  # ================================
+  # 前端服务 (Next.js)
+  # ================================
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      args:
+        # 构建时环境变量（Next.js 需要在构建时注入）
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8521}
+    image: easyssh-frontend:latest
+    container_name: easyssh-frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8520}:8520"
+    environment:
+      # 运行时配置
+      NODE_ENV: production
+      PORT: 8520
+      HOSTNAME: 0.0.0.0
+
+      # 后端服务地址（容器内部通信）
+      # ⚠️ 注意：这里使用服务名 'backend' 而不是 'localhost'
+      NEXT_PUBLIC_API_BASE: http://backend:8521
+      NEXT_PUBLIC_WS_HOST: ${NEXT_PUBLIC_WS_HOST:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - easyssh-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8520/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ================================
+  # PostgreSQL 数据库
+  # ================================
   postgres:
-    image: postgres:16
-    container_name: Easyssh_postgres
+    image: postgres:16-alpine
+    container_name: easyssh-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: easyssh
-      POSTGRES_PASSWORD: easyssh_dev_password  # ⚠️ 和 DB_PASSWORD 一致
-      POSTGRES_DB: Easyssh_db
+      POSTGRES_USER: ${DB_USER:-easyssh}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}  # ⚠️ 和 DB_PASSWORD 一致
+      POSTGRES_DB: ${DB_NAME:-Easyssh_db}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - easyssh-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-easyssh} -d ${DB_NAME:-Easyssh_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
+  # ================================
+  # Redis 缓存
+  # ================================
   redis:
-    image: redis:7
-    container_name: Easyssh_redis
+    image: redis:7-alpine
+    container_name: easyssh-redis
     restart: unless-stopped
+    command: >
+      sh -c "
+      if [ -n \"${REDIS_PASSWORD:-}\" ]; then
+        redis-server --appendonly yes --requirepass \"${REDIS_PASSWORD}\"
+      else
+        redis-server --appendonly yes
+      fi
+      "
     volumes:
-      - ./data/redis:/data
-    command: redis-server --appendonly yes
+      - redis_data:/data
     networks:
       - easyssh-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
+# ================================
+# 网络配置
+# ================================
 networks:
   easyssh-network:
     name: easyssh-network
     driver: bridge
+
+# ================================
+# 数据卷配置
+# ================================
+volumes:
+  postgres_data:
+    name: easyssh-postgres-data
+  redis_data:
+    name: easyssh-redis-data
