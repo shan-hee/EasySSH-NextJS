@@ -445,17 +445,18 @@ export default function SftpPage() {
  const sessionId = `session-${nextSessionId}`
  // 在SFTP页面使用根目录，在终端页面使用用户主目录
  const initialPath = "/"
+ const serverDisplayName = server.name || `${server.username}@${server.host}:${server.port}`
  const newSession: SftpSession = {
  id: sessionId,
  serverId: server.id,
- serverName: server.name,
+ serverName: serverDisplayName,
  host: server.host,
  username: server.username,
  currentPath: initialPath,
  files: [],
  isConnected: false,
  isLoading: true, // 初始加载状态
- label: `${server.name}`,
+ label: serverDisplayName,
  color: sessionColors[(nextSessionId - 1) % sessionColors.length],
  }
  setSessions(prev => [...prev, newSession])
@@ -845,7 +846,7 @@ export default function SftpPage() {
  >
  <Server className="h-4 w-4 text-green-500" />
  <div className="flex-1 min-w-0">
- <div className="font-medium text-sm truncate">{server.name}</div>
+ <div className="font-medium text-sm truncate">{server.name || server.host}</div>
  <div className="text-xs text-muted-foreground font-mono truncate">
  {server.host}
  </div>
@@ -871,7 +872,7 @@ export default function SftpPage() {
  >
  <Server className="h-4 w-4 text-zinc-400" />
  <div className="flex-1 min-w-0">
- <div className="font-medium text-sm truncate">{server.name}</div>
+ <div className="font-medium text-sm truncate">{server.name || server.host}</div>
  <div className="text-xs text-muted-foreground font-mono truncate">
  {server.host}
  </div>
@@ -933,7 +934,7 @@ export default function SftpPage() {
  </div>
  <div className="space-y-0.5 w-full">
  <h3 className="font-medium text-xs truncate transition-colors text-zinc-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400">
- {server.name}
+ {server.name || server.host}
  </h3>
  <p className="text-[10px] text-zinc-600 dark:text-zinc-600 font-mono truncate">
  {server.host}
@@ -969,7 +970,7 @@ export default function SftpPage() {
  </div>
  <div className="space-y-0.5 w-full">
  <h3 className="font-medium text-xs truncate text-zinc-600 dark:text-zinc-400">
- {server.name}
+ {server.name || server.host}
  </h3>
  <p className="text-[10px] text-zinc-600 dark:text-zinc-600 font-mono truncate">
  {server.host}

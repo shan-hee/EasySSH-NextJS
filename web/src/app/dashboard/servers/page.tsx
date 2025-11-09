@@ -216,7 +216,7 @@ export default function ServersPage() {
  // 按搜索词过滤
  if (searchTerm) {
  filtered = filtered.filter(server =>
- server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+ (server.name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
  server.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
  server.username.toLowerCase().includes(searchTerm.toLowerCase())
  )
@@ -403,7 +403,10 @@ export default function ServersPage() {
  await serversApi.delete(token, serverId)
  toast.success("服务器已删除")
 
- await loadServers()
+ // 乐观更新：直接从本地列表移除，避免整个页面刷新
+ setServers(prev => prev.filter(s => s.id !== serverId))
+
+ // 只刷新统计信息
  await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to delete server:", error)
@@ -485,12 +488,15 @@ export default function ServersPage() {
  description: data.description,
  }
 
- await serversApi.create(token, serverData)
+ const newServer = await serversApi.create(token, serverData)
 
  toast.success("服务器添加成功")
  setIsAddDialogOpen(false)
 
- await loadServers()
+ // 乐观更新：直接添加到本地列表，避免整个页面刷新
+ setServers(prev => [...prev, newServer])
+
+ // 只刷新统计信息
  await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to add server:", error)
@@ -511,7 +517,7 @@ export default function ServersPage() {
  return
  }
 
- await serversApi.update(token, editingServer.id, {
+ const updatedServer = await serversApi.update(token, editingServer.id, {
  name: data.name,
  host: data.host,
  port: parseInt(data.port) || 22,
@@ -528,7 +534,12 @@ export default function ServersPage() {
  setIsEditDialogOpen(false)
  setEditingServer(null)
 
- await loadServers()
+ // 乐观更新：只更新被修改的服务器，避免整个页面刷新
+ setServers(prev => prev.map(s =>
+ s.id === editingServer.id ? updatedServer : s
+ ))
+
+ // 只刷新统计信息（如果标签或分组改变）
  await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to update server:", error)

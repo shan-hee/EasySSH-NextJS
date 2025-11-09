@@ -30,7 +30,7 @@ const (
 type Server struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
 	UserID        uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
-	Name          string         `gorm:"not null;size:100" json:"name"`
+	Name          string         `gorm:"size:100" json:"name"`
 	Host          string         `gorm:"not null;size:255" json:"host"`
 	Port          int            `gorm:"default:22" json:"port"`
 	Username      string         `gorm:"not null;size:50" json:"username"`

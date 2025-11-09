@@ -83,7 +83,7 @@ export default function MonitoringHealthPage() {
  if (server.status !== "online") {
  return {
  id: server.id,
- server: server.name,
+ server: server.name || `${server.username}@${server.host}:${server.port}`,
  ip: server.host,
  status: "offline" as const,
  checks: [],
@@ -205,7 +205,7 @@ export default function MonitoringHealthPage() {
 
  return {
  id: server.id,
- server: server.name,
+ server: server.name || `${server.username}@${server.host}:${server.port}`,
  ip: server.host,
  status: overallStatus,
  checks,
@@ -219,10 +219,10 @@ export default function MonitoringHealthPage() {
  uptime: formatUptime(systemInfo.uptime),
  }
  } catch (error: unknown) {
- console.error(`加载服务器 ${server.name} 健康检查数据失败:`, error)
+ console.error(`加载服务器 ${server.name || server.host} 健康检查数据失败:`, error)
  return {
  id: server.id,
- server: server.name,
+ server: server.name || `${server.username}@${server.host}:${server.port}`,
  ip: server.host,
  status: "error" as const,
  checks: [],

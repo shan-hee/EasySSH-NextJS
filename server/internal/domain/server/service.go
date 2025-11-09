@@ -47,7 +47,7 @@ type Service interface {
 
 // CreateServerRequest 创建服务器请求
 type CreateServerRequest struct {
-	Name        string     `json:"name" binding:"required"`
+	Name        string     `json:"name"`
 	Host        string     `json:"host" binding:"required"`
 	Port        int        `json:"port"`
 	Username    string     `json:"username" binding:"required"`
@@ -107,8 +107,8 @@ func NewService(repo Repository, encryptor *crypto.Encryptor) Service {
 
 func (s *serverService) Create(ctx context.Context, userID uuid.UUID, req *CreateServerRequest) (*Server, error) {
 	// 参数验证
-	if req.Name == "" || req.Host == "" || req.Username == "" {
-		return nil, errors.New("name, host and username are required")
+	if req.Host == "" || req.Username == "" {
+		return nil, errors.New("host and username are required")
 	}
 
 	if req.Port == 0 {

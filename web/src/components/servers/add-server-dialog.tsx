@@ -33,7 +33,7 @@ interface AddServerDialogProps {
 }
 
 export interface ServerFormData {
-  name: string
+  name?: string
   host: string
   port: string
   username: string

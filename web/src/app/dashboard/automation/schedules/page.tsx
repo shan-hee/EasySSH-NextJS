@@ -206,7 +206,7 @@ export default function AutomationSchedulesPage() {
  // 过滤服务器
  const filteredServers = servers.filter(
  (server) =>
- server.name.toLowerCase().includes(serverSearchTerm.toLowerCase()) ||
+ (server.name?.toLowerCase().includes(serverSearchTerm.toLowerCase()) ?? false) ||
  server.host.toLowerCase().includes(serverSearchTerm.toLowerCase())
  )
 
@@ -900,7 +900,7 @@ export default function AutomationSchedulesPage() {
  className="cursor-pointer"
  />
  <div className="flex-1">
- <div className="font-medium text-sm">{server.name}</div>
+ <div className="font-medium text-sm">{server.name || server.host}</div>
  <div className="text-xs text-muted-foreground">{server.host}</div>
  </div>
  <Badge variant="outline" className="text-xs">
@@ -1049,7 +1049,7 @@ export default function AutomationSchedulesPage() {
  className="cursor-pointer"
  />
  <div className="flex-1">
- <div className="font-medium text-sm">{server.name}</div>
+ <div className="font-medium text-sm">{server.name || server.host}</div>
  <div className="text-xs text-muted-foreground">{server.host}</div>
  </div>
  <Badge variant="outline" className="text-xs">

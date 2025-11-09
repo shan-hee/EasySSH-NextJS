@@ -160,7 +160,7 @@ export default function AutomationBatchPage() {
 
  // 过滤服务器
  const filteredServers = servers.filter(server =>
- server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+ (server.name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
  server.host.toLowerCase().includes(searchTerm.toLowerCase())
  )
 
@@ -645,7 +645,7 @@ export default function AutomationBatchPage() {
  className="flex-1 flex items-center justify-between cursor-pointer"
  >
  <div>
- <div className="font-medium">{server.name}</div>
+ <div className="font-medium">{server.name || server.host}</div>
  <div className="text-sm text-muted-foreground">{server.host}</div>
  </div>
  <Badge variant={server.status === "online" ? "default" : "secondary"}>
@@ -788,7 +788,7 @@ export default function AutomationBatchPage() {
  className="flex-1 flex items-center justify-between cursor-pointer"
  >
  <div>
- <div className="font-medium">{server.name}</div>
+ <div className="font-medium">{server.name || server.host}</div>
  <div className="text-sm text-muted-foreground">{server.host}</div>
  </div>
  <Badge variant={server.status === "online" ? "default" : "secondary"}>
@@ -918,7 +918,7 @@ export default function AutomationBatchPage() {
  className="flex-1 flex items-center justify-between cursor-pointer"
  >
  <div>
- <div className="font-medium">{server.name}</div>
+ <div className="font-medium">{server.name || server.host}</div>
  <div className="text-sm text-muted-foreground">{server.host}</div>
  </div>
  <Badge variant={server.status === "online" ? "default" : "secondary"}>

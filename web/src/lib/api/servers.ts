@@ -16,7 +16,7 @@ export type ServerStatus = "online" | "offline" | "error" | "unknown"
 export interface Server {
   id: string
   user_id: string
-  name: string
+  name?: string
   host: string
   port: number
   username: string
@@ -37,7 +37,7 @@ export interface Server {
  * 创建服务器请求
  */
 export interface CreateServerRequest {
-  name: string
+  name?: string
   host: string
   port: number
   username: string

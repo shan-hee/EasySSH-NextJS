@@ -91,7 +91,7 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
 
                     <div className="flex-1 min-w-0">
                       <div className={"text-sm font-medium transition-colors truncate text-zinc-900 group-hover:text-green-600 dark:text-white dark:group-hover:text-green-400"}>
-                        {server.name}
+                        {server.name || server.host}
                       </div>
                       <div className={"text-xs font-mono truncate text-zinc-500 dark:text-zinc-600"}>
                         {server.username}@{server.host}:{server.port}
@@ -136,7 +136,7 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
                 {offlineServers.map((server) => (
                   <div key={server.id} className={"flex items-center gap-2 text-xs pl-3 text-zinc-500 dark:text-zinc-600"}>
                     <div className={"w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-700"}></div>
-                    {server.name} <span className="font-mono">({server.host})</span>
+                    {server.name || server.host} <span className="font-mono">({server.host})</span>
                   </div>
                 ))}
               </div>

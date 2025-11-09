@@ -93,7 +93,7 @@ export default function MonitoringResourcesPage() {
  // 离线服务器返回默认数据
  return {
  id: server.id,
- name: server.name,
+ name: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  status: "offline" as const,
  cpu: { usage: 0, cores: 0 },
@@ -134,7 +134,7 @@ export default function MonitoringResourcesPage() {
 
  return {
  id: server.id,
- name: server.name,
+ name: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  status,
  cpu: {
@@ -161,11 +161,11 @@ export default function MonitoringResourcesPage() {
  lastUpdate: new Date().toLocaleTimeString("zh-CN"),
  }
  } catch (error) {
- console.error(`Failed to load monitoring data for ${server.name}:`, error)
+ console.error(`Failed to load monitoring data for ${server.name || server.host}:`, error)
  // 监控数据加载失败，返回错误状态
  return {
  id: server.id,
- name: server.name,
+ name: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  status: "error" as const,
  cpu: { usage: 0, cores: 0 },

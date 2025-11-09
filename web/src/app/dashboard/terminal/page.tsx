@@ -85,7 +85,7 @@ export default function TerminalPage() {
  return {
  ...s,
  serverId: server.id,
- serverName: server.name,
+ serverName: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  port: server.port,
  username: server.username,
@@ -177,7 +177,7 @@ export default function TerminalPage() {
  // 将Server类型转换为QuickServer类型，保留 UUID
  const quickServers: QuickServer[] = servers.map((server: Server) => ({
  id: server.id, // 保留 UUID 字符串
- name: server.name,
+ name: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  port: server.port,
  username: server.username,
@@ -250,7 +250,7 @@ export default function TerminalPage() {
  setSessions(prev => prev.map(s => s.id === sessionId ? {
  id: newSessionId, // 使用新的 auto- 格式 ID
  serverId: server.id,
- serverName: server.name,
+ serverName: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  port: server.port,
  username: server.username,

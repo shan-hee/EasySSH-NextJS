@@ -520,17 +520,13 @@ func (h *SFTPHandler) WriteFile(c *gin.Context) {
 		return
 	}
 
-	// 读取请求体
-	content, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid_content", "Failed to read content")
-		return
+	// 解析 JSON 请求体
+	var req struct {
+		Path    string `json:"path" binding:"required"`
+		Content string `json:"content"`
 	}
-
-	// 获取路径参数
-	path := c.Query("path")
-	if path == "" {
-		RespondError(c, http.StatusBadRequest, "missing_path", "Path parameter is required")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 
@@ -543,12 +539,12 @@ func (h *SFTPHandler) WriteFile(c *gin.Context) {
 	defer sftpClient.Close()
 
 	// 写入文件
-	if err := sftpClient.WriteFile(path, content, 0644); err != nil {
+	if err := sftpClient.WriteFile(req.Path, []byte(req.Content), 0644); err != nil {
 		RespondError(c, http.StatusInternalServerError, "write_failed", err.Error())
 		return
 	}
 
-	RespondSuccessWithMessage(c, gin.H{"path": path}, "File written successfully")
+	RespondSuccessWithMessage(c, gin.H{"path": req.Path}, "File written successfully")
 }
 
 // GetDiskUsage 获取磁盘使用情况
