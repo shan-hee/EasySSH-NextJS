@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -157,14 +158,13 @@ export function LoginForm({
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex flex-col items-center gap-3">
                 <div className="flex size-16 items-center justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <Image
                     src={config?.system_logo || "/logo.svg"}
                     alt={`${config?.system_name || "EasySSH"} Logo`}
+                    width={64}
+                    height={64}
                     className="size-16 transition-opacity duration-200"
-                    loading="eager"
-                    decoding="async"
-                    fetchPriority="high"
+                    priority
                     style={{
                       // 防止闪烁: 设置固定尺寸避免布局偏移
                       width: '64px',

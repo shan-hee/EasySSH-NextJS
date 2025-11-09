@@ -1,8 +1,8 @@
-import { getApiUrl } from "../config"
+import { apiFetch } from "@/lib/api-client"
 
-const API_BASE_URL = getApiUrl()
-
-// 文件传输类型定义
+/**
+ * 文件传输类型定义
+ */
 export interface FileTransfer {
   id: string
   user_id: string
@@ -72,6 +72,9 @@ export interface UpdateFileTransferRequest {
   error_message?: string
 }
 
+/**
+ * 文件传输 API 服务
+ */
 export const fileTransfersApi = {
   /**
    * 获取文件传输列表
@@ -84,122 +87,53 @@ export const fileTransfersApi = {
     if (params?.transfer_type) queryParams.append("transfer_type", params.transfer_type)
     if (params?.server_id) queryParams.append("server_id", params.server_id)
 
-    const url = `${API_BASE_URL}/file-transfers${queryParams.toString() ? `?${queryParams}` : ""}`
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch file transfers")
-    }
-
-    return response.json()
+    const url = `/file-transfers${queryParams.toString() ? `?${queryParams}` : ""}`
+    return apiFetch<ListFileTransfersResponse>(url, { token })
   },
 
   /**
    * 获取文件传输详情
    */
-  async getById(token: string, id: string): Promise<{ data: FileTransfer }> {
-    const response = await fetch(`${API_BASE_URL}/file-transfers/${id}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch file transfer")
-    }
-
-    return response.json()
+  async getById(token: string, id: string): Promise<FileTransfer> {
+    return apiFetch<FileTransfer>(`/file-transfers/${id}`, { token })
   },
 
   /**
    * 创建文件传输记录
    */
-  async create(token: string, data: CreateFileTransferRequest): Promise<{ data: FileTransfer }> {
-    const response = await fetch(`${API_BASE_URL}/file-transfers`, {
+  async create(token: string, data: CreateFileTransferRequest): Promise<FileTransfer> {
+    return apiFetch<FileTransfer>("/file-transfers", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
+      token,
+      body: data,
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to create file transfer")
-    }
-
-    return response.json()
   },
 
   /**
    * 更新文件传输记录
    */
-  async update(token: string, id: string, data: UpdateFileTransferRequest): Promise<{ data: FileTransfer }> {
-    const response = await fetch(`${API_BASE_URL}/file-transfers/${id}`, {
+  async update(token: string, id: string, data: UpdateFileTransferRequest): Promise<FileTransfer> {
+    return apiFetch<FileTransfer>(`/file-transfers/${id}`, {
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
+      token,
+      body: data,
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to update file transfer")
-    }
-
-    return response.json()
   },
 
   /**
    * 删除文件传输记录
    */
-  async delete(token: string, id: string): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/file-transfers/${id}`, {
+  async delete(token: string, id: string): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/file-transfers/${id}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
+      token,
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to delete file transfer")
-    }
-
-    return response.json()
   },
 
   /**
    * 获取文件传输统计信息
    */
-  async getStatistics(token: string): Promise<{ data: FileTransferStatistics }> {
-    const response = await fetch(`${API_BASE_URL}/file-transfers/statistics`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch file transfer statistics")
-    }
-
-    return response.json()
+  async getStatistics(token: string): Promise<FileTransferStatistics> {
+    return apiFetch<FileTransferStatistics>("/file-transfers/statistics", { token })
   },
 }

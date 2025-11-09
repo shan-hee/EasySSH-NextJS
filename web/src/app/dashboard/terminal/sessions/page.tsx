@@ -77,7 +77,7 @@ export default function TerminalSessionsPage() {
       ])
 
       setSessions(sessionsResponse.data || [])
-      setStatistics(statsResponse.data)
+      setStatistics(statsResponse)
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "无法加载活动会话"))
     } finally {

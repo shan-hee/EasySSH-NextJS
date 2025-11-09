@@ -1,179 +1,156 @@
-"use client"
-
-import { useState, useEffect } from "react"
+import { Suspense } from "react"
+import type { Metadata } from "next"
 import { PageHeader } from "@/components/page-header"
-import Link from "next/link"
-import { serversApi, auditLogsApi } from "@/lib/api"
-import { getErrorMessage } from "@/lib/error-utils"
-import { Server, Activity, History } from "lucide-react"
-import { SkeletonCard } from "@/components/ui/loading"
-import { useRouter } from "next/navigation"
-import { toast } from "@/components/ui/sonner"
+import { getServerStats, getAuditStats } from "@/lib/api/dashboard-server"
+import { DashboardStatsCards } from "./components/dashboard-stats"
+import { QuickActions } from "./components/quick-actions"
+import { DashboardSkeleton } from "./components/dashboard-skeleton"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Activity, FileText, Server, ServerOff } from "lucide-react"
+import { generatePageMetadata } from "@/lib/metadata"
 
-interface DashboardStats {
- totalServers: number
- onlineServers: number
- offlineServers: number
- todayConnections: number
- recentLogsCount: number
+export const metadata: Metadata = generatePageMetadata("dashboard")
+
+/**
+ * 服务器统计卡片（快速加载）
+ * 独立的 Suspense 边界，优先显示服务器数据
+ */
+async function ServerStatsCards() {
+  const stats = await getServerStats()
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">服务器总数</CardTitle>
+          <Server className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{stats.totalServers}</div>
+          <p className="text-xs text-muted-foreground">已配置的服务器</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">在线服务器</CardTitle>
+          <Server className="h-4 w-4 text-green-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-green-600">{stats.onlineServers}</div>
+          <p className="text-xs text-muted-foreground">
+            在线率 {stats.totalServers > 0 ? Math.round((stats.onlineServers / stats.totalServers) * 100) : 0}%
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">离线服务器</CardTitle>
+          <ServerOff className="h-4 w-4 text-red-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-red-600">{stats.offlineServers}</div>
+          <p className="text-xs text-muted-foreground">需要检查</p>
+        </CardContent>
+      </Card>
+    </>
+  )
 }
 
-export default function Page() {
- const router = useRouter()
- const [stats, setStats] = useState<DashboardStats>({
- totalServers: 0,
- onlineServers: 0,
- offlineServers: 0,
- todayConnections: 0,
- recentLogsCount: 0,
- })
- const [loading, setLoading] = useState(true)
+/**
+ * 审计日志统计卡片（可能较慢）
+ * 独立的 Suspense 边界，延迟加载审计日志数据
+ */
+async function AuditStatsCards() {
+  const stats = await getAuditStats()
 
- useEffect(() => {
- loadDashboardData()
- // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [])
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">今日连接</CardTitle>
+          <Activity className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{stats.todayConnections}</div>
+          <p className="text-xs text-muted-foreground">今日操作次数</p>
+        </CardContent>
+      </Card>
 
- async function loadDashboardData() {
- try {
- setLoading(true)
- const accessToken = localStorage.getItem("easyssh_access_token")
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">最近日志</CardTitle>
+          <FileText className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{stats.recentLogsCount}</div>
+          <p className="text-xs text-muted-foreground">审计日志总数</p>
+        </CardContent>
+      </Card>
+    </>
+  )
+}
 
- if (!accessToken) {
- router.push("/login")
- return
- }
+/**
+ * 统计卡片骨架屏
+ */
+function StatsCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-4 animate-pulse rounded bg-muted" />
+      </CardHeader>
+      <CardContent>
+        <div className="h-8 w-16 animate-pulse rounded bg-muted" />
+        <div className="mt-1 h-3 w-24 animate-pulse rounded bg-muted" />
+      </CardContent>
+    </Card>
+  )
+}
 
- // 并行加载服务器列表和审计日志统计
- const [serversResponse, logsStats] = await Promise.all([
- serversApi.list(accessToken, { page: 1, limit: 1000 }),
- auditLogsApi.getStatistics(accessToken).catch(() => null), // 如果失败，返回 null
- ])
+/**
+ * 仪表盘页面（Server Component）
+ * 使用多个独立的 Suspense 边界实现 Streaming 优化
+ * 快速数据（服务器统计）优先显示，慢速数据（审计日志）延迟加载
+ */
+export default function DashboardPage() {
+  return (
+    <>
+      <PageHeader title="仪表盘" />
+      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+        {/* 统计卡片 - 使用独立的 Suspense 边界实现渐进式渲染 */}
+        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+          {/* 服务器统计 - 快速加载 */}
+          <Suspense
+            fallback={
+              <>
+                <StatsCardSkeleton />
+                <StatsCardSkeleton />
+                <StatsCardSkeleton />
+              </>
+            }
+          >
+            <ServerStatsCards />
+          </Suspense>
 
- // 防御性检查：处理apiFetch自动解包导致的数据结构不一致，确保始终返回数组
- const servers = Array.isArray(serversResponse)
- ? serversResponse
- : (Array.isArray(serversResponse?.data) ? serversResponse.data : [])
- const total = Array.isArray(serversResponse)
- ? servers.length
- : (serversResponse?.total || 0)
+          {/* 审计日志统计 - 延迟加载，不阻塞服务器统计的显示 */}
+          <Suspense
+            fallback={
+              <>
+                <StatsCardSkeleton />
+                <StatsCardSkeleton />
+              </>
+            }
+          >
+            <AuditStatsCards />
+          </Suspense>
+        </div>
 
- const onlineCount = servers.filter(s => s.status === "online").length
- const offlineCount = servers.filter(s => s.status === "offline").length
-
- // 防御性检查：处理审计日志统计数据
-    const statsData = logsStats?.action_stats ? logsStats : (logsStats as unknown as { data?: typeof logsStats })?.data || null
-
- // 统计今日连接（根据操作日志中的登录操作）
- const todayConnections = statsData?.action_stats
-      ? Object.values(statsData.action_stats).reduce((sum: number, count) => sum + (count as number), 0)
- : 0
-
- // 最近日志数量
- const recentLogsCount = statsData?.total_logs || 0
-
- setStats({
- totalServers: total,
- onlineServers: onlineCount,
- offlineServers: offlineCount,
- todayConnections,
- recentLogsCount,
- })
- } catch (error: unknown) {
- console.error("Failed to load dashboard data:", error)
- toast.error(getErrorMessage(error, "无法加载仪表盘数据"))
- } finally {
- setLoading(false)
- }
- }
-
- // 加载状态 - 使用固定的卡片骨架屏
- if (loading) {
- return (
- <>
- <PageHeader title="仪表盘" />
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
- <div className="grid auto-rows-min gap-4 md:grid-cols-3">
- <SkeletonCard showHeader={false} lines={2} />
- <SkeletonCard showHeader={false} lines={2} />
- <SkeletonCard showHeader={false} lines={2} />
- </div>
- <SkeletonCard showHeader lines={4} className="flex-1" />
- </div>
- </>
- )
- }
-
- return (
- <>
- <PageHeader title="仪表盘" />
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
- <div className="grid auto-rows-min gap-4 md:grid-cols-3">
- <div className="bg-card border rounded-xl p-6">
- <div className="flex items-center justify-between mb-2">
- <h3 className="text-lg font-semibold">服务器总数</h3>
- <Server className="h-5 w-5 text-muted-foreground" />
- </div>
- <p className="text-3xl font-bold text-primary">{stats.totalServers}</p>
- <p className="text-sm text-muted-foreground">
- 在线: {stats.onlineServers} | 离线: {stats.offlineServers}
- </p>
- </div>
- <div className="bg-card border rounded-xl p-6">
- <div className="flex items-center justify-between mb-2">
- <h3 className="text-lg font-semibold">操作总数</h3>
- <Activity className="h-5 w-5 text-muted-foreground" />
- </div>
- <p className="text-3xl font-bold text-green-600">{stats.todayConnections}</p>
- <p className="text-sm text-muted-foreground">所有审计日志记录</p>
- </div>
- <div className="bg-card border rounded-xl p-6">
- <div className="flex items-center justify-between mb-2">
- <h3 className="text-lg font-semibold">历史记录</h3>
- <History className="h-5 w-5 text-muted-foreground" />
- </div>
- <p className="text-3xl font-bold text-blue-600">{stats.recentLogsCount}</p>
- <p className="text-sm text-muted-foreground">系统操作记录</p>
- </div>
- </div>
- <div className="bg-card border rounded-xl p-6 flex-1">
- <h3 className="text-xl font-semibold mb-4">快速操作</h3>
- <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
- <Link href="/dashboard/servers">
- <button className="bg-primary text-primary-foreground p-4 rounded-lg hover:bg-primary/90 transition-colors w-full">
- <div className="text-center">
- <div className="text-2xl mb-2">🖥️</div>
- <div>添加服务器</div>
- </div>
- </button>
- </Link>
- <Link href="/dashboard/terminal">
- <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
- <div className="text-center">
- <div className="text-2xl mb-2">💻</div>
- <div>Web终端</div>
- </div>
- </button>
- </Link>
- <Link href="/dashboard/monitoring">
- <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
- <div className="text-center">
- <div className="text-2xl mb-2">📊</div>
- <div>查看监控</div>
- </div>
- </button>
- </Link>
- <Link href="/dashboard/settings/general">
- <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
- <div className="text-center">
- <div className="text-2xl mb-2">⚙️</div>
- <div>系统设置</div>
- </div>
- </button>
- </Link>
- </div>
- </div>
- </div>
- </>
- )
+        {/* 快速操作 - 客户端组件，立即显示 */}
+        <QuickActions />
+      </div>
+    </>
+  )
 }

@@ -1,6 +1,4 @@
-import { getApiUrl } from "../config"
-
-const API_BASE_URL = getApiUrl()
+import { apiFetch } from "@/lib/api-client"
 
 /**
  * SSH会话详细信息(用于会话历史管理)
@@ -55,6 +53,9 @@ export interface SSHSessionStatistics {
   }
 }
 
+/**
+ * SSH 会话 API 服务
+ */
 export const sshSessionsApi = {
   /**
    * 获取SSH会话列表
@@ -67,101 +68,41 @@ export const sshSessionsApi = {
     if (params?.server_id) queryParams.append("server_id", params.server_id)
     if (params?.user_id) queryParams.append("user_id", params.user_id)
 
-    const url = `${API_BASE_URL}/ssh-sessions${queryParams.toString() ? `?${queryParams}` : ""}`
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch SSH sessions")
-    }
-
-    const result = await response.json()
-    return result.data
+    const url = `/ssh-sessions${queryParams.toString() ? `?${queryParams}` : ""}`
+    return apiFetch<ListSSHSessionsResponse>(url, { token })
   },
 
   /**
    * 获取SSH会话详情
    */
-  async getById(token: string, id: string): Promise<{ data: SSHSessionDetail }> {
-    const response = await fetch(`${API_BASE_URL}/ssh-sessions/${id}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch SSH session")
-    }
-
-    return response.json()
+  async getById(token: string, id: string): Promise<SSHSessionDetail> {
+    return apiFetch<SSHSessionDetail>(`/ssh-sessions/${id}`, { token })
   },
 
   /**
    * 删除SSH会话记录
    */
-  async delete(token: string, id: string): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/ssh-sessions/${id}`, {
+  async delete(token: string, id: string): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/ssh-sessions/${id}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
+      token,
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to delete SSH session")
-    }
-
-    return response.json()
   },
 
   /**
    * 获取SSH会话统计信息
    */
-  async getStatistics(token: string): Promise<{ data: SSHSessionStatistics }> {
-    const response = await fetch(`${API_BASE_URL}/ssh-sessions/statistics`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch SSH session statistics")
-    }
-
-    return response.json()
+  async getStatistics(token: string): Promise<SSHSessionStatistics> {
+    return apiFetch<SSHSessionStatistics>("/ssh-sessions/statistics", { token })
   },
 
   /**
    * 关闭SSH会话
    */
-  async close(token: string, id: string): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/ssh-sessions/${id}/close`, {
+  async close(token: string, id: string): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/ssh-sessions/${id}/close`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
+      token,
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to close SSH session")
-    }
-
-    return response.json()
   },
 }

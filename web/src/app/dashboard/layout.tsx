@@ -1,10 +1,16 @@
 import { redirect } from "next/navigation"
+import type { Metadata } from "next"
 import SidebarProviderServer from "@/components/sidebar-provider-server"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { verifyAuth } from "@/lib/auth-server"
 import { ClientAuthProvider } from "@/components/client-auth-provider"
 import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
+
+export const metadata: Metadata = {
+  title: "仪表盘",
+  description: "EasySSH 管理控制台 - 服务器管理、连接监控、操作审计",
+}
 
 /**
  * Dashboard 布局 - Server Component

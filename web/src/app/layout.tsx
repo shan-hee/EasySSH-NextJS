@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { SystemConfigProvider } from "@/contexts/system-config-context";
 import { DynamicHeadUpdater } from "@/components/dynamic-head-updater";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,11 +19,40 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: "EasySSH",
-  description: "EasySSH 的 React 前端",
+  title: {
+    default: "EasySSH - 简单易用的 SSH 管理平台",
+    template: "%s | EasySSH",
+  },
+  description: "EasySSH 是一个现代化的 SSH 服务器管理平台，提供便捷的服务器连接、文件传输、操作审计等功能",
+  keywords: ["SSH", "服务器管理", "远程连接", "文件传输", "审计日志", "EasySSH"],
+  authors: [{ name: "EasySSH Team" }],
+  creator: "EasySSH",
+  publisher: "EasySSH",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
+  openGraph: {
+    type: "website",
+    locale: "zh_CN",
+    title: "EasySSH - 简单易用的 SSH 管理平台",
+    description: "现代化的 SSH 服务器管理平台，提供便捷的服务器连接、文件传输、操作审计等功能",
+    siteName: "EasySSH",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "EasySSH - 简单易用的 SSH 管理平台",
+    description: "现代化的 SSH 服务器管理平台",
+  },
+  robots: {
+    index: false, // 内部管理系统，不需要被搜索引擎索引
+    follow: false,
   },
 };
 
@@ -51,6 +82,10 @@ export default function RootLayout({
           </AuthProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
+        {/* Vercel Analytics - 性能监控 */}
+        <Analytics />
+        {/* Vercel Speed Insights - 速度洞察 */}
+        <SpeedInsights />
       </body>
     </html>
   );

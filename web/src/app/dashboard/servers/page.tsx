@@ -465,7 +465,7 @@ export default function ServersPage() {
  }
 
  const serverData: {
- name: string
+ name?: string
  host: string
  port: number
  username: string

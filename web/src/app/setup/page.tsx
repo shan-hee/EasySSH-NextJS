@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { authApi } from "@/lib/api/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -170,13 +171,13 @@ export default function SetupPage() {
             {/* Logo 和标题 */}
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex size-16 items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src="/logo.svg"
                   alt="EasySSH Logo"
+                  width={64}
+                  height={64}
                   className="size-16"
-                  loading="eager"
-                  style={{ width: '64px', height: '64px' }}
+                  priority
                 />
               </div>
               <div className="space-y-2">
