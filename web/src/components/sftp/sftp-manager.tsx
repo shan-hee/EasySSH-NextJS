@@ -325,20 +325,13 @@ export function SftpManager(props: SftpManagerProps) {
     }
 
     try {
-      console.log('[SftpManager] 打开文件编辑器:', fileName)
       const content = await onReadFile(fileName)
-      console.log('[SftpManager] 获取到的内容长度:', content?.length || 0)
       const fullPath = `${currentPath}/${fileName}`.replace(/\/+/g, "/")
       setEditorState({
         isOpen: true,
         fileName,
         filePath: fullPath,
         content,
-      })
-      console.log('[SftpManager] EditorState已设置:', {
-        fileName,
-        filePath: fullPath,
-        contentLength: content?.length || 0,
       })
     } catch (error) {
       console.error("读取文件失败:", error)
@@ -470,7 +463,6 @@ export function SftpManager(props: SftpManagerProps) {
         // 跨会话拖拽到文件夹
         if (dragData.sourceSessionId !== sessionId && targetType === "directory") {
           const targetPath = `${currentPath}/${targetFileName}`.replace(/\/+/g, "/")
-          console.log(`跨会话拖拽 ${dragData.fileName} 到文件夹 ${targetPath}`)
           // TODO: 这里需要页面层级实现跨会话上传逻辑
           setDragOverFolder(null)
           return
@@ -489,7 +481,6 @@ export function SftpManager(props: SftpManagerProps) {
     // 移动文件到文件夹
     if (targetType === "directory") {
       const newPath = `${currentPath}/${targetFileName}/${draggedFileName}`.replace(/\/+/g, "/")
-      console.log(`移动 ${draggedFileName} 到 ${newPath}`)
       onRename(draggedFileName, newPath)
     }
 
@@ -545,13 +536,11 @@ export function SftpManager(props: SftpManagerProps) {
 
     // 移动文件到文件夹
     if (targetType === "directory" && dragOverFolder) {
-      console.log(`移动 ${draggedFileName} 到文件夹 ${targetFileName}`)
       // TODO: 调用实际的移动API
       // onRename(draggedFileName, `${targetFileName}/${draggedFileName}`)
     }
     // 文件排序（暂时只是视觉效果，实际不改变服务器顺序）
     else if (dragOverIndex !== null) {
-      console.log(`将 ${draggedFileName} 排序到 ${targetFileName} 附近`)
       // 注意：SFTP文件列表顺序通常由服务器决定，客户端排序可能无意义
       // 如果需要持久化排序，需要后端支持
     }
@@ -627,7 +616,6 @@ export function SftpManager(props: SftpManagerProps) {
       if (jsonData) {
         const dragData = JSON.parse(jsonData)
         if (dragData.sourceSessionId && dragData.sourceSessionId !== sessionId) {
-          console.log(`跨会话上传: ${dragData.fileName} 到当前目录 ${currentPath}`)
           // TODO: 实现跨会话上传逻辑
           return
         }
@@ -1941,7 +1929,6 @@ export function SftpManager(props: SftpManagerProps) {
                         <DropdownMenuItem
                           onClick={() => {
                             // TODO: 实现复制功能
-                            console.log("复制:", file.name)
                           }}
                           className={cn(
                             "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
@@ -1955,7 +1942,6 @@ export function SftpManager(props: SftpManagerProps) {
                         <DropdownMenuItem
                           onClick={() => {
                             // TODO: 实现粘贴功能
-                            console.log("粘贴到当前目录:", currentPath)
                           }}
                           className={cn(
                             "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
@@ -2367,7 +2353,6 @@ export function SftpManager(props: SftpManagerProps) {
                     )}
                     onClick={() => {
                       // TODO: 显示文件详细信息
-                      console.log("显示信息:", contextMenu.fileName)
                       closeContextMenu()
                     }}
                   >

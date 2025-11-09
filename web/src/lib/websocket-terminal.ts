@@ -110,7 +110,6 @@ export class TerminalWebSocket {
         if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
           // 自动重连
           this.reconnectAttempts++
-          console.log(`[TerminalWS] 尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
           setTimeout(() => this.connect(), this.reconnectDelay)
         } else {
           this.onDisconnected?.()

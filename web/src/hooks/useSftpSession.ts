@@ -293,16 +293,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           ? `${currentPath}${fileName}`
           : `${currentPath}/${fileName}`;
 
-        console.log('[useSftpSession] 读取文件:', {
-          fileName,
-          currentPath,
-          fullPath,
-          serverId,
-        });
-
         const content = await sftpApi.readFile(token, serverId, fullPath);
-
-        console.log('[useSftpSession] 文件内容长度:', content?.length || 0);
 
         return content;
       } catch (error) {

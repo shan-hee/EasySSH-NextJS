@@ -370,8 +370,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       // 如果选择了新图片文件，需要压缩
       if (avatarFile) {
         finalAvatar = await compressImage(avatarFile, 128, 128)
-        const sizeInKB = Math.round(finalAvatar.length / 1024)
-        console.log(`压缩后图片大小: ${sizeInKB} KB`)
       }
 
       // 保存个人信息和头像

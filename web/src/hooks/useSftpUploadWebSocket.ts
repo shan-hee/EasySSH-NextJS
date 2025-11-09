@@ -73,7 +73,6 @@ export function useSftpUploadWebSocket({
     }
 
     if (wsRef.current) {
-      console.log('[SftpUploadWS] Manually disconnecting:', taskId);
       wsRef.current.close(1000, 'Client disconnecting');
       wsRef.current = null;
     }
@@ -112,7 +111,6 @@ export function useSftpUploadWebSocket({
 
       ws.onopen = () => {
         if (!isMountedRef.current) return;
-        console.log('[SftpUploadWS] Connected:', taskId);
         setStatus(WSStatus.CONNECTED);
       };
 
@@ -135,7 +133,6 @@ export function useSftpUploadWebSocket({
               break;
 
             case 'complete':
-              console.log('[SftpUploadWS] Upload completed:', taskId);
               onComplete?.();
               // 上传完成后自动断开
               disconnect();
@@ -160,13 +157,11 @@ export function useSftpUploadWebSocket({
 
       ws.onclose = (event) => {
         if (!isMountedRef.current) return;
-        console.log('[SftpUploadWS] Disconnected:', taskId, 'code:', event.code);
         setStatus(WSStatus.DISCONNECTED);
         wsRef.current = null;
 
         // 如果是非正常关闭且仍然 enabled，尝试重连（最多1次）
         if (event.code !== 1000 && enabledRef.current && !reconnectTimeoutRef.current) {
-          console.log('[SftpUploadWS] Attempting to reconnect...');
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectTimeoutRef.current = null;
             if (enabledRef.current && isMountedRef.current) {

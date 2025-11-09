@@ -375,7 +375,6 @@ export default function SftpPage() {
  })
 
  setClipboard(clipboardFiles)
- console.log('已复制文件到跨会话剪贴板:', clipboardFiles)
  }
 
  const handleCutFiles = (sessionId: string, fileNames: string[]) => {
@@ -395,7 +394,6 @@ export default function SftpPage() {
  })
 
  setClipboard(clipboardFiles)
- console.log('已剪切文件到跨会话剪贴板:', clipboardFiles)
  }
 
  const handlePasteFiles = (targetSessionId: string) => {
@@ -403,10 +401,6 @@ export default function SftpPage() {
 
  const targetSession = sessions.find(s => s.id === targetSessionId)
  if (!targetSession) return
-
- console.log(`粘贴 ${clipboard.length} 个文件到会话 ${targetSession.label}`)
- console.log('目标路径:', targetSession.currentPath)
- console.log('文件列表:', clipboard)
 
  // 这里应该实现实际的文件传输逻辑
  // 如果是cut操作，粘贴后应该清空剪贴板
@@ -421,10 +415,6 @@ export default function SftpPage() {
  const sourceSession = sessions.find(s => s.id === dragData.sourceSessionId)
 
  if (!targetSession || !sourceSession) return
-
- console.log(`跨会话拖拽: ${dragData.fileName}`)
- console.log(`从: ${sourceSession.label} (${dragData.filePath})`)
- console.log(`到: ${targetSession.label} (${targetSession.currentPath})`)
 
  // TODO: 实现实际的跨会话文件传输
  // 这里应该调用API进行文件下载+上传操作
