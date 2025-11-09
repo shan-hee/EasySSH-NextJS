@@ -2,7 +2,6 @@ package rest
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"path/filepath"
 	"time"
