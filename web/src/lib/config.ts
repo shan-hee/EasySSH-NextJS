@@ -20,8 +20,22 @@ export function getApiBase(): string {
 
 /**
  * 获取 API URL (带 /api/v1 路径)
+ *
+ * 客户端和服务端行为不同:
+ * - 客户端: 返回相对路径 /api，由 Next.js rewrites 代理到后端
+ * - 服务端: 返回完整 URL http://backend:8521/api/v1，直接访问后端
+ *
+ * 这样设计的原因:
+ * - 客户端使用相对路径避免浏览器尝试访问 Docker 内部服务名
+ * - 服务端使用完整 URL 在 Docker 网络中直接通信
  */
 export function getApiUrl(): string {
+  // 客户端: 使用相对路径，让 Next.js rewrites 处理
+  if (typeof window !== 'undefined') {
+    return '/api'
+  }
+
+  // 服务端: 使用完整 URL，直接访问后端
   return `${getApiBase()}/api/v1`
 }
 

@@ -38,13 +38,9 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     url = path
   } else {
     const apiUrl = getApiUrl()
-    if (apiUrl.startsWith("http")) {
-      // 完整URL: http://localhost:8521/api/v1
-      url = new URL(`${apiUrl}${path}`).toString()
-    } else {
-      // 相对路径: /api/v1
-      url = `${apiUrl}${path}`
-    }
+    // getApiUrl() 在客户端返回相对路径 /api
+    // 在服务端返回完整 URL http://backend:8521/api/v1
+    url = `${apiUrl}${path}`
   }
 
   const headers: HeadersInit = {

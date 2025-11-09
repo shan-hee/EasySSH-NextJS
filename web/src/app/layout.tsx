@@ -6,8 +6,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { SystemConfigProvider } from "@/contexts/system-config-context";
 import { DynamicHeadUpdater } from "@/components/dynamic-head-updater";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -82,10 +80,6 @@ export default function RootLayout({
           </AuthProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
-        {/* Vercel Analytics - 性能监控 */}
-        <Analytics />
-        {/* Vercel Speed Insights - 速度洞察 */}
-        <SpeedInsights />
       </body>
     </html>
   );
