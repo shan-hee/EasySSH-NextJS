@@ -172,7 +172,7 @@ docker build -f docker/Dockerfile.web \
 docker compose ps
 
 # 手动检查后端健康
-curl http://localhost:8521/api/health
+curl http://localhost:8521/api/v1/health
 
 # 手动检查前端健康
 curl http://localhost:8520/api/health
@@ -312,6 +312,29 @@ docker exec -i easyssh-postgres psql -U easyssh Easyssh_db < backup.sql
    docker compose ps
    ```
 
+### Redis 内存警告
+
+如果看到 Redis 的 `WARNING Memory overcommit must be enabled!` 警告：
+
+**临时解决方案**（重启后失效）：
+```bash
+sudo sysctl vm.overcommit_memory=1
+```
+
+**永久解决方案**：
+```bash
+# 添加到系统配置
+echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+
+# 应用配置
+sudo sysctl -p
+```
+
+**说明**：
+- 此警告不影响 Redis 基本功能，但可能影响后台保存和复制操作
+- `vm.overcommit_memory=1` 允许内核过度分配内存，这是 Redis 推荐的配置
+- Docker Compose 已配置 `sysctls` 参数优化网络性能
+
 ### 前端无法连接后端
 
 1. **检查环境变量**：
@@ -322,7 +345,7 @@ docker exec -i easyssh-postgres psql -U easyssh Easyssh_db < backup.sql
 2. **验证网络连通性**：
    ```bash
    # 从前端容器访问后端
-   docker exec easyssh-frontend wget -O- http://backend:8521/api/health
+   docker exec easyssh-frontend wget -O- http://backend:8521/api/v1/health
    ```
 
 3. **检查 docker-compose.yml 配置**：
