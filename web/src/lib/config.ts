@@ -40,24 +40,20 @@ export function getApiUrl(): string {
 }
 
 /**
- * 获取 WebSocket Host
- * 客户端使用,自动处理 protocol
+ * 获取 WebSocket Host（仅浏览器端）
+ * 优先使用 NEXT_PUBLIC_WS_HOST；否则使用当前页面的 host。
+ * 不再从 NEXT_PUBLIC_API_BASE 推导，避免把 Docker 内部服务名泄露到浏览器（如 backend）。
  */
 export function getWsHost(): string {
   if (typeof window === 'undefined') {
     throw new Error('getWsHost() can only be called on client side')
   }
 
-  const apiBase = getApiBase()
-
-  // 从完整 URL 中提取 host
-  try {
-    const url = new URL(apiBase)
-    return url.host // 例如: localhost:8521 或 api.yourdomain.com
-  } catch {
-    // 如果不是完整 URL,尝试智能处理
-    return apiBase.replace(/^https?:\/\//, '')
+  const envWsHost = process.env.NEXT_PUBLIC_WS_HOST
+  if (envWsHost && envWsHost.trim() !== '') {
+    return envWsHost.trim()
   }
+  return window.location.host
 }
 
 /**
@@ -69,11 +65,14 @@ export function getWsUrl(path: string): string {
     throw new Error('getWsUrl() can only be called on client side')
   }
 
-  const apiBase = getApiBase()
-  const protocol = apiBase.startsWith('https') ? 'wss:' : 'ws:'
+  // 使用当前页面协议决定 ws/wss，避免与 API_BASE 的协议不一致
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsHost = getWsHost()
 
-  return `${protocol}//${wsHost}${path}`
+  // 标准化路径：将 /api/v1/* 统一改写为 /api/*，以命中 Next.js rewrites
+  const normalizedPath = path.replace(/^\/api\/v1(?=\/|$)/, '/api')
+
+  return `${protocol}//${wsHost}${normalizedPath}`
 }
 
 /**

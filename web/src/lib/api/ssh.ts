@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
+import { getWsUrl } from "@/lib/config"
 
 /**
  * SSH会话信息
@@ -84,29 +85,7 @@ export const sshApi = {
    * 获取WebSocket终端URL
    */
   getTerminalUrl(serverId: string, token: string): string {
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-
-    // 优先使用环境变量，否则从 API_BASE 推导
-    let wsHost = process.env.NEXT_PUBLIC_WS_HOST
-
-    if (!wsHost) {
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE
-      if (apiBase) {
-        try {
-          // 从 API_BASE 提取主机和端口
-          const url = new URL(apiBase)
-          wsHost = url.host
-        } catch (error) {
-          console.warn("Failed to parse NEXT_PUBLIC_API_BASE:", error)
-          // 回退到当前主机
-          wsHost = window.location.host
-        }
-      } else {
-        // 如果没有配置 API_BASE，使用当前主机
-        wsHost = window.location.host
-      }
-    }
-
-    return `${wsProtocol}//${wsHost}/api/v1/ssh/terminal/${serverId}?token=${token}`
+    // 统一通过同域 /api 走 Next.js rewrites，避免浏览器访问 Docker 内部主机名
+    return getWsUrl(`/api/v1/ssh/terminal/${serverId}?token=${token}`)
   },
 }

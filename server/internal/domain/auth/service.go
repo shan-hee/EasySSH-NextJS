@@ -323,11 +323,20 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 		return nil, "", "", errors.New("password must be at least 6 characters")
 	}
 
+	// 生成头像
+	avatar, err := s.generateAvatarForUser(username, email)
+	if err != nil {
+		// 头像生成失败不应该阻止管理员创建，记录日志但继续
+		fmt.Printf("⚠️  Warning: failed to generate avatar for admin %s: %v\n", username, err)
+		avatar = ""
+	}
+
 	// 创建管理员用户
 	user := &User{
 		Username: username,
 		Email:    email,
 		Role:     RoleAdmin,
+		Avatar:   avatar,
 	}
 
 	// 设置密码（bcrypt 加密）
