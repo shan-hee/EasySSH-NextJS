@@ -95,7 +95,7 @@ export function NetworkLatencyPopover() {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[340px] p-4"
+        className="w-auto min-w-[320px] p-4"
         align="center"
         sideOffset={8}
       >
