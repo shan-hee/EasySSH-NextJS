@@ -95,7 +95,8 @@ export function DataTableToolbar<TData>({
             onClick={onRefresh}
             className="h-8"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="mr-2 h-4 w-4" />
+            刷新
           </Button>
         )}
 

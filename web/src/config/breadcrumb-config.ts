@@ -143,31 +143,26 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   },
 
   // ===================
-  // 系统配置
+  // 系统与组织
   // ===================
-  '/dashboard/settings/general': {
+  '/dashboard/settings/system-config': {
     breadcrumbs: [
-      { title: '系统配置' }, // 无 /dashboard/settings 父级页面
+      { title: '系统与组织' },
     ],
   },
-  '/dashboard/settings/security': {
+  '/dashboard/settings/security-center': {
     breadcrumbs: [
-      { title: '系统配置' },
+      { title: '系统与组织' },
     ],
   },
-  '/dashboard/settings/ai': {
+  '/dashboard/settings/integrations': {
     breadcrumbs: [
-      { title: '系统配置' },
+      { title: '系统与组织' },
     ],
   },
-  '/dashboard/settings/notifications': {
+  '/dashboard/settings/management': {
     breadcrumbs: [
-      { title: '系统配置' },
-    ],
-  },
-  '/dashboard/settings/backup': {
-    breadcrumbs: [
-      { title: '系统配置' },
+      { title: '系统与组织' },
     ],
   },
 
@@ -176,7 +171,7 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   '/dashboard/users': {
     breadcrumbs: [
-      { title: '系统配置' }, // 补充父级，保持层级一致性
+      { title: '系统与组织' },
     ],
   },
 

@@ -86,17 +86,14 @@ const navMainData = [
     ],
   },
   {
-    title: "系统配置",
+    title: "系统与组织",
     url: "#",
     icon: Settings2,
     items: [
-      { title: "通用设置", url: "/dashboard/settings/general" },
-      { title: "安全策略", url: "/dashboard/settings/security" },
-      { title: "高级配置", url: "/dashboard/settings/advanced" },
-      { title: "AI 配置", url: "/dashboard/settings/ai" },
-      { title: "通知设置", url: "/dashboard/settings/notifications" },
-      { title: "用户管理", url: "/dashboard/users" },
-      { title: "备份恢复", url: "/dashboard/settings/backup" },
+      { title: "系统配置", url: "/dashboard/settings/system-config" },
+      { title: "安全中心", url: "/dashboard/settings/security-center" },
+      { title: "集成服务", url: "/dashboard/settings/integrations" },
+      { title: "管理运维", url: "/dashboard/settings/management" },
     ],
   },
 ]
@@ -124,7 +121,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
     () => all.filter((i) => ["监控告警", "日志审计"].includes(i.title)),
     [all]
   )
-  const groupSettings = React.useMemo(() => all.filter((i) => i.title === "系统配置"), [all])
+  const groupSettings = React.useMemo(() => all.filter((i) => i.title === "系统与组织"), [all])
 
   // 构建真实用户数据
   const userData = React.useMemo(() => {

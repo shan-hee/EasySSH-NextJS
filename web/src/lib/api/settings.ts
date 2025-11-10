@@ -609,6 +609,7 @@ export const settingsApi = {
 
   /**
    * 获取 Cookie 配置
+   * @deprecated Cookie配置已移至环境变量(.env.example)，此方法已废弃
    */
   async getCookieConfig(token: string): Promise<CookieConfig> {
     const response = await apiFetch<GetCookieConfigResponse>("/settings/advanced/cookie", {
@@ -620,6 +621,7 @@ export const settingsApi = {
 
   /**
    * 保存 Cookie 配置
+   * @deprecated Cookie配置已移至环境变量(.env.example)，此方法已废弃
    */
   async saveCookieConfig(token: string, config: CookieConfig): Promise<void> {
     return apiFetch<void>("/settings/advanced/cookie", {

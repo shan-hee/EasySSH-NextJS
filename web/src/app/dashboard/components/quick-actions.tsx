@@ -35,7 +35,7 @@ export function QuickActions() {
             </div>
           </button>
         </Link>
-        <Link href="/dashboard/settings/general">
+        <Link href="/dashboard/settings/system-config">
           <button className="bg-secondary text-secondary-foreground p-4 rounded-lg hover:bg-secondary/90 transition-colors w-full">
             <div className="text-center">
               <div className="text-2xl mb-2">⚙️</div>
