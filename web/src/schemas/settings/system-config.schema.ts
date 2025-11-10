@@ -26,23 +26,6 @@ export const performanceSchema = z.object({
     .number()
     .min(1, "文件上传大小不能小于1MB")
     .max(1024, "文件上传大小不能超过1024MB"),
-  // 数据库连接池配置
-  max_idle_conns: z
-    .number()
-    .min(1, "最大空闲连接数不能小于1")
-    .max(1000, "最大空闲连接数不能超过1000"),
-  max_open_conns: z
-    .number()
-    .min(1, "最大打开连接数不能小于1")
-    .max(10000, "最大打开连接数不能超过10000"),
-  conn_max_lifetime: z
-    .number()
-    .min(1, "连接最大生命周期不能小于1分钟")
-    .max(1440, "连接最大生命周期不能超过1440分钟"),
-  conn_max_idle_time: z
-    .number()
-    .min(1, "连接最大空闲时间不能小于1分钟")
-    .max(60, "连接最大空闲时间不能超过60分钟"),
 })
 
 // 完整的系统配置 Schema (所有标签页合并)

@@ -93,9 +93,12 @@ func main() {
 	// 初始化服务层
 	// JWT 服务
 	jwtService := auth.NewJWTService(auth.JWTConfig{
-		SecretKey:            cfg.JWT.Secret,
-		AccessTokenDuration:  time.Duration(cfg.JWT.AccessExpire) * time.Hour,
-		RefreshTokenDuration: time.Duration(cfg.JWT.RefreshExpire) * time.Hour,
+		SecretKey:                 cfg.JWT.Secret,
+		AccessTokenDuration:       time.Duration(cfg.JWT.AccessExpireMinutes) * time.Minute,
+		RefreshIdleExpireDuration: time.Duration(cfg.JWT.RefreshIdleExpireDays) * 24 * time.Hour,
+		RefreshAbsoluteExpireDuration: time.Duration(cfg.JWT.RefreshAbsoluteExpireDays) * 24 * time.Hour,
+		RefreshRotate:             cfg.JWT.RefreshRotate,
+		RefreshReuseDetection:     cfg.JWT.RefreshReuseDetection,
 	}, redisClient.GetClient())
 
 	// 认证服务

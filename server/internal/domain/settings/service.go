@@ -42,14 +42,6 @@ type Service interface {
 	GetSystemConfig(ctx context.Context) (*SystemConfig, error)
 	SaveSystemConfig(ctx context.Context, config *SystemConfig) error
 
-	// 数据库连接池配置
-	GetDatabasePoolConfig(ctx context.Context) (*DatabasePoolConfig, error)
-	SaveDatabasePoolConfig(ctx context.Context, config *DatabasePoolConfig) error
-
-	// JWT 配置
-	GetJWTConfig(ctx context.Context) (*JWTConfig, error)
-	SaveJWTConfig(ctx context.Context, config *JWTConfig) error
-
 	// CORS 配置
 	GetCORSConfig(ctx context.Context) (*CORSConfig, error)
 	SaveCORSConfig(ctx context.Context, config *CORSConfig) error

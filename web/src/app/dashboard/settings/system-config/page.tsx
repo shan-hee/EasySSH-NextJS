@@ -27,39 +27,10 @@ export default function SystemConfigPage() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: systemConfigSchema,
     loadFn: async (token) => {
-      // 合并多个API调用
-      const systemConfig = await settingsApi.getSystemConfig(token)
-      const dbConfig = await settingsApi.getDatabasePoolConfig(token)
-
-      return {
-        ...systemConfig,
-        ...dbConfig,
-      }
+      return await settingsApi.getSystemConfig(token)
     },
     saveFn: async (token, data) => {
-      // 分别保存到不同的API
-      const systemData = {
-        system_name: data.system_name,
-        system_logo: data.system_logo,
-        system_favicon: data.system_favicon,
-        default_language: data.default_language,
-        default_timezone: data.default_timezone,
-        date_format: data.date_format,
-        default_page_size: data.default_page_size,
-        max_file_upload_size: data.max_file_upload_size,
-      }
-
-      const dbData = {
-        max_idle_conns: data.max_idle_conns,
-        max_open_conns: data.max_open_conns,
-        conn_max_lifetime: data.conn_max_lifetime,
-        conn_max_idle_time: data.conn_max_idle_time,
-      }
-
-      await Promise.all([
-        settingsApi.saveSystemConfig(token, systemData),
-        settingsApi.saveDatabasePoolConfig(token, dbData),
-      ])
+      await settingsApi.saveSystemConfig(token, data)
     },
   })
 

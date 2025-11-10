@@ -184,38 +184,6 @@ export interface CheckIPResponse {
 // === 高级配置类型定义 ===
 
 /**
- * 数据库连接池配置
- */
-export interface DatabasePoolConfig {
-  max_idle_conns: number
-  max_open_conns: number
-  conn_max_lifetime: number
-  conn_max_idle_time: number
-}
-
-/**
- * 获取数据库连接池配置响应
- */
-export interface GetDatabasePoolConfigResponse {
-  config: DatabasePoolConfig
-}
-
-/**
- * JWT 配置
- */
-export interface JWTConfig {
-  access_expire: number
-  refresh_expire: number
-}
-
-/**
- * 获取 JWT 配置响应
- */
-export interface GetJWTConfigResponse {
-  config: JWTConfig
-}
-
-/**
  * CORS 配置
  */
 export interface CORSConfig {
@@ -518,50 +486,6 @@ export const settingsApi = {
   },
 
   // === 高级配置相关 API ===
-
-  /**
-   * 获取数据库连接池配置
-   */
-  async getDatabasePoolConfig(token: string): Promise<DatabasePoolConfig> {
-    const response = await apiFetch<GetDatabasePoolConfigResponse>("/settings/advanced/database-pool", {
-      method: "GET",
-      token,
-    })
-    return response.config
-  },
-
-  /**
-   * 保存数据库连接池配置
-   */
-  async saveDatabasePoolConfig(token: string, config: DatabasePoolConfig): Promise<void> {
-    return apiFetch<void>("/settings/advanced/database-pool", {
-      method: "POST",
-      token,
-      body: config,
-    })
-  },
-
-  /**
-   * 获取 JWT 配置
-   */
-  async getJWTConfig(token: string): Promise<JWTConfig> {
-    const response = await apiFetch<GetJWTConfigResponse>("/settings/advanced/jwt", {
-      method: "GET",
-      token,
-    })
-    return response.config
-  },
-
-  /**
-   * 保存 JWT 配置
-   */
-  async saveJWTConfig(token: string, config: JWTConfig): Promise<void> {
-    return apiFetch<void>("/settings/advanced/jwt", {
-      method: "POST",
-      token,
-      body: config,
-    })
-  },
 
   /**
    * 获取 CORS 配置

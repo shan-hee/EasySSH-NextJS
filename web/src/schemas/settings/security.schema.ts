@@ -35,18 +35,6 @@ export const sessionManagementSchema = z.object({
   hibernate: z.boolean(),
 })
 
-// JWT认证 Schema
-export const jwtConfigSchema = z.object({
-  access_expire: z
-    .number()
-    .min(1, "访问令牌过期时间不能小于1小时")
-    .max(168, "访问令牌过期时间不能超过168小时"),
-  refresh_expire: z
-    .number()
-    .min(24, "刷新令牌过期时间不能小于24小时")
-    .max(720, "刷新令牌过期时间不能超过720小时"),
-})
-
 // CORS配置 Schema
 export const corsConfigSchema = z.object({
   allowed_origins: z.array(z.string().min(1)).min(1, "至少需要一个允许的域名"),
@@ -68,14 +56,12 @@ export const rateLimitSchema = z.object({
 
 // 完整的安全配置 Schema
 export const securityConfigSchema = sessionManagementSchema
-  .merge(jwtConfigSchema)
   .merge(corsConfigSchema)
   .merge(rateLimitSchema)
 
 // 导出类型
 export type IPWhitelistFormData = z.infer<typeof ipWhitelistSchema>
 export type SessionManagementFormData = z.infer<typeof sessionManagementSchema>
-export type JWTConfigFormData = z.infer<typeof jwtConfigSchema>
 export type CORSConfigFormData = z.infer<typeof corsConfigSchema>
 export type RateLimitFormData = z.infer<typeof rateLimitSchema>
 export type SecurityConfigFormData = z.infer<typeof securityConfigSchema>

@@ -19,6 +19,12 @@ services:
       DB_NAME: ${DB_NAME:-Easyssh_db}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
 
+      # 数据库连接池配置
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}  # 最大空闲连接数
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-100}  # 最大打开连接数
+      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-60}  # 连接最大生命周期（分钟）
+      DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-10}  # 连接最大空闲时间（分钟）
+
       # Redis 配置
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -32,6 +38,13 @@ services:
       # 安全配置
       JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-production}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 48
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 24
+
+      # JWT 令牌过期时间配置
+      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-15}  # 访问令牌过期时间（分钟）
+      JWT_REFRESH_IDLE_EXPIRE_DAYS: ${JWT_REFRESH_IDLE_EXPIRE_DAYS:-7}  # 刷新令牌闲置过期时间（天）
+      JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS: ${JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS:-30}  # 刷新令牌绝对过期时间（天）
+      JWT_REFRESH_ROTATE: ${JWT_REFRESH_ROTATE:-true}  # 刷新令牌轮换
+      JWT_REFRESH_REUSE_DETECTION: ${JWT_REFRESH_REUSE_DETECTION:-true}  # 复用检测
 
       # Cookie 配置
       COOKIE_SECURE: ${COOKIE_SECURE:-true}  # HTTPS 环境设置为 true | HTTP 环境必须为 false

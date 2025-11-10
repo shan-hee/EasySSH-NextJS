@@ -83,43 +83,6 @@ func (m *ConfigManager) InvalidateAllCache() {
 	m.cache = make(map[string]*cacheEntry)
 }
 
-// GetJWTConfig 获取 JWT 配置（带缓存）
-func (m *ConfigManager) GetJWTConfig(ctx context.Context) (*JWTConfig, error) {
-	const cacheKey = "jwt_config"
-
-	// 尝试从缓存获取
-	if cached, found := m.getFromCache(cacheKey); found {
-		return cached.(*JWTConfig), nil
-	}
-
-	// 缓存未命中，从数据库读取
-	config, err := m.service.GetJWTConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// 写入缓存
-	m.setToCache(cacheKey, config)
-	return config, nil
-}
-
-// GetDatabasePoolConfig 获取数据库连接池配置（带缓存）
-func (m *ConfigManager) GetDatabasePoolConfig(ctx context.Context) (*DatabasePoolConfig, error) {
-	const cacheKey = "database_pool_config"
-
-	if cached, found := m.getFromCache(cacheKey); found {
-		return cached.(*DatabasePoolConfig), nil
-	}
-
-	config, err := m.service.GetDatabasePoolConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	m.setToCache(cacheKey, config)
-	return config, nil
-}
-
 // GetCORSConfig 获取 CORS 配置（带缓存）
 func (m *ConfigManager) GetCORSConfig(ctx context.Context) (*CORSConfig, error) {
 	const cacheKey = "cors_config"

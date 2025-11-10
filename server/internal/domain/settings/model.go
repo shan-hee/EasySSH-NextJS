@@ -77,20 +77,6 @@ const (
 	KeyRememberLogin      = "tabsession.remember_login"      // 是否允许记住登录状态
 )
 
-// 数据库连接池配置相关的键名
-const (
-	KeyDBMaxIdleConns    = "database.max_idle_conns"
-	KeyDBMaxOpenConns    = "database.max_open_conns"
-	KeyDBConnMaxLifetime = "database.conn_max_lifetime" // 分钟
-	KeyDBConnMaxIdleTime = "database.conn_max_idle_time" // 分钟
-)
-
-// JWT 配置相关的键名
-const (
-	KeyJWTAccessExpire  = "jwt.access_expire_hours"
-	KeyJWTRefreshExpire = "jwt.refresh_expire_hours"
-)
-
 // CORS 配置相关的键名
 const (
 	KeyCORSAllowedOrigins = "cors.allowed_origins" // 逗号分隔的域名列表
@@ -167,20 +153,6 @@ type TabSessionConfig struct {
 	Hibernate       bool `json:"hibernate"`         // 是否启用后台标签页休眠
 	SessionTimeout  int  `json:"session_timeout"`   // 会话超时时间（分钟）
 	RememberLogin   bool `json:"remember_login"`    // 是否允许记住登录状态
-}
-
-// DatabasePoolConfig 数据库连接池配置结构
-type DatabasePoolConfig struct {
-	MaxIdleConns    int `json:"max_idle_conns"`    // 最大空闲连接数
-	MaxOpenConns    int `json:"max_open_conns"`    // 最大打开连接数
-	ConnMaxLifetime int `json:"conn_max_lifetime"` // 连接最大生命周期（分钟）
-	ConnMaxIdleTime int `json:"conn_max_idle_time"` // 连接最大空闲时间（分钟）
-}
-
-// JWTConfig JWT 配置结构
-type JWTConfig struct {
-	AccessExpire  int `json:"access_expire"`  // 访问令牌过期时间（小时）
-	RefreshExpire int `json:"refresh_expire"` // 刷新令牌过期时间（小时）
 }
 
 // CORSConfig CORS 配置结构
