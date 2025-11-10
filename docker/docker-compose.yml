@@ -32,6 +32,10 @@ services:
       # 安全配置
       JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-production}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 48
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 24
+
+      # Cookie 配置
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}  # HTTPS 环境设置为 true | HTTP 环境必须为 false
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}  # Cookie 域名，留空表示当前域名
     depends_on:
       postgres:
         condition: service_healthy
