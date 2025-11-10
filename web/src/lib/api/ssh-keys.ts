@@ -29,19 +29,17 @@ export interface ImportSSHKeyRequest {
 /**
  * 获取当前用户的SSH密钥列表
  */
-export async function getSSHKeys(token: string): Promise<SSHKey[]> {
-  return apiFetch<SSHKey[]>("/ssh-keys", { token })
+export async function getSSHKeys(): Promise<SSHKey[]> {
+  return apiFetch<SSHKey[]>("/ssh-keys")
 }
 
 /**
  * 生成新的SSH密钥对
  */
 export async function generateSSHKey(
-  token: string,
   data: GenerateSSHKeyRequest
 ): Promise<SSHKeyWithPrivateKey> {
   return apiFetch<SSHKeyWithPrivateKey>("/ssh-keys/generate", {
-    token,
     method: "POST",
     body: JSON.stringify(data),
   })
@@ -51,11 +49,9 @@ export async function generateSSHKey(
  * 导入已有的SSH密钥
  */
 export async function importSSHKey(
-  token: string,
   data: ImportSSHKeyRequest
 ): Promise<SSHKeyWithPrivateKey> {
   return apiFetch<SSHKeyWithPrivateKey>("/ssh-keys/import", {
-    token,
     method: "POST",
     body: JSON.stringify(data),
   })
@@ -64,9 +60,8 @@ export async function importSSHKey(
 /**
  * 删除SSH密钥
  */
-export async function deleteSSHKey(token: string, id: number): Promise<void> {
+export async function deleteSSHKey(id: number): Promise<void> {
   await apiFetch(`/ssh-keys/${id}`, {
-    token,
     method: "DELETE",
   })
 }

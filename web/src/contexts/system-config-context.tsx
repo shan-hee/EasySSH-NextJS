@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { settingsApi, type SystemConfig } from "@/lib/api/settings"
-import { getAccessToken } from "@/contexts/auth-context"
 
 /**
  * 系统配置 Context
@@ -36,23 +35,7 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
       setIsLoading(true)
       setError(null)
 
-      const token = await getAccessToken()
-      if (!token) {
-        // 如果没有token,使用默认配置
-        setConfig({
-          system_name: "EasySSH",
-          system_logo: "/logo.svg",
-          system_favicon: "/favicon.ico",
-          default_language: "zh-CN",
-          default_timezone: "Asia/Shanghai",
-          date_format: "YYYY-MM-DD HH:mm:ss",
-          default_page_size: 20,
-          max_file_upload_size: 100,
-        })
-        return
-      }
-
-      const systemConfig = await settingsApi.getSystemConfig(token)
+      const systemConfig = await settingsApi.getSystemConfig()
       setConfig(systemConfig)
     } catch (err) {
       console.error("Failed to load system config:", err)

@@ -99,7 +99,6 @@ export function useFileTransfer() {
    */
   const uploadFile = useCallback(
     async (
-      token: string,
       serverId: string,
       remotePath: string,
       file: File,
@@ -116,8 +115,8 @@ export function useFileTransfer() {
       try {
         // 如果启用 WebSocket，先建立连接
         if (enableWebSocket) {
-          // 使用统一的 WebSocket URL 构建函数
-          const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}`) + `?token=${token}`;
+          // 使用统一的 WebSocket URL 构建函数（凭 Cookie 认证，不再拼接 token）
+          const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}`);
 
           wsConnection = new WebSocket(wsUrl);
 
@@ -188,7 +187,6 @@ export function useFileTransfer() {
 
         // 调用 API 上传（传递任务 ID 以便后端推送 SFTP 进度）
         await sftpApi.uploadFile(
-          token,
           serverId,
           remotePath,
           file,
@@ -228,7 +226,6 @@ export function useFileTransfer() {
    */
   const downloadFile = useCallback(
     async (
-      token: string,
       serverId: string,
       remotePath: string,
       fileName: string,
@@ -312,7 +309,8 @@ export function useFileTransfer() {
         const apiUrl = getApiUrl();
         const url = `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(remotePath)}`;
         xhr.open('GET', url);
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        // 使用 Cookie 认证
+        xhr.withCredentials = true;
         xhr.send();
       });
     },

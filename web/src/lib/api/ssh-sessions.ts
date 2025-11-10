@@ -60,7 +60,7 @@ export const sshSessionsApi = {
   /**
    * 获取SSH会话列表
    */
-  async list(token: string, params?: ListSSHSessionsParams): Promise<ListSSHSessionsResponse> {
+  async list(params?: ListSSHSessionsParams): Promise<ListSSHSessionsResponse> {
     const queryParams = new URLSearchParams()
     if (params?.page) queryParams.append("page", params.page.toString())
     if (params?.limit) queryParams.append("limit", params.limit.toString())
@@ -69,40 +69,38 @@ export const sshSessionsApi = {
     if (params?.user_id) queryParams.append("user_id", params.user_id)
 
     const url = `/ssh-sessions${queryParams.toString() ? `?${queryParams}` : ""}`
-    return apiFetch<ListSSHSessionsResponse>(url, { token })
+    return apiFetch<ListSSHSessionsResponse>(url)
   },
 
   /**
    * 获取SSH会话详情
    */
-  async getById(token: string, id: string): Promise<SSHSessionDetail> {
-    return apiFetch<SSHSessionDetail>(`/ssh-sessions/${id}`, { token })
+  async getById(id: string): Promise<SSHSessionDetail> {
+    return apiFetch<SSHSessionDetail>(`/ssh-sessions/${id}`)
   },
 
   /**
    * 删除SSH会话记录
    */
-  async delete(token: string, id: string): Promise<{ message: string }> {
+  async delete(id: string): Promise<{ message: string }> {
     return apiFetch<{ message: string }>(`/ssh-sessions/${id}`, {
       method: "DELETE",
-      token,
     })
   },
 
   /**
    * 获取SSH会话统计信息
    */
-  async getStatistics(token: string): Promise<SSHSessionStatistics> {
-    return apiFetch<SSHSessionStatistics>("/ssh-sessions/statistics", { token })
+  async getStatistics(): Promise<SSHSessionStatistics> {
+    return apiFetch<SSHSessionStatistics>("/ssh-sessions/statistics")
   },
 
   /**
    * 关闭SSH会话
    */
-  async close(token: string, id: string): Promise<{ message: string }> {
+  async close(id: string): Promise<{ message: string }> {
     return apiFetch<{ message: string }>(`/ssh-sessions/${id}/close`, {
       method: "POST",
-      token,
     })
   },
 }

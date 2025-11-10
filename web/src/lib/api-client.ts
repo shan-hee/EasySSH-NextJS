@@ -1,5 +1,41 @@
 import { getApiUrl } from "@/lib/config"
 
+// 全局刷新会话 Promise，避免并发重复刷新
+let refreshPromise: Promise<void> | null = null
+
+async function refreshSession(): Promise<void> {
+  if (typeof window === 'undefined') {
+    // 仅在浏览器端执行刷新；服务端不做刷新以免无法设置浏览器 Cookie
+    throw new Error('Refresh not supported on server')
+  }
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = (async () => {
+    const apiUrl = getApiUrl()
+    const url = `${apiUrl}/auth/refresh`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}), // 刻意不传 refresh_token，后端将从 Cookie 读取
+      credentials: 'same-origin',
+    })
+    if (!res.ok) {
+      throw new Error(`Refresh failed: ${res.status}`)
+    }
+    // 刷新成功，后端通过 Set-Cookie 更新会话，无需处理响应体
+  })()
+
+  try {
+    await refreshPromise
+  } finally {
+    // 单次刷新完成后释放锁
+    refreshPromise = null
+  }
+}
+
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
 /**
@@ -25,7 +61,6 @@ type ApiFetchOptions = {
   method?: HttpMethod
   headers?: HeadersInit
   body?: unknown
-  token?: string
   signal?: AbortSignal
   timeout?: number // 超时时间(毫秒),默认 30000ms
   retry?: boolean // 是否启用重试,默认 true
@@ -70,6 +105,17 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     try {
       return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
     } catch (error) {
+      // 401 处理：仅在浏览器端尝试用 Cookie 刷新并重放一次
+      if (typeof window !== 'undefined' && isApiError(error) && error.status === 401) {
+        try {
+          await refreshSession()
+          // 刷新成功，重放原请求一次（不进入重试退避）
+          return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
+        } catch (_) {
+          // 刷新失败，抛出原始 401
+          throw error
+        }
+      }
       lastError = error
 
       // 最后一次尝试或不可重试的错误,直接抛出
@@ -109,8 +155,22 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     ...options.headers,
   }
 
-  if (options.token) {
-    ;(headers as Record<string, string>)["Authorization"] = `Bearer ${options.token}`
+  // 服务端环境：将当前请求的 Cookie 透传给后端，便于基于 Cookie 鉴权
+  // 说明：不能在模块顶层静态导入 next/headers（会被客户端引用到），需在运行时按需动态导入
+  if (typeof window === 'undefined') {
+    try {
+      const { cookies } = await import('next/headers')
+      const cookieStore = cookies()
+      const cookieHeader = cookieStore
+        .getAll()
+        .map((c) => `${c.name}=${c.value}`)
+        .join('; ')
+      if (cookieHeader && !(headers as Record<string, string>)['Cookie']) {
+        ;(headers as Record<string, string>)['Cookie'] = cookieHeader
+      }
+    } catch (e) {
+      // 在无法获取 cookies 的上下文（如某些构建阶段）忽略透传，不影响客户端请求
+    }
   }
 
   // 创建超时控制器
@@ -125,6 +185,7 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   const init: RequestInit = {
     method: options.method ?? "GET",
     headers,
+    credentials: 'same-origin',
     signal,
   }
 
@@ -182,4 +243,3 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     throw error
   }
 }
-

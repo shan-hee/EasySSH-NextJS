@@ -105,7 +105,7 @@ export const serversApi = {
   /**
    * 获取服务器列表
    */
-  async list(token: string, params?: {
+  async list(params?: {
     page?: number
     limit?: number
     group?: string
@@ -118,23 +118,22 @@ export const serversApi = {
     if (params?.search) queryParams.set("search", params.search)
 
     const url = `/servers${queryParams.toString() ? `?${queryParams}` : ""}`
-    return apiFetch<ServerListResponse>(url, { token })
+    return apiFetch<ServerListResponse>(url)
   },
 
   /**
    * 获取服务器详情
    */
-  async getById(token: string, id: string): Promise<Server> {
-    return apiFetch<Server>(`/servers/${id}`, { token })
+  async getById(id: string): Promise<Server> {
+    return apiFetch<Server>(`/servers/${id}`)
   },
 
   /**
    * 创建服务器
    */
-  async create(token: string, data: CreateServerRequest): Promise<Server> {
+  async create(data: CreateServerRequest): Promise<Server> {
     return apiFetch<Server>("/servers", {
       method: "POST",
-      token,
       body: data,
     })
   },
@@ -142,10 +141,9 @@ export const serversApi = {
   /**
    * 更新服务器
    */
-  async update(token: string, id: string, data: UpdateServerRequest): Promise<Server> {
+  async update(id: string, data: UpdateServerRequest): Promise<Server> {
     return apiFetch<Server>(`/servers/${id}`, {
       method: "PUT",
-      token,
       body: data,
     })
   },
@@ -153,37 +151,34 @@ export const serversApi = {
   /**
    * 删除服务器
    */
-  async delete(token: string, id: string): Promise<void> {
+  async delete(id: string): Promise<void> {
     return apiFetch<void>(`/servers/${id}`, {
       method: "DELETE",
-      token,
     })
   },
 
   /**
    * 测试服务器连接
    */
-  async testConnection(token: string, id: string): Promise<TestConnectionResponse> {
+  async testConnection(id: string): Promise<TestConnectionResponse> {
     return apiFetch<TestConnectionResponse>(`/servers/${id}/test`, {
       method: "POST",
-      token,
     })
   },
 
   /**
    * 获取服务器统计信息
    */
-  async getStatistics(token: string): Promise<ServerStatisticsResponse> {
-    return apiFetch<ServerStatisticsResponse>("/servers/statistics", { token })
+  async getStatistics(): Promise<ServerStatisticsResponse> {
+    return apiFetch<ServerStatisticsResponse>("/servers/statistics")
   },
 
   /**
    * 批量更新服务器排序顺序
    */
-  async reorder(token: string, serverIds: string[]): Promise<void> {
+  async reorder(serverIds: string[]): Promise<void> {
     return apiFetch<void>("/servers/reorder", {
       method: "PATCH",
-      token,
       body: { server_ids: serverIds },
     })
   },

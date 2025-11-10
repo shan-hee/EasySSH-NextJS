@@ -228,14 +228,9 @@ export default function ServersPage() {
  async function loadServers() {
  try {
  setLoading(true)
- const token = localStorage.getItem("easyssh_access_token")
+ // 认证基于 HttpOnly Cookie，无需本地令牌
 
- if (!token) {
- router.push("/login")
- return
- }
-
- const response = await serversApi.list(token, {
+ const response = await serversApi.list({
  page: 1,
  limit: 100
  })
@@ -256,10 +251,9 @@ export default function ServersPage() {
 
  async function loadStatistics() {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) return
+ // 认证基于 HttpOnly Cookie
 
- const stats = await serversApi.getStatistics(token)
+ const stats = await serversApi.getStatistics()
  setStatistics(stats)
  } catch (error) {
  console.error("Failed to load statistics:", error)
@@ -281,17 +275,13 @@ export default function ServersPage() {
  const handleTestConnection = async (serverId: string, e: React.MouseEvent) => {
  e.stopPropagation()
 
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
  setTestingServerId(serverId)
  toast.info("正在测试连接...")
 
  try {
- const result = await serversApi.testConnection(token, serverId)
+ const result = await serversApi.testConnection(serverId)
  if (result.success) {
  toast.success(`连接测试成功！延迟: ${result.latency_ms}ms`)
 
@@ -328,11 +318,7 @@ export default function ServersPage() {
 
  // 批量测试离线服务器
  const handleBatchTestOffline = async () => {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
  // 获取所有离线和错误状态的服务器
  const offlineServers = servers.filter(s => s.status === 'offline' || s.status === 'error')
@@ -351,7 +337,7 @@ export default function ServersPage() {
  // 并发测试所有离线服务器
  const testPromises = offlineServers.map(async (server) => {
  try {
- const result = await serversApi.testConnection(token, server.id)
+ const result = await serversApi.testConnection(server.id)
 
  // 更新服务器状态
  setServers(prev => prev.map(s =>
@@ -394,13 +380,9 @@ export default function ServersPage() {
  }
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
- await serversApi.delete(token, serverId)
+ await serversApi.delete(serverId)
  toast.success("服务器已删除")
 
  // 乐观更新：直接从本地列表移除，避免整个页面刷新
@@ -438,14 +420,10 @@ export default function ServersPage() {
 
  // 调用后端 API 保存新顺序
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
  const serverIds = newOrder.map(s => s.id)
- await serversApi.reorder(token, serverIds)
+ await serversApi.reorder(serverIds)
  toast.success("排序已保存")
  } catch (error: unknown) {
  console.error("Failed to save server order:", error)
@@ -458,11 +436,7 @@ export default function ServersPage() {
 
  const handleAddServer = async (data: ServerFormData) => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
  const serverData: {
  name?: string
@@ -488,7 +462,7 @@ export default function ServersPage() {
  description: data.description,
  }
 
- const newServer = await serversApi.create(token, serverData)
+ const newServer = await serversApi.create(serverData)
 
  toast.success("服务器添加成功")
  setIsAddDialogOpen(false)
@@ -506,18 +480,14 @@ export default function ServersPage() {
 
  const handleEditServer = async (data: ServerFormData) => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
  if (!editingServer) {
  toast.error("未找到要编辑的服务器")
  return
  }
 
- const updatedServer = await serversApi.update(token, editingServer.id, {
+ const updatedServer = await serversApi.update(editingServer.id, {
  name: data.name,
  host: data.host,
  port: parseInt(data.port) || 22,

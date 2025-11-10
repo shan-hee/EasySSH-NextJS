@@ -1,6 +1,4 @@
-import { getApiUrl } from "../config"
-
-const API_BASE_URL = getApiUrl()
+import { apiFetch } from "@/lib/api-client"
 
 // 批量任务类型定义
 export interface BatchTask {
@@ -68,153 +66,69 @@ export const batchTasksApi = {
   /**
    * 获取批量任务列表
    */
-  async list(token: string, params?: ListBatchTasksParams): Promise<ListBatchTasksResponse> {
+  async list(params?: ListBatchTasksParams): Promise<ListBatchTasksResponse> {
     const queryParams = new URLSearchParams()
     if (params?.page) queryParams.append("page", params.page.toString())
     if (params?.limit) queryParams.append("limit", params.limit.toString())
     if (params?.status) queryParams.append("status", params.status)
     if (params?.task_type) queryParams.append("task_type", params.task_type)
 
-    const url = `${API_BASE_URL}/batch-tasks${queryParams.toString() ? `?${queryParams}` : ""}`
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch batch tasks")
-    }
-
-    return response.json()
+    const url = `/batch-tasks${queryParams.toString() ? `?${queryParams}` : ""}`
+    return apiFetch<ListBatchTasksResponse>(url)
   },
 
   /**
    * 创建批量任务
    */
-  async create(token: string, data: CreateBatchTaskRequest): Promise<{ data: BatchTask }> {
-    const response = await fetch(`${API_BASE_URL}/batch-tasks`, {
+  async create(data: CreateBatchTaskRequest): Promise<{ data: BatchTask }> {
+    return apiFetch<{ data: BatchTask }>(`/batch-tasks`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to create batch task")
-    }
-
-    return response.json()
   },
 
   /**
    * 获取批量任务详情
    */
-  async getById(token: string, id: string): Promise<{ data: BatchTask }> {
-    const response = await fetch(`${API_BASE_URL}/batch-tasks/${id}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch batch task")
-    }
-
-    return response.json()
+  async getById(id: string): Promise<{ data: BatchTask }> {
+    return apiFetch<{ data: BatchTask }>(`/batch-tasks/${id}`)
   },
 
   /**
    * 更新批量任务
    */
   async update(
-    token: string,
     id: string,
     data: UpdateBatchTaskRequest
   ): Promise<{ data: BatchTask }> {
-    const response = await fetch(`${API_BASE_URL}/batch-tasks/${id}`, {
+    return apiFetch<{ data: BatchTask }>(`/batch-tasks/${id}`, {
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to update batch task")
-    }
-
-    return response.json()
   },
 
   /**
    * 删除批量任务
    */
-  async delete(token: string, id: string): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/batch-tasks/${id}`, {
+  async delete(id: string): Promise<{ data: { message: string } }> {
+    return apiFetch<{ data: { message: string } }>(`/batch-tasks/${id}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to delete batch task")
-    }
-
-    return response.json()
   },
 
   /**
    * 获取批量任务统计信息
    */
-  async getStatistics(token: string): Promise<{ data: BatchTaskStatistics }> {
-    const response = await fetch(`${API_BASE_URL}/batch-tasks/statistics`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch batch task statistics")
-    }
-
-    return response.json()
+  async getStatistics(): Promise<{ data: BatchTaskStatistics }> {
+    return apiFetch<{ data: BatchTaskStatistics }>(`/batch-tasks/statistics`)
   },
 
   /**
    * 启动批量任务
    */
-  async start(token: string, id: string): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/batch-tasks/${id}/start`, {
+  async start(id: string): Promise<{ data: { message: string } }> {
+    return apiFetch<{ data: { message: string } }>(`/batch-tasks/${id}/start`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to start batch task")
-    }
-
-    return response.json()
   },
 }

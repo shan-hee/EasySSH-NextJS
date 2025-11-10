@@ -29,16 +29,15 @@ export const sessionsApi = {
   /**
    * 获取所有活跃会话
    */
-  async list(token: string): Promise<SessionsResponse> {
-    return apiFetch<SessionsResponse>("/users/me/sessions", { token })
+  async list(): Promise<SessionsResponse> {
+    return apiFetch<SessionsResponse>("/users/me/sessions")
   },
 
   /**
    * 撤销指定会话
    */
-  async revoke(token: string, sessionId: string): Promise<{ message: string }> {
+  async revoke(sessionId: string): Promise<{ message: string }> {
     return apiFetch<{ message: string }>(`/users/me/sessions/${sessionId}`, {
-      token,
       method: "DELETE",
     })
   },
@@ -46,9 +45,8 @@ export const sessionsApi = {
   /**
    * 撤销所有其他会话
    */
-  async revokeAllOthers(token: string): Promise<{ message: string }> {
+  async revokeAllOthers(): Promise<{ message: string }> {
     return apiFetch<{ message: string }>("/users/me/sessions/revoke-others", {
-      token,
       method: "POST",
     })
   },

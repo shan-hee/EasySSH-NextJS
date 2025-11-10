@@ -53,39 +53,25 @@ export async function middleware(request: NextRequest) {
   // 注意: 仅检查 cookie 存在性,不验证有效性
   // 如果 token 无效,dashboard layout 会处理重定向
   if (pathname === "/login") {
-    const accessToken = request.cookies.get("easyssh_access_token")?.value
-    if (accessToken) {
-      // 验证 token 是否有效
-      try {
-        const apiUrl = `${getApiBaseUrl()}/users/me`
-        const response = await fetch(apiUrl, {
-          method: "GET",
-          headers: {
-            "Accept": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
-        })
+    try {
+      const apiUrl = `${getApiBaseUrl()}/users/me`
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          // 直接转发原始 Cookie，基于 Cookie 进行鉴权
+          Cookie: request.headers.get("cookie") || "",
+        },
+        cache: "no-store",
+      })
 
-        // Token 有效,重定向到 dashboard
-        if (response.ok) {
-          return NextResponse.redirect(new URL("/dashboard", request.url))
-        }
-        // Token 无效,清除 cookie,留在登录页
-        else {
-          const response = NextResponse.next()
-          response.cookies.delete("easyssh_access_token")
-          response.cookies.delete("easyssh_refresh_token")
-          return response
-        }
-      } catch (error) {
-        console.error("Middleware: Failed to verify token:", error)
-        // 验证失败,清除 cookie
-        const response = NextResponse.next()
-        response.cookies.delete("easyssh_access_token")
-        response.cookies.delete("easyssh_refresh_token")
-        return response
+      // 已认证则重定向到 dashboard
+      if (response.ok) {
+        return NextResponse.redirect(new URL("/dashboard", request.url))
       }
+    } catch (error) {
+      console.error("Middleware: Failed to verify session via cookie:", error)
+      // 失败时不阻塞，留在登录页
     }
   }
 

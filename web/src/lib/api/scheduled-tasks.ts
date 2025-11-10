@@ -1,6 +1,4 @@
-import { getApiUrl } from "../config"
-
-const API_BASE_URL = getApiUrl()
+import { apiFetch } from "@/lib/api-client"
 
 // 定时任务类型定义
 export interface ScheduledTask {
@@ -78,7 +76,6 @@ export const scheduledTasksApi = {
    * 获取定时任务列表
    */
   async list(
-    token: string,
     params?: ListScheduledTasksParams
   ): Promise<ListScheduledTasksResponse> {
     const queryParams = new URLSearchParams()
@@ -87,170 +84,74 @@ export const scheduledTasksApi = {
     if (params?.enabled !== undefined) queryParams.append("enabled", params.enabled.toString())
     if (params?.task_type) queryParams.append("task_type", params.task_type)
 
-    const url = `${API_BASE_URL}/scheduled-tasks${queryParams.toString() ? `?${queryParams}` : ""}`
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch scheduled tasks")
-    }
-
-    return response.json()
+    const url = `/scheduled-tasks${queryParams.toString() ? `?${queryParams}` : ""}`
+    return apiFetch<ListScheduledTasksResponse>(url)
   },
 
   /**
    * 创建定时任务
    */
   async create(
-    token: string,
     data: CreateScheduledTaskRequest
   ): Promise<{ data: ScheduledTask }> {
-    const response = await fetch(`${API_BASE_URL}/scheduled-tasks`, {
+    return apiFetch<{ data: ScheduledTask }>(`/scheduled-tasks`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to create scheduled task")
-    }
-
-    return response.json()
   },
 
   /**
    * 获取定时任务详情
    */
-  async getById(token: string, id: string): Promise<{ data: ScheduledTask }> {
-    const response = await fetch(`${API_BASE_URL}/scheduled-tasks/${id}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch scheduled task")
-    }
-
-    return response.json()
+  async getById(id: string): Promise<{ data: ScheduledTask }> {
+    return apiFetch<{ data: ScheduledTask }>(`/scheduled-tasks/${id}`)
   },
 
   /**
    * 更新定时任务
    */
   async update(
-    token: string,
     id: string,
     data: UpdateScheduledTaskRequest
   ): Promise<{ data: ScheduledTask }> {
-    const response = await fetch(`${API_BASE_URL}/scheduled-tasks/${id}`, {
+    return apiFetch<{ data: ScheduledTask }>(`/scheduled-tasks/${id}`, {
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to update scheduled task")
-    }
-
-    return response.json()
   },
 
   /**
    * 删除定时任务
    */
-  async delete(token: string, id: string): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/scheduled-tasks/${id}`, {
+  async delete(id: string): Promise<{ data: { message: string } }> {
+    return apiFetch<{ data: { message: string } }>(`/scheduled-tasks/${id}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to delete scheduled task")
-    }
-
-    return response.json()
   },
 
   /**
    * 获取定时任务统计信息
    */
-  async getStatistics(token: string): Promise<{ data: ScheduledTaskStatistics }> {
-    const response = await fetch(`${API_BASE_URL}/scheduled-tasks/statistics`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to fetch scheduled task statistics")
-    }
-
-    return response.json()
+  async getStatistics(): Promise<{ data: ScheduledTaskStatistics }> {
+    return apiFetch<{ data: ScheduledTaskStatistics }>(`/scheduled-tasks/statistics`)
   },
 
   /**
    * 启用/禁用定时任务
    */
-  async toggle(token: string, id: string, enabled: boolean): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/scheduled-tasks/${id}/toggle`, {
+  async toggle(id: string, enabled: boolean): Promise<{ data: { message: string } }> {
+    return apiFetch<{ data: { message: string } }>(`/scheduled-tasks/${id}/toggle`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({ enabled }),
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to toggle scheduled task")
-    }
-
-    return response.json()
   },
 
   /**
    * 手动触发定时任务
    */
-  async trigger(token: string, id: string): Promise<{ data: { message: string } }> {
-    const response = await fetch(`${API_BASE_URL}/scheduled-tasks/${id}/trigger`, {
+  async trigger(id: string): Promise<{ data: { message: string } }> {
+    return apiFetch<{ data: { message: string } }>(`/scheduled-tasks/${id}/trigger`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to trigger scheduled task")
-    }
-
-    return response.json()
   },
 }

@@ -35,16 +35,15 @@ export const twoFactorApi = {
   /**
    * 生成 2FA secret（第一步）
    */
-  async generateSecret(token: string): Promise<Generate2FAResponse> {
-    return apiFetch<Generate2FAResponse>("/users/me/2fa/generate", { token })
+  async generateSecret(): Promise<Generate2FAResponse> {
+    return apiFetch<Generate2FAResponse>("/users/me/2fa/generate")
   },
 
   /**
    * 启用双因子认证（第二步：验证代码并启用）
    */
-  async enable(token: string, code: string): Promise<Enable2FAResponse> {
+  async enable(code: string): Promise<Enable2FAResponse> {
     return apiFetch<Enable2FAResponse>("/users/me/2fa/enable", {
-      token,
       method: "POST",
       body: JSON.stringify({ code }),
     })
@@ -53,9 +52,8 @@ export const twoFactorApi = {
   /**
    * 禁用双因子认证
    */
-  async disable(token: string, code: string): Promise<{ message: string }> {
+  async disable(code: string): Promise<{ message: string }> {
     return apiFetch<{ message: string }>("/users/me/2fa/disable", {
-      token,
       method: "POST",
       body: JSON.stringify({ code }),
     })

@@ -22,33 +22,49 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// 从环境变量读取允许的源列表
-		allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
-		if allowedOriginsEnv == "" {
-			// 默认允许本地开发环境
-			allowedOriginsEnv = "http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:8080"
-		}
+    ReadBufferSize:  1024,
+    WriteBufferSize: 1024,
+    CheckOrigin: func(r *http.Request) bool {
+        // 从环境变量读取允许的源列表（逗号分隔），追加常见本地端口作为默认白名单
+        allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+        defaults := []string{
+            "http://localhost:3000", "http://127.0.0.1:3000",
+            "http://localhost:8080", "http://127.0.0.1:8080",
+            "http://localhost:2580", "http://127.0.0.1:2580",
+            "http://localhost:8520", "http://127.0.0.1:8520",
+            // 允许 https 的本地场景
+            "https://localhost:3000", "https://127.0.0.1:3000",
+            "https://localhost:2580", "https://127.0.0.1:2580",
+            "https://localhost:8520", "https://127.0.0.1:8520",
+        }
 
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			// 如果没有 Origin 头,允许连接(同源请求)
-			return true
-		}
+        origin := r.Header.Get("Origin")
+        if origin == "" {
+            // 无 Origin 头：通常为同源升级，允许
+            return true
+        }
 
-		// 检查 origin 是否在白名单中
-		allowedOrigins := strings.Split(allowedOriginsEnv, ",")
-		for _, allowed := range allowedOrigins {
-			if strings.TrimSpace(allowed) == origin {
-				return true
-			}
-		}
+        // 组装白名单列表（env 优先，其次默认）
+        var allowedOrigins []string
+        if allowedOriginsEnv != "" {
+            for _, v := range strings.Split(allowedOriginsEnv, ",") {
+                v = strings.TrimSpace(v)
+                if v != "" {
+                    allowedOrigins = append(allowedOrigins, v)
+                }
+            }
+        }
+        allowedOrigins = append(allowedOrigins, defaults...)
 
-		log.Printf("WebSocket connection rejected: origin %s not in whitelist", origin)
-		return false
-	},
+        for _, allowed := range allowedOrigins {
+            if strings.TrimSpace(allowed) == origin {
+                return true
+            }
+        }
+
+        log.Printf("WebSocket connection rejected: origin %s not in whitelist", origin)
+        return false
+    },
 }
 
 // TerminalHandler WebSocket 终端处理器

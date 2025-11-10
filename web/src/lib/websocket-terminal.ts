@@ -55,13 +55,8 @@ export class TerminalWebSocket {
     }
 
     try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        throw new Error("未找到访问令牌")
-      }
-
-      // 构建 WebSocket URL
-      const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?cols=${this.cols}&rows=${this.rows}&token=${token}`)
+      // 构建 WebSocket URL（凭 HttpOnly Cookie 认证，不再拼接 token）
+      const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?cols=${this.cols}&rows=${this.rows}`)
 
       this.ws = new WebSocket(wsUrl)
       this.ws.binaryType = "arraybuffer" // 设置为二进制模式

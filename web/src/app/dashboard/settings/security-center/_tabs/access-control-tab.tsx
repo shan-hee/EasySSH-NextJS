@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Shield, Trash2, Plus } from "lucide-react"
 import { settingsApi, type IPWhitelist } from "@/lib/api/settings"
-import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
 import {
   Table,
@@ -35,13 +34,7 @@ export function AccessControlTab() {
   const loadIPWhitelistConfig = async () => {
     try {
       setIsLoading(true)
-      const token = await getAccessToken()
-      if (!token) {
-        toast.error("未找到访问令牌")
-        return
-      }
-
-      const whitelists = await settingsApi.getIPWhitelistList(token)
+      const whitelists = await settingsApi.getIPWhitelistList()
       setIpWhitelists(whitelists)
     } catch (error) {
       console.error("Failed to load IP whitelist config:", error)
@@ -66,13 +59,7 @@ export function AccessControlTab() {
 
     setIsAddingIP(true)
     try {
-      const token = await getAccessToken()
-      if (!token) {
-        toast.error("未找到访问令牌")
-        return
-      }
-
-      const newIP = await settingsApi.createIPWhitelist(token, {
+      const newIP = await settingsApi.createIPWhitelist({
         ip_address: newIPAddress.trim(),
         description: newIPDescription.trim(),
       })
@@ -91,13 +78,7 @@ export function AccessControlTab() {
 
   const handleToggleIP = async (id: number) => {
     try {
-      const token = await getAccessToken()
-      if (!token) {
-        toast.error("未找到访问令牌")
-        return
-      }
-
-      await settingsApi.toggleIPWhitelist(token, id)
+      await settingsApi.toggleIPWhitelist(id)
 
       setIpWhitelists((prev) =>
         prev.map((ip) => (ip.id === id ? { ...ip, enabled: !ip.enabled } : ip))
@@ -115,13 +96,7 @@ export function AccessControlTab() {
     }
 
     try {
-      const token = await getAccessToken()
-      if (!token) {
-        toast.error("未找到访问令牌")
-        return
-      }
-
-      await settingsApi.deleteIPWhitelist(token, id)
+      await settingsApi.deleteIPWhitelist(id)
 
       setIpWhitelists((prev) => prev.filter((ip) => ip.id !== id))
       toast.success("IP 地址删除成功")

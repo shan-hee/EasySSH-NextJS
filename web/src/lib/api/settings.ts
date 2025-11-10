@@ -236,10 +236,9 @@ export const settingsApi = {
   /**
    * 获取 SMTP 配置
    */
-  async getSMTPConfig(token: string): Promise<SMTPConfig> {
+  async getSMTPConfig(): Promise<SMTPConfig> {
     const response = await apiFetch<GetSMTPConfigResponse>("/settings/smtp", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -247,10 +246,9 @@ export const settingsApi = {
   /**
    * 保存 SMTP 配置
    */
-  async saveSMTPConfig(token: string, config: SMTPConfig): Promise<void> {
+  async saveSMTPConfig(config: SMTPConfig): Promise<void> {
     return apiFetch<void>("/settings/smtp", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -258,10 +256,9 @@ export const settingsApi = {
   /**
    * 测试 SMTP 连接
    */
-  async testSMTPConnection(token: string, config: SMTPConfig): Promise<void> {
+  async testSMTPConnection(config: SMTPConfig): Promise<void> {
     return apiFetch<void>("/settings/smtp/test", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -269,10 +266,9 @@ export const settingsApi = {
   /**
    * 获取 Webhook 配置
    */
-  async getWebhookConfig(token: string): Promise<WebhookConfig> {
+  async getWebhookConfig(): Promise<WebhookConfig> {
     const response = await apiFetch<GetWebhookConfigResponse>("/settings/webhook", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -280,10 +276,9 @@ export const settingsApi = {
   /**
    * 保存 Webhook 配置
    */
-  async saveWebhookConfig(token: string, config: WebhookConfig): Promise<void> {
+  async saveWebhookConfig(config: WebhookConfig): Promise<void> {
     return apiFetch<void>("/settings/webhook", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -291,10 +286,9 @@ export const settingsApi = {
   /**
    * 测试 Webhook 连接
    */
-  async testWebhookConnection(token: string, config: WebhookConfig): Promise<void> {
+  async testWebhookConnection(config: WebhookConfig): Promise<void> {
     return apiFetch<void>("/settings/webhook/test", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -302,10 +296,9 @@ export const settingsApi = {
   /**
    * 获取钉钉配置
    */
-  async getDingTalkConfig(token: string): Promise<DingTalkConfig> {
+  async getDingTalkConfig(): Promise<DingTalkConfig> {
     const response = await apiFetch<GetDingTalkConfigResponse>("/settings/dingding", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -313,10 +306,9 @@ export const settingsApi = {
   /**
    * 保存钉钉配置
    */
-  async saveDingTalkConfig(token: string, config: DingTalkConfig): Promise<void> {
+  async saveDingTalkConfig(config: DingTalkConfig): Promise<void> {
     return apiFetch<void>("/settings/dingding", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -324,10 +316,9 @@ export const settingsApi = {
   /**
    * 测试钉钉连接
    */
-  async testDingTalkConnection(token: string, config: DingTalkConfig): Promise<void> {
+  async testDingTalkConnection(config: DingTalkConfig): Promise<void> {
     return apiFetch<void>("/settings/dingding/test", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -335,10 +326,9 @@ export const settingsApi = {
   /**
    * 获取企业微信配置
    */
-  async getWeComConfig(token: string): Promise<WeComConfig> {
+  async getWeComConfig(): Promise<WeComConfig> {
     const response = await apiFetch<GetWeComConfigResponse>("/settings/wechat", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -346,10 +336,9 @@ export const settingsApi = {
   /**
    * 保存企业微信配置
    */
-  async saveWeComConfig(token: string, config: WeComConfig): Promise<void> {
+  async saveWeComConfig(config: WeComConfig): Promise<void> {
     return apiFetch<void>("/settings/wechat", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -357,10 +346,9 @@ export const settingsApi = {
   /**
    * 测试企业微信连接
    */
-  async testWeComConnection(token: string, config: WeComConfig): Promise<void> {
+  async testWeComConnection(config: WeComConfig): Promise<void> {
     return apiFetch<void>("/settings/wechat/test", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -368,10 +356,9 @@ export const settingsApi = {
   /**
    * 获取系统配置
    */
-  async getSystemConfig(token: string): Promise<SystemConfig> {
+  async getSystemConfig(): Promise<SystemConfig> {
     const response = await apiFetch<GetSystemConfigResponse>("/settings/system", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -379,10 +366,9 @@ export const settingsApi = {
   /**
    * 保存系统配置
    */
-  async saveSystemConfig(token: string, config: SystemConfig): Promise<void> {
+  async saveSystemConfig(config: SystemConfig): Promise<void> {
     return apiFetch<void>("/settings/system", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -390,10 +376,9 @@ export const settingsApi = {
   /**
    * 获取标签/会话设置
    */
-  async getTabSessionConfig(token: string): Promise<TabSessionConfig> {
+  async getTabSessionConfig(): Promise<TabSessionConfig> {
     const response = await apiFetch<GetTabSessionConfigResponse>("/settings/tabsession", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -401,10 +386,9 @@ export const settingsApi = {
   /**
    * 保存标签/会话设置
    */
-  async saveTabSessionConfig(token: string, config: TabSessionConfig): Promise<void> {
+  async saveTabSessionConfig(config: TabSessionConfig): Promise<void> {
     return apiFetch<void>("/settings/tabsession", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -414,10 +398,9 @@ export const settingsApi = {
   /**
    * 获取 IP 白名单配置
    */
-  async getIPWhitelistConfig(token: string): Promise<IPWhitelistConfig> {
+  async getIPWhitelistConfig(): Promise<IPWhitelistConfig> {
     const response = await apiFetch<GetIPWhitelistConfigResponse>("/settings/ip-whitelist", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -425,20 +408,18 @@ export const settingsApi = {
   /**
    * 获取 IP 白名单列表
    */
-  async getIPWhitelistList(token: string): Promise<IPWhitelist[]> {
+  async getIPWhitelistList(): Promise<IPWhitelist[]> {
     return apiFetch<IPWhitelist[]>("/settings/ip-whitelist/list", {
       method: "GET",
-      token,
     })
   },
 
   /**
    * 创建 IP 白名单项
    */
-  async createIPWhitelist(token: string, request: CreateIPWhitelistRequest): Promise<IPWhitelist> {
+  async createIPWhitelist(request: CreateIPWhitelistRequest): Promise<IPWhitelist> {
     return apiFetch<IPWhitelist>("/settings/ip-whitelist", {
       method: "POST",
-      token,
       body: request,
     })
   },
@@ -446,10 +427,9 @@ export const settingsApi = {
   /**
    * 更新 IP 白名单项
    */
-  async updateIPWhitelist(token: string, id: number, request: UpdateIPWhitelistRequest): Promise<IPWhitelist> {
+  async updateIPWhitelist(id: number, request: UpdateIPWhitelistRequest): Promise<IPWhitelist> {
     return apiFetch<IPWhitelist>(`/settings/ip-whitelist/${id}`, {
       method: "PUT",
-      token,
       body: request,
     })
   },
@@ -457,30 +437,27 @@ export const settingsApi = {
   /**
    * 删除 IP 白名单项
    */
-  async deleteIPWhitelist(token: string, id: number): Promise<void> {
+  async deleteIPWhitelist(id: number): Promise<void> {
     return apiFetch<void>(`/settings/ip-whitelist/${id}`, {
       method: "DELETE",
-      token,
     })
   },
 
   /**
    * 切换 IP 白名单项状态
    */
-  async toggleIPWhitelist(token: string, id: number): Promise<void> {
+  async toggleIPWhitelist(id: number): Promise<void> {
     return apiFetch<void>(`/settings/ip-whitelist/${id}/toggle`, {
       method: "POST",
-      token,
     })
   },
 
   /**
    * 检查 IP 是否被允许
    */
-  async checkIPAllowed(token: string, request: CheckIPRequest): Promise<CheckIPResponse> {
+  async checkIPAllowed(request: CheckIPRequest): Promise<CheckIPResponse> {
     return apiFetch<CheckIPResponse>("/settings/ip-whitelist/check", {
       method: "POST",
-      token,
       body: request,
     })
   },
@@ -490,10 +467,9 @@ export const settingsApi = {
   /**
    * 获取 CORS 配置
    */
-  async getCORSConfig(token: string): Promise<CORSConfig> {
+  async getCORSConfig(): Promise<CORSConfig> {
     const response = await apiFetch<GetCORSConfigResponse>("/settings/advanced/cors", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -501,10 +477,9 @@ export const settingsApi = {
   /**
    * 保存 CORS 配置
    */
-  async saveCORSConfig(token: string, config: CORSConfig): Promise<void> {
+  async saveCORSConfig(config: CORSConfig): Promise<void> {
     return apiFetch<void>("/settings/advanced/cors", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -512,10 +487,9 @@ export const settingsApi = {
   /**
    * 获取速率限制配置
    */
-  async getRateLimitConfig(token: string): Promise<RateLimitConfig> {
+  async getRateLimitConfig(): Promise<RateLimitConfig> {
     const response = await apiFetch<GetRateLimitConfigResponse>("/settings/advanced/ratelimit", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -523,10 +497,9 @@ export const settingsApi = {
   /**
    * 保存速率限制配置
    */
-  async saveRateLimitConfig(token: string, config: RateLimitConfig): Promise<void> {
+  async saveRateLimitConfig(config: RateLimitConfig): Promise<void> {
     return apiFetch<void>("/settings/advanced/ratelimit", {
       method: "POST",
-      token,
       body: config,
     })
   },
@@ -535,10 +508,9 @@ export const settingsApi = {
    * 获取 Cookie 配置
    * @deprecated Cookie配置已移至环境变量(.env.example)，此方法已废弃
    */
-  async getCookieConfig(token: string): Promise<CookieConfig> {
+  async getCookieConfig(): Promise<CookieConfig> {
     const response = await apiFetch<GetCookieConfigResponse>("/settings/advanced/cookie", {
       method: "GET",
-      token,
     })
     return response.config
   },
@@ -547,10 +519,9 @@ export const settingsApi = {
    * 保存 Cookie 配置
    * @deprecated Cookie配置已移至环境变量(.env.example)，此方法已废弃
    */
-  async saveCookieConfig(token: string, config: CookieConfig): Promise<void> {
+  async saveCookieConfig(config: CookieConfig): Promise<void> {
     return apiFetch<void>("/settings/advanced/cookie", {
       method: "POST",
-      token,
       body: config,
     })
   },

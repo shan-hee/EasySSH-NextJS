@@ -56,24 +56,18 @@ export default function TerminalSessionsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
 
-  // 获取 token
-  const getToken = () => {
-    return localStorage.getItem("easyssh_access_token") || ""
-  }
-
   // 加载数据
   const loadData = async () => {
     try {
       setLoading(true)
-      const token = getToken()
 
       // 并行加载活动会话列表和统计信息
       const [sessionsResponse, statsResponse] = await Promise.all([
-        sshSessionsApi.list(token, {
+        sshSessionsApi.list({
           status: "active",
           limit: 100,
         }),
-        sshSessionsApi.getStatistics(token),
+        sshSessionsApi.getStatistics(),
       ])
 
       setSessions(sessionsResponse.data || [])
@@ -105,8 +99,7 @@ export default function TerminalSessionsPage() {
   // 删除会话记录
   const handleDelete = async (id: string) => {
     try {
-      const token = getToken()
-      await sshSessionsApi.delete(token, id)
+      await sshSessionsApi.delete(id)
       toast.success("会话记录已删除")
       loadData()
     } catch (error: unknown) {

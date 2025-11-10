@@ -93,42 +93,42 @@ export const monitoringApi = {
   /**
    * 获取系统综合信息
    */
-  async getSystemInfo(token: string, serverId: string): Promise<SystemInfo> {
-    return apiFetch<SystemInfo>(`/monitoring/${serverId}/system`, { token })
+  async getSystemInfo(serverId: string): Promise<SystemInfo> {
+    return apiFetch<SystemInfo>(`/monitoring/${serverId}/system`)
   },
 
   /**
    * 获取CPU信息
    */
-  async getCPUInfo(token: string, serverId: string): Promise<CPUInfo> {
-    return apiFetch<CPUInfo>(`/monitoring/${serverId}/cpu`, { token })
+  async getCPUInfo(serverId: string): Promise<CPUInfo> {
+    return apiFetch<CPUInfo>(`/monitoring/${serverId}/cpu`)
   },
 
   /**
    * 获取内存信息
    */
-  async getMemoryInfo(token: string, serverId: string): Promise<MemoryInfo> {
-    return apiFetch<MemoryInfo>(`/monitoring/${serverId}/memory`, { token })
+  async getMemoryInfo(serverId: string): Promise<MemoryInfo> {
+    return apiFetch<MemoryInfo>(`/monitoring/${serverId}/memory`)
   },
 
   /**
    * 获取磁盘信息
    */
-  async getDiskInfo(token: string, serverId: string): Promise<DiskInfo[]> {
-    return apiFetch<DiskInfo[]>(`/monitoring/${serverId}/disk`, { token })
+  async getDiskInfo(serverId: string): Promise<DiskInfo[]> {
+    return apiFetch<DiskInfo[]>(`/monitoring/${serverId}/disk`)
   },
 
   /**
    * 获取网络信息
    */
-  async getNetworkInfo(token: string, serverId: string): Promise<NetworkInterface[]> {
-    return apiFetch<NetworkInterface[]>(`/monitoring/${serverId}/network`, { token })
+  async getNetworkInfo(serverId: string): Promise<NetworkInterface[]> {
+    return apiFetch<NetworkInterface[]>(`/monitoring/${serverId}/network`)
   },
 
   /**
    * 获取TOP进程列表
    */
-  async getTopProcesses(token: string, serverId: string, limit: number = 10): Promise<ProcessInfo[]> {
-    return apiFetch<ProcessInfo[]>(`/monitoring/${serverId}/processes?limit=${limit}`, { token })
+  async getTopProcesses(serverId: string, limit: number = 10): Promise<ProcessInfo[]> {
+    return apiFetch<ProcessInfo[]>(`/monitoring/${serverId}/processes?limit=${limit}`)
   },
 }

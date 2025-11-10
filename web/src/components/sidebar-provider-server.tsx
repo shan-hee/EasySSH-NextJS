@@ -8,7 +8,7 @@ export default async function SidebarProviderServer({
   children: React.ReactNode
   className?: string
 }) {
-  const cookieStore = await cookies()
+  const cookieStore = cookies()
   const persisted = cookieStore.get("sidebar_state")?.value === "true"
   return (
     <SidebarProvider defaultOpen={persisted} className={className}>
@@ -16,4 +16,3 @@ export default async function SidebarProviderServer({
     </SidebarProvider>
   )
 }
-

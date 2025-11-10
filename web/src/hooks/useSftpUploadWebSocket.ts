@@ -6,9 +6,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { getWsUrl } from '@/lib/config';
 
-// 导入全局 Token 键常量
-const TOKEN_KEY = "easyssh_access_token";
-
 // 上传进度消息接口
 export interface UploadProgressMessage {
   type: 'progress' | 'complete' | 'error';
@@ -97,18 +94,11 @@ export function useSftpUploadWebSocket({
       wsRef.current = null;
     }
 
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) {
-      console.error('[SftpUploadWS] No token found');
-      setStatus(WSStatus.ERROR);
-      onError?.('Authentication token not found');
-      return;
-    }
-
     setStatus(WSStatus.CONNECTING);
 
     try {
-      const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${taskId}`) + `?token=${token}`;
+      // 凭 HttpOnly Cookie 认证，不再在 URL 上拼接 token
+      const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${taskId}`);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

@@ -37,14 +37,14 @@ export default function IntegrationsPage() {
 
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: integrationsConfigSchema,
-    loadFn: async (token) => {
+    loadFn: async () => {
       // 由于AI配置使用本地状态，这里只加载通知配置
       const [smtpConfig, dingTalkConfig, weComConfig, webhookConfig] =
         await Promise.all([
-          settingsApi.getSMTPConfig(token),
-          settingsApi.getDingTalkConfig(token),
-          settingsApi.getWeComConfig(token),
-          settingsApi.getWebhookConfig(token),
+          settingsApi.getSMTPConfig(),
+          settingsApi.getDingTalkConfig(),
+          settingsApi.getWeComConfig(),
+          settingsApi.getWebhookConfig(),
         ])
 
       // AI配置使用默认值（实际项目中应从localStorage或API加载）
@@ -82,7 +82,7 @@ export default function IntegrationsPage() {
         method: webhookConfig.method as "GET" | "POST",
       }
     },
-    saveFn: async (token, data) => {
+    saveFn: async (data) => {
       // AI配置保存到localStorage（实际项目应保存到后端）
       const aiConfig = {
         system_enabled: data.system_enabled,
@@ -108,7 +108,7 @@ export default function IntegrationsPage() {
 
       // 保存通知配置到后端
       await Promise.all([
-        settingsApi.saveSMTPConfig(token, {
+        settingsApi.saveSMTPConfig({
           enabled: data.enabled,
           host: data.host,
           port: data.port,
@@ -118,16 +118,16 @@ export default function IntegrationsPage() {
           from_name: data.from_name,
           use_tls: data.use_tls,
         }),
-        settingsApi.saveDingTalkConfig(token, {
+        settingsApi.saveDingTalkConfig({
           enabled: data.enabled,
           webhook_url: data.webhook_url,
           secret: data.secret || "",
         }),
-        settingsApi.saveWeComConfig(token, {
+        settingsApi.saveWeComConfig({
           enabled: data.enabled,
           webhook_url: data.webhook_url,
         }),
-        settingsApi.saveWebhookConfig(token, {
+        settingsApi.saveWebhookConfig({
           enabled: data.enabled,
           url: data.url,
           method: data.method,

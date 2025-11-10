@@ -80,17 +80,10 @@ export default function ScriptsPage() {
  // 加载脚本列表
  const loadScripts = async () => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- const response = await scriptsApi.list(token, {
-   page,
-   limit: pageSize,
- })
+ const response = await scriptsApi.list({
+  page,
+  limit: pageSize,
+})
 
  setScripts(response.data)
  setTotalRows(response.total || response.data.length)
@@ -210,14 +203,7 @@ const filterOptions = useMemo(() => {
  }
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await scriptsApi.delete(token, scriptId)
+ await scriptsApi.delete(scriptId)
  toast.success("脚本删除成功")
  await loadScripts()
  } catch (error: unknown) {
@@ -346,20 +332,13 @@ const filterOptions = useMemo(() => {
  }
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await scriptsApi.create(token, {
- name: newScript.name,
- description: newScript.description || "",
- content: newScript.content,
- language: "bash",
- tags: newScript.tags,
- })
+ await scriptsApi.create({
+  name: newScript.name,
+  description: newScript.description || "",
+  content: newScript.content,
+  language: "bash",
+  tags: newScript.tags,
+})
 
  toast.success("脚本创建成功")
  setIsDialogOpen(false)
@@ -408,20 +387,13 @@ const filterOptions = useMemo(() => {
  if (editingScriptId === null) return
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await scriptsApi.update(token, editingScriptId, {
- name: editScript.name,
- description: editScript.description || "",
- content: editScript.content,
- language: "bash",
- tags: editScript.tags,
- })
+ await scriptsApi.update(editingScriptId, {
+  name: editScript.name,
+  description: editScript.description || "",
+  content: editScript.content,
+  language: "bash",
+  tags: editScript.tags,
+})
 
  toast.success("脚本更新成功")
  setIsEditDialogOpen(false)

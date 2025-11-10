@@ -80,13 +80,7 @@ export default function SetupPage() {
         run_mode: runMode, // 添加运行模式
       })
 
-      // 保存令牌到 localStorage 和 cookies
-      localStorage.setItem("easyssh_access_token", response.access_token)
-      localStorage.setItem("easyssh_refresh_token", response.refresh_token)
-
-      // 同步到 cookies (客户端设置)
-      document.cookie = `easyssh_access_token=${response.access_token}; path=/; max-age=3600; samesite=lax`
-      document.cookie = `easyssh_refresh_token=${response.refresh_token}; path=/; max-age=604800; samesite=lax`
+      // 令牌由后端以 HttpOnly Cookie 下发，前端无需手动保存
 
       // 显示完成页面
       setStep("completed")

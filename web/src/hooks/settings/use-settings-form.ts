@@ -4,13 +4,12 @@ import { useEffect, useState } from "react"
 import { useForm, UseFormReturn, FieldValues } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
 
 interface UseSettingsFormOptions<T extends FieldValues> {
   schema: z.ZodType<T, any, any>
-  loadFn: (token: string) => Promise<T>
-  saveFn: (token: string, data: T) => Promise<void>
+  loadFn: () => Promise<T>
+  saveFn: (data: T) => Promise<void>
   onSuccess?: () => void
   onError?: (error: Error) => void
   defaultValues?: Partial<T>
@@ -57,14 +56,7 @@ export function useSettingsForm<T extends FieldValues>({
   const loadData = async () => {
     try {
       setIsLoading(true)
-      const token = await getAccessToken()
-
-      if (!token) {
-        toast.error("未找到访问令牌")
-        return
-      }
-
-      const data = await loadFn(token)
+      const data = await loadFn()
       form.reset(data)
     } catch (error) {
       const err = error as Error
@@ -94,14 +86,7 @@ export function useSettingsForm<T extends FieldValues>({
     setIsSaving(true)
 
     try {
-      const token = await getAccessToken()
-
-      if (!token) {
-        toast.error("未找到访问令牌")
-        return
-      }
-
-      await saveFn(token, data)
+      await saveFn(data)
       toast.success("保存成功")
       onSuccess?.()
     } catch (error) {

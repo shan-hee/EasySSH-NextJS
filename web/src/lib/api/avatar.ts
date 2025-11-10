@@ -24,11 +24,10 @@ export const avatarApi = {
    * @param request 生成头像请求参数
    * @returns 生成的头像数据URL
    */
-  async generate(token: string, request: GenerateAvatarRequest = {}): Promise<GenerateAvatarResponse> {
+  async generate(request: GenerateAvatarRequest = {}): Promise<GenerateAvatarResponse> {
     const response = await apiFetch<GenerateAvatarResponse>("/avatar/generate", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(request),
@@ -44,11 +43,11 @@ export const avatarApi = {
    * @param email 邮箱（可选）
    * @returns 生成的头像数据URL
    */
-  async generateForNewUser(token: string, username: string, email?: string): Promise<GenerateAvatarResponse> {
+  async generateForNewUser(username: string, email?: string): Promise<GenerateAvatarResponse> {
     // 生成确定性种子
     const seed = this.generateUserSeed(username, email)
 
-    return this.generate(token, { seed })
+    return this.generate({ seed })
   },
 
   /**

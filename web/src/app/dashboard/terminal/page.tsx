@@ -155,18 +155,12 @@ export default function TerminalPage() {
 
  // 加载服务器列表
  async function loadServers() {
- try {
- setLoading(true)
- const token = localStorage.getItem("easyssh_access_token")
+  try {
+  setLoading(true)
 
- if (!token) {
- router.push("/login")
- return
- }
-
- const response = await serversApi.list(token, {
- page: 1,
- limit: 100, // 加载所有服务器
+  const response = await serversApi.list({
+  page: 1,
+  limit: 100, // 加载所有服务器
  })
 
  // 防御性检查：处理apiFetch自动解包导致的数据结构不一致

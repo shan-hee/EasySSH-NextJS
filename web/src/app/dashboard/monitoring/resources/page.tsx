@@ -69,7 +69,7 @@ export default function MonitoringResourcesPage() {
  async function loadData() {
  try {
  setLoading(true)
- const accessToken = localStorage.getItem("easyssh_access_token")
+ // 认证基于 HttpOnly Cookie
 
  if (!accessToken) {
  router.push("/login")
@@ -77,10 +77,10 @@ export default function MonitoringResourcesPage() {
  }
 
  // 加载服务器列表
- const serverListResponse = await serversApi.list(accessToken, {
- page: 1,
- limit: 100,
- })
+ const serverListResponse = await serversApi.list({
+  page: 1,
+  limit: 100,
+})
 
  // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
  const serverList = Array.isArray(serverListResponse)
@@ -108,11 +108,11 @@ export default function MonitoringResourcesPage() {
  try {
  // 并行获取所有监控数据
  const [systemInfo, cpuInfo, memoryInfo, diskInfo, networkInfo] = await Promise.all([
- monitoringApi.getSystemInfo(accessToken, server.id),
- monitoringApi.getCPUInfo(accessToken, server.id),
- monitoringApi.getMemoryInfo(accessToken, server.id),
- monitoringApi.getDiskInfo(accessToken, server.id),
- monitoringApi.getNetworkInfo(accessToken, server.id),
+ monitoringApi.getSystemInfo(server.id),
+ monitoringApi.getCPUInfo(server.id),
+ monitoringApi.getMemoryInfo(server.id),
+ monitoringApi.getDiskInfo(server.id),
+ monitoringApi.getNetworkInfo(server.id),
  ])
 
  // 计算总磁盘使用情况
@@ -421,4 +421,3 @@ export default function MonitoringResourcesPage() {
  </>
  )
 }
-

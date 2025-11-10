@@ -54,7 +54,7 @@ export const auditLogsApi = {
   /**
    * 获取审计日志列表
    */
-  async list(token: string, params?: {
+  async list(params?: {
     page?: number
     page_size?: number
     user_id?: string
@@ -77,13 +77,13 @@ export const auditLogsApi = {
     if (params?.end_date) queryParams.set("end_date", params.end_date)
 
     const url = `/audit-logs${queryParams.toString() ? `?${queryParams}` : ""}`
-    return apiFetch<AuditLogListResponse>(url, { token })
+    return apiFetch<AuditLogListResponse>(url)
   },
 
   /**
    * 获取当前用户的审计日志
    */
-  async getMyLogs(token: string, params?: {
+  async getMyLogs(params?: {
     page?: number
     page_size?: number
     action?: string
@@ -98,20 +98,20 @@ export const auditLogsApi = {
     if (params?.end_date) queryParams.set("end_date", params.end_date)
 
     const url = `/audit-logs/me${queryParams.toString() ? `?${queryParams}` : ""}`
-    return apiFetch<AuditLogListResponse>(url, { token })
+    return apiFetch<AuditLogListResponse>(url)
   },
 
   /**
    * 获取审计日志详情
    */
-  async getById(token: string, id: string): Promise<AuditLog> {
-    return apiFetch<AuditLog>(`/audit-logs/${id}`, { token })
+  async getById(id: string): Promise<AuditLog> {
+    return apiFetch<AuditLog>(`/audit-logs/${id}`)
   },
 
   /**
    * 获取审计日志统计信息
    */
-  async getStatistics(token: string, params?: {
+  async getStatistics(params?: {
     start_date?: string
     end_date?: string
   }): Promise<AuditLogStatisticsResponse> {
@@ -120,16 +120,15 @@ export const auditLogsApi = {
     if (params?.end_date) queryParams.set("end_date", params.end_date)
 
     const url = `/audit-logs/statistics${queryParams.toString() ? `?${queryParams}` : ""}`
-    return apiFetch<AuditLogStatisticsResponse>(url, { token })
+    return apiFetch<AuditLogStatisticsResponse>(url)
   },
 
   /**
    * 清理旧日志
    */
-  async cleanup(token: string, beforeDate: string): Promise<{ deleted: number }> {
+  async cleanup(beforeDate: string): Promise<{ deleted: number }> {
     return apiFetch<{ deleted: number }>(`/audit-logs/cleanup`, {
       method: "DELETE",
-      token,
       body: { before_date: beforeDate },
     })
   },

@@ -63,7 +63,7 @@ export default function MonitoringHealthPage() {
  // 加载健康检查数据
  const loadData = async () => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
+ // 认证基于 HttpOnly Cookie
  if (!token) {
  toast.error("未登录，请先登录")
  router.push("/login")
@@ -71,7 +71,7 @@ export default function MonitoringHealthPage() {
  }
 
  // 获取服务器列表
- const serversRes = await serversApi.list(token, { page: 1, limit: 100 })
+ const serversRes = await serversApi.list({ page: 1, limit: 100 })
 
  // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
  const serverList = Array.isArray(serversRes)
@@ -95,11 +95,11 @@ export default function MonitoringHealthPage() {
  try {
  // 并行获取所有监控数据
  const [systemInfo, cpuInfo, memoryInfo, diskInfo, networkInfo] = await Promise.all([
- monitoringApi.getSystemInfo(token, server.id),
- monitoringApi.getCPUInfo(token, server.id),
- monitoringApi.getMemoryInfo(token, server.id),
- monitoringApi.getDiskInfo(token, server.id),
- monitoringApi.getNetworkInfo(token, server.id),
+ monitoringApi.getSystemInfo(server.id),
+ monitoringApi.getCPUInfo(server.id),
+ monitoringApi.getMemoryInfo(server.id),
+ monitoringApi.getDiskInfo(server.id),
+ monitoringApi.getNetworkInfo(server.id),
  ])
 
  // 生成健康检查项

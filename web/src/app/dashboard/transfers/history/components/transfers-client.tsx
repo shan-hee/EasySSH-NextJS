@@ -47,25 +47,19 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     (state, deletedId: string) => state.filter((transfer) => transfer.id !== deletedId)
   )
 
-  // 获取 token
-  const getToken = () => {
-    return localStorage.getItem("easyssh_access_token") || ""
-  }
 
   // 加载数据
   const loadData = useCallback(
     async (currentPage: number, currentPageSize: number) => {
       try {
         setRefreshing(true)
-        const token = getToken()
-
         // 并行加载传输列表和统计信息
         const [transfersResponse, statsResponse] = await Promise.all([
-          fileTransfersApi.list(token, {
+          fileTransfersApi.list({
             page: currentPage,
             limit: currentPageSize,
           }),
-          fileTransfersApi.getStatistics(token),
+          fileTransfersApi.getStatistics(),
         ])
 
         setTransfers(transfersResponse.data || [])

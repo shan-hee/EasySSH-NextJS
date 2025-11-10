@@ -68,13 +68,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     setError(null);
 
     try {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       const response: DirectoryListResponse = await sftpApi.listDirectory(
-        token,
         serverId,
         path
       );
@@ -114,16 +108,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const uploadFiles = useCallback(
     async (fileList: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       const uploadPromises: Promise<void>[] = [];
 
       for (const file of Array.from(fileList)) {
         const promise = fileTransfer.uploadFile(
-          token,
           serverId,
           currentPath,
           file,
@@ -150,11 +138,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const downloadFile = useCallback(
     async (fileName: string) => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       const file = files.find((f) => f.name === fileName);
       if (!file || file.type === 'directory') return;
 
@@ -163,7 +146,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         : `${currentPath}/${fileName}`;
 
       await fileTransfer.downloadFile(
-        token,
         serverId,
         fullPath,
         fileName,
@@ -178,17 +160,12 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const deleteFile = useCallback(
     async (fileName: string) => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       try {
         const fullPath = currentPath.endsWith('/')
           ? `${currentPath}${fileName}`
           : `${currentPath}/${fileName}`;
 
-        await sftpApi.delete(token, serverId, fullPath);
+        await sftpApi.delete(serverId, fullPath);
         refresh();
       } catch (error) {
         console.error('[useSftpSession] 删除失败:', error);
@@ -203,17 +180,12 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const createFolder = useCallback(
     async (name: string) => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       try {
         const fullPath = currentPath.endsWith('/')
           ? `${currentPath}${name}`
           : `${currentPath}/${name}`;
 
-        await sftpApi.createDirectory(token, serverId, fullPath);
+        await sftpApi.createDirectory(serverId, fullPath);
         refresh();
       } catch (error) {
         console.error('[useSftpSession] 创建文件夹失败:', error);
@@ -228,18 +200,13 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const createFile = useCallback(
     async (name: string) => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       try {
         const fullPath = currentPath.endsWith('/')
           ? `${currentPath}${name}`
           : `${currentPath}/${name}`;
 
         // 创建空文件
-        await sftpApi.writeFile(token, serverId, fullPath, '');
+        await sftpApi.writeFile(serverId, fullPath, '');
         refresh();
       } catch (error) {
         console.error('[useSftpSession] 创建文件失败:', error);
@@ -254,11 +221,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const renameFile = useCallback(
     async (oldName: string, newName: string) => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       try {
         const oldPath = currentPath.endsWith('/')
           ? `${currentPath}${oldName}`
@@ -268,7 +230,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           ? `${currentPath}${newName}`
           : `${currentPath}/${newName}`;
 
-        await sftpApi.rename(token, serverId, oldPath, newPath);
+        await sftpApi.rename(serverId, oldPath, newPath);
         refresh();
       } catch (error) {
         console.error('[useSftpSession] 重命名失败:', error);
@@ -283,17 +245,12 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const readFile = useCallback(
     async (fileName: string): Promise<string> => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       try {
         const fullPath = currentPath.endsWith('/')
           ? `${currentPath}${fileName}`
           : `${currentPath}/${fileName}`;
 
-        const content = await sftpApi.readFile(token, serverId, fullPath);
+        const content = await sftpApi.readFile(serverId, fullPath);
 
         return content;
       } catch (error) {
@@ -309,17 +266,12 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const saveFile = useCallback(
     async (fileName: string, content: string) => {
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        throw new Error('未找到访问令牌');
-      }
-
       try {
         const fullPath = currentPath.endsWith('/')
           ? `${currentPath}${fileName}`
           : `${currentPath}/${fileName}`;
 
-        await sftpApi.writeFile(token, serverId, fullPath, content);
+        await sftpApi.writeFile(serverId, fullPath, content);
         refresh();
       } catch (error) {
         console.error('[useSftpSession] 保存文件失败:', error);

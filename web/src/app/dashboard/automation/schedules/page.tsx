@@ -127,19 +127,12 @@ export default function AutomationSchedulesPage() {
  // 加载所有数据
  const loadData = async () => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- // 并行加载所有数据
+// 并行加载所有数据
  const [tasksRes, serversRes, scriptsRes, statsRes] = await Promise.all([
- scheduledTasksApi.list(token, { page: 1, limit: 100 }),
- serversApi.list(token),
- scriptsApi.list(token, { page: 1, limit: 100 }),
- scheduledTasksApi.getStatistics(token),
+ scheduledTasksApi.list({ page: 1, limit: 100 }),
+ serversApi.list(),
+ scriptsApi.list({ page: 1, limit: 100 }),
+ scheduledTasksApi.getStatistics(),
  ])
 
  // 防御性检查：处理apiFetch自动解包，确保始终返回数组
@@ -305,14 +298,9 @@ export default function AutomationSchedulesPage() {
  }
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
- await scheduledTasksApi.create(token, {
+ await scheduledTasksApi.create({
  task_name: newTask.task_name,
  task_type: newTask.task_type,
  command: newTask.command || undefined,
@@ -373,14 +361,9 @@ export default function AutomationSchedulesPage() {
  if (editingTaskId === null) return
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
- await scheduledTasksApi.update(token, editingTaskId, {
+ await scheduledTasksApi.update(editingTaskId, {
  task_name: editTask.task_name,
  command: editTask.command || undefined,
  server_ids: editTask.server_ids,
@@ -420,14 +403,9 @@ export default function AutomationSchedulesPage() {
  }
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
- await scheduledTasksApi.delete(token, taskId)
+ await scheduledTasksApi.delete(taskId)
  toast.success("定时任务删除成功")
  await loadData()
  } catch (error: unknown) {
@@ -439,14 +417,9 @@ export default function AutomationSchedulesPage() {
  // 启用/禁用任务
  const handleToggle = async (taskId: string, enabled: boolean) => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
- await scheduledTasksApi.toggle(token, taskId, !enabled)
+ await scheduledTasksApi.toggle(taskId, !enabled)
  toast.success(enabled ? "任务已禁用" : "任务已启用")
  await loadData()
  } catch (error: unknown) {
@@ -458,14 +431,9 @@ export default function AutomationSchedulesPage() {
  // 手动触发任务
  const handleTrigger = async (taskId: string) => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie
 
- await scheduledTasksApi.trigger(token, taskId)
+ await scheduledTasksApi.trigger(taskId)
  toast.success("任务已手动触发")
  await loadData()
  } catch (error: unknown) {

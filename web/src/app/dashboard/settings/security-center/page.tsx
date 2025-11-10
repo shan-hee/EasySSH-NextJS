@@ -27,13 +27,13 @@ export default function SecurityCenterPage() {
 
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: securityConfigSchema,
-    loadFn: async (token) => {
+    loadFn: async () => {
       // 合并多个API调用
       const [sessionConfig, corsConfig, rateLimitConfig] =
         await Promise.all([
-          settingsApi.getTabSessionConfig(token),
-          settingsApi.getCORSConfig(token),
-          settingsApi.getRateLimitConfig(token),
+          settingsApi.getTabSessionConfig(),
+          settingsApi.getCORSConfig(),
+          settingsApi.getRateLimitConfig(),
         ])
 
       return {
@@ -42,7 +42,7 @@ export default function SecurityCenterPage() {
         ...rateLimitConfig,
       }
     },
-    saveFn: async (token, data) => {
+    saveFn: async (data) => {
       // 分别保存到不同的API
       const sessionData = {
         session_timeout: data.session_timeout,
@@ -64,9 +64,9 @@ export default function SecurityCenterPage() {
       }
 
       await Promise.all([
-        settingsApi.saveTabSessionConfig(token, sessionData),
-        settingsApi.saveCORSConfig(token, corsData),
-        settingsApi.saveRateLimitConfig(token, rateLimitData),
+        settingsApi.saveTabSessionConfig(sessionData),
+        settingsApi.saveCORSConfig(corsData),
+        settingsApi.saveRateLimitConfig(rateLimitData),
       ])
     },
   })

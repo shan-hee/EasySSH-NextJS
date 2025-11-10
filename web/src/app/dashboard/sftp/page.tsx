@@ -239,7 +239,7 @@ export default function SftpPage() {
  const router = useRouter()
  const [servers, setServers] = useState<ApiServer[]>([])
  const [loading, setLoading] = useState(true)
- const [token, setToken] = useState<string>("")
+ // 认证改为基于 HttpOnly Cookie，不再需要前端 token
 
  // 改用会话数组管理多个连接
  const [sessions, setSessions] = useState<SftpSession[]>([])
@@ -263,19 +263,10 @@ export default function SftpPage() {
  const loadServers = useCallback(async () => {
  try {
  setLoading(true)
- const accessToken = localStorage.getItem("easyssh_access_token")
-
- if (!accessToken) {
- router.push("/login")
- return
- }
-
- setToken(accessToken)
-
- const response = await serversApi.list(accessToken, {
+ const response = await serversApi.list({
  page: 1,
  limit: 100,
- })
+})
 
  // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
  const serverList = Array.isArray(response)
@@ -454,7 +445,7 @@ export default function SftpPage() {
 
  // 连接并加载文件列表
  try {
- const dirResponse = await sftpApi.listDirectory(token, serverId, initialPath)
+ const dirResponse = await sftpApi.listDirectory(serverId, initialPath)
  const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
 
  // 添加父目录项
@@ -500,7 +491,7 @@ export default function SftpPage() {
  )
 
  try {
- const dirResponse = await sftpApi.listDirectory(token, session.serverId, session.currentPath)
+ const dirResponse = await sftpApi.listDirectory(session.serverId, session.currentPath)
  const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
 
  const filesWithParent: ComponentFile[] = dirResponse.parent
@@ -557,7 +548,7 @@ export default function SftpPage() {
  )
 
  try {
- const dirResponse = await sftpApi.listDirectory(token, session.serverId, path)
+ const dirResponse = await sftpApi.listDirectory(session.serverId, path)
  const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
 
  const filesWithParent: ComponentFile[] = dirResponse.parent
@@ -607,7 +598,6 @@ export default function SftpPage() {
  for (const file of files) {
  try {
  await sftpApi.uploadFile(
-   token,
    session.serverId,
    session.currentPath,
    file,
@@ -641,7 +631,7 @@ export default function SftpPage() {
  if (!session || !session.isConnected) return
 
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
- const downloadUrl = sftpApi.getDownloadUrl(session.serverId, filePath, token)
+ const downloadUrl = sftpApi.getDownloadUrl(session.serverId, filePath)
 
  // 创建隐藏的下载链接并触发下载
  const link = document.createElement("a")
@@ -662,7 +652,7 @@ export default function SftpPage() {
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
  try {
- await sftpApi.delete(token, session.serverId, filePath)
+ await sftpApi.delete(session.serverId, filePath)
  toast.success(`删除成功: ${fileName}`)
 
  // 刷新文件列表
@@ -681,7 +671,7 @@ export default function SftpPage() {
  const folderPath = `${session.currentPath}/${name}`.replace("//", "/")
 
  try {
- await sftpApi.createDirectory(token, session.serverId, folderPath)
+ await sftpApi.createDirectory(session.serverId, folderPath)
  toast.success(`创建文件夹成功: ${name}`)
 
  // 刷新文件列表
@@ -701,7 +691,7 @@ export default function SftpPage() {
  const newPath = `${session.currentPath}/${newName}`.replace("//", "/")
 
  try {
- await sftpApi.rename(token, session.serverId, oldPath, newPath)
+ await sftpApi.rename(session.serverId, oldPath, newPath)
  toast.success(`重命名成功: ${oldName} → ${newName}`)
 
  // 刷新文件列表
@@ -722,7 +712,7 @@ export default function SftpPage() {
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
  try {
- const content = await sftpApi.readFile(token, session.serverId, filePath)
+ const content = await sftpApi.readFile(session.serverId, filePath)
  return content
  } catch (error: unknown) {
  console.error("Failed to read file:", error)
@@ -741,7 +731,7 @@ export default function SftpPage() {
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
  try {
- await sftpApi.writeFile(token, session.serverId, filePath, content)
+ await sftpApi.writeFile(session.serverId, filePath, content)
  toast.success(`保存成功: ${fileName}`)
 
  // 刷新文件列表（文件大小可能变化）

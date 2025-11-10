@@ -47,25 +47,19 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     (state, deletedId: string) => state.filter((session) => session.id !== deletedId)
   )
 
-  // 获取 token
-  const getToken = () => {
-    return localStorage.getItem("easyssh_access_token") || ""
-  }
 
   // 加载数据
   const loadData = useCallback(
     async (currentPage: number, currentPageSize: number) => {
       try {
         setRefreshing(true)
-        const token = getToken()
-
         // 并行加载会话列表和统计信息
         const [sessionsResponse, statsResponse] = await Promise.all([
-          sshSessionsApi.list(token, {
+          sshSessionsApi.list({
             page: currentPage,
             limit: currentPageSize,
           }),
-          sshSessionsApi.getStatistics(token),
+          sshSessionsApi.getStatistics(),
         ])
 
         // 确保 data 是数组

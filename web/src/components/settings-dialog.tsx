@@ -73,7 +73,6 @@ import { twoFactorApi } from "@/lib/api/2fa"
 import { sessionsApi, type Session } from "@/lib/api/sessions"
 import { notificationsApi } from "@/lib/api/notifications"
 import * as sshKeysApi from "@/lib/api/ssh-keys"
-import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
 
 /**
@@ -350,11 +349,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 保存个人信息
   const handleSaveProfile = React.useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
 
     // 验证邮箱格式
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -390,12 +384,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   // 修改密码
   const handleChangePassword = React.useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
 
     // 验证新密码
     if (passwordForm.new_password.length < 8) {
@@ -449,15 +437,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 生成 2FA Secret（第一步）
   const handleGenerate2FA = React.useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     setTwoFactorLoading(true)
     try {
-      const response = await twoFactorApi.generateSecret(token)
+      const response = await twoFactorApi.generateSecret()
       setQrCodeUrl(response.qr_code_url)
       setTotpSecret(response.secret)
       setQrCodeDialogOpen(true)
@@ -471,12 +453,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 启用 2FA（第二步：验证代码）
   const handleEnable2FA = React.useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     if (!verificationCode || verificationCode.length !== 6) {
       toast.error("请输入 6 位验证码")
       return
@@ -484,7 +460,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
     setTwoFactorLoading(true)
     try {
-      const response = await twoFactorApi.enable(token, verificationCode)
+      const response = await twoFactorApi.enable(verificationCode)
       setBackupCodes(response.backup_codes)
       setQrCodeDialogOpen(false)
       setBackupCodesDialogOpen(true)
@@ -507,12 +483,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 禁用 2FA
   const handleDisable2FA = React.useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     if (!disableCode || disableCode.length !== 6) {
       toast.error("请输入 6 位验证码")
       return
@@ -520,7 +490,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
     setTwoFactorLoading(true)
     try {
-      await twoFactorApi.disable(token, disableCode)
+      await twoFactorApi.disable(disableCode)
       setDisableDialogOpen(false)
       setDisableCode("")
       await refreshUser()
@@ -556,12 +526,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 加载会话列表
   const loadSessions = React.useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) return
-
     setSessionsLoading(true)
     try {
-      const response = await sessionsApi.list(token)
+      const response = await sessionsApi.list()
       setSessions(response.sessions || [])
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "加载会话列表失败"))
@@ -572,14 +539,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 撤销单个会话
   const handleRevokeSession = React.useCallback(async (sessionId: string) => {
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     try {
-      await sessionsApi.revoke(token, sessionId)
+      await sessionsApi.revoke(sessionId)
       toast.success("会话已撤销")
       loadSessions() // 刷新列表
     } catch (error: unknown) {
@@ -589,14 +550,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 撤销所有其他会话
   const handleRevokeAllOtherSessions = React.useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     try {
-      await sessionsApi.revokeAllOthers(token)
+      await sessionsApi.revokeAllOthers()
       toast.success("已撤销所有其他会话")
       loadSessions() // 刷新列表
     } catch (error: unknown) {
@@ -607,15 +562,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   // 更新通知设置
   const handleUpdateNotification = React.useCallback(
     async (field: "email_login" | "email_alert" | "browser", value: boolean) => {
-      const token = getAccessToken()
-      if (!token) {
-        toast.error("未登录，请重新登录")
-        return
-      }
-
       setNotificationLoading(true)
       try {
-        await notificationsApi.update(token, { [field]: value })
+        await notificationsApi.update({ [field]: value })
         toast.success("通知设置已更新")
         // 刷新用户数据
         await refreshUser()
@@ -634,12 +583,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 加载SSH密钥列表
   const loadSSHKeys = React.useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) return
-
     setSshKeysLoading(true)
     try {
-      const keys = await sshKeysApi.getSSHKeys(token)
+      const keys = await sshKeysApi.getSSHKeys()
       setSshKeys(keys)
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "加载SSH密钥失败"))
@@ -655,15 +601,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       return
     }
 
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     setGenerateLoading(true)
     try {
-      const newKey = await sshKeysApi.generateSSHKey(token, generateForm)
+      const newKey = await sshKeysApi.generateSSHKey(generateForm)
       toast.success("SSH密钥生成成功！")
       setSelectedKey(newKey)
       setViewKeyDialogOpen(true)
@@ -688,15 +628,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       return
     }
 
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     setImportLoading(true)
     try {
-      const newKey = await sshKeysApi.importSSHKey(token, importForm)
+      const newKey = await sshKeysApi.importSSHKey(importForm)
       toast.success("SSH密钥导入成功！")
       setSelectedKey(newKey)
       setViewKeyDialogOpen(true)
@@ -716,14 +650,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       return
     }
 
-    const token = getAccessToken()
-    if (!token) {
-      toast.error("未登录，请重新登录")
-      return
-    }
-
     try {
-      await sshKeysApi.deleteSSHKey(token, keyId)
+      await sshKeysApi.deleteSSHKey(keyId)
       toast.success("SSH密钥已删除")
       loadSSHKeys() // 刷新列表
     } catch (error: unknown) {

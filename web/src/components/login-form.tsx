@@ -34,15 +34,10 @@ export function LoginForm({
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
-  const { login, isLoading: authLoading } = useAuth()
+  const { isLoading: authLoading } = useAuth()
   const { config } = useSystemConfig()
 
-  // 预取控制台页面，加速跳转
-  useEffect(() => {
-    try {
-      router.prefetch?.('/dashboard')
-    } catch {}
-  }, [router])
+  // 为避免预取到“未登录”的缓存结果，删除预取 dashboard 的逻辑
 
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -62,7 +57,7 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      // 第一步：常规登录
+      // 第一步：常规登录（仅一次调用，依赖后端下发的 HttpOnly Cookie）
       const response = await authApi.login({ username, password })
 
       // 检查是否需要 2FA
@@ -76,11 +71,11 @@ export function LoginForm({
         return
       }
 
-      // 没有 2FA，直接登录成功
-      await login({ username, password })
+      // 没有 2FA，后端已设置 HttpOnly Cookie，直接跳转
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
       })
+      router.replace("/dashboard")
     } catch (error: unknown) {
       console.error("Login error:", error)
       toast.error("登录失败", {
@@ -102,15 +97,7 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      const response = await twoFactorApi.verify(tempToken, twoFactorCode)
-
-      // 手动保存令牌和用户信息
-      if (typeof window !== "undefined") {
-        localStorage.setItem("easyssh_access_token", response.access_token)
-        localStorage.setItem("easyssh_refresh_token", response.refresh_token)
-        document.cookie = `easyssh_access_token=${response.access_token}; path=/; max-age=3600; SameSite=Lax`
-        document.cookie = `easyssh_refresh_token=${response.refresh_token}; path=/; max-age=604800; SameSite=Lax`
-      }
+      await twoFactorApi.verify(tempToken, twoFactorCode)
 
       toast.success("验证成功", {
         description: "正在跳转到控制台...",

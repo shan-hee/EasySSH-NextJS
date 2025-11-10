@@ -43,28 +43,17 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
     server_id: false, // 默认隐藏服务器列
   })
 
-  // 获取 token
-  const getToken = () => {
-    return localStorage.getItem("easyssh_access_token") || ""
-  }
-
   // 加载数据
   const loadData = async (currentPage: number, currentPageSize: number) => {
     try {
       setLoading(true)
-      const token = getToken()
-
-      if (!token) {
-        throw new Error("未找到认证令牌，请重新登录")
-      }
-
       // 并行加载日志列表和统计信息
       const [logsResponse, statsResponse] = await Promise.all([
-        auditLogsApi.list(token, {
+        auditLogsApi.list({
           page: currentPage,
           page_size: currentPageSize,
         }),
-        auditLogsApi.getStatistics(token),
+        auditLogsApi.getStatistics(),
       ])
 
       setLogs(logsResponse.logs || [])

@@ -46,40 +46,57 @@ func getCookieConfig(c *gin.Context, configManager interface{}) (secure bool, do
 
 // setAuthCookies 设置认证相关的 HttpOnly Cookie（支持动态配置）
 func setAuthCookies(c *gin.Context, accessToken, refreshToken string, configManager interface{}) {
-	secure, domain := getCookieConfig(c, configManager)
+    secure, domain := getCookieConfig(c, configManager)
 
-	// 设置 Access Token Cookie
-	c.SetCookie(
-		AccessTokenCookieName,
-		accessToken,
-		AccessTokenMaxAge,
-		"/",
-		domain,
-		secure,
-		true, // HttpOnly
-	)
+    // 使用 http.SetCookie 显式设置 SameSite，避免覆盖多个 Set-Cookie 头
+    http.SetCookie(c.Writer, &http.Cookie{
+        Name:     AccessTokenCookieName,
+        Value:    accessToken,
+        Path:     "/",
+        Domain:   domain,
+        MaxAge:   AccessTokenMaxAge,
+        Secure:   secure,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
 
-	// 设置 Refresh Token Cookie
-	c.SetCookie(
-		RefreshTokenCookieName,
-		refreshToken,
-		RefreshTokenMaxAge,
-		"/",
-		domain,
-		secure,
-		true, // HttpOnly
-	)
-
-	// 设置 SameSite 属性 (Gin 不直接支持,需要手动设置响应头)
-	c.Header("Set-Cookie", c.Writer.Header().Get("Set-Cookie")+"; SameSite=Lax")
+    http.SetCookie(c.Writer, &http.Cookie{
+        Name:     RefreshTokenCookieName,
+        Value:    refreshToken,
+        Path:     "/",
+        Domain:   domain,
+        MaxAge:   RefreshTokenMaxAge,
+        Secure:   secure,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
 }
 
 // clearAuthCookies 清除认证相关的 Cookie（支持动态配置）
 func clearAuthCookies(c *gin.Context, configManager interface{}) {
-	_, domain := getCookieConfig(c, configManager)
+    secure, domain := getCookieConfig(c, configManager)
 
-	c.SetCookie(AccessTokenCookieName, "", -1, "/", domain, false, true)
-	c.SetCookie(RefreshTokenCookieName, "", -1, "/", domain, false, true)
+    // 通过设置过期时间和 MaxAge<0 来清除 Cookie，保持 SameSite 与 Secure 一致
+    http.SetCookie(c.Writer, &http.Cookie{
+        Name:     AccessTokenCookieName,
+        Value:    "",
+        Path:     "/",
+        Domain:   domain,
+        MaxAge:   -1,
+        Secure:   secure,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
+    http.SetCookie(c.Writer, &http.Cookie{
+        Name:     RefreshTokenCookieName,
+        Value:    "",
+        Path:     "/",
+        Domain:   domain,
+        MaxAge:   -1,
+        Secure:   secure,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
 }
 
 // AuthHandler 认证处理器
@@ -268,48 +285,62 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // RefreshToken 刷新访问令牌
 // POST /api/v1/auth/refresh
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var req RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
-		return
-	}
+    var req RefreshTokenRequest
+    // 兼容：请求体可选。若未提供 refresh_token，则尝试从 Cookie 中读取
+    _ = c.ShouldBindJSON(&req)
 
-	newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), req.RefreshToken)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrExpiredToken) {
-			// 清除无效的 Cookie
-			clearAuthCookies(c, h.configManager)
-			RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid or expired refresh token")
-			return
-		}
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to refresh token")
-		return
-	}
+    refreshToken := strings.TrimSpace(req.RefreshToken)
+    if refreshToken == "" {
+        if cookieToken, err := c.Cookie(RefreshTokenCookieName); err == nil {
+            refreshToken = cookieToken
+        }
+    }
 
-	// 更新 Access Token Cookie
-	secure, domain := getCookieConfig(c, h.configManager)
-	c.SetCookie(
-		AccessTokenCookieName,
-		newAccessToken,
-		AccessTokenMaxAge,
-		"/",
-		domain,
-		secure,
-		true, // HttpOnly
-	)
+    if refreshToken == "" {
+        // 缺少 refresh token：清理 Cookie，返回 401
+        clearAuthCookies(c, h.configManager)
+        RespondError(c, http.StatusUnauthorized, "invalid_token", "Missing refresh token")
+        return
+    }
 
-	// 如果启用了令牌轮换，更新 Refresh Token Cookie
-	if newRefreshToken != "" {
-		c.SetCookie(
-			RefreshTokenCookieName,
-			newRefreshToken,
-			RefreshTokenMaxAge,
-			"/",
-			domain,
-			secure,
-			true, // HttpOnly
-		)
-	}
+    newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), refreshToken)
+    if err != nil {
+        if errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrExpiredToken) {
+            // 清除无效的 Cookie
+            clearAuthCookies(c, h.configManager)
+            RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid or expired refresh token")
+            return
+        }
+        RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to refresh token")
+        return
+    }
+
+    // 更新 Access Token Cookie（显式设置 SameSite）
+    secure, domain := getCookieConfig(c, h.configManager)
+    http.SetCookie(c.Writer, &http.Cookie{
+        Name:     AccessTokenCookieName,
+        Value:    newAccessToken,
+        Path:     "/",
+        Domain:   domain,
+        MaxAge:   AccessTokenMaxAge,
+        Secure:   secure,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
+
+    // 如果启用了令牌轮换，更新 Refresh Token Cookie
+    if newRefreshToken != "" {
+        http.SetCookie(c.Writer, &http.Cookie{
+            Name:     RefreshTokenCookieName,
+            Value:    newRefreshToken,
+            Path:     "/",
+            Domain:   domain,
+            MaxAge:   RefreshTokenMaxAge,
+            Secure:   secure,
+            HttpOnly: true,
+            SameSite: http.SameSiteLaxMode,
+        })
+    }
 
 	// 构造响应数据
 	response := gin.H{
@@ -909,4 +940,3 @@ func (h *AuthHandler) UpdateNotificationSettings(c *gin.Context) {
 		"message": "Notification settings updated successfully",
 	})
 }
-

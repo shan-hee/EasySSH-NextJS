@@ -3,15 +3,6 @@ import { apiFetch } from "./api-client"
 import type { HttpMethod } from "./api-client"
 
 /**
- * 获取服务端 token
- * 从 cookies 中读取访问令牌
- */
-async function getServerToken(): Promise<string | null> {
-  const cookieStore = await cookies()
-  return cookieStore.get("easyssh_access_token")?.value || null
-}
-
-/**
  * Next.js 缓存选项
  */
 export interface CacheOptions {
@@ -48,11 +39,8 @@ export async function serverApiFetch<T>(
     cache?: CacheOptions
   } = {}
 ): Promise<T> {
-  const token = await getServerToken()
-  if (!token) {
-    throw new Error("Unauthorized: No access token")
-  }
-  return apiFetch<T>(path, { ...options, token })
+  // Cookie-only：无需读取/校验 token，apiFetch 会在服务端将 Cookie 透传给后端
+  return apiFetch<T>(path, { ...options })
 }
 
 /**
@@ -60,6 +48,6 @@ export async function serverApiFetch<T>(
  * 用于条件渲染或逻辑判断
  */
 export async function hasServerToken(): Promise<boolean> {
-  const token = await getServerToken()
-  return !!token
+  const cookieStore = cookies()
+  return !!cookieStore.get("easyssh_access_token")?.value
 }

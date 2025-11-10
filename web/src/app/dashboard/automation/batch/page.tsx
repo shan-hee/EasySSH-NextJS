@@ -95,19 +95,12 @@ export default function AutomationBatchPage() {
  // 加载所有数据
  const loadData = async () => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- // 并行加载所有数据
+// 并行加载所有数据
  const [tasksRes, serversRes, scriptsRes, statsRes] = await Promise.all([
- batchTasksApi.list(token, { page: 1, limit: 100 }),
- serversApi.list(token),
- scriptsApi.list(token, { page: 1, limit: 100 }),
- batchTasksApi.getStatistics(token),
+ batchTasksApi.list({ page: 1, limit: 100 }),
+ serversApi.list(),
+ scriptsApi.list({ page: 1, limit: 100 }),
+ batchTasksApi.getStatistics(),
  ])
 
  // 防御性检查：处理apiFetch自动解包，确保始终返回数组
@@ -213,14 +206,7 @@ export default function AutomationBatchPage() {
 
  setIsExecuting(true)
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await batchTasksApi.create(token, {
+ await batchTasksApi.create({
  task_name: taskName,
  task_type: "command",
  content: command,
@@ -262,14 +248,7 @@ export default function AutomationBatchPage() {
 
  setIsExecuting(true)
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await batchTasksApi.create(token, {
+ await batchTasksApi.create({
  task_name: taskName,
  task_type: "script",
  content: scriptContent,
@@ -313,14 +292,7 @@ export default function AutomationBatchPage() {
 
  setIsExecuting(true)
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await batchTasksApi.create(token, {
+ await batchTasksApi.create({
  task_name: taskName,
  task_type: "file",
  content: `${filePath} -> ${targetPath}`,
@@ -361,14 +333,7 @@ export default function AutomationBatchPage() {
  }
 
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await batchTasksApi.delete(token, taskId)
+ await batchTasksApi.delete(taskId)
  toast.success("任务删除成功")
  await loadData()
  } catch (error: unknown) {
@@ -380,14 +345,7 @@ export default function AutomationBatchPage() {
  // 启动任务
  const handleStartTask = async (taskId: string) => {
  try {
- const token = localStorage.getItem("easyssh_access_token")
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
-
- await batchTasksApi.start(token, taskId)
+ await batchTasksApi.start(taskId)
  toast.success("任务已启动")
  await loadData()
  } catch (error: unknown) {

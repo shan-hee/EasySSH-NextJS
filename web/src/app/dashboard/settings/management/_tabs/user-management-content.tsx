@@ -83,16 +83,9 @@ export function UserManagementContent() {
   // 加载用户列表
   const loadUsers = async () => {
     try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
       const [usersRes, statsRes] = await Promise.all([
-        usersApi.list(token, { page: 1, limit: 100 }),
-        usersApi.getStatistics(token),
+        usersApi.list({ page: 1, limit: 100 }),
+        usersApi.getStatistics(),
       ])
 
       // 防御性检查：处理apiFetch自动解包
@@ -138,14 +131,7 @@ export function UserManagementContent() {
     }
 
     try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      await usersApi.create(token, newUser)
+      await usersApi.create(newUser)
       toast.success("用户创建成功")
       setIsCreateDialogOpen(false)
       setNewUser({ username: "", email: "", password: "", role: "user" })
@@ -175,14 +161,7 @@ export function UserManagementContent() {
     }
 
     try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      await usersApi.update(token, editingUserId, editUser)
+      await usersApi.update(editingUserId, editUser)
       toast.success("用户更新成功")
       setIsEditDialogOpen(false)
       setEditingUserId(null)
@@ -208,14 +187,7 @@ export function UserManagementContent() {
     }
 
     try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      await usersApi.changePassword(token, passwordUserId, { new_password: newPassword })
+      await usersApi.changePassword(passwordUserId, { new_password: newPassword })
       toast.success("密码修改成功")
       setIsPasswordDialogOpen(false)
       setPasswordUserId(null)
@@ -232,14 +204,7 @@ export function UserManagementContent() {
     }
 
     try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
-      await usersApi.delete(token, userId)
+      await usersApi.deleteUser(userId)
       toast.success("用户删除成功")
       await loadUsers()
     } catch (error: unknown) {
@@ -254,15 +219,8 @@ export function UserManagementContent() {
     }
 
     try {
-      const token = localStorage.getItem("easyssh_access_token")
-      if (!token) {
-        toast.error("未登录，请先登录")
-        router.push("/login")
-        return
-      }
-
       await Promise.all(
-        userIds.map((id) => usersApi.delete(token, id))
+        userIds.map((id) => usersApi.deleteUser(id))
       )
       toast.success(`成功删除 ${userIds.length} 个用户`)
       await loadUsers()

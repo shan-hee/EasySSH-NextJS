@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
 
 interface UseSettingsAPIOptions<T> {
@@ -13,7 +12,7 @@ interface UseSettingsAPIReturn<T> {
   data: T | null
   isLoading: boolean
   error: Error | null
-  execute: (apiFn: (token: string) => Promise<T>) => Promise<T | null>
+  execute: (apiFn: () => Promise<T>) => Promise<T | null>
   reset: () => void
 }
 
@@ -40,17 +39,11 @@ export function useSettingsAPI<T = any>(
   const [error, setError] = useState<Error | null>(null)
 
   const execute = useCallback(
-    async (apiFn: (token: string) => Promise<T>): Promise<T | null> => {
+    async (apiFn: () => Promise<T>): Promise<T | null> => {
       try {
         setIsLoading(true)
         setError(null)
-
-        const token = await getAccessToken()
-        if (!token) {
-          throw new Error("未找到访问令牌")
-        }
-
-        const result = await apiFn(token)
+        const result = await apiFn()
         setData(result)
         options.onSuccess?.(result)
         return result

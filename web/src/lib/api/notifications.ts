@@ -16,12 +16,8 @@ export const notificationsApi = {
   /**
    * 更新通知设置
    */
-  async update(
-    token: string,
-    settings: NotificationSettings
-  ): Promise<{ message: string }> {
+  async update(settings: NotificationSettings): Promise<{ message: string }> {
     return apiFetch<{ message: string }>("/users/me/notifications", {
-      token,
       method: "PUT",
       body: JSON.stringify(settings),
     })

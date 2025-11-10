@@ -217,17 +217,8 @@ export function useMonitorWebSocket({
     }
 
     try {
-      // 获取 token
-      const token = localStorage.getItem('easyssh_access_token');
-      if (!token) {
-        console.warn('[Monitor WS] 未找到认证令牌，跳过连接');
-        setStatus(WSStatus.DISCONNECTED);
-        onStatusChange?.(WSStatus.DISCONNECTED);
-        return;
-      }
-
-      // 构建 WebSocket URL
-      const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?token=${token}&interval=${interval}`);
+      // 构建 WebSocket URL（凭 Cookie 认证，不再拼接 token）
+      const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?interval=${interval}`);
 
       setStatus(WSStatus.CONNECTING);
       onStatusChange?.(WSStatus.CONNECTING);

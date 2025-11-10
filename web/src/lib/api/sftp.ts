@@ -45,28 +45,23 @@ export const sftpApi = {
   /**
    * 列出目录内容
    */
-  async listDirectory(token: string, serverId: string, path: string = "/"): Promise<DirectoryListResponse> {
-    return apiFetch<DirectoryListResponse>(`/sftp/${serverId}/list?path=${encodeURIComponent(path)}`, {
-      token,
-    })
+  async listDirectory(serverId: string, path: string = "/"): Promise<DirectoryListResponse> {
+    return apiFetch<DirectoryListResponse>(`/sftp/${serverId}/list?path=${encodeURIComponent(path)}`)
   },
 
   /**
    * 获取文件信息
    */
-  async getFileInfo(token: string, serverId: string, path: string): Promise<FileInfo> {
-    return apiFetch<FileInfo>(`/sftp/${serverId}/stat?path=${encodeURIComponent(path)}`, {
-      token,
-    })
+  async getFileInfo(serverId: string, path: string): Promise<FileInfo> {
+    return apiFetch<FileInfo>(`/sftp/${serverId}/stat?path=${encodeURIComponent(path)}`)
   },
 
   /**
    * 创建目录
    */
-  async createDirectory(token: string, serverId: string, path: string): Promise<void> {
+  async createDirectory(serverId: string, path: string): Promise<void> {
     return apiFetch<void>(`/sftp/${serverId}/mkdir`, {
       method: "POST",
-      token,
       body: { path },
     })
   },
@@ -74,10 +69,9 @@ export const sftpApi = {
   /**
    * 删除文件或目录
    */
-  async delete(token: string, serverId: string, path: string): Promise<void> {
+  async delete(serverId: string, path: string): Promise<void> {
     return apiFetch<void>(`/sftp/${serverId}/delete`, {
       method: "DELETE",
-      token,
       body: { path },
     })
   },
@@ -85,10 +79,9 @@ export const sftpApi = {
   /**
    * 重命名文件或目录
    */
-  async rename(token: string, serverId: string, oldPath: string, newPath: string): Promise<void> {
+  async rename(serverId: string, oldPath: string, newPath: string): Promise<void> {
     return apiFetch<void>(`/sftp/${serverId}/rename`, {
       method: "POST",
-      token,
       body: { old_path: oldPath, new_path: newPath },
     })
   },
@@ -96,10 +89,9 @@ export const sftpApi = {
   /**
    * 移动文件或目录
    */
-  async move(token: string, serverId: string, sourcePath: string, destPath: string): Promise<void> {
+  async move(serverId: string, sourcePath: string, destPath: string): Promise<void> {
     return apiFetch<void>(`/sftp/${serverId}/move`, {
       method: "POST",
-      token,
       body: { source: sourcePath, destination: destPath },
     })
   },
@@ -107,10 +99,9 @@ export const sftpApi = {
   /**
    * 复制文件
    */
-  async copy(token: string, serverId: string, sourcePath: string, destPath: string): Promise<void> {
+  async copy(serverId: string, sourcePath: string, destPath: string): Promise<void> {
     return apiFetch<void>(`/sftp/${serverId}/copy`, {
       method: "POST",
-      token,
       body: { source: sourcePath, destination: destPath },
     })
   },
@@ -118,14 +109,13 @@ export const sftpApi = {
   /**
    * 读取文件内容
    */
-  async readFile(token: string, serverId: string, path: string): Promise<string> {
+  async readFile(serverId: string, path: string): Promise<string> {
     // 注意: 后端返回的是纯文本(text/plain),不是JSON
     const apiUrl = getApiUrl()
     const response = await fetch(`${apiUrl}/sftp/${serverId}/read?path=${encodeURIComponent(path)}`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      // 凭 Cookie 认证
+      credentials: 'same-origin',
     })
 
     if (!response.ok) {
@@ -140,10 +130,9 @@ export const sftpApi = {
   /**
    * 写入文件内容
    */
-  async writeFile(token: string, serverId: string, path: string, content: string): Promise<void> {
+  async writeFile(serverId: string, path: string, content: string): Promise<void> {
     return apiFetch<void>(`/sftp/${serverId}/write`, {
       method: "POST",
-      token,
       body: { path, content },
     })
   },
@@ -151,18 +140,17 @@ export const sftpApi = {
   /**
    * 获取磁盘使用情况
    */
-  async getDiskUsage(token: string, serverId: string, path: string = "/"): Promise<DiskUsageResponse> {
-    return apiFetch<DiskUsageResponse>(`/sftp/${serverId}/disk-usage?path=${encodeURIComponent(path)}`, {
-      token,
-    })
+  async getDiskUsage(serverId: string, path: string = "/"): Promise<DiskUsageResponse> {
+    return apiFetch<DiskUsageResponse>(`/sftp/${serverId}/disk-usage?path=${encodeURIComponent(path)}`)
   },
 
   /**
    * 获取下载URL
    */
-  getDownloadUrl(serverId: string, path: string, token: string): string {
+  getDownloadUrl(serverId: string, path: string): string {
     const apiUrl = getApiUrl()
-    return `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(path)}&token=${token}`
+    // 通过 Cookie 认证，不再拼接 token
+    return `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(path)}`
   },
 
   /**
@@ -171,7 +159,6 @@ export const sftpApi = {
    * @param wsTaskId 可选的 WebSocket 任务 ID，用于接收 SFTP 阶段的进度
    */
   async uploadFile(
-    token: string,
     serverId: string,
     path: string,
     file: File,
@@ -228,7 +215,8 @@ export const sftpApi = {
 
       // 发送请求
       xhr.open("POST", url)
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+      // 凭 Cookie 认证
+      xhr.withCredentials = true
       xhr.send(formData)
     })
   },

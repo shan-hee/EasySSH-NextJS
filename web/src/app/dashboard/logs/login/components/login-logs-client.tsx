@@ -39,10 +39,6 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
     details: true,
   })
 
-  // 获取 token
-  const getToken = () => {
-    return localStorage.getItem("easyssh_access_token") || ""
-  }
 
   // 检测异常IP（简单的内网IP检测）
   function isAbnormalIP(ip: string): boolean {
@@ -61,14 +57,8 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
   const loadData = async (currentPage: number, currentPageSize: number) => {
     try {
       setLoading(true)
-      const token = getToken()
-
-      if (!token) {
-        throw new Error("未找到认证令牌，请重新登录")
-      }
-
       // 加载日志列表
-      const logsResponse = await auditLogsApi.list(token, {
+      const logsResponse = await auditLogsApi.list({
         page: currentPage,
         page_size: currentPageSize,
         action: "login",

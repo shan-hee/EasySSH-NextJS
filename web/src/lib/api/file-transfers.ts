@@ -79,7 +79,7 @@ export const fileTransfersApi = {
   /**
    * 获取文件传输列表
    */
-  async list(token: string, params?: ListFileTransfersParams): Promise<ListFileTransfersResponse> {
+  async list(params?: ListFileTransfersParams): Promise<ListFileTransfersResponse> {
     const queryParams = new URLSearchParams()
     if (params?.page) queryParams.append("page", params.page.toString())
     if (params?.limit) queryParams.append("limit", params.limit.toString())
@@ -88,23 +88,22 @@ export const fileTransfersApi = {
     if (params?.server_id) queryParams.append("server_id", params.server_id)
 
     const url = `/file-transfers${queryParams.toString() ? `?${queryParams}` : ""}`
-    return apiFetch<ListFileTransfersResponse>(url, { token })
+    return apiFetch<ListFileTransfersResponse>(url)
   },
 
   /**
    * 获取文件传输详情
    */
-  async getById(token: string, id: string): Promise<FileTransfer> {
-    return apiFetch<FileTransfer>(`/file-transfers/${id}`, { token })
+  async getById(id: string): Promise<FileTransfer> {
+    return apiFetch<FileTransfer>(`/file-transfers/${id}`)
   },
 
   /**
    * 创建文件传输记录
    */
-  async create(token: string, data: CreateFileTransferRequest): Promise<FileTransfer> {
+  async create(data: CreateFileTransferRequest): Promise<FileTransfer> {
     return apiFetch<FileTransfer>("/file-transfers", {
       method: "POST",
-      token,
       body: data,
     })
   },
@@ -112,10 +111,9 @@ export const fileTransfersApi = {
   /**
    * 更新文件传输记录
    */
-  async update(token: string, id: string, data: UpdateFileTransferRequest): Promise<FileTransfer> {
+  async update(id: string, data: UpdateFileTransferRequest): Promise<FileTransfer> {
     return apiFetch<FileTransfer>(`/file-transfers/${id}`, {
       method: "PUT",
-      token,
       body: data,
     })
   },
@@ -123,17 +121,16 @@ export const fileTransfersApi = {
   /**
    * 删除文件传输记录
    */
-  async delete(token: string, id: string): Promise<{ message: string }> {
+  async delete(id: string): Promise<{ message: string }> {
     return apiFetch<{ message: string }>(`/file-transfers/${id}`, {
       method: "DELETE",
-      token,
     })
   },
 
   /**
    * 获取文件传输统计信息
    */
-  async getStatistics(token: string): Promise<FileTransferStatistics> {
-    return apiFetch<FileTransferStatistics>("/file-transfers/statistics", { token })
+  async getStatistics(): Promise<FileTransferStatistics> {
+    return apiFetch<FileTransferStatistics>("/file-transfers/statistics")
   },
 }
