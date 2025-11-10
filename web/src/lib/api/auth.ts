@@ -102,16 +102,17 @@ export const authApi = {
 
   /**
    * 用户登出
+   * Cookie 会自动携带,无需传递 token
    */
-  async logout(token: string): Promise<void> {
+  async logout(): Promise<void> {
     return apiFetch<void>("/auth/logout", {
       method: "POST",
-      token,
     })
   },
 
   /**
    * 刷新访问令牌
+   * Cookie 会自动携带,无需传递 refresh_token
    */
   async refreshToken(data: RefreshTokenRequest): Promise<RefreshTokenResponse> {
     return apiFetch<RefreshTokenResponse>("/auth/refresh", {
@@ -122,34 +123,30 @@ export const authApi = {
 
   /**
    * 获取当前用户信息
+   * Cookie 会自动携带,无需传递 token
    */
-  async getCurrentUser(token: string): Promise<User> {
-    return apiFetch<User>("/users/me", {
-      token,
-    })
+  async getCurrentUser(): Promise<User> {
+    return apiFetch<User>("/users/me")
   },
 
   /**
    * 更新用户资料
+   * Cookie 会自动携带,无需传递 token
    */
-  async updateProfile(token: string, data: Partial<User>): Promise<User> {
+  async updateProfile(data: Partial<User>): Promise<User> {
     return apiFetch<User>("/users/me", {
       method: "PUT",
-      token,
       body: data,
     })
   },
 
   /**
    * 修改密码
+   * Cookie 会自动携带,无需传递 token
    */
-  async changePassword(
-    token: string,
-    data: { old_password: string; new_password: string }
-  ): Promise<void> {
+  async changePassword(data: { old_password: string; new_password: string }): Promise<void> {
     return apiFetch<void>("/users/me/password", {
       method: "PUT",
-      token,
       body: data,
     })
   },

@@ -39,6 +39,12 @@ export function NavMain({
 }) {
   const pathname = usePathname()
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({})
+  const [isClient, setIsClient] = React.useState(false)
+
+  // 延迟客户端状态初始化,避免 Hydration 不匹配
+  React.useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   const isSubActive = React.useCallback(
     (url?: string) => {
@@ -82,7 +88,8 @@ export function NavMain({
             )
           }
 
-          const open = openGroups[item.title] ?? (item.isActive || groupActive)
+          // 服务端渲染时默认关闭,客户端挂载后根据状态决定是否展开
+          const open = isClient ? (openGroups[item.title] ?? (item.isActive || groupActive)) : false
           return (
             <Collapsible
               key={item.title}

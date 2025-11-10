@@ -74,8 +74,8 @@ func (s *service) executeSSHCommand(ctx context.Context, serverID, command strin
 		return "", fmt.Errorf("failed to get server: %w", err)
 	}
 
-	// 创建 SSH 客户端
-	sshClient, err := sshDomain.NewClient(srv, s.encryptor)
+	// 创建 SSH 客户端（监控命令使用不安全模式以避免阻塞）
+	sshClient, err := sshDomain.NewClient(srv, s.encryptor, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create SSH client: %w", err)
 	}

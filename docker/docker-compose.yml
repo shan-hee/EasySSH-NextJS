@@ -18,7 +18,6 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 16
       DB_NAME: ${DB_NAME:-Easyssh_db}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
-      DB_DEBUG: ${DB_DEBUG:-false}
 
       # Redis 配置
       REDIS_HOST: redis
@@ -28,17 +27,11 @@ services:
 
       # 应用配置
       ENV: ${ENV:-production}
-      GIN_MODE: ${GIN_MODE:-release}
       PORT: 8521
 
-      # 安全配置 ⚠️ 生产环境必须修改
-      JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-production}  # 生成: openssl rand -base64 48
-      JWT_ACCESS_EXPIRE_HOURS: ${JWT_ACCESS_EXPIRE_HOURS:-1}
-      JWT_REFRESH_EXPIRE_HOURS: ${JWT_REFRESH_EXPIRE_HOURS:-168}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # 生成: openssl rand -base64 24
-
-      # AI 配置（可选）
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # 安全配置
+      JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-production}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 48
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 24
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,14 +56,10 @@ services:
     ports:
       - "${WEB_PORT:-8520}:8520"
     environment:
-      # 运行时配置
       NODE_ENV: production
       PORT: 8520
       HOSTNAME: 0.0.0.0
-
-      # 后端服务地址（容器内部通信）
-      # ⚠️ 注意：这里使用服务名 'backend' 而不是 'localhost'
-      NEXT_PUBLIC_API_BASE: http://backend:8521
+      NEXT_PUBLIC_API_BASE: http://backend:8521  # ⚠️ 容器内部通信使用服务名
       NEXT_PUBLIC_WS_HOST: ${NEXT_PUBLIC_WS_HOST:-}
     depends_on:
       backend:
@@ -127,7 +116,7 @@ services:
     networks:
       - easyssh-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping 2>/dev/null || redis-cli ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -140,10 +129,3 @@ networks:
   easyssh-network:
     name: easyssh-network
     driver: bridge
-
-# ================================
-# 数据卷配置
-# ================================
-# 数据存储在当前目录的 data/ 文件夹中
-# - ./data/postgres - PostgreSQL 数据库文件
-# - ./data/redis - Redis 持久化文件

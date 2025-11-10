@@ -2,7 +2,7 @@ package auth
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -118,9 +118,9 @@ func (s *authService) Register(ctx context.Context, username, email, password st
 		return nil, errors.New("username, email and password are required")
 	}
 
-	// 密码长度验证
-	if len(password) < 6 {
-		return nil, errors.New("password must be at least 6 characters")
+	// 密码策略验证
+	if err := ValidatePasswordWithDefault(password); err != nil {
+		return nil, err
 	}
 
 	// 生成头像
@@ -233,9 +233,9 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 		return errors.New("invalid old password")
 	}
 
-	// 验证新密码长度
-	if len(newPassword) < 6 {
-		return errors.New("new password must be at least 6 characters")
+	// 验证新密码策略
+	if err := ValidatePasswordWithDefault(newPassword); err != nil {
+		return err
 	}
 
 	// 设置新密码
@@ -318,9 +318,9 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 		return nil, "", "", errors.New("username, email and password are required")
 	}
 
-	// 密码长度验证
-	if len(password) < 6 {
-		return nil, "", "", errors.New("password must be at least 6 characters")
+	// 密码策略验证
+	if err := ValidatePasswordWithDefault(password); err != nil {
+		return nil, "", "", err
 	}
 
 	// 生成头像
@@ -696,8 +696,8 @@ func (s *authService) generateUserSeed(username, email string) string {
 		seedInput += strings.ToLower(email)
 	}
 
-	// 使用MD5哈希生成确定性种子
-	hash := md5.Sum([]byte(seedInput))
+	// 使用SHA-256哈希生成确定性种子
+	hash := sha256.Sum256([]byte(seedInput))
 	return fmt.Sprintf("%x", hash)
 }
 
@@ -706,8 +706,13 @@ func (s *authService) generateDiceBearAvatar(seed string) (string, error) {
 	// DiceBear API URL - 使用notionists-neutral风格
 	dicebearUrl := fmt.Sprintf("https://api.dicebear.com/7.x/notionists-neutral/svg?seed=%s", seed)
 
+	// 创建带超时的 HTTP 客户端
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	// 发起HTTP请求获取SVG
-	resp, err := http.Get(dicebearUrl)
+	resp, err := client.Get(dicebearUrl)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch avatar from DiceBear API: %w", err)
 	}

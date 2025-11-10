@@ -20,7 +20,8 @@ type Client struct {
 }
 
 // NewClient 创建 SSH 客户端
-func NewClient(srv *server.Server, encryptor *crypto.Encryptor) (*Client, error) {
+// hostKeyCallback: 可选的主机密钥验证回调，如果为 nil 则使用不安全的模式（不推荐）
+func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback ssh.HostKeyCallback) (*Client, error) {
 	// 解密认证信息
 	var authMethods []ssh.AuthMethod
 
@@ -44,10 +45,15 @@ func NewClient(srv *server.Server, encryptor *crypto.Encryptor) (*Client, error)
 	}
 
 	// 配置 SSH 客户端
+	// 如果没有提供主机密钥验证回调，使用不安全的模式（向后兼容）
+	if hostKeyCallback == nil {
+		hostKeyCallback = ssh.InsecureIgnoreHostKey()
+	}
+
 	config := &ssh.ClientConfig{
 		User:            srv.Username,
 		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 注意：生产环境应该验证主机密钥
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         30 * time.Second,
 	}
 

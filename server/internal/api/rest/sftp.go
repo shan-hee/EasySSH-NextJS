@@ -13,6 +13,7 @@ import (
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/ssh"
 )
 
 // SFTPHandler SFTP 处理器
@@ -21,15 +22,17 @@ type SFTPHandler struct {
 	serverRepo        server.Repository
 	encryptor         *crypto.Encryptor
 	uploadWSHandler   *ws.SFTPUploadHandler
+	hostKeyCallback   ssh.HostKeyCallback // SSH主机密钥验证回调
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
-func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor, uploadWSHandler *ws.SFTPUploadHandler) *SFTPHandler {
+func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor, uploadWSHandler *ws.SFTPUploadHandler, hostKeyCallback ssh.HostKeyCallback) *SFTPHandler {
 	return &SFTPHandler{
 		serverService:   serverService,
 		serverRepo:      serverRepo,
 		encryptor:       encryptor,
 		uploadWSHandler: uploadWSHandler,
+		hostKeyCallback: hostKeyCallback,
 	}
 }
 
@@ -47,14 +50,15 @@ func (h *SFTPHandler) createSFTPClient(c *gin.Context, serverID uuid.UUID) (*sft
 		return nil, nil, err
 	}
 
-	// 创建 SSH 客户端
-	sshClient, err := sshDomain.NewClient(srv, h.encryptor)
+	// 创建 SSH 客户端（使用主机密钥验证）
+	sshClient, err := sshDomain.NewClient(srv, h.encryptor, h.hostKeyCallback)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create SSH client: %w", err)
 	}
 
 	// 连接到服务器
 	if err := sshClient.Connect(srv.Host, srv.Port); err != nil {
+		sshClient.Close() // 确保关闭连接
 		return nil, nil, fmt.Errorf("failed to connect: %w", err)
 	}
 

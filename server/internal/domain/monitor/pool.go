@@ -160,8 +160,8 @@ func (p *ConnectionPool) GetOrCreate(userID, serverID string) (*PooledConnection
 	resultChan := make(chan result, 1)
 
 	go func() {
-		// 创建 SSH 客户端
-		client, err := sshDomain.NewClient(srv, p.encryptor)
+		// 创建 SSH 客户端（连接池使用不安全模式以避免阻塞）
+		client, err := sshDomain.NewClient(srv, p.encryptor, nil)
 		if err != nil {
 			resultChan <- result{nil, fmt.Errorf("failed to create ssh client: %w", err)}
 			return

@@ -77,6 +77,39 @@ const (
 	KeyRememberLogin      = "tabsession.remember_login"      // 是否允许记住登录状态
 )
 
+// 数据库连接池配置相关的键名
+const (
+	KeyDBMaxIdleConns    = "database.max_idle_conns"
+	KeyDBMaxOpenConns    = "database.max_open_conns"
+	KeyDBConnMaxLifetime = "database.conn_max_lifetime" // 分钟
+	KeyDBConnMaxIdleTime = "database.conn_max_idle_time" // 分钟
+)
+
+// JWT 配置相关的键名
+const (
+	KeyJWTAccessExpire  = "jwt.access_expire_hours"
+	KeyJWTRefreshExpire = "jwt.refresh_expire_hours"
+)
+
+// CORS 配置相关的键名
+const (
+	KeyCORSAllowedOrigins = "cors.allowed_origins" // 逗号分隔的域名列表
+	KeyCORSAllowedMethods = "cors.allowed_methods" // 逗号分隔的方法列表
+	KeyCORSAllowedHeaders = "cors.allowed_headers" // 逗号分隔的头部列表
+)
+
+// 速率限制配置相关的键名
+const (
+	KeyRateLimitLogin = "ratelimit.login" // 登录接口速率限制（次/分钟/IP）
+	KeyRateLimitAPI   = "ratelimit.api"   // API 接口速率限制（次/分钟/IP）
+)
+
+// Cookie 安全配置相关的键名
+const (
+	KeyCookieSecure = "cookie.secure" // Cookie Secure 标志
+	KeyCookieDomain = "cookie.domain" // Cookie 域名
+)
+
 // SMTPConfig SMTP 配置结构
 type SMTPConfig struct {
 	Enabled   bool   `json:"enabled"`
@@ -134,4 +167,37 @@ type TabSessionConfig struct {
 	Hibernate       bool `json:"hibernate"`         // 是否启用后台标签页休眠
 	SessionTimeout  int  `json:"session_timeout"`   // 会话超时时间（分钟）
 	RememberLogin   bool `json:"remember_login"`    // 是否允许记住登录状态
+}
+
+// DatabasePoolConfig 数据库连接池配置结构
+type DatabasePoolConfig struct {
+	MaxIdleConns    int `json:"max_idle_conns"`    // 最大空闲连接数
+	MaxOpenConns    int `json:"max_open_conns"`    // 最大打开连接数
+	ConnMaxLifetime int `json:"conn_max_lifetime"` // 连接最大生命周期（分钟）
+	ConnMaxIdleTime int `json:"conn_max_idle_time"` // 连接最大空闲时间（分钟）
+}
+
+// JWTConfig JWT 配置结构
+type JWTConfig struct {
+	AccessExpire  int `json:"access_expire"`  // 访问令牌过期时间（小时）
+	RefreshExpire int `json:"refresh_expire"` // 刷新令牌过期时间（小时）
+}
+
+// CORSConfig CORS 配置结构
+type CORSConfig struct {
+	AllowedOrigins []string `json:"allowed_origins"` // 允许的域名列表
+	AllowedMethods []string `json:"allowed_methods"` // 允许的方法列表
+	AllowedHeaders []string `json:"allowed_headers"` // 允许的头部列表
+}
+
+// RateLimitConfig 速率限制配置结构
+type RateLimitConfig struct {
+	LoginLimit int `json:"login_limit"` // 登录接口速率限制（次/分钟/IP）
+	APILimit   int `json:"api_limit"`   // API 接口速率限制（次/分钟/IP）
+}
+
+// CookieConfig Cookie 安全配置结构
+type CookieConfig struct {
+	Secure bool   `json:"secure"` // Cookie Secure 标志
+	Domain string `json:"domain"` // Cookie 域名
 }

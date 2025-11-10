@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,8 +25,29 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// 生产环境应该检查 Origin
-		return true
+		// 从环境变量读取允许的源列表
+		allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+		if allowedOriginsEnv == "" {
+			// 默认允许本地开发环境
+			allowedOriginsEnv = "http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:8080"
+		}
+
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			// 如果没有 Origin 头,允许连接(同源请求)
+			return true
+		}
+
+		// 检查 origin 是否在白名单中
+		allowedOrigins := strings.Split(allowedOriginsEnv, ",")
+		for _, allowed := range allowedOrigins {
+			if strings.TrimSpace(allowed) == origin {
+				return true
+			}
+		}
+
+		log.Printf("WebSocket connection rejected: origin %s not in whitelist", origin)
+		return false
 	},
 }
 
@@ -35,16 +58,18 @@ type TerminalHandler struct {
 	sessionManager    *sshDomain.SessionManager
 	encryptor         *crypto.Encryptor
 	sshSessionService sshsession.Service
+	hostKeyCallback   ssh.HostKeyCallback // SSH主机密钥验证回调
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
 		sessionManager:    sessionManager,
 		encryptor:         encryptor,
 		sshSessionService: sshSessionService,
+		hostKeyCallback:   hostKeyCallback,
 	}
 }
 
@@ -126,8 +151,8 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		return
 	}
 
-	// 创建 SSH 客户端
-	client, err := sshDomain.NewClient(srv, h.encryptor)
+	// 创建 SSH 客户端（使用主机密钥验证）
+	client, err := sshDomain.NewClient(srv, h.encryptor, h.hostKeyCallback)
 	if err != nil {
 		h.sendError(wsConn, "client_creation_failed", err.Error())
 		return

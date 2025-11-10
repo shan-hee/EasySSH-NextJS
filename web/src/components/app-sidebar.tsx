@@ -92,6 +92,7 @@ const navMainData = [
     items: [
       { title: "通用设置", url: "/dashboard/settings/general" },
       { title: "安全策略", url: "/dashboard/settings/security" },
+      { title: "高级配置", url: "/dashboard/settings/advanced" },
       { title: "AI 配置", url: "/dashboard/settings/ai" },
       { title: "通知设置", url: "/dashboard/settings/notifications" },
       { title: "用户管理", url: "/dashboard/users" },

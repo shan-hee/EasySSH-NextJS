@@ -6,22 +6,95 @@ import (
 	"strings"
 	"time"
 
+	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/easyssh/server/internal/domain/auth"
 )
+
+// Cookie 配置常量
+const (
+	AccessTokenCookieName  = "easyssh_access_token"
+	RefreshTokenCookieName = "easyssh_refresh_token"
+	AccessTokenMaxAge      = 3600        // 1小时
+	RefreshTokenMaxAge     = 604800      // 7天
+)
+
+// CookieConfig Cookie 配置（用于类型断言）
+type CookieConfig struct {
+	Secure bool
+	Domain string
+}
+
+// getCookieConfig 从配置管理器获取 Cookie 配置（带缓存）
+func getCookieConfig(c *gin.Context, configManager interface{}) (secure bool, domain string) {
+	// 默认值
+	secure = true
+	domain = ""
+
+	// 尝试从配置管理器获取配置
+	if cm, ok := configManager.(interface {
+		GetCookieConfig(ctx interface{}) (*CookieConfig, error)
+	}); ok {
+		if config, err := cm.GetCookieConfig(c.Request.Context()); err == nil {
+			secure = config.Secure
+			domain = config.Domain
+		}
+	}
+
+	return secure, domain
+}
+
+// setAuthCookies 设置认证相关的 HttpOnly Cookie（支持动态配置）
+func setAuthCookies(c *gin.Context, accessToken, refreshToken string, configManager interface{}) {
+	secure, domain := getCookieConfig(c, configManager)
+
+	// 设置 Access Token Cookie
+	c.SetCookie(
+		AccessTokenCookieName,
+		accessToken,
+		AccessTokenMaxAge,
+		"/",
+		domain,
+		secure,
+		true, // HttpOnly
+	)
+
+	// 设置 Refresh Token Cookie
+	c.SetCookie(
+		RefreshTokenCookieName,
+		refreshToken,
+		RefreshTokenMaxAge,
+		"/",
+		domain,
+		secure,
+		true, // HttpOnly
+	)
+
+	// 设置 SameSite 属性 (Gin 不直接支持,需要手动设置响应头)
+	c.Header("Set-Cookie", c.Writer.Header().Get("Set-Cookie")+"; SameSite=Lax")
+}
+
+// clearAuthCookies 清除认证相关的 Cookie（支持动态配置）
+func clearAuthCookies(c *gin.Context, configManager interface{}) {
+	_, domain := getCookieConfig(c, configManager)
+
+	c.SetCookie(AccessTokenCookieName, "", -1, "/", domain, false, true)
+	c.SetCookie(RefreshTokenCookieName, "", -1, "/", domain, false, true)
+}
 
 // AuthHandler 认证处理器
 type AuthHandler struct {
-	authService auth.Service
-	jwtService  auth.JWTService
+	authService   auth.Service
+	jwtService    auth.JWTService
+	configManager interface{} // 配置管理器（用于动态配置）
 }
 
 // NewAuthHandler 创建认证处理器
-func NewAuthHandler(authService auth.Service, jwtService auth.JWTService) *AuthHandler {
+func NewAuthHandler(authService auth.Service, jwtService auth.JWTService, configManager interface{}) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		jwtService:  jwtService,
+		authService:   authService,
+		jwtService:    jwtService,
+		configManager: configManager,
 	}
 }
 
@@ -153,7 +226,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// 未启用 2FA，直接返回令牌
+	// 未启用 2FA，设置 HttpOnly Cookie 并返回令牌
+	setAuthCookies(c, accessToken, refreshToken, h.configManager)
+
 	RespondSuccess(c, AuthResponse{
 		User:         user.ToPublic(),
 		AccessToken:  accessToken,
@@ -166,27 +241,26 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // Logout 用户登出
 // POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// 从请求头获取 token
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		RespondError(c, http.StatusUnauthorized, "missing_token", "Authorization header is required")
+	// 从 Cookie 获取 token
+	accessToken, err := c.Cookie(AccessTokenCookieName)
+
+	// 如果没有 token,直接清除 Cookie 并返回成功(幂等操作)
+	if err != nil || accessToken == "" {
+		clearAuthCookies(c, h.configManager)
+		RespondSuccessWithMessage(c, nil, "Logged out successfully")
 		return
 	}
-
-	// 解析 Bearer token
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid authorization header format")
-		return
-	}
-
-	accessToken := parts[1]
 
 	// 将 token 加入黑名单
 	if err := h.authService.Logout(c.Request.Context(), accessToken); err != nil {
+		// 即使加入黑名单失败,也清除 Cookie
+		clearAuthCookies(c, h.configManager)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to logout")
 		return
 	}
+
+	// 清除 HttpOnly Cookie
+	clearAuthCookies(c, h.configManager)
 
 	RespondSuccessWithMessage(c, nil, "Logged out successfully")
 }
@@ -203,12 +277,26 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	newAccessToken, err := h.authService.RefreshAccessToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrExpiredToken) {
+			// 清除无效的 Cookie
+			clearAuthCookies(c, h.configManager)
 			RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid or expired refresh token")
 			return
 		}
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to refresh token")
 		return
 	}
+
+	// 更新 Access Token Cookie (Refresh Token 保持不变)
+	secure, domain := getCookieConfig(c, h.configManager)
+	c.SetCookie(
+		AccessTokenCookieName,
+		newAccessToken,
+		AccessTokenMaxAge,
+		"/",
+		domain,
+		secure,
+		true, // HttpOnly
+	)
 
 	RespondSuccess(c, gin.H{
 		"access_token": newAccessToken,
@@ -363,6 +451,9 @@ func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "init_failed", err.Error())
 		return
 	}
+
+	// 设置 HttpOnly Cookie
+	setAuthCookies(c, accessToken, refreshToken, h.configManager)
 
 	// 返回用户信息和令牌
 	RespondSuccess(c, AuthResponse{
@@ -566,6 +657,9 @@ func (h *AuthHandler) Verify2FACode(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate tokens")
 		return
 	}
+
+	// 设置 HttpOnly Cookie
+	setAuthCookies(c, accessToken, refreshToken, h.configManager)
 
 	RespondSuccess(c, AuthResponse{
 		User:         user.ToPublic(),

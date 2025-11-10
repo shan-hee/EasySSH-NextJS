@@ -27,9 +27,70 @@ type ApiFetchOptions = {
   body?: unknown
   token?: string
   signal?: AbortSignal
+  timeout?: number // 超时时间(毫秒),默认 30000ms
+  retry?: boolean // 是否启用重试,默认 true
+  maxRetries?: number // 最大重试次数,默认 3
+}
+
+/**
+ * 延迟函数
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 判断错误是否可重试
+ */
+function isRetryableError(error: unknown): boolean {
+  if (isApiError(error)) {
+    // 5xx 服务器错误可重试
+    return error.status >= 500 && error.status < 600
+  }
+  // 网络错误可重试
+  if (error instanceof TypeError && error.message.includes('fetch')) {
+    return true
+  }
+  return false
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const {
+    timeout = 30000,
+    retry = true,
+    maxRetries = 3,
+    ...fetchOptions
+  } = options
+
+  // 实现重试逻辑
+  let lastError: unknown
+  const retries = retry ? maxRetries : 1
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
+    } catch (error) {
+      lastError = error
+
+      // 最后一次尝试或不可重试的错误,直接抛出
+      if (attempt === retries - 1 || !isRetryableError(error)) {
+        throw error
+      }
+
+      // 指数退避: 2^attempt * 1000ms (1s, 2s, 4s...)
+      const backoffMs = Math.pow(2, attempt) * 1000
+      console.warn(`[apiFetch] Retry ${attempt + 1}/${maxRetries} after ${backoffMs}ms`, error)
+      await sleep(backoffMs)
+    }
+  }
+
+  throw lastError
+}
+
+/**
+ * 内部 fetch 实现,支持超时
+ */
+async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 'retry' | 'maxRetries'> = {}): Promise<T> {
   // 构建请求URL
   // 如果path是完整URL则直接使用
   // 否则使用统一的API URL配置
@@ -52,10 +113,19 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     ;(headers as Record<string, string>)["Authorization"] = `Bearer ${options.token}`
   }
 
+  // 创建超时控制器
+  const controller = new AbortController()
+  const timeoutId = options.timeout ? setTimeout(() => {
+    controller.abort()
+  }, options.timeout) : null
+
+  // 合并用户提供的 signal 和超时 signal
+  const signal = options.signal || controller.signal
+
   const init: RequestInit = {
     method: options.method ?? "GET",
     headers,
-    signal: options.signal,
+    signal,
   }
 
   if (options.body !== undefined && options.body !== null) {
@@ -67,35 +137,49 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     }
   }
 
-  const res = await fetch(url, init)
-  if (!res.ok) {
-    // 修复: 根据Content-Type只读取一次响应体
-    const contentType = res.headers.get("content-type") || ""
-    let detail: unknown
-    try {
-      if (contentType.includes("application/json")) {
-        detail = await res.json()
-      } else {
-        detail = await res.text()
-      }
-    } catch {
-      detail = "Failed to parse error response"
-    }
-    throw Object.assign(new Error(`API ${res.status} ${res.statusText}`), {
-      status: res.status,
-      detail,
-    })
-  }
+  try {
+    const res = await fetch(url, init)
 
-  const contentType = res.headers.get("content-type") || ""
-  if (contentType.includes("application/json")) {
-    const json = await res.json()
-    // 如果响应包含data字段,自动解包
-    if (json && typeof json === "object" && "data" in json) {
-      return json.data as T
+    // 清理超时定时器
+    if (timeoutId) {
+      clearTimeout(timeoutId)
     }
-    return json as T
+
+    if (!res.ok) {
+      // 修复: 根据Content-Type只读取一次响应体
+      const contentType = res.headers.get("content-type") || ""
+      let detail: unknown
+      try {
+        if (contentType.includes("application/json")) {
+          detail = await res.json()
+        } else {
+          detail = await res.text()
+        }
+      } catch {
+        detail = "Failed to parse error response"
+      }
+      throw Object.assign(new Error(`API ${res.status} ${res.statusText}`), {
+        status: res.status,
+        detail,
+      })
+    }
+
+    const contentType = res.headers.get("content-type") || ""
+    if (contentType.includes("application/json")) {
+      const json = await res.json()
+      // 如果响应包含data字段,自动解包
+      if (json && typeof json === "object" && "data" in json) {
+        return json.data as T
+      }
+      return json as T
+    }
+    return (await res.text()) as unknown as T
+  } catch (error) {
+    // 清理超时定时器
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+    throw error
   }
-  return (await res.text()) as unknown as T
 }
 

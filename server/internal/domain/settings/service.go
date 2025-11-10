@@ -41,15 +41,41 @@ type Service interface {
 	// 系统通用配置
 	GetSystemConfig(ctx context.Context) (*SystemConfig, error)
 	SaveSystemConfig(ctx context.Context, config *SystemConfig) error
+
+	// 数据库连接池配置
+	GetDatabasePoolConfig(ctx context.Context) (*DatabasePoolConfig, error)
+	SaveDatabasePoolConfig(ctx context.Context, config *DatabasePoolConfig) error
+
+	// JWT 配置
+	GetJWTConfig(ctx context.Context) (*JWTConfig, error)
+	SaveJWTConfig(ctx context.Context, config *JWTConfig) error
+
+	// CORS 配置
+	GetCORSConfig(ctx context.Context) (*CORSConfig, error)
+	SaveCORSConfig(ctx context.Context, config *CORSConfig) error
+
+	// 速率限制配置
+	GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
+	SaveRateLimitConfig(ctx context.Context, config *RateLimitConfig) error
+
+	// Cookie 配置
+	GetCookieConfig(ctx context.Context) (*CookieConfig, error)
+	SaveCookieConfig(ctx context.Context, config *CookieConfig) error
 }
 
 type service struct {
-	repo Repository
+	repo          Repository
+	configManager *ConfigManager // 配置管理器（用于清除缓存）
 }
 
 // NewService 创建设置服务
 func NewService(repo Repository) Service {
 	return &service{repo: repo}
+}
+
+// SetConfigManager 设置配置管理器（用于清除缓存）
+func (s *service) SetConfigManager(cm *ConfigManager) {
+	s.configManager = cm
 }
 
 // GetSetting 获取单个设置值

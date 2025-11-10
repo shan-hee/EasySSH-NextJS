@@ -26,6 +26,7 @@ import (
 	"github.com/easyssh/server/internal/domain/settings"
 	"github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshkey"
+	"github.com/easyssh/server/internal/domain/sshhostkey"
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/domain/tabsession"
 	"github.com/easyssh/server/internal/domain/user"
@@ -82,6 +83,7 @@ func main() {
 		&settings.Settings{},         // 系统设置表
 		&settings.IPWhitelist{},      // IP白名单表
 		&sshkey.SSHKey{},             // SSH密钥表
+		&sshhostkey.SSHHostKey{},     // SSH主机密钥表（TOFU安全验证）
 		&tabsession.TabSessionSettings{}, // 标签/会话设置表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
@@ -103,6 +105,15 @@ func main() {
 	// 系统设置服务（需要在邮件服务之前初始化）
 	settingsRepo := settings.NewRepository(database)
 	settingsService := settings.NewService(settingsRepo)
+
+	// 创建配置管理器（缓存 TTL 为 5 分钟）
+	configManager := settings.NewConfigManager(settingsService, 5*time.Minute)
+
+	// 设置双向引用（解决循环依赖）
+	if svc, ok := settingsService.(interface{ SetConfigManager(*settings.ConfigManager) }); ok {
+		svc.SetConfigManager(configManager)
+	}
+	log.Println("✅ Configuration manager initialized with 5-minute cache")
 
 	// IP 白名单服务
 	ipWhitelistRepo := settings.NewIPWhitelistRepository(database)
@@ -156,6 +167,9 @@ func main() {
 	serverRepo := server.NewRepository(database)
 	serverService := server.NewService(serverRepo, encryptor)
 
+	// SSH 主机密钥验证服务（TOFU安全模型）
+	sshHostKeyService := sshhostkey.NewService(database)
+
 	// SSH 会话管理器
 	sessionManager := ssh.NewSessionManager()
 
@@ -202,11 +216,11 @@ func main() {
 	sftpUploadWSHandler := ws.NewSFTPUploadHandler()
 
 	// 初始化处理器
-	authHandler := rest.NewAuthHandler(authService, jwtService)
+	authHandler := rest.NewAuthHandler(authService, jwtService, configManager)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
-	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler)
-	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService)
+	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
+	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback())
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
@@ -227,7 +241,8 @@ func main() {
 	r.Use(middleware.Recovery())                                    // 错误恢复
 	r.Use(middleware.Logger())                                       // 日志记录
 	r.Use(middleware.RequestID())                                    // 请求 ID
-	r.Use(middleware.CORS())                                         // 跨域
+	r.Use(middleware.SecurityHeaders())                              // 安全响应头
+	r.Use(middleware.CORS(configManager))                            // 跨域（支持动态配置）
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(ipWhitelistService)) // IP 白名单验证（可选）
 
@@ -273,11 +288,13 @@ func main() {
 		authRoutes := v1.Group("/auth")
 		{
 			authRoutes.POST("/register", authHandler.Register)
-			authRoutes.POST("/login", authHandler.Login)
+			// 登录接口应用速率限制（支持动态配置）
+			authRoutes.POST("/login", middleware.LoginRateLimitMiddleware(configManager), authHandler.Login)
 			authRoutes.POST("/logout", authHandler.Logout)
 			authRoutes.POST("/refresh", authHandler.RefreshToken)
 			authRoutes.GET("/admin-status", authHandler.CheckAdminStatus)           // 检查管理员状态
-			authRoutes.POST("/initialize-admin", authHandler.InitializeAdmin)       // 初始化管理员
+			// 初始化管理员接口应用速率限制（支持动态配置）
+			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(configManager), authHandler.InitializeAdmin)
 			authRoutes.POST("/2fa/verify", authHandler.Verify2FACode)                // 验证 2FA 代码（登录时）
 		}
 

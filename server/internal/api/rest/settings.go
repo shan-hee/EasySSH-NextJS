@@ -66,7 +66,31 @@ func (h *SettingsHandler) RegisterRoutes(r *gin.RouterGroup) {
 		settingsGroup.POST("/ip-whitelist/:id/toggle", h.ToggleIPWhitelist)
 		settingsGroup.POST("/ip-whitelist/check", h.CheckIPAllowed)
 
-		// 通用设置
+		// 高级配置路由组 - 必须在通配路由之前注册
+		advancedGroup := settingsGroup.Group("/advanced")
+		{
+			// 数据库连接池配置
+			advancedGroup.GET("/database-pool", h.GetDatabasePoolConfig)
+			advancedGroup.POST("/database-pool", h.SaveDatabasePoolConfig)
+
+			// JWT 配置
+			advancedGroup.GET("/jwt", h.GetJWTConfig)
+			advancedGroup.POST("/jwt", h.SaveJWTConfig)
+
+			// CORS 配置
+			advancedGroup.GET("/cors", h.GetCORSConfig)
+			advancedGroup.POST("/cors", h.SaveCORSConfig)
+
+			// 速率限制配置
+			advancedGroup.GET("/ratelimit", h.GetRateLimitConfig)
+			advancedGroup.POST("/ratelimit", h.SaveRateLimitConfig)
+
+			// Cookie 配置
+			advancedGroup.GET("/cookie", h.GetCookieConfig)
+			advancedGroup.POST("/cookie", h.SaveCookieConfig)
+		}
+
+		// 通用设置 - 通配路由必须放在最后,避免拦截其他路由
 		settingsGroup.GET("/:category", h.GetSettingsByCategory)
 		settingsGroup.POST("", h.SetSetting)
 	}
@@ -828,5 +852,316 @@ func (h *SettingsHandler) CheckIPAllowed(c *gin.Context) {
 	c.JSON(http.StatusOK, CheckIPResponse{
 		Allowed: allowed,
 		Message: message,
+	})
+}
+
+// === 数据库连接池配置相关 ===
+
+// GetDatabasePoolConfigResponse 数据库连接池配置响应
+type GetDatabasePoolConfigResponse struct {
+	Config *settings.DatabasePoolConfig `json:"config"`
+}
+
+// SaveDatabasePoolConfigRequest 保存数据库连接池配置请求
+type SaveDatabasePoolConfigRequest struct {
+	MaxIdleConns    int `json:"max_idle_conns"`
+	MaxOpenConns    int `json:"max_open_conns"`
+	ConnMaxLifetime int `json:"conn_max_lifetime"`
+	ConnMaxIdleTime int `json:"conn_max_idle_time"`
+}
+
+// GetDatabasePoolConfig 获取数据库连接池配置
+// @Summary 获取数据库连接池配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetDatabasePoolConfigResponse
+// @Router /api/v1/settings/advanced/database-pool [get]
+func (h *SettingsHandler) GetDatabasePoolConfig(c *gin.Context) {
+	config, err := h.settingsService.GetDatabasePoolConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetDatabasePoolConfigResponse{Config: config})
+}
+
+// SaveDatabasePoolConfig 保存数据库连接池配置
+// @Summary 保存数据库连接池配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SaveDatabasePoolConfigRequest true "数据库连接池配置"
+// @Success 200 {object} map[string]interface
+// @Router /api/v1/settings/advanced/database-pool [post]
+func (h *SettingsHandler) SaveDatabasePoolConfig(c *gin.Context) {
+	var req SaveDatabasePoolConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	config := &settings.DatabasePoolConfig{
+		MaxIdleConns:    req.MaxIdleConns,
+		MaxOpenConns:    req.MaxOpenConns,
+		ConnMaxLifetime: req.ConnMaxLifetime,
+		ConnMaxIdleTime: req.ConnMaxIdleTime,
+	}
+
+	if err := h.settingsService.SaveDatabasePoolConfig(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "数据库连接池配置已保存，重启服务后生效",
+		"config":  config,
+	})
+}
+
+// === JWT 配置相关 ===
+
+// GetJWTConfigResponse JWT 配置响应
+type GetJWTConfigResponse struct {
+	Config *settings.JWTConfig `json:"config"`
+}
+
+// SaveJWTConfigRequest 保存 JWT 配置请求
+type SaveJWTConfigRequest struct {
+	AccessExpire  int `json:"access_expire"`
+	RefreshExpire int `json:"refresh_expire"`
+}
+
+// GetJWTConfig 获取 JWT 配置
+// @Summary 获取 JWT 配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetJWTConfigResponse
+// @Router /api/v1/settings/advanced/jwt [get]
+func (h *SettingsHandler) GetJWTConfig(c *gin.Context) {
+	config, err := h.settingsService.GetJWTConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetJWTConfigResponse{Config: config})
+}
+
+// SaveJWTConfig 保存 JWT 配置
+// @Summary 保存 JWT 配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SaveJWTConfigRequest true "JWT 配置"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/settings/advanced/jwt [post]
+func (h *SettingsHandler) SaveJWTConfig(c *gin.Context) {
+	var req SaveJWTConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	config := &settings.JWTConfig{
+		AccessExpire:  req.AccessExpire,
+		RefreshExpire: req.RefreshExpire,
+	}
+
+	if err := h.settingsService.SaveJWTConfig(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "JWT 配置已保存，重启服务后生效",
+		"config":  config,
+	})
+}
+
+// === CORS 配置相关 ===
+
+// GetCORSConfigResponse CORS 配置响应
+type GetCORSConfigResponse struct {
+	Config *settings.CORSConfig `json:"config"`
+}
+
+// SaveCORSConfigRequest 保存 CORS 配置请求
+type SaveCORSConfigRequest struct {
+	AllowedOrigins []string `json:"allowed_origins"`
+	AllowedMethods []string `json:"allowed_methods"`
+	AllowedHeaders []string `json:"allowed_headers"`
+}
+
+// GetCORSConfig 获取 CORS 配置
+// @Summary 获取 CORS 配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetCORSConfigResponse
+// @Router /api/v1/settings/advanced/cors [get]
+func (h *SettingsHandler) GetCORSConfig(c *gin.Context) {
+	config, err := h.settingsService.GetCORSConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetCORSConfigResponse{Config: config})
+}
+
+// SaveCORSConfig 保存 CORS 配置
+// @Summary 保存 CORS 配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SaveCORSConfigRequest true "CORS 配置"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/settings/advanced/cors [post]
+func (h *SettingsHandler) SaveCORSConfig(c *gin.Context) {
+	var req SaveCORSConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	config := &settings.CORSConfig{
+		AllowedOrigins: req.AllowedOrigins,
+		AllowedMethods: req.AllowedMethods,
+		AllowedHeaders: req.AllowedHeaders,
+	}
+
+	if err := h.settingsService.SaveCORSConfig(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "CORS 配置已保存",
+		"config":  config,
+	})
+}
+
+// === 速率限制配置相关 ===
+
+// GetRateLimitConfigResponse 速率限制配置响应
+type GetRateLimitConfigResponse struct {
+	Config *settings.RateLimitConfig `json:"config"`
+}
+
+// SaveRateLimitConfigRequest 保存速率限制配置请求
+type SaveRateLimitConfigRequest struct {
+	LoginLimit int `json:"login_limit"`
+	APILimit   int `json:"api_limit"`
+}
+
+// GetRateLimitConfig 获取速率限制配置
+// @Summary 获取速率限制配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetRateLimitConfigResponse
+// @Router /api/v1/settings/advanced/ratelimit [get]
+func (h *SettingsHandler) GetRateLimitConfig(c *gin.Context) {
+	config, err := h.settingsService.GetRateLimitConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetRateLimitConfigResponse{Config: config})
+}
+
+// SaveRateLimitConfig 保存速率限制配置
+// @Summary 保存速率限制配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SaveRateLimitConfigRequest true "速率限制配置"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/settings/advanced/ratelimit [post]
+func (h *SettingsHandler) SaveRateLimitConfig(c *gin.Context) {
+	var req SaveRateLimitConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	config := &settings.RateLimitConfig{
+		LoginLimit: req.LoginLimit,
+		APILimit:   req.APILimit,
+	}
+
+	if err := h.settingsService.SaveRateLimitConfig(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "速率限制配置已保存",
+		"config":  config,
+	})
+}
+
+// === Cookie 配置相关 ===
+
+// GetCookieConfigResponse Cookie 配置响应
+type GetCookieConfigResponse struct {
+	Config *settings.CookieConfig `json:"config"`
+}
+
+// SaveCookieConfigRequest 保存 Cookie 配置请求
+type SaveCookieConfigRequest struct {
+	Secure bool   `json:"secure"`
+	Domain string `json:"domain"`
+}
+
+// GetCookieConfig 获取 Cookie 配置
+// @Summary 获取 Cookie 配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetCookieConfigResponse
+// @Router /api/v1/settings/advanced/cookie [get]
+func (h *SettingsHandler) GetCookieConfig(c *gin.Context) {
+	config, err := h.settingsService.GetCookieConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GetCookieConfigResponse{Config: config})
+}
+
+// SaveCookieConfig 保存 Cookie 配置
+// @Summary 保存 Cookie 配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SaveCookieConfigRequest true "Cookie 配置"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/settings/advanced/cookie [post]
+func (h *SettingsHandler) SaveCookieConfig(c *gin.Context) {
+	var req SaveCookieConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	config := &settings.CookieConfig{
+		Secure: req.Secure,
+		Domain: req.Domain,
+	}
+
+	if err := h.settingsService.SaveCookieConfig(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Cookie 配置已保存",
+		"config":  config,
 	})
 }
