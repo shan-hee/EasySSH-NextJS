@@ -1,14 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useForm, UseFormReturn } from "react-hook-form"
+import { useForm, UseFormReturn, FieldValues } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { getAccessToken } from "@/contexts/auth-context"
 import { toast } from "sonner"
 
-interface UseSettingsFormOptions<T> {
-  schema: z.ZodType<T>
+interface UseSettingsFormOptions<T extends FieldValues> {
+  schema: z.ZodType<T, any, any>
   loadFn: (token: string) => Promise<T>
   saveFn: (token: string, data: T) => Promise<void>
   onSuccess?: () => void
@@ -16,7 +16,7 @@ interface UseSettingsFormOptions<T> {
   defaultValues?: Partial<T>
 }
 
-interface UseSettingsFormReturn<T> {
+interface UseSettingsFormReturn<T extends FieldValues> {
   form: UseFormReturn<T>
   isLoading: boolean
   isSaving: boolean
@@ -37,7 +37,7 @@ interface UseSettingsFormReturn<T> {
  *   saveFn: settingsApi.saveSystemConfig,
  * })
  */
-export function useSettingsForm<T extends Record<string, any>>({
+export function useSettingsForm<T extends FieldValues>({
   schema,
   loadFn,
   saveFn,
@@ -49,7 +49,7 @@ export function useSettingsForm<T extends Record<string, any>>({
   const [isSaving, setIsSaving] = useState(false)
 
   const form = useForm<T>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: defaultValues as any,
   })
 

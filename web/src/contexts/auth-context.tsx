@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const userData = await authApi.getCurrentUser(token)
+      const userData = await authApi.getCurrentUser()
       setUser(userData)
     } catch (_error) {
       // 令牌可能过期,尝试刷新
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             refresh_token: refreshToken,
           })
           setTokens(access_token, refresh_token)
-          const userData = await authApi.getCurrentUser(access_token)
+          const userData = await authApi.getCurrentUser()
           setUser(userData)
         } catch (_refreshError) {
           // 刷新失败,清除令牌并重定向到登录页
@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = getToken()
     if (token) {
       try {
-        await authApi.logout(token)
+        await authApi.logout()
       } catch (error) {
         console.error("Logout API call failed:", error)
       }

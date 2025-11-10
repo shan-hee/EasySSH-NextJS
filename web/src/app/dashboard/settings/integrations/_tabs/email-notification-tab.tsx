@@ -142,7 +142,7 @@ export function EmailNotificationTab({ form }: EmailNotificationTabProps) {
           <Alert>
             <InfoIcon className="h-4 w-4" />
             <AlertDescription>
-              测试邮件将发送到配置的发件人邮箱。如果使用Gmail，请确保已启用"两步验证"并生成"应用专用密码"。
+              测试邮件将发送到配置的发件人邮箱。如果使用Gmail，请确保已启用&ldquo;两步验证&rdquo;并生成&ldquo;应用专用密码&rdquo;。
             </AlertDescription>
           </Alert>
         </>

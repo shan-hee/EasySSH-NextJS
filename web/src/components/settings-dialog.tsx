@@ -373,7 +373,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       }
 
       // 保存个人信息和头像
-      await authApi.updateProfile(token, {
+      await authApi.updateProfile({
         email: profileForm.email,
         avatar: finalAvatar, // 包含头像数据
       })
@@ -410,7 +410,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
     setPasswordLoading(true)
     try {
-      await authApi.changePassword(token, {
+      await authApi.changePassword({
         old_password: passwordForm.old_password,
         new_password: passwordForm.new_password,
       })

@@ -91,8 +91,8 @@ export function WeComNotificationTab({ form }: WeComNotificationTabProps) {
           <div>
             <p className="font-medium text-foreground">步骤 1：创建群机器人</p>
             <ul className="list-disc list-inside ml-2">
-              <li>打开企业微信群聊，点击右上角"..."→ 群机器人</li>
-              <li>点击"添加群机器人"</li>
+              <li>打开企业微信群聊，点击右上角&ldquo;...&rdquo;→ 群机器人</li>
+              <li>点击&ldquo;添加群机器人&rdquo;</li>
               <li>设置机器人名称和头像</li>
             </ul>
           </div>

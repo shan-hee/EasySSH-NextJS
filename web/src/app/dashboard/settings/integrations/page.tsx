@@ -51,12 +51,12 @@ export default function IntegrationsPage() {
       return {
         // AI服务商配置
         system_enabled: false,
-        system_provider: "openai",
+        system_provider: "openai" as "openai" | "anthropic" | "azure" | "custom",
         system_api_endpoint: "",
         system_default_model: "",
         system_rate_limit: 60,
         use_system_config: false,
-        provider: "openai",
+        provider: "openai" as "openai" | "anthropic" | "azure" | "custom",
         api_key: "",
         api_endpoint: "",
         preferred_model: "",
@@ -78,6 +78,8 @@ export default function IntegrationsPage() {
         ...dingTalkConfig,
         ...weComConfig,
         ...webhookConfig,
+        // 类型转换
+        method: webhookConfig.method as "GET" | "POST",
       }
     },
     saveFn: async (token, data) => {
@@ -119,7 +121,7 @@ export default function IntegrationsPage() {
         settingsApi.saveDingTalkConfig(token, {
           enabled: data.enabled,
           webhook_url: data.webhook_url,
-          secret: data.secret,
+          secret: data.secret || "",
         }),
         settingsApi.saveWeComConfig(token, {
           enabled: data.enabled,
@@ -129,7 +131,7 @@ export default function IntegrationsPage() {
           enabled: data.enabled,
           url: data.url,
           method: data.method,
-          secret: data.secret,
+          secret: data.secret || "",
         }),
       ])
     },

@@ -274,7 +274,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	newAccessToken, err := h.authService.RefreshAccessToken(c.Request.Context(), req.RefreshToken)
+	newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrExpiredToken) {
 			// 清除无效的 Cookie
@@ -286,7 +286,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// 更新 Access Token Cookie (Refresh Token 保持不变)
+	// 更新 Access Token Cookie
 	secure, domain := getCookieConfig(c, h.configManager)
 	c.SetCookie(
 		AccessTokenCookieName,
@@ -298,11 +298,32 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		true, // HttpOnly
 	)
 
-	RespondSuccess(c, gin.H{
+	// 如果启用了令牌轮换，更新 Refresh Token Cookie
+	if newRefreshToken != "" {
+		c.SetCookie(
+			RefreshTokenCookieName,
+			newRefreshToken,
+			RefreshTokenMaxAge,
+			"/",
+			domain,
+			secure,
+			true, // HttpOnly
+		)
+	}
+
+	// 构造响应数据
+	response := gin.H{
 		"access_token": newAccessToken,
 		"token_type":   "Bearer",
 		"expires_in":   3600,
-	})
+	}
+
+	// 如果有新的刷新令牌，也返回给客户端
+	if newRefreshToken != "" {
+		response["refresh_token"] = newRefreshToken
+	}
+
+	RespondSuccess(c, response)
 }
 
 // GetCurrentUser 获取当前用户信息

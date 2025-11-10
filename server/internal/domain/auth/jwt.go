@@ -38,8 +38,8 @@ type JWTService interface {
 	// ValidateToken 验证令牌
 	ValidateToken(tokenString string) (*Claims, error)
 
-	// RefreshToken 刷新令牌
-	RefreshToken(refreshToken string) (accessToken string, err error)
+	// RefreshToken 刷新令牌（返回新的访问令牌和刷新令牌）
+	RefreshToken(refreshToken string) (accessToken, newRefreshToken string, err error)
 
 	// BlacklistToken 将令牌加入黑名单
 	BlacklistToken(tokenString string, expiration time.Duration) error
@@ -180,7 +180,7 @@ func (s *jwtService) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	// 解析令牌
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// 验证签名方法
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -216,31 +216,31 @@ func (s *jwtService) ValidateToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (s *jwtService) RefreshToken(refreshToken string) (string, error) {
+func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 	ctx := context.Background()
 	now := time.Now()
 
 	// 验证刷新令牌
 	claims, err := s.ValidateToken(refreshToken)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	// 验证是否是刷新令牌
 	if len(claims.Audience) == 0 || claims.Audience[0] != "refresh" {
-		return "", errors.New("not a refresh token")
+		return "", "", errors.New("not a refresh token")
 	}
 
 	// 检查绝对过期时间
 	if claims.AbsoluteExpiry > 0 && now.Unix() > claims.AbsoluteExpiry {
-		return "", errors.New("refresh token has reached absolute expiration")
+		return "", "", errors.New("refresh token has reached absolute expiration")
 	}
 
 	// 检查闲置过期（当前时间 - 最后使用时间 > 闲置时间）
 	if claims.LastUsed > 0 {
 		idleTime := now.Unix() - claims.LastUsed
 		if idleTime > int64(s.refreshIdleExpireDuration.Seconds()) {
-			return "", errors.New("refresh token has been idle for too long")
+			return "", "", errors.New("refresh token has been idle for too long")
 		}
 	}
 
@@ -249,12 +249,12 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, error) {
 		usedKey := fmt.Sprintf("used_token:%s:v%d", claims.TokenFamily, claims.TokenVersion)
 		exists, err := s.redisClient.Exists(ctx, usedKey).Result()
 		if err != nil {
-			return "", fmt.Errorf("failed to check token reuse: %w", err)
+			return "", "", fmt.Errorf("failed to check token reuse: %w", err)
 		}
 		if exists > 0 {
 			// 令牌被重复使用！这是安全威胁，立即撤销整个令牌家族
 			s.revokeTokenFamily(claims.TokenFamily)
-			return "", errors.New("refresh token reuse detected - all tokens in this family have been revoked")
+			return "", "", errors.New("refresh token reuse detected - all tokens in this family have been revoked")
 		}
 
 		// 标记此令牌已被使用
@@ -262,7 +262,7 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, error) {
 		if ttl > 0 {
 			err = s.redisClient.Set(ctx, usedKey, "1", ttl).Err()
 			if err != nil {
-				return "", fmt.Errorf("failed to mark token as used: %w", err)
+				return "", "", fmt.Errorf("failed to mark token as used: %w", err)
 			}
 		}
 	}
@@ -278,7 +278,7 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, error) {
 	// 生成新的访问令牌
 	newAccessToken, err := s.generateAccessToken(user, now)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate new access token: %w", err)
+		return "", "", fmt.Errorf("failed to generate new access token: %w", err)
 	}
 
 	// 如果启用了令牌轮换，生成新的刷新令牌
@@ -292,7 +292,7 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, error) {
 			claims.AbsoluteExpiry,   // 保持相同的绝对过期时间
 		)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate new refresh token: %w", err)
+			return "", "", fmt.Errorf("failed to generate new refresh token: %w", err)
 		}
 
 		// 将旧的刷新令牌加入黑名单
@@ -301,13 +301,12 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, error) {
 			_ = s.BlacklistToken(refreshToken, ttl)
 		}
 
-		// 返回新的访问令牌和刷新令牌（通过特殊格式）
-		// 注意：这里需要修改接口返回值，暂时只返回访问令牌
-		// TODO: 修改接口以支持返回新的刷新令牌
-		return newAccessToken, nil
+		// 返回新的访问令牌和刷新令牌
+		return newAccessToken, newRefreshToken, nil
 	}
 
-	return newAccessToken, nil
+	// 未启用轮换时，只返回新的访问令牌，刷新令牌返回空字符串
+	return newAccessToken, "", nil
 }
 
 // revokeTokenFamily 撤销整个令牌家族（用于复用检测）

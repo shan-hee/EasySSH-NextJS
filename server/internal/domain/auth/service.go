@@ -28,8 +28,8 @@ type Service interface {
 	// GetUserByID 根据 ID 获取用户
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error)
 
-	// RefreshAccessToken 刷新访问令牌
-	RefreshAccessToken(ctx context.Context, refreshToken string) (string, error)
+	// RefreshAccessToken 刷新访问令牌（返回新的访问令牌和刷新令牌）
+	RefreshAccessToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
 
 	// ChangePassword 修改密码
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error
@@ -217,7 +217,7 @@ func (s *authService) GetUserByID(ctx context.Context, userID uuid.UUID) (*User,
 	return s.repo.FindByID(ctx, userID)
 }
 
-func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, error) {
+func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) {
 	return s.jwtService.RefreshToken(refreshToken)
 }
 

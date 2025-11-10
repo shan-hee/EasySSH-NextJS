@@ -231,7 +231,7 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
           <InfoIcon className="h-4 w-4" />
           <AlertDescription>
             {useSystemConfig ? (
-              <span>您正在使用系统配置的AI服务。如需使用自己的API，请关闭"使用系统配置"选项。</span>
+              <span>您正在使用系统配置的AI服务。如需使用自己的API，请关闭&ldquo;使用系统配置&rdquo;选项。</span>
             ) : (
               <span>
                 API密钥将加密存储。不同的AI服务提供商有不同的定价策略，请根据您的需求选择合适的服务。

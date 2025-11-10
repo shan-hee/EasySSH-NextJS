@@ -102,15 +102,15 @@ export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) 
             <p className="font-medium text-foreground">步骤 1：创建群机器人</p>
             <ul className="list-disc list-inside ml-2">
               <li>打开钉钉群组，点击群设置 → 智能群助手 → 添加机器人</li>
-              <li>选择"自定义"类型的机器人</li>
+              <li>选择&ldquo;自定义&rdquo;类型的机器人</li>
               <li>设置机器人名称和头像</li>
             </ul>
           </div>
           <div>
             <p className="font-medium text-foreground">步骤 2：安全设置</p>
             <ul className="list-disc list-inside ml-2">
-              <li>推荐选择"加签"方式，并保存生成的密钥</li>
-              <li>也可以选择"自定义关键词"或"IP地址"验证</li>
+              <li>推荐选择&ldquo;加签&rdquo;方式，并保存生成的密钥</li>
+              <li>也可以选择&ldquo;自定义关键词&rdquo;或&ldquo;IP地址&rdquo;验证</li>
             </ul>
           </div>
           <div>

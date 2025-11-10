@@ -215,7 +215,7 @@ export function UserManagementContent() {
         return
       }
 
-      await usersApi.updatePassword(token, passwordUserId, { password: newPassword })
+      await usersApi.changePassword(token, passwordUserId, { new_password: newPassword })
       toast.success("密码修改成功")
       setIsPasswordDialogOpen(false)
       setPasswordUserId(null)

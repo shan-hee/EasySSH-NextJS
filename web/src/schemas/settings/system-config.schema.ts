@@ -6,7 +6,7 @@ export const basicInfoSchema = z.object({
   system_logo: z.string().url("请输入有效的URL").or(z.literal("")),
   system_favicon: z.string().url("请输入有效的URL").or(z.literal("")),
   default_language: z.enum(["zh-CN", "en-US", "ja-JP"], {
-    errorMap: () => ({ message: "请选择有效的语言" }),
+    message: "请选择有效的语言",
   }),
 })
 
