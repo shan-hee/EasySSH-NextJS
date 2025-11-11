@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -25,44 +26,51 @@ var upgrader = websocket.Upgrader{
     ReadBufferSize:  1024,
     WriteBufferSize: 1024,
     CheckOrigin: func(r *http.Request) bool {
-        // 从环境变量读取允许的源列表（逗号分隔），追加常见本地端口作为默认白名单
-        allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
-        defaults := []string{
-            "http://localhost:3000", "http://127.0.0.1:3000",
-            "http://localhost:8080", "http://127.0.0.1:8080",
-            "http://localhost:2580", "http://127.0.0.1:2580",
-            "http://localhost:8520", "http://127.0.0.1:8520",
-            // 允许 https 的本地场景
-            "https://localhost:3000", "https://127.0.0.1:3000",
-            "https://localhost:2580", "https://127.0.0.1:2580",
-            "https://localhost:8520", "https://127.0.0.1:8520",
-        }
-
         origin := r.Header.Get("Origin")
         if origin == "" {
             // 无 Origin 头：通常为同源升级，允许
             return true
         }
 
-        // 组装白名单列表（env 优先，其次默认）
-        var allowedOrigins []string
-        if allowedOriginsEnv != "" {
-            for _, v := range strings.Split(allowedOriginsEnv, ",") {
-                v = strings.TrimSpace(v)
-                if v != "" {
-                    allowedOrigins = append(allowedOrigins, v)
+        // 1) 环境变量显式白名单（精确匹配 Origin 字符串）
+        if env := os.Getenv("ALLOWED_ORIGINS"); env != "" {
+            for _, v := range strings.Split(env, ",") {
+                if strings.TrimSpace(v) == origin {
+                    return true
                 }
             }
         }
-        allowedOrigins = append(allowedOrigins, defaults...)
 
-        for _, allowed := range allowedOrigins {
-            if strings.TrimSpace(allowed) == origin {
+        // 2) 动态允许：当 Origin 的主机名与当前请求的 Host 或 X-Forwarded-Host 一致时放行
+        //    这样默认就是“当前域名/端口”，无需额外配置
+        var originHost string
+        if u, err := url.Parse(origin); err == nil {
+            originHost = u.Hostname()
+        }
+        if originHost == "" {
+            log.Printf("WebSocket origin parse failed: %s", origin)
+            return false
+        }
+
+        // 候选主机：请求的 Host
+        candidates := []string{strings.Split(r.Host, ":")[0]}
+        // 以及 X-Forwarded-Host（可能为逗号分隔）
+        if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
+            for _, h := range strings.Split(xfh, ",") {
+                h = strings.TrimSpace(h)
+                if h != "" {
+                    candidates = append(candidates, strings.Split(h, ":")[0])
+                }
+            }
+        }
+
+        for _, h := range candidates {
+            if h != "" && strings.EqualFold(h, originHost) {
                 return true
             }
         }
 
-        log.Printf("WebSocket connection rejected: origin %s not in whitelist", origin)
+        log.Printf("WebSocket connection rejected: origin %s not allowed (host=%s, x-forwarded-host=%s)", origin, r.Host, r.Header.Get("X-Forwarded-Host"))
         return false
     },
 }

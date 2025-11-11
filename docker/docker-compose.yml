@@ -11,7 +11,9 @@ services:
     ports:
       - "${PORT:-8521}:8521"
     environment:
-      # 数据库配置
+      # ------------------------------
+      # 数据库配置（PostgreSQL）
+      # ------------------------------
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER:-easyssh}
@@ -25,30 +27,47 @@ services:
       DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-60}  # 连接最大生命周期（分钟）
       DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-10}  # 连接最大空闲时间（分钟）
 
-      # Redis 配置
+      # ------------------------------
+      # 缓存配置（Redis）
+      # ------------------------------
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: ${REDIS_DB:-0}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}  # 留空表示无密码 | 生成: openssl rand -base64 16
 
-      # 应用配置
+      # ------------------------------
+      # 应用运行与端口
+      # ------------------------------
       ENV: ${ENV:-production}
       PORT: 8521
 
-      # 安全配置
+      # ------------------------------
+      # 安全密钥（请务必替换为强随机值）
+      # ------------------------------
       JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-production}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 48
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 24
 
-      # JWT 令牌过期时间配置
+      # ------------------------------
+      # JWT 过期与刷新策略
+      # ------------------------------
       JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-15}  # 访问令牌过期时间（分钟）
       JWT_REFRESH_IDLE_EXPIRE_DAYS: ${JWT_REFRESH_IDLE_EXPIRE_DAYS:-7}  # 刷新令牌闲置过期时间（天）
       JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS: ${JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS:-30}  # 刷新令牌绝对过期时间（天）
       JWT_REFRESH_ROTATE: ${JWT_REFRESH_ROTATE:-true}  # 刷新令牌轮换
       JWT_REFRESH_REUSE_DETECTION: ${JWT_REFRESH_REUSE_DETECTION:-true}  # 复用检测
 
-      # Cookie 配置
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}  # HTTPS 环境设置为 true | HTTP 环境必须为 false
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}  # Cookie 域名，留空表示当前域名
+      # ------------------------------
+      # Cookie-only 策略相关
+      # ------------------------------
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}    # HTTPS 环境 true | HTTP 开发 false
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}        # 多子域共享：.example.com；留空=当前域
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax} # lax|none|strict（跨域直连需 none + HTTPS）
+
+      # WebSocket Origin 白名单（逗号分隔）
+      # 未设置：默认允许与当前请求 Host / X-Forwarded-Host 同主机名的 Origin（同域/同端口）
+      # 跨域直连/多前端域时显式配置（需包含协议与端口）：
+      #   例：ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,7 +95,9 @@ services:
       NODE_ENV: production
       PORT: 8520
       HOSTNAME: 0.0.0.0
-      NEXT_PUBLIC_API_BASE: http://backend:8521  # ⚠️ 容器内部通信使用服务名
+      # 同源 + Next 重写（推荐）：容器内使用服务名连后端
+      NEXT_PUBLIC_API_BASE: http://backend:8521
+      # 可选：手动指定 WS 目标主机（默认使用 window.location.host）
       NEXT_PUBLIC_WS_HOST: ${NEXT_PUBLIC_WS_HOST:-}
     depends_on:
       backend:

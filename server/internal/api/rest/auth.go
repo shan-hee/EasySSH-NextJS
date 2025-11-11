@@ -1,14 +1,15 @@
 package rest
 
 import (
-	"errors"
-	"net/http"
-	"strings"
-	"time"
+    "errors"
+    "net/http"
+    "strings"
+    "time"
+    "os"
 
-	"github.com/easyssh/server/internal/domain/auth"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+    "github.com/easyssh/server/internal/domain/auth"
+    "github.com/gin-gonic/gin"
+    "github.com/google/uuid"
 )
 
 // Cookie 配置常量
@@ -21,32 +22,57 @@ const (
 
 // CookieConfig Cookie 配置（用于类型断言）
 type CookieConfig struct {
-	Secure bool
-	Domain string
+    Secure bool
+    Domain string
 }
 
 // getCookieConfig 从配置管理器获取 Cookie 配置（带缓存）
-func getCookieConfig(c *gin.Context, configManager interface{}) (secure bool, domain string) {
-	// 默认值
-	secure = true
-	domain = ""
+func getCookieConfig(c *gin.Context, configManager interface{}) (secure bool, domain string, sameSite http.SameSite) {
+    // 默认值
+    secure = true
+    domain = ""
+    sameSite = http.SameSiteLaxMode
 
-	// 尝试从配置管理器获取配置
-	if cm, ok := configManager.(interface {
-		GetCookieConfig(ctx interface{}) (*CookieConfig, error)
-	}); ok {
-		if config, err := cm.GetCookieConfig(c.Request.Context()); err == nil {
-			secure = config.Secure
-			domain = config.Domain
-		}
-	}
+    // 尝试从配置管理器获取配置
+    if cm, ok := configManager.(interface {
+        GetCookieConfig(ctx interface{}) (*CookieConfig, error)
+    }); ok {
+        if config, err := cm.GetCookieConfig(c.Request.Context()); err == nil {
+            secure = config.Secure
+            domain = config.Domain
+        }
+    }
 
-	return secure, domain
+    // 环境变量覆盖（可选）：COOKIE_SECURE, COOKIE_DOMAIN
+    if v := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE"))); v != "" {
+        if v == "true" || v == "1" || v == "yes" || v == "on" {
+            secure = true
+        } else if v == "false" || v == "0" || v == "no" || v == "off" {
+            secure = false
+        }
+    }
+    if v := strings.TrimSpace(os.Getenv("COOKIE_DOMAIN")); v != "" {
+        domain = v
+    }
+
+    // 允许通过环境变量覆盖 SameSite 策略：COOKIE_SAMESITE=none|lax|strict
+    switch strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SAMESITE"))) {
+    case "none":
+        sameSite = http.SameSiteNoneMode
+    case "strict":
+        sameSite = http.SameSiteStrictMode
+    case "lax", "":
+        sameSite = http.SameSiteLaxMode
+    default:
+        sameSite = http.SameSiteLaxMode
+    }
+
+    return secure, domain, sameSite
 }
 
 // setAuthCookies 设置认证相关的 HttpOnly Cookie（支持动态配置）
 func setAuthCookies(c *gin.Context, accessToken, refreshToken string, configManager interface{}) {
-    secure, domain := getCookieConfig(c, configManager)
+    secure, domain, sameSite := getCookieConfig(c, configManager)
 
     // 使用 http.SetCookie 显式设置 SameSite，避免覆盖多个 Set-Cookie 头
     http.SetCookie(c.Writer, &http.Cookie{
@@ -57,7 +83,7 @@ func setAuthCookies(c *gin.Context, accessToken, refreshToken string, configMana
         MaxAge:   AccessTokenMaxAge,
         Secure:   secure,
         HttpOnly: true,
-        SameSite: http.SameSiteLaxMode,
+        SameSite: sameSite,
     })
 
     http.SetCookie(c.Writer, &http.Cookie{
@@ -68,13 +94,13 @@ func setAuthCookies(c *gin.Context, accessToken, refreshToken string, configMana
         MaxAge:   RefreshTokenMaxAge,
         Secure:   secure,
         HttpOnly: true,
-        SameSite: http.SameSiteLaxMode,
+        SameSite: sameSite,
     })
 }
 
 // clearAuthCookies 清除认证相关的 Cookie（支持动态配置）
 func clearAuthCookies(c *gin.Context, configManager interface{}) {
-    secure, domain := getCookieConfig(c, configManager)
+    secure, domain, sameSite := getCookieConfig(c, configManager)
 
     // 通过设置过期时间和 MaxAge<0 来清除 Cookie，保持 SameSite 与 Secure 一致
     http.SetCookie(c.Writer, &http.Cookie{
@@ -85,7 +111,7 @@ func clearAuthCookies(c *gin.Context, configManager interface{}) {
         MaxAge:   -1,
         Secure:   secure,
         HttpOnly: true,
-        SameSite: http.SameSiteLaxMode,
+        SameSite: sameSite,
     })
     http.SetCookie(c.Writer, &http.Cookie{
         Name:     RefreshTokenCookieName,
@@ -95,7 +121,7 @@ func clearAuthCookies(c *gin.Context, configManager interface{}) {
         MaxAge:   -1,
         Secure:   secure,
         HttpOnly: true,
-        SameSite: http.SameSiteLaxMode,
+        SameSite: sameSite,
     })
 }
 
@@ -316,7 +342,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
     }
 
     // 更新 Access Token Cookie（显式设置 SameSite）
-    secure, domain := getCookieConfig(c, h.configManager)
+    secure, domain, sameSite := getCookieConfig(c, h.configManager)
     http.SetCookie(c.Writer, &http.Cookie{
         Name:     AccessTokenCookieName,
         Value:    newAccessToken,
@@ -325,7 +351,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
         MaxAge:   AccessTokenMaxAge,
         Secure:   secure,
         HttpOnly: true,
-        SameSite: http.SameSiteLaxMode,
+        SameSite: sameSite,
     })
 
     // 如果启用了令牌轮换，更新 Refresh Token Cookie
@@ -338,7 +364,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
             MaxAge:   RefreshTokenMaxAge,
             Secure:   secure,
             HttpOnly: true,
-            SameSite: http.SameSiteLaxMode,
+            SameSite: sameSite,
         })
     }
 

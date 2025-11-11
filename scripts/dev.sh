@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # EasySSH 开发环境启动脚本
 # 启动前端和后端服务，数据库配置从 .env 读取
 
-set -e
+set -euo pipefail
 
 # 颜色定义
 GREEN='\033[0;32m'
@@ -16,7 +16,9 @@ echo -e "${BLUE}🚀 启动 EasySSH 开发环境...${NC}\n"
 
 # 加载环境变量
 if [ -f ".env" ]; then
-    export $(grep -v '^#' .env | grep -v '^$' | xargs)
+    set -a  # 自动导出所有变量
+    source <(grep -v '^#' .env | grep -v '^$' | grep '=')
+    set +a  # 关闭自动导出
 fi
 
 # 设置默认端口（如果环境变量未设置）
@@ -39,6 +41,10 @@ if ! command_exists pnpm; then
     echo -e "${YELLOW}   运行: npm install -g pnpm${NC}"
     exit 1
 fi
+
+# 端口占用快速检查
+ensure_port_free "${BACKEND_PORT}"
+ensure_port_free "${FRONTEND_PORT}"
 
 # 检查 Air 是否存在
 AIR_PATH=""
@@ -75,19 +81,44 @@ if [ ! -f ".env" ]; then
     fi
 fi
 
-# 自动调整为开发环境配置
-echo -e "${BLUE}🔧 配置开发环境参数...${NC}"
+# 开发环境：按需更新 .env 关键参数（可重复执行，幂等修改）
+echo -e "${BLUE}🔧 写入开发环境建议参数到 .env...${NC}"
 
-# 将生产环境配置修改为开发环境
-sed -i 's/^ENV=production$/ENV=development/' .env
-sed -i 's/^GIN_MODE=release$/GIN_MODE=debug/' .env
-sed -i 's/^DB_DEBUG=false$/DB_DEBUG=true/' .env
+# 安全的 key=value 更新函数
+set_kv() {
+  local key="$1"; shift
+  local val="$1"; shift || true
+  if grep -qE "^${key}=" .env 2>/dev/null; then
+    # 使用 # 作为 sed 分隔，避免 URL 中的 /
+    sed -i "s#^${key}=.*#${key}=${val}#" .env
+  else
+    echo "${key}=${val}" >> .env
+  fi
+}
 
-echo -e "${GREEN}✅ 开发环境配置完成${NC}"
-echo -e "${YELLOW}   ENV: development${NC}"
-echo -e "${YELLOW}   GIN_MODE: debug${NC}"
-echo -e "${YELLOW}   DB_DEBUG: true${NC}\n"
+# 1) 基本运行模式
+set_kv ENV development
 
+# 2) Cookie 策略（HTTP 开发环境推荐）
+set_kv COOKIE_SECURE false
+set_kv COOKIE_SAMESITE lax
+
+# 3) API 基础地址（Next 重写 & SSR 使用）
+set_kv NEXT_PUBLIC_API_BASE http://localhost:${BACKEND_PORT}
+
+# 4) WS Origin 白名单（可选，明确本机前端端口）
+if ! grep -qE '^ALLOWED_ORIGINS=' .env 2>/dev/null || [[ -z "${ALLOWED_ORIGINS:-}" ]]; then
+  set_kv ALLOWED_ORIGINS http://localhost:${FRONTEND_PORT},http://127.0.0.1:${FRONTEND_PORT}
+fi
+
+export ENV=development
+export COOKIE_SECURE=false
+export COOKIE_SAMESITE=lax
+
+echo -e "${GREEN}✅ 已更新 .env。${NC}"
+if [[ "${COOKIE_SECURE}" == "true" ]]; then
+  echo -e "${YELLOW}⚠️  当前 COOKIE_SECURE=true 可能导致 HTTP 下 Cookie 被拒收，已建议写入 false。${NC}"
+fi
 # 检查前端依赖
 if [ ! -d "web/node_modules" ]; then
     echo -e "${YELLOW}📦 安装前端依赖...${NC}"
@@ -119,9 +150,9 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
 
     # 检查后端端口是否就绪
     if command_exists curl; then
-        if curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/health" >/dev/null 2>&1 || \
+        if curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/api/v1/health" >/dev/null 2>&1 || \
            curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/api/health" >/dev/null 2>&1 || \
-           curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/" >/dev/null 2>&1; then
+           curl -s --connect-timeout 2 "http://localhost:${BACKEND_PORT}/health" >/dev/null 2>&1; then
             BACKEND_READY=true
             break
         fi
@@ -187,7 +218,6 @@ echo -e "${GREEN}✅ 开发环境启动完成！${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}前端:${NC}    http://localhost:${FRONTEND_PORT}"
 echo -e "${GREEN}后端:${NC}    http://localhost:${BACKEND_PORT}"
-echo -e "${GREEN}配置:${NC}   使用根目录 .env 中的配置"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "\n${YELLOW}按 Ctrl+C 停止所有服务${NC}\n"
 

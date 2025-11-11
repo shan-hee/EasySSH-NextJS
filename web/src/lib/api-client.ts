@@ -182,10 +182,25 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   // 合并用户提供的 signal 和超时 signal
   const signal = options.signal || controller.signal
 
+  // 选择 credentials 策略：
+  // - 默认 same-origin
+  // - 若在浏览器端且请求为跨源绝对 URL，则自动使用 include 以携带 Cookie（跨域直连场景）
+  let credentials: RequestCredentials = 'same-origin'
+  try {
+    if (typeof window !== 'undefined') {
+      const reqUrl = new URL(url, window.location.href)
+      if (reqUrl.origin !== window.location.origin) {
+        credentials = 'include'
+      }
+    }
+  } catch {
+    // ignore URL parsing errors
+  }
+
   const init: RequestInit = {
     method: options.method ?? "GET",
     headers,
-    credentials: 'same-origin',
+    credentials,
     signal,
   }
 
