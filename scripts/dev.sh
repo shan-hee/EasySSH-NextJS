@@ -42,10 +42,6 @@ if ! command_exists pnpm; then
     exit 1
 fi
 
-# 端口占用快速检查
-ensure_port_free "${BACKEND_PORT}"
-ensure_port_free "${FRONTEND_PORT}"
-
 # 检查 Air 是否存在
 AIR_PATH=""
 if command_exists air; then
