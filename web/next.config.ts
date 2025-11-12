@@ -1,23 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // 反向代理配置 - 将 API 请求转发到后端服务
-  async rewrites() {
-    // 后端服务地址（统一使用 NEXT_PUBLIC_API_BASE）
-    const backendUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8521";
-
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/v1/:path*`,
-      },
-      // WebSocket 连接（用于 SSH 终端）
-      {
-        source: "/ws/:path*",
-        destination: `${backendUrl}/ws/:path*`,
-      },
-    ];
-  },
+  // 注意：HTTP API 和 WebSocket 代理已由 Nginx 统一处理
+  // - HTTP API: 通过 Route Handler (app/api/[...path]/route.ts) 转发到后端
+  // - WebSocket: 通过 Nginx 直接代理到后端
 
   // 静态资源缓存配置
   async headers() {

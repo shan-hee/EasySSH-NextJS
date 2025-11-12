@@ -2,14 +2,42 @@ version: '3.8'
 
 services:
   # ================================
+  # Nginx 反向代理
+  # ================================
+  nginx:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.nginx
+    container_name: easyssh-nginx
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    networks:
+      - easyssh-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # ================================
   # 后端服务 (Go API)
   # ================================
   backend:
     image: shanheee/easyssh-backend:latest
     container_name: easyssh-backend
     restart: unless-stopped
-    ports:
-      - "${PORT:-8521}:8521"
+    # 端口不再直接暴露到宿主机，通过 Nginx 反向代理访问
+    # ports:
+    #   - "${PORT:-8521}:8521"
+    expose:
+      - "8521"
     environment:
       # ------------------------------
       # 数据库配置（PostgreSQL）
@@ -89,16 +117,18 @@ services:
     image: shanheee/easyssh-frontend:latest
     container_name: easyssh-frontend
     restart: unless-stopped
-    ports:
-      - "${WEB_PORT:-8520}:8520"
+    # 端口不再直接暴露到宿主机，通过 Nginx 反向代理访问
+    # ports:
+    #   - "${WEB_PORT:-8520}:8520"
+    expose:
+      - "8520"
     environment:
       NODE_ENV: production
       PORT: 8520
       HOSTNAME: 0.0.0.0
-      # 同源 + Next 重写（推荐）：容器内使用服务名连后端
-      NEXT_PUBLIC_API_BASE: http://backend:8521
-      # 可选：手动指定 WS 目标主机（默认使用 window.location.host）
-      NEXT_PUBLIC_WS_HOST: ${NEXT_PUBLIC_WS_HOST:-}
+      # HTTP API 运行时配置（Route Handler 使用）
+      API_BASE_URL: http://backend:8521
+      # 注意：WebSocket 代理已由 Nginx 统一处理，不再需要 NEXT_PUBLIC_* 变量
     depends_on:
       backend:
         condition: service_healthy
