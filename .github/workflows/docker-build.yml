@@ -6,8 +6,6 @@ on:
     paths:
       - 'VERSION'                           # 版本号变化
       - 'docker/Dockerfile'                 # Dockerfile 变化
-      - 'server/**'                         # 后端代码变化
-      - 'web/**'                            # 前端代码变化
       - '.github/workflows/docker-build.yml' # Workflow 自身变化
 
   workflow_dispatch:

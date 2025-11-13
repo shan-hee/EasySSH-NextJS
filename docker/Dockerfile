@@ -5,18 +5,21 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /frontend
 
-# 复制前端依赖文件
-COPY web/package.json web/package-lock.json* ./
+# 启用 Corepack 并安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# 安装依赖（使用 npm ci 确保一致性）
-RUN npm ci --only=production --ignore-scripts && \
-    npm cache clean --force
+# 复制前端依赖文件
+COPY web/package.json web/pnpm-lock.yaml* ./
+
+# 安装依赖（包含 devDependencies，构建需要）
+RUN pnpm install --frozen-lockfile --ignore-scripts && \
+    pnpm store prune
 
 # 复制前端源代码
 COPY web/ ./
 
 # 构建前端（输出到 ../server/static）
-RUN npm run build && \
+RUN pnpm run build && \
     # 清理不需要的文件
     rm -rf node_modules .next/cache src
 
