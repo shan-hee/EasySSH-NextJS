@@ -18,8 +18,9 @@ RUN pnpm install --frozen-lockfile --ignore-scripts && \
 # 复制前端源代码
 COPY web/ ./
 
-# 构建前端（输出到 ../server/static）
-RUN pnpm run build && \
+# 创建输出目录并构建前端（输出到 /server/static）
+RUN mkdir -p /server/static && \
+    pnpm run build && \
     # 清理不需要的文件
     rm -rf node_modules .next/cache src
 

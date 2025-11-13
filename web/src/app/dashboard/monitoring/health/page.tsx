@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -55,7 +54,6 @@ interface ServerHealthCheck {
 }
 
 export default function MonitoringHealthPage() {
- const router = useRouter()
  const [healthChecks, setHealthChecks] = useState<ServerHealthCheck[]>([])
  const [loading, setLoading] = useState(true)
  const [refreshing, setRefreshing] = useState(false)
@@ -63,12 +61,7 @@ export default function MonitoringHealthPage() {
  // 加载健康检查数据
  const loadData = async () => {
  try {
- // 认证基于 HttpOnly Cookie
- if (!token) {
- toast.error("未登录，请先登录")
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie，无需手动检查 token
 
  // 获取服务器列表
  const serversRes = await serversApi.list({ page: 1, limit: 100 })
