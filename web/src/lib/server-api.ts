@@ -48,6 +48,6 @@ export async function serverApiFetch<T>(
  * 用于条件渲染或逻辑判断
  */
 export async function hasServerToken(): Promise<boolean> {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   return !!cookieStore.get("easyssh_access_token")?.value
 }

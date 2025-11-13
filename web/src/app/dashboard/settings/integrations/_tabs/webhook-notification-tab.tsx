@@ -33,8 +33,8 @@ export function WebhookNotificationTab({ form }: WebhookNotificationTabProps) {
       secret: data.secret || "",
     }
 
-    await testConnection(async (token) => {
-      await settingsApi.testWebhookConnection(token, config)
+    await testConnection(async () => {
+      await settingsApi.testWebhookConnection(config)
       toast.success("测试请求发送成功！请检查您的Webhook端点。")
     })
   }

@@ -13,7 +13,7 @@ import { getApiUrl } from "./config"
  */
 export async function verifyAuth(): Promise<User | null> {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const cookieHeader = cookieStore
       .getAll()
       .map((c) => `${c.name}=${c.value}`)

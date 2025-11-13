@@ -19,7 +19,6 @@ import {
 import { serversApi, monitoringApi, type Server as ApiServer } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
-import { useRouter } from "next/navigation"
 import { SkeletonCard } from "@/components/ui/loading"
 
 // 服务器资源数据接口
@@ -56,7 +55,6 @@ function formatNetworkSpeed(bytesPerSec: number): { value: number; unit: string 
 }
 
 export default function MonitoringResourcesPage() {
- const router = useRouter()
  const [servers, setServers] = useState<ServerResource[]>([])
  const [loading, setLoading] = useState(true)
  const [isRefreshing, setIsRefreshing] = useState(false)
@@ -69,12 +67,7 @@ export default function MonitoringResourcesPage() {
  async function loadData() {
  try {
  setLoading(true)
- // 认证基于 HttpOnly Cookie
-
- if (!accessToken) {
- router.push("/login")
- return
- }
+ // 认证基于 HttpOnly Cookie，无需手动检查 token
 
  // 加载服务器列表
  const serverListResponse = await serversApi.list({

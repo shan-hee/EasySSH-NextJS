@@ -26,8 +26,8 @@ export function WeComNotificationTab({ form }: WeComNotificationTabProps) {
       webhook_url: data.webhook_url,
     }
 
-    await testConnection(async (token) => {
-      await settingsApi.testWeComConnection(token, config)
+    await testConnection(async () => {
+      await settingsApi.testWeComConnection(config)
       toast.success("测试消息发送成功！请检查您的企业微信群组。")
     })
   }

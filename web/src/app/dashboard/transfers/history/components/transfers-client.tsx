@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useTransition, useOptimistic } from "react"
+import React, { useState, useCallback, useTransition, useOptimistic } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown } from "lucide-react"
@@ -22,23 +22,31 @@ function formatFileSize(bytes: number): string {
 }
 
 interface TransfersClientProps {
-  initialData: FileTransfersPageData
+  initialData?: FileTransfersPageData
 }
 
 /**
  * 传输记录客户端组件
- * 接收服务端传递的初始数据，处理客户端交互
+ * 纯 CSR 模式：在客户端加载数据
  */
 export function TransfersClient({ initialData }: TransfersClientProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [transfers, setTransfers] = useState<FileTransfer[]>(initialData.transfers)
-  const [statistics, setStatistics] = useState<FileTransferStatistics>(initialData.statistics)
-  const [refreshing, setRefreshing] = useState(false)
-  const [page, setPage] = useState(initialData.currentPage)
-  const [pageSize, setPageSize] = useState(initialData.pageSize)
-  const [totalPages, setTotalPages] = useState(initialData.totalPages)
-  const [totalCount, setTotalCount] = useState(initialData.totalCount)
+  const [transfers, setTransfers] = useState<FileTransfer[]>(initialData?.transfers || [])
+  const [statistics, setStatistics] = useState<FileTransferStatistics>(initialData?.statistics || {
+    total_transfers: 0,
+    completed_transfers: 0,
+    failed_transfers: 0,
+    total_bytes_uploaded: 0,
+    total_bytes_downloaded: 0,
+    by_type: {},
+    by_status: {},
+  })
+  const [refreshing, setRefreshing] = useState(!initialData)
+  const [page, setPage] = useState(initialData?.currentPage || 1)
+  const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
+  const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
+  const [totalCount, setTotalCount] = useState(initialData?.totalCount || 0)
 
   // 乐观更新：立即从 UI 中移除删除的项目
   const [optimisticTransfers, setOptimisticTransfers] = useOptimistic(
@@ -73,6 +81,14 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     },
     []
   )
+
+  // 初始加载数据（纯 CSR 模式）
+  React.useEffect(() => {
+    if (!initialData) {
+      loadData(page, pageSize)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 刷新数据
   const handleRefresh = async () => {

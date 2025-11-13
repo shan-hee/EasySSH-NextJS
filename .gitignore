@@ -27,6 +27,9 @@
 /build
 /web/build
 
+# Next.js 静态导出产物（由前端构建生成）
+/server/static/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

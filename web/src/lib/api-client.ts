@@ -160,7 +160,7 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   if (typeof window === 'undefined') {
     try {
       const { cookies } = await import('next/headers')
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       const cookieHeader = cookieStore
         .getAll()
         .map((c) => `${c.name}=${c.value}`)

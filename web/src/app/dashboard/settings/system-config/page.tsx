@@ -26,11 +26,11 @@ export default function SystemConfigPage() {
 
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: systemConfigSchema,
-    loadFn: async (token) => {
-      return await settingsApi.getSystemConfig(token)
+    loadFn: async () => {
+      return await settingsApi.getSystemConfig()
     },
-    saveFn: async (token, data) => {
-      await settingsApi.saveSystemConfig(token, data)
+    saveFn: async (data) => {
+      await settingsApi.saveSystemConfig(data)
     },
   })
 

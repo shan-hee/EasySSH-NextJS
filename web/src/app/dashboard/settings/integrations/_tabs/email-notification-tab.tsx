@@ -33,8 +33,8 @@ export function EmailNotificationTab({ form }: EmailNotificationTabProps) {
       use_tls: data.use_tls,
     }
 
-    await testConnection(async (token) => {
-      await settingsApi.testSMTPConnection(token, config)
+    await testConnection(async () => {
+      await settingsApi.testSMTPConnection(config)
       toast.success("测试邮件发送成功！请检查您的邮箱。")
     })
   }

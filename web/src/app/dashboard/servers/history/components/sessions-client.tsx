@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useTransition, useOptimistic } from "react"
+import React, { useState, useCallback, useTransition, useOptimistic } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, Activity, ArrowUpDown, ArrowDownUp } from "lucide-react"
@@ -22,7 +22,7 @@ function formatBytes(bytes: number): string {
 }
 
 interface SessionsClientProps {
-  initialData: SSHSessionsPageData
+  initialData?: SSHSessionsPageData
 }
 
 /**
@@ -32,20 +32,27 @@ interface SessionsClientProps {
 export function SessionsClient({ initialData }: SessionsClientProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [sessions, setSessions] = useState<SSHSessionDetail[]>(initialData.sessions)
-  const [statistics, setStatistics] = useState<SSHSessionStatistics>(initialData.statistics)
-  const [refreshing, setRefreshing] = useState(false)
-  const [page, setPage] = useState(initialData.currentPage)
-  const [pageSize, setPageSize] = useState(initialData.pageSize)
-  const [totalPages, setTotalPages] = useState(initialData.totalPages)
-  const [totalCount, setTotalCount] = useState(initialData.totalCount)
+  const [sessions, setSessions] = useState<SSHSessionDetail[]>(initialData?.sessions || [])
+  const [statistics, setStatistics] = useState<SSHSessionStatistics>(initialData?.statistics || {
+    total_sessions: 0,
+    active_sessions: 0,
+    closed_sessions: 0,
+    total_duration: 0,
+    total_bytes_sent: 0,
+    total_bytes_received: 0,
+    by_server: {},
+  })
+  const [refreshing, setRefreshing] = useState(!initialData)
+  const [page, setPage] = useState(initialData?.currentPage || 1)
+  const [pageSize, setPageSize] = useState(initialData?.pageSize || 10)
+  const [totalPages, setTotalPages] = useState(initialData?.totalPages || 1)
+  const [totalCount, setTotalCount] = useState(initialData?.totalCount || 0)
 
   // 乐观更新：立即从 UI 中移除删除的项目
   const [optimisticSessions, setOptimisticSessions] = useOptimistic(
     sessions,
     (state, deletedId: string) => state.filter((session) => session.id !== deletedId)
   )
-
 
   // 加载数据
   const loadData = useCallback(
@@ -77,6 +84,14 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     },
     []
   )
+
+  // 初始加载数据（纯 CSR 模式）
+  React.useEffect(() => {
+    if (!initialData) {
+      loadData(page, pageSize)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 刷新数据
   const handleRefresh = async () => {

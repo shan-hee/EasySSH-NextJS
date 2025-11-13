@@ -27,8 +27,8 @@ export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) 
       secret: data.secret || "",
     }
 
-    await testConnection(async (token) => {
-      await settingsApi.testDingTalkConnection(token, config)
+    await testConnection(async () => {
+      await settingsApi.testDingTalkConnection(config)
       toast.success("测试消息发送成功！请检查您的钉钉群组。")
     })
   }

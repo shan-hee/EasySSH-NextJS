@@ -14,21 +14,26 @@ import { loginLogColumns } from "../../components/login-log-columns"
 import type { LoginLogsPageData } from "@/lib/api/audit-logs-server"
 
 interface LoginLogsClientProps {
-  initialData: LoginLogsPageData
+  initialData?: LoginLogsPageData
 }
 
 /**
  * 登录日志客户端组件
- * 接收服务端传递的初始数据和预计算的统计数据
+ * 纯 CSR 模式：在客户端加载数据
  */
 export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
-  const [logs, setLogs] = useState<AuditLog[]>(initialData.logs)
-  const [loginStats, setLoginStats] = useState(initialData.loginStats)
-  const [loading, setLoading] = useState(false)
-  const [page, setPage] = useState(initialData.currentPage)
-  const [pageSize, setPageSize] = useState(initialData.pageSize)
-  const [totalPages, setTotalPages] = useState(initialData.totalPages)
-  const [totalRows, setTotalRows] = useState(initialData.totalCount)
+  const [logs, setLogs] = useState<AuditLog[]>(initialData?.logs || [])
+  const [loginStats, setLoginStats] = useState(initialData?.loginStats || {
+    total: 0,
+    success: 0,
+    failure: 0,
+    abnormalIP: 0,
+  })
+  const [loading, setLoading] = useState(!initialData)
+  const [page, setPage] = useState(initialData?.currentPage || 1)
+  const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
+  const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
+  const [totalRows, setTotalRows] = useState(initialData?.totalCount || 0)
   const [columnVisibility, setColumnVisibility] = useState({
     created_at: true,
     username: true,
@@ -83,6 +88,14 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
       setLoading(false)
     }
   }
+
+  // 初始加载数据（纯 CSR 模式）
+  React.useEffect(() => {
+    if (!initialData) {
+      loadData(page, pageSize)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 页码变化
   const handlePageChange = (newPage: number) => {

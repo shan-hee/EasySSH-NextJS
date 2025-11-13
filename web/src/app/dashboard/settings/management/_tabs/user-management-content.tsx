@@ -204,7 +204,7 @@ export function UserManagementContent() {
     }
 
     try {
-      await usersApi.deleteUser(userId)
+      await usersApi.delete(userId)
       toast.success("用户删除成功")
       await loadUsers()
     } catch (error: unknown) {
@@ -220,7 +220,7 @@ export function UserManagementContent() {
 
     try {
       await Promise.all(
-        userIds.map((id) => usersApi.deleteUser(id))
+        userIds.map((id) => usersApi.delete(id))
       )
       toast.success(`成功删除 ${userIds.length} 个用户`)
       await loadUsers()
