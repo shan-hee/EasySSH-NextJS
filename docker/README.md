@@ -2,34 +2,29 @@
 
 ## 📋 架构说明
 
-本项目采用**前后端分离**的 Docker 部署架构，包含以下服务：
+本项目采用**纯 CSR (Client-Side Rendering)** 架构，前端静态文件由 Go 后端托管，单容器部署。
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Docker Compose 网络                 │
-├─────────────────────────────────────────────────┤
-│                                                  │
-│  ┌──────────────┐      ┌──────────────┐        │
-│  │   Frontend   │      │   Backend    │        │
-│  │  (Next.js)   │─────▶│    (Go)      │        │
-│  │   :8520      │      │   :8521      │        │
-│  └──────────────┘      └──────┬───────┘        │
-│                                │                 │
-│                        ┌───────┴────────┐       │
-│                        │                 │       │
-│                   ┌────▼────┐     ┌────▼────┐  │
-│                   │PostgreSQL│     │  Redis  │  │
-│                   │  :5432   │     │  :6379  │  │
-│                   └──────────┘     └─────────┘  │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│         Docker 容器                  │
+│  ┌──────────────────────────────┐  │
+│  │   Go 后端 (:8521)            │  │
+│  │  ├─ API 服务                 │  │
+│  │  ├─ WebSocket (SSH)          │  │
+│  │  └─ 静态文件托管 (Next.js)   │  │
+│  └──────────────────────────────┘  │
+│           ↓         ↓                │
+│  ┌──────────┐  ┌──────────┐        │
+│  │PostgreSQL│  │  Redis   │        │
+│  └──────────┘  └──────────┘        │
+└─────────────────────────────────────┘
 ```
 
 ### 服务列表
 
 | 服务名 | 容器名 | 镜像 | 端口 | 说明 |
 |--------|--------|------|------|------|
-| backend | easyssh-backend | easyssh-backend:latest | 8521 | Go API 后端服务 |
-| frontend | easyssh-frontend | easyssh-frontend:latest | 8520 | Next.js 前端服务 |
+| easyssh | easyssh | shanheee/easyssh:latest | 8521 | Go API + 前端静态文件 |
 | postgres | easyssh-postgres | postgres:16-alpine | 5432 | PostgreSQL 数据库 |
 | redis | easyssh-redis | redis:7-alpine | 6379 | Redis 缓存 |
 
@@ -47,10 +42,6 @@ cp ../.env.example .env
 编辑 `.env` 文件，修改以下关键配置：
 
 ```bash
-# 端口配置（可选，默认值已设置）
-PORT=8521              # 后端端口
-WEB_PORT=8520          # 前端端口
-
 # 数据库配置
 DB_PASSWORD=your_secure_password_here
 
@@ -76,8 +67,7 @@ docker compose logs -f
 
 ### 3. 访问应用
 
-- **前端界面**: http://localhost:8520
-- **后端 API**: http://localhost:8521
+- **Web 界面**: http://localhost:8521
 
 ### 4. 停止服务
 
@@ -92,57 +82,22 @@ docker compose down
 docker compose down -v
 ```
 
-## 🔧 端口配置
-
-### 修改端口
-
-如果需要修改默认端口，有两种方式：
-
-#### 方式一：通过环境变量（推荐）
-
-在 `docker/.env` 文件中设置：
-
-```bash
-PORT=9521              # 后端端口
-WEB_PORT=9520          # 前端端口
-```
-
-#### 方式二：直接修改 docker-compose.yml
-
-编辑 `docker/docker-compose.yml`：
-
-```yaml
-services:
-  backend:
-    ports:
-      - "9521:8521"    # 宿主机端口:容器端口
-
-  frontend:
-    ports:
-      - "9520:8520"    # 宿主机端口:容器端口
-```
-
-⚠️ **注意**：容器内部端口（冒号后）保持不变，只修改宿主机端口（冒号前）。
-
 ## 📦 镜像仓库
 
 ### Docker Hub 镜像
 
-本项目提供两个独立的 Docker 镜像：
+本项目提供单一的 Docker 镜像（包含前后端）：
 
-- **后端镜像**: [`shanheee/easyssh-backend`](https://hub.docker.com/r/shanheee/easyssh-backend)
-- **前端镜像**: [`shanheee/easyssh-frontend`](https://hub.docker.com/r/shanheee/easyssh-frontend)
+- **镜像**: [`shanheee/easyssh`](https://hub.docker.com/r/shanheee/easyssh)
 
 ### 拉取镜像
 
 ```bash
 # 拉取最新版本
-docker pull shanheee/easyssh-backend:latest
-docker pull shanheee/easyssh-frontend:latest
+docker pull shanheee/easyssh:latest
 
 # 拉取指定版本
-docker pull shanheee/easyssh-backend:v1.0.0
-docker pull shanheee/easyssh-frontend:v1.0.0
+docker pull shanheee/easyssh:v1.0.0
 ```
 
 ### 本地构建镜像（可选）
@@ -152,16 +107,9 @@ docker pull shanheee/easyssh-frontend:v1.0.0
 ```bash
 cd /path/to/EasySSH-NextJS
 
-# 构建后端镜像
-docker build -f docker/Dockerfile -t easyssh-backend:latest .
-
-# 构建前端镜像
-docker build -f docker/Dockerfile.web \
-  --build-arg NEXT_PUBLIC_API_BASE=http://backend:8521 \
-  -t easyssh-frontend:latest .
+# 构建镜像
+docker build -f docker/Dockerfile -t easyssh:latest .
 ```
-
-⚠️ **重要**：前端镜像需要在构建时指定 `NEXT_PUBLIC_API_BASE`，因为 Next.js 会在构建时注入环境变量。
 
 ## 🔍 健康检查
 
@@ -173,9 +121,6 @@ docker compose ps
 
 # 手动检查后端健康
 curl http://localhost:8521/api/v1/health
-
-# 手动检查前端健康
-curl http://localhost:8520/api/health
 ```
 
 ## 📊 日志管理
@@ -190,10 +135,7 @@ docker compose logs -f
 
 ```bash
 # 后端日志
-docker compose logs -f backend
-
-# 前端日志
-docker compose logs -f frontend
+docker compose logs -f easyssh
 
 # 数据库日志
 docker compose logs -f postgres
@@ -206,10 +148,10 @@ docker compose logs -f redis
 
 ```bash
 # 只显示最后 100 行
-docker compose logs --tail=100 backend
+docker compose logs --tail=100 easyssh
 
 # 显示最近 10 分钟的日志
-docker compose logs --since=10m frontend
+docker compose logs --since=10m easyssh
 ```
 
 ## 🔄 更新部署
@@ -230,10 +172,8 @@ docker compose up -d
 
 ```bash
 # 编辑 docker-compose.yml，修改镜像标签
-# backend:
-#   image: shanheee/easyssh-backend:v1.0.1
-# frontend:
-#   image: shanheee/easyssh-frontend:v1.0.1
+# easyssh:
+#   image: shanheee/easyssh:v1.0.1
 
 # 拉取并重启
 docker compose pull
@@ -245,26 +185,8 @@ docker compose up -d
 ```bash
 cd docker
 
-# 重新构建镜像
-docker compose build
-
-# 重启服务
-docker compose up -d
-
-# 或者一步完成
-docker compose up -d --build
-```
-
-### 仅更新特定服务
-
-```bash
-# 仅更新后端
-docker compose pull backend
-docker compose up -d backend
-
-# 仅更新前端
-docker compose pull frontend
-docker compose up -d frontend
+# 使用开发配置构建
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
 ## 💾 数据持久化
@@ -280,10 +202,10 @@ docker volume ls | grep easyssh
 # - easyssh-redis-data: Redis 数据
 
 # 备份数据库
-docker exec easyssh-postgres pg_dump -U easyssh Easyssh_db > backup.sql
+docker exec easyssh-postgres pg_dump -U easyssh easyssh_db > backup.sql
 
 # 恢复数据库
-docker exec -i easyssh-postgres psql -U easyssh Easyssh_db < backup.sql
+docker exec -i easyssh-postgres psql -U easyssh easyssh_db < backup.sql
 ```
 
 ## 🐛 故障排查
@@ -293,18 +215,15 @@ docker exec -i easyssh-postgres psql -U easyssh Easyssh_db < backup.sql
 1. **检查端口占用**：
    ```bash
    # Linux/macOS
-   lsof -i :8520
    lsof -i :8521
 
    # Windows
-   netstat -ano | findstr :8520
    netstat -ano | findstr :8521
    ```
 
 2. **检查容器日志**：
    ```bash
-   docker compose logs backend
-   docker compose logs frontend
+   docker compose logs easyssh
    ```
 
 3. **检查健康状态**：
@@ -330,28 +249,6 @@ echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
-**说明**：
-- 此警告不影响 Redis 基本功能，但可能影响后台保存和复制操作
-- `vm.overcommit_memory=1` 允许内核过度分配内存，这是 Redis 推荐的配置
-- Docker Compose 已配置 `sysctls` 参数优化网络性能
-
-### 前端无法连接后端
-
-1. **检查环境变量**：
-   ```bash
-   docker exec easyssh-frontend env | grep NEXT_PUBLIC
-   ```
-
-2. **验证网络连通性**：
-   ```bash
-   # 从前端容器访问后端
-   docker exec easyssh-frontend wget -O- http://backend:8521/api/v1/health
-   ```
-
-3. **检查 docker-compose.yml 配置**：
-   - 确保 `NEXT_PUBLIC_API_BASE=http://backend:8521`
-   - 确保两个服务在同一网络 `easyssh-network`
-
 ### 数据库连接失败
 
 1. **检查数据库是否就绪**：
@@ -364,7 +261,7 @@ sudo sysctl -p
 
 3. **手动连接测试**：
    ```bash
-   docker exec -it easyssh-postgres psql -U easyssh -d Easyssh_db
+   docker exec -it easyssh-postgres psql -U easyssh -d easyssh_db
    ```
 
 ## 🔐 安全建议
@@ -392,38 +289,8 @@ sudo sysctl -p
    - 配置 SSL 证书（Let's Encrypt）
 
 4. **限制端口暴露**：
-   - 仅暴露前端端口 8520
-   - 后端端口 8521 仅供容器内部访问
-
-### 网络隔离
-
-修改 `docker-compose.yml`，移除后端端口暴露：
-
-```yaml
-services:
-  backend:
-    # 注释掉端口映射，仅允许容器内部访问
-    # ports:
-    #   - "${PORT:-8521}:8521"
-```
-
-## 🆚 架构对比
-
-### 旧架构（单容器）
-
-- ❌ 前后端在同一容器中运行
-- ❌ 使用 supervisord 管理多进程
-- ❌ 日志混在一起，难以调试
-- ❌ 无法独立扩展前后端
-- ❌ 更新需要重启整个容器
-
-### 新架构（前后端分离）
-
-- ✅ 前后端独立容器，职责清晰
-- ✅ 每个容器单一进程，符合最佳实践
-- ✅ 日志分离，便于调试和监控
-- ✅ 可独立扩展和更新
-- ✅ 资源限制更精细
+   - 仅暴露必要的端口 8521
+   - 数据库和 Redis 端口仅供容器内部访问
 
 ## 📚 环境变量说明
 
@@ -434,9 +301,8 @@ DB_HOST=postgres              # 数据库主机（Docker: postgres | 开发: loc
 DB_PORT=5432                  # 数据库端口
 DB_USER=easyssh               # 数据库用户名
 DB_PASSWORD=***               # 数据库密码（必须修改）
-DB_NAME=Easyssh_db            # 数据库名称
+DB_NAME=easyssh_db            # 数据库名称
 DB_SSLMODE=disable            # SSL 模式
-DB_DEBUG=false                # SQL 调试日志
 ```
 
 ### Redis 配置
@@ -452,19 +318,7 @@ REDIS_PASSWORD=               # Redis 密码（留空表示无密码）
 
 ```bash
 ENV=production                # 运行环境（development | production）
-GIN_MODE=release              # Gin 框架模式（debug | release）
 PORT=8521                     # 后端服务端口
-WEB_PORT=8520                 # 前端服务端口
-```
-
-### 前端配置
-
-```bash
-# 后端服务地址（必须包含完整的协议和端口）
-NEXT_PUBLIC_API_BASE=http://backend:8521
-
-# WebSocket 主机地址（可选，默认从 API_BASE 推导）
-NEXT_PUBLIC_WS_HOST=
 ```
 
 ### 安全配置（必须修改）
@@ -473,19 +327,24 @@ NEXT_PUBLIC_WS_HOST=
 # JWT 签名密钥（至少 64 字符）
 JWT_SECRET=***
 
-# JWT 令牌过期时间（小时）
-JWT_ACCESS_EXPIRE_HOURS=1
-JWT_REFRESH_EXPIRE_HOURS=168
+# JWT 令牌过期时间
+JWT_ACCESS_EXPIRE_MINUTES=15
+JWT_REFRESH_IDLE_EXPIRE_DAYS=7
+JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS=30
 
 # 数据加密密钥（必须是 32 字节）
 ENCRYPTION_KEY=***
+
+# Cookie 安全策略
+COOKIE_SECURE=true            # HTTPS: true | HTTP: false
+COOKIE_SAMESITE=lax           # lax | none | strict
 ```
 
 ## ❓ 常见问题
 
 ### Q: 如何修改端口？
 
-A: 在 `docker/.env` 文件中设置 `PORT` 和 `WEB_PORT` 环境变量。
+A: 在 `docker/.env` 文件中设置 `PORT` 环境变量，或直接修改 `docker-compose.yml` 中的端口映射。
 
 ### Q: 如何重置数据库？
 
@@ -500,8 +359,7 @@ docker compose up -d    # 重新启动
 A:
 ```bash
 # 进入容器
-docker exec -it easyssh-backend sh
-docker exec -it easyssh-frontend sh
+docker exec -it easyssh sh
 ```
 
 ### Q: 如何限制资源使用？
@@ -510,7 +368,7 @@ A: 在 `docker-compose.yml` 中添加资源限制：
 
 ```yaml
 services:
-  backend:
+  easyssh:
     deploy:
       resources:
         limits:
@@ -521,21 +379,9 @@ services:
           memory: 256M
 ```
 
-### Q: 为什么前端无法连接后端？
+### Q: 为什么只需要一个端口？
 
-A: 检查以下几点：
-1. 确保 `NEXT_PUBLIC_API_BASE=http://backend:8521`（容器内部通信使用服务名）
-2. 确保两个服务在同一网络 `easyssh-network`
-3. 检查后端健康状态：`docker compose ps`
-
-### Q: 如何从旧的单容器架构迁移？
-
-A:
-1. 备份数据：`docker exec easyssh-postgres pg_dump -U easyssh Easyssh_db > backup.sql`
-2. 停止旧容器：`docker compose down`
-3. 更新 docker-compose.yml 到新版本
-4. 启动新架构：`docker compose up -d`
-5. 恢复数据（如需要）
+A: 本项目采用纯 CSR 架构，前端静态文件由 Go 后端托管，因此只需要暴露后端端口 8521。
 
 ## 📞 获取帮助
 
@@ -544,7 +390,7 @@ A:
 1. 查看日志：`docker compose logs -f`
 2. 检查健康状态：`docker compose ps`
 3. 查看本文档的故障排查部分
-4. 提交 Issue：[GitHub Issues](https://github.com/yourusername/easyssh/issues)
+4. 提交 Issue：[GitHub Issues](https://github.com/shan-hee/EasySSH-NextJS/issues)
 
 ## 🔖 版本号管理（开发者）
 
@@ -570,20 +416,17 @@ git push  # 触发 CI/CD 构建
     ↓
 GitHub Actions 自动触发
     ↓
-并行构建前后端镜像
+构建 Docker 镜像（多架构）
     ↓
 推送到 Docker Hub
     ↓
-shanheee/easyssh-backend:v1.0.1
-shanheee/easyssh-backend:latest
-shanheee/easyssh-frontend:v1.0.1
-shanheee/easyssh-frontend:latest
+shanheee/easyssh:v1.0.1
+shanheee/easyssh:latest
 ```
 
 ### 查看构建状态
 
-- [后端构建](https://github.com/yourusername/easyssh/actions/workflows/docker-build-backend.yml)
-- [前端构建](https://github.com/yourusername/easyssh/actions/workflows/docker-build-frontend.yml)
+- [Docker 构建](https://github.com/shan-hee/EasySSH-NextJS/actions/workflows/docker-build.yml)
 
 ---
 
