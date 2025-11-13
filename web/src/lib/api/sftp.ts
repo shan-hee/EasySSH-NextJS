@@ -73,6 +73,8 @@ export const sftpApi = {
     return apiFetch<void>(`/sftp/${serverId}/delete`, {
       method: "DELETE",
       body: { path },
+      timeout: 300000, // 5分钟超时（用于删除大目录如 node_modules）
+      retry: false,    // 禁用重试（删除操作不应重试）
     })
   },
 
@@ -87,26 +89,6 @@ export const sftpApi = {
   },
 
   /**
-   * 移动文件或目录
-   */
-  async move(serverId: string, sourcePath: string, destPath: string): Promise<void> {
-    return apiFetch<void>(`/sftp/${serverId}/move`, {
-      method: "POST",
-      body: { source: sourcePath, destination: destPath },
-    })
-  },
-
-  /**
-   * 复制文件
-   */
-  async copy(serverId: string, sourcePath: string, destPath: string): Promise<void> {
-    return apiFetch<void>(`/sftp/${serverId}/copy`, {
-      method: "POST",
-      body: { source: sourcePath, destination: destPath },
-    })
-  },
-
-  /**
    * 读取文件内容
    */
   async readFile(serverId: string, path: string): Promise<string> {
@@ -114,8 +96,8 @@ export const sftpApi = {
     const apiUrl = getApiUrl()
     const response = await fetch(`${apiUrl}/sftp/${serverId}/read?path=${encodeURIComponent(path)}`, {
       method: "GET",
-      // 凭 Cookie 认证
-      credentials: 'same-origin',
+      // 凭 Cookie 认证（跨域请求需要 include）
+      credentials: 'include',
     })
 
     if (!response.ok) {

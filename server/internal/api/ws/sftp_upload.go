@@ -11,6 +11,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// upgrader 在 monitor.go 中已定义，这里不需要重复定义
+// 如果编译器报错，说明包级别的 upgrader 变量已经在 monitor.go 中定义
+
 // UploadProgressMessage SFTP 上传进度消息
 type UploadProgressMessage struct {
 	Type     string `json:"type"`      // "progress", "complete", "error"

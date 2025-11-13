@@ -12,15 +12,6 @@ interface FileItem {
   group: string
 }
 
-interface ClipboardFile {
-  fileName: string
-  sessionId: string
-  sessionLabel: string
-  filePath: string
-  fileType: "file" | "directory"
-  operation: "copy" | "cut"
-}
-
 interface SftpSessionContextValue {
   // 会话信息
   sessionId: string
@@ -37,9 +28,6 @@ interface SftpSessionContextValue {
   currentPath: string
   files: FileItem[]
 
-  // 剪贴板
-  clipboard: ClipboardFile[]
-
   // 操作回调
   onNavigate: (path: string) => void
   onUpload: (files: FileList) => void
@@ -52,9 +40,6 @@ interface SftpSessionContextValue {
   onReadFile?: (fileName: string) => Promise<string>
   onSaveFile?: (fileName: string, content: string) => Promise<void>
   onRenameSession?: (newLabel: string) => void
-  onCopyFiles?: (fileNames: string[]) => void
-  onCutFiles?: (fileNames: string[]) => void
-  onPasteFiles?: () => void
   onToggleFullscreen?: () => void
 }
 

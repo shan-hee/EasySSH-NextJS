@@ -1,15 +1,17 @@
 package sftp
 
 import (
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
+    "fmt"
+    "io"
+    "os"
+    "path/filepath"
+    "strings"
+    "time"
 
-	"github.com/easyssh/server/internal/domain/server"
-	sshDomain "github.com/easyssh/server/internal/domain/ssh"
-	"github.com/pkg/sftp"
+    "github.com/easyssh/server/internal/domain/server"
+    sshDomain "github.com/easyssh/server/internal/domain/ssh"
+    "github.com/google/uuid"
+    "github.com/pkg/sftp"
 )
 
 // Client SFTP 客户端封装
@@ -206,21 +208,101 @@ func (c *Client) CreateDirectories(path string) error {
 
 // DeleteFile 删除文件
 func (c *Client) DeleteFile(path string) error {
-	err := c.sftpClient.Remove(path)
-	if err != nil {
-		return fmt.Errorf("failed to delete file: %w", err)
-	}
-	return nil
+    err := c.sftpClient.Remove(path)
+    if err != nil {
+        return fmt.Errorf("failed to delete file: %w", err)
+    }
+    return nil
 }
 
 // DeleteDirectory 删除目录
 func (c *Client) DeleteDirectory(path string) error {
-	// 递归删除目录
-	err := c.removeAll(path)
-	if err != nil {
-		return fmt.Errorf("failed to delete directory: %w", err)
-	}
-	return nil
+    // 混合策略：目录优先使用 “回收站重命名 + SSH 后台删除”；
+    // SSH 不可用或失败时回退 SFTP 递归删除。
+    if c.sshClient != nil && c.sshClient.IsConnected() {
+        if err := c.deleteDirWithTrashAndSSH(path); err == nil {
+            return nil
+        } else {
+            fmt.Printf("[SFTP DeleteDirectory] SSH trash-delete failed, fallback to SFTP: %v\n", err)
+        }
+    }
+
+    // 回退：SFTP 递归删除（较慢，但兼容）
+    fmt.Printf("[SFTP DeleteDirectory] Using SFTP recursive delete: %s\n", path)
+    err := c.removeAll(path)
+    if err != nil {
+        return fmt.Errorf("failed to delete directory: %w", err)
+    }
+    fmt.Printf("[SFTP DeleteDirectory] SFTP delete completed: %s\n", path)
+    return nil
+}
+
+// deleteDirWithTrashAndSSH 目录删除：回收站重命名 + SSH 后台删除
+func (c *Client) deleteDirWithTrashAndSSH(path string) error {
+    // 1) 在同级目录下准备回收站（.trash）
+    parent := filepath.Dir(path)
+    trashDir := filepath.Join(parent, ".trash")
+    // 尝试创建回收站目录（存在即略过）
+    _ = c.sftpClient.Mkdir(trashDir)
+    if info, err := c.sftpClient.Stat(trashDir); err != nil || !info.IsDir() {
+        return fmt.Errorf("trash directory invalid: %s", trashDir)
+    }
+
+    // 2) 生成唯一目标名，并原子重命名到回收站
+    base := filepath.Base(path)
+    uniq := fmt.Sprintf("%s-%s-%s", base, time.Now().Format("20060102-150405"), uuid.NewString()[:8])
+    trashPath := filepath.Join(trashDir, uniq)
+
+    if err := c.sftpClient.Rename(path, trashPath); err != nil {
+        // 如果重命名失败，回退为直接 SSH 安全删除（不进回收站）
+        fmt.Printf("[SFTP DeleteDirectory] Rename to trash failed, direct SSH delete: %v\n", err)
+        return c.directSSHSafeDelete(path)
+    }
+
+    fmt.Printf("[SFTP DeleteDirectory] Moved to trash: %s -> %s\n", path, trashPath)
+
+    // 3) 通过 SSH 后台删除回收站中的目录
+    if err := c.backgroundSSHSafeDelete(trashPath); err != nil {
+        // 后台删除提交失败，则尝试直接 SSH 删除（同步）
+        fmt.Printf("[SFTP DeleteDirectory] Background delete submit failed, try direct SSH: %v\n", err)
+        return c.directSSHSafeDelete(trashPath)
+    }
+
+    fmt.Printf("[SFTP DeleteDirectory] Background deletion scheduled for: %s\n", trashPath)
+    return nil
+}
+
+// backgroundSSHSafeDelete 使用 SSH 启动后台安全删除（nohup + &）
+func (c *Client) backgroundSSHSafeDelete(target string) error {
+    if c.sshClient == nil || !c.sshClient.IsConnected() {
+        return fmt.Errorf("ssh client not available")
+    }
+    script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; nohup rm -rf -- \"$tgt\" >/dev/null 2>&1 &", shSingleQuote(target))
+    cmd := "sh -c " + shSingleQuote(script)
+    _, err := c.sshClient.ExecuteCommand(cmd)
+    if err != nil {
+        return fmt.Errorf("background delete failed: %w", err)
+    }
+    return nil
+}
+
+// directSSHSafeDelete 使用 SSH 同步安全删除
+func (c *Client) directSSHSafeDelete(target string) error {
+    if c.sshClient == nil || !c.sshClient.IsConnected() {
+        return fmt.Errorf("ssh client not available")
+    }
+    script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; rm -rf -- \"$tgt\"", shSingleQuote(target))
+    cmd := "sh -c " + shSingleQuote(script)
+    _, err := c.sshClient.ExecuteCommand(cmd)
+    if err != nil {
+        return fmt.Errorf("direct ssh delete failed: %w", err)
+    }
+    return nil
+}
+
+// shSingleQuote 将字符串按 POSIX 单引号安全包裹：' -> '\''
+func shSingleQuote(s string) string {
+    return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // removeAll 递归删除目录（类似 os.RemoveAll）
@@ -228,6 +310,17 @@ func (c *Client) removeAll(path string) error {
 	// 获取目录内容
 	entries, err := c.sftpClient.ReadDir(path)
 	if err != nil {
+		// 如果目录不存在或无法读取，尝试直接删除
+		// 可能是符号链接或特殊文件
+		fmt.Printf("[SFTP removeAll] Failed to read directory %s: %v, trying direct remove\n", path, err)
+		// 尝试作为文件删除
+		if removeErr := c.sftpClient.Remove(path); removeErr == nil {
+			return nil
+		}
+		// 尝试作为目录删除
+		if removeDirErr := c.sftpClient.RemoveDirectory(path); removeDirErr == nil {
+			return nil
+		}
 		return err
 	}
 
@@ -236,17 +329,23 @@ func (c *Client) removeAll(path string) error {
 		childPath := filepath.Join(path, entry.Name())
 		if entry.IsDir() {
 			if err := c.removeAll(childPath); err != nil {
+				fmt.Printf("[SFTP removeAll] Failed to remove subdirectory %s: %v\n", childPath, err)
 				return err
 			}
 		} else {
 			if err := c.sftpClient.Remove(childPath); err != nil {
+				fmt.Printf("[SFTP removeAll] Failed to remove file %s: %v\n", childPath, err)
 				return err
 			}
 		}
 	}
 
 	// 删除空目录
-	return c.sftpClient.RemoveDirectory(path)
+	err = c.sftpClient.RemoveDirectory(path)
+	if err != nil {
+		fmt.Printf("[SFTP removeAll] Failed to remove directory %s: %v\n", path, err)
+	}
+	return err
 }
 
 // RenameFile 重命名文件或目录
@@ -256,36 +355,6 @@ func (c *Client) RenameFile(oldPath, newPath string) error {
 		return fmt.Errorf("failed to rename: %w", err)
 	}
 	return nil
-}
-
-// CopyFile 复制文件
-func (c *Client) CopyFile(srcPath, dstPath string) error {
-	// 打开源文件
-	srcFile, err := c.sftpClient.Open(srcPath)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
-	}
-	defer srcFile.Close()
-
-	// 创建目标文件
-	dstFile, err := c.sftpClient.Create(dstPath)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer dstFile.Close()
-
-	// 复制数据
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file: %w", err)
-	}
-
-	return nil
-}
-
-// MoveFile 移动文件
-func (c *Client) MoveFile(srcPath, dstPath string) error {
-	return c.RenameFile(srcPath, dstPath)
 }
 
 // GetWorkingDirectory 获取当前工作目录

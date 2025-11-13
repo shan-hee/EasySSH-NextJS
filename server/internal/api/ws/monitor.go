@@ -22,6 +22,13 @@ const (
     wsWriteWait = 10 * time.Second
 )
 
+// upgrader WebSocket 升级器
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // 允许所有来源（生产环境应该限制）
+	},
+}
+
 // MonitorHandler WebSocket 监控处理器
 type MonitorHandler struct {
 	connectionPool *monitor.ConnectionPool

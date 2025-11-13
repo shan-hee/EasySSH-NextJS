@@ -11,18 +11,25 @@ import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 
 /**
- * 统计卡片骨架屏
+ * 统计卡片骨架屏 - 精确匹配真实卡片的高度和布局
+ * 策略：使用透明文本占位，而不是固定高度的 span，确保行高完全一致
  */
 function StatsCardSkeleton() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+        <CardTitle className="text-sm font-medium">
+          <span className="inline-block w-20 animate-pulse rounded bg-muted text-transparent">占位</span>
+        </CardTitle>
         <div className="h-4 w-4 animate-pulse rounded bg-muted" />
       </CardHeader>
       <CardContent>
-        <div className="h-8 w-16 animate-pulse rounded bg-muted" />
-        <div className="mt-1 h-3 w-24 animate-pulse rounded bg-muted" />
+        <div className="text-2xl font-bold">
+          <span className="inline-block w-16 animate-pulse rounded bg-muted text-transparent">0</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          <span className="inline-block w-24 animate-pulse rounded bg-muted text-transparent">占位文字</span>
+        </p>
       </CardContent>
     </Card>
   )
@@ -30,11 +37,10 @@ function StatsCardSkeleton() {
 
 /**
  * 仪表盘页面（Client Component）
- * 纯 CSR 模式：在客户端获取数据
+ * 乐观渲染模式：立即显示骨架屏，后台加载数据
  */
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const loadStats = async () => {
@@ -43,8 +49,6 @@ export default function DashboardPage() {
         setStats(data)
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, "无法加载仪表盘数据"))
-      } finally {
-        setLoading(false)
       }
     }
 
@@ -55,9 +59,9 @@ export default function DashboardPage() {
     <>
       <PageHeader title="仪表盘" />
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        {/* 统计卡片 */}
+        {/* 统计卡片 - 乐观渲染：先显示骨架屏，数据加载后替换 */}
         <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-          {loading ? (
+          {!stats ? (
             <>
               <StatsCardSkeleton />
               <StatsCardSkeleton />

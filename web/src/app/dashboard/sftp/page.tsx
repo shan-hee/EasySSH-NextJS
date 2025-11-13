@@ -90,16 +90,6 @@ interface SftpSession {
  color?: string // 会话标识颜色
 }
 
-// 跨会话剪贴板接口
-interface ClipboardFile {
- fileName: string
- sessionId: string
- sessionLabel: string
- filePath: string
- fileType: "file" | "directory"
- operation: "copy" | "cut"
-}
-
 // 跨会话拖拽数据接口
 interface CrossSessionDragData {
  sessionId: string
@@ -245,7 +235,6 @@ export default function SftpPage() {
  const [sessions, setSessions] = useState<SftpSession[]>([])
  const [nextSessionId, setNextSessionId] = useState(1)
  const [fullscreenSessionId, setFullscreenSessionId] = useState<string | null>(null)
- const [clipboard, setClipboard] = useState<ClipboardFile[]>([])
  const [activeId, setActiveId] = useState<string | null>(null) // 当前拖拽的会话ID
  const parentRef = useRef<HTMLDivElement>(null)
 
@@ -345,58 +334,6 @@ export default function SftpPage() {
  setFullscreenSessionId(null)
  } else {
  setFullscreenSessionId(sessionId)
- }
- }
-
- // 跨会话剪贴板操作
- const handleCopyFiles = (sessionId: string, fileNames: string[]) => {
- const session = sessions.find(s => s.id === sessionId)
- if (!session) return
-
- const clipboardFiles: ClipboardFile[] = fileNames.map(fileName => {
- const file = session.files.find(f => f.name === fileName)
- return {
- fileName,
- sessionId,
- sessionLabel: session.label,
- filePath: `${session.currentPath}/${fileName}`.replace('//', '/'),
- fileType: file?.type || 'file',
- operation: 'copy' as const,
- }
- })
-
- setClipboard(clipboardFiles)
- }
-
- const handleCutFiles = (sessionId: string, fileNames: string[]) => {
- const session = sessions.find(s => s.id === sessionId)
- if (!session) return
-
- const clipboardFiles: ClipboardFile[] = fileNames.map(fileName => {
- const file = session.files.find(f => f.name === fileName)
- return {
- fileName,
- sessionId,
- sessionLabel: session.label,
- filePath: `${session.currentPath}/${fileName}`.replace('//', '/'),
- fileType: file?.type || 'file',
- operation: 'cut' as const,
- }
- })
-
- setClipboard(clipboardFiles)
- }
-
- const handlePasteFiles = (targetSessionId: string) => {
- if (clipboard.length === 0) return
-
- const targetSession = sessions.find(s => s.id === targetSessionId)
- if (!targetSession) return
-
- // 这里应该实现实际的文件传输逻辑
- // 如果是cut操作，粘贴后应该清空剪贴板
- if (clipboard[0]?.operation === 'cut') {
- setClipboard([])
  }
  }
 
@@ -1000,11 +937,7 @@ export default function SftpPage() {
  onReadFile={(fileName) => handleReadFile(session.id, fileName)}
  onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
  onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
- onCopyFiles={(fileNames) => handleCopyFiles(session.id, fileNames)}
- onCutFiles={(fileNames) => handleCutFiles(session.id, fileNames)}
- onPasteFiles={() => handlePasteFiles(session.id)}
  onToggleFullscreen={() => toggleFullscreen(session.id)}
- clipboard={clipboard}
  />
  ) : (
  renderWelcomePage()
@@ -1072,11 +1005,7 @@ export default function SftpPage() {
  onReadFile={(fileName) => handleReadFile(session.id, fileName)}
  onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
  onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
- onCopyFiles={(fileNames) => handleCopyFiles(session.id, fileNames)}
- onCutFiles={(fileNames) => handleCutFiles(session.id, fileNames)}
- onPasteFiles={() => handlePasteFiles(session.id)}
  onToggleFullscreen={() => toggleFullscreen(session.id)}
- clipboard={clipboard}
  />
  ) : (
  renderWelcomePage()

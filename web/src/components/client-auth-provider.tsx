@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { authApi, type User, type LoginRequest } from "@/lib/api/auth"
 
@@ -32,6 +32,13 @@ interface ClientAuthProviderProps {
 export function ClientAuthProvider({ children, initialUser }: ClientAuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser)
   const router = useRouter()
+
+  // 同步 initialUser 的变化（用于乐观渲染场景）
+  useEffect(() => {
+    if (initialUser !== null) {
+      setUser(initialUser)
+    }
+  }, [initialUser])
 
   const isAuthenticated = !!user
 

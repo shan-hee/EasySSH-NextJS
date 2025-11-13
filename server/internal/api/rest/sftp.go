@@ -361,9 +361,14 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	// 记录删除操作开始
+	startTime := time.Now()
+	fmt.Printf("[SFTP Delete] Starting delete operation: server=%s, path=%s\n", serverID, req.Path)
+
 	// 创建 SFTP 客户端
 	sftpClient, _, err := h.createSFTPClient(c, serverID)
 	if err != nil {
+		fmt.Printf("[SFTP Delete] Failed to create SFTP client: %v\n", err)
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
@@ -372,22 +377,29 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 	// 获取文件信息以判断类型
 	fileInfo, err := sftpClient.GetFileInfo(req.Path)
 	if err != nil {
+		fmt.Printf("[SFTP Delete] File not found: %s, error: %v\n", req.Path, err)
 		RespondError(c, http.StatusNotFound, "file_not_found", err.Error())
 		return
 	}
 
 	// 删除文件或目录
 	if fileInfo.IsDir {
+		fmt.Printf("[SFTP Delete] Deleting directory: %s\n", req.Path)
 		err = sftpClient.DeleteDirectory(req.Path)
 	} else {
+		fmt.Printf("[SFTP Delete] Deleting file: %s\n", req.Path)
 		err = sftpClient.DeleteFile(req.Path)
 	}
 
 	if err != nil {
+		elapsed := time.Since(startTime)
+		fmt.Printf("[SFTP Delete] Delete failed after %v: %v\n", elapsed, err)
 		RespondError(c, http.StatusInternalServerError, "delete_failed", err.Error())
 		return
 	}
 
+	elapsed := time.Since(startTime)
+	fmt.Printf("[SFTP Delete] Delete completed successfully in %v: %s\n", elapsed, req.Path)
 	RespondSuccessWithMessage(c, nil, "Deleted successfully")
 }
 
@@ -428,53 +440,6 @@ func (h *SFTPHandler) Rename(c *gin.Context) {
 	RespondSuccess(c, gin.H{
 		"old_path": req.OldPath,
 		"new_path": req.NewPath,
-	})
-}
-
-// Move 移动文件或目录
-// POST /api/v1/sftp/:server_id/move
-func (h *SFTPHandler) Move(c *gin.Context) {
-	// 移动操作与重命名类似
-	h.Rename(c)
-}
-
-// Copy 复制文件
-// POST /api/v1/sftp/:server_id/copy
-func (h *SFTPHandler) Copy(c *gin.Context) {
-	// 解析服务器 ID
-	serverID, err := uuid.Parse(c.Param("server_id"))
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
-		return
-	}
-
-	// 解析请求
-	var req struct {
-		SrcPath string `json:"src_path" binding:"required"`
-		DstPath string `json:"dst_path" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
-		return
-	}
-
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
-		return
-	}
-	defer sftpClient.Close()
-
-	// 复制文件
-	if err := sftpClient.CopyFile(req.SrcPath, req.DstPath); err != nil {
-		RespondError(c, http.StatusInternalServerError, "copy_failed", err.Error())
-		return
-	}
-
-	RespondSuccess(c, gin.H{
-		"src_path": req.SrcPath,
-		"dst_path": req.DstPath,
 	})
 }
 

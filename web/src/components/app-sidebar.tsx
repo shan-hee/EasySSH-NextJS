@@ -22,6 +22,9 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
 } from "@/components/ui/sidebar"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/contexts/system-config-context"
@@ -126,11 +129,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
   // 构建真实用户数据
   const userData = React.useMemo(() => {
     if (!user) {
-      return {
-        name: "访客",
-        email: "",
-        avatar: undefined,
-      }
+      return null
     }
     return {
       name: user.username,
@@ -153,7 +152,23 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       </SidebarContent>
       <SidebarFooter>
         <NavExtra />
-        <NavUser user={userData} />
+        {/* 用户信息区域：加载时显示占位，加载完成后显示真实内容 */}
+        {userData ? (
+          <NavUser user={userData} />
+        ) : (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" className="pointer-events-none">
+                <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
+                <div className="grid flex-1 text-left text-sm leading-tight gap-0.5">
+                  <div className="h-3.5 w-20 bg-muted rounded animate-pulse" />
+                  <div className="h-3 w-32 bg-muted rounded animate-pulse" />
+                </div>
+                <div className="ml-auto h-4 w-4 bg-muted rounded animate-pulse" />
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

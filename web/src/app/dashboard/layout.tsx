@@ -12,7 +12,7 @@ import { getErrorMessage } from "@/lib/error-utils"
 
 /**
  * Dashboard 布局 - Client Component
- * 纯 CSR 模式：在客户端验证认证状态
+ * 乐观渲染模式：先渲染界面，后台静默验证认证状态
  */
 export default function DashboardLayout({
   children,
@@ -21,7 +21,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [isVerifying, setIsVerifying] = useState(true)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -30,36 +30,29 @@ export default function DashboardLayout({
         setUser(currentUser)
       } catch (error: unknown) {
         console.error("Authentication failed:", getErrorMessage(error))
+        // 静默跳转到登录页
         router.push("/login")
       } finally {
-        setLoading(false)
+        setIsVerifying(false)
       }
     }
 
     checkAuth()
   }, [router])
 
-  // 加载中：显示空白或骨架屏
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    )
-  }
-
-  // 未认证：不渲染（已重定向）
-  if (!user) {
-    return null
-  }
-
-  // 已认证：渲染 Dashboard
+  // 乐观渲染：立即显示界面，后台验证
+  // 如果验证失败，会自动跳转到登录页
   return (
     <ClientAuthProvider initialUser={user}>
       <BreadcrumbProvider>
         <SidebarProviderServer>
           <AppSidebar />
-          <SidebarInset>{children}</SidebarInset>
+          <SidebarInset>
+            {/* 添加淡入动画，使界面显示更平滑 */}
+            <div className="animate-in fade-in duration-300">
+              {children}
+            </div>
+          </SidebarInset>
         </SidebarProviderServer>
       </BreadcrumbProvider>
     </ClientAuthProvider>

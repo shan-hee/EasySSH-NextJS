@@ -44,7 +44,6 @@ import {
   Eye,
   EyeOff,
   Edit,
-  Copy,
   FolderPlus,
   ChevronRight,
   Activity,
@@ -90,15 +89,6 @@ type EnhancedFileItem = FileItem & {
 // 使用导入的 TransferTask 类型
 type TransferTask = ImportedTransferTask
 
-interface ClipboardFile {
-  fileName: string
-  sessionId: string
-  sessionLabel: string
-  filePath: string
-  fileType: "file" | "directory"
-  operation: "copy" | "cut"
-}
-
 interface SftpManagerProps {
   serverId: string
   serverName: string
@@ -125,11 +115,7 @@ interface SftpManagerProps {
   onReadFile?: (fileName: string) => Promise<string>
   onSaveFile?: (fileName: string, content: string) => Promise<void>
   onRenameSession?: (newLabel: string) => void
-  onCopyFiles?: (fileNames: string[]) => void
-  onCutFiles?: (fileNames: string[]) => void
-  onPasteFiles?: () => void
   onToggleFullscreen?: () => void
-  clipboard?: ClipboardFile[]
   dragHandleListeners?: any
   dragHandleAttributes?: any
   // 传输任务管理(从外部传入)
@@ -164,10 +150,7 @@ export function SftpManager(props: SftpManagerProps) {
     onReadFile,
     onSaveFile,
     onRenameSession,
-    onCopyFiles,
-    onPasteFiles,
     onToggleFullscreen,
-    clipboard = [],
     dragHandleListeners,
     dragHandleAttributes,
     transferTasks = [],  // 从外部传入
@@ -864,22 +847,6 @@ export function SftpManager(props: SftpManagerProps) {
         startRename(selectedFiles[0])
       }
 
-      // Ctrl/Cmd + C: 复制
-      if (cmdOrCtrl && e.key === 'c' && selectedFiles.length > 0) {
-        e.preventDefault()
-        if (onCopyFiles) {
-          onCopyFiles(selectedFiles)
-        }
-      }
-
-      // Ctrl/Cmd + V: 粘贴
-      if (cmdOrCtrl && e.key === 'v' && clipboard && clipboard.length > 0) {
-        e.preventDefault()
-        if (onPasteFiles) {
-          onPasteFiles()
-        }
-      }
-
       // Ctrl/Cmd + D: 下载选中文件
       if (cmdOrCtrl && e.key === 'd' && selectedFiles.length > 0) {
         e.preventDefault()
@@ -928,9 +895,6 @@ export function SftpManager(props: SftpManagerProps) {
     creatingNew,
     editingSessionLabel,
     editorState.isOpen,
-    clipboard,
-    onCopyFiles,
-    onPasteFiles,
     onRefresh,
     handleBatchDelete,
     handleBatchDownload,
@@ -1089,7 +1053,6 @@ export function SftpManager(props: SftpManagerProps) {
     isFullscreen,
     currentPath,
     files,
-    clipboard,
     onNavigate,
     onUpload,
     onDownload,
@@ -1101,12 +1064,8 @@ export function SftpManager(props: SftpManagerProps) {
     onReadFile,
     onSaveFile,
     onRenameSession,
-    onCopyFiles,
-    onCutFiles: onPasteFiles, // placeholder
-    onPasteFiles,
     onToggleFullscreen,
   }), [
-    clipboard,
     currentPath,
     files,
     host,
@@ -1115,14 +1074,12 @@ export function SftpManager(props: SftpManagerProps) {
     onCreateFolder,
     onDownload,
     onNavigate,
-    onPasteFiles,
     onRefresh,
     onRename,
     onRenameSession,
     onSaveFile,
     onReadFile,
     onUpload,
-    onCopyFiles,
     onDelete,
     onDisconnect,
     onToggleFullscreen,
@@ -1134,7 +1091,7 @@ export function SftpManager(props: SftpManagerProps) {
     username,
   ])
 
-  const stickyHeaderCellClass = "sticky top-0 z-20 bg-muted supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
+  const stickyHeaderCellClass = "sticky top-0 z-20 bg-background supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
 
   // 主界面内容
   const managerContent = (
@@ -1660,7 +1617,7 @@ export function SftpManager(props: SftpManagerProps) {
             wrapperClassName="overflow-auto h-full scrollbar-custom"
             className="sftp-table text-xs [&_th]:h-9 [&_th]:px-3 [&_th]:text-xs [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle"
           >
-            <TableHeader className="sticky top-0 z-20 bg-muted supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
+            <TableHeader className="sticky top-0 z-20 bg-background supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
               <TableRow className={cn(
                 "border-b border-zinc-200 dark:border-zinc-800/50 text-xs",
               )}>
@@ -1926,32 +1883,6 @@ export function SftpManager(props: SftpManagerProps) {
                           重命名
                         </DropdownMenuItem>
 
-                        {/* 复制 */}
-                        <DropdownMenuItem
-                          onClick={() => {
-                            // TODO: 实现复制功能
-                          }}
-                          className={cn(
-                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
-                          )}
-                        >
-                          <Copy className="h-4 w-4 mr-2" />
-                          复制
-                        </DropdownMenuItem>
-
-                        {/* 粘贴 */}
-                        <DropdownMenuItem
-                          onClick={() => {
-                            // TODO: 实现粘贴功能
-                          }}
-                          className={cn(
-                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
-                          )}
-                        >
-                          <FileText className="h-4 w-4 mr-2 rotate-180" />
-                          粘贴
-                        </DropdownMenuItem>
-
                         <DropdownMenuSeparator className={cn(
                           "bg-zinc-200 dark:bg-zinc-700/50",
                         )} />
@@ -2176,33 +2107,6 @@ export function SftpManager(props: SftpManagerProps) {
                   </kbd>
                 </button>
 
-                {/* 粘贴 */}
-                <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
-                    clipboard.length === 0 && "opacity-50 pointer-events-none"
-                  )}
-                  onClick={() => {
-                    if (onPasteFiles && clipboard.length > 0) {
-                      onPasteFiles()
-                    }
-                    closeContextMenu()
-                  }}
-                  disabled={clipboard.length === 0}
-                >
-                  <FileText className="h-4 w-4 rotate-180" />
-                  <span className="flex-1">
-                    粘贴{clipboard.length > 0 ? ` (${clipboard.length} 项)` : ''}
-                  </span>
-                  <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                  )}>
-                    ⌘V
-                  </kbd>
-                </button>
-
-                <div className={cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")} />
-
                 {/* 刷新 */}
                 <button
                   className="w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm"
@@ -2300,56 +2204,6 @@ export function SftpManager(props: SftpManagerProps) {
                     </kbd>
                   </button>
                 )}
-
-                {/* 复制 */}
-                <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
-                  )}
-                  onClick={() => {
-                    const filesToCopy = selectedFiles.length > 1 ? selectedFiles : (contextMenu.fileName ? [contextMenu.fileName] : [])
-                    if (onCopyFiles && filesToCopy.length > 0) {
-                      onCopyFiles(filesToCopy)
-                    }
-                    closeContextMenu()
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                  <span className="flex-1">
-                    {selectedFiles.length > 1 ? `复制 ${selectedFiles.length} 项` : "复制"}
-                  </span>
-                  <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                  )}>
-                    ⌘C
-                  </kbd>
-                </button>
-
-                {/* 粘贴 */}
-                <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all rounded-sm",
-                    clipboard.length === 0 && "opacity-50 cursor-not-allowed",
-                    "hover:bg-accent hover:text-accent-foreground",
-                  )}
-                  onClick={() => {
-                    if (onPasteFiles && clipboard.length > 0) {
-                      onPasteFiles()
-                    }
-                    closeContextMenu()
-                  }}
-                  disabled={clipboard.length === 0}
-                >
-                  <FileText className="h-4 w-4 rotate-180" />
-                  <span className="flex-1">
-                    粘贴{clipboard.length > 0 ? ` (${clipboard.length} 项)` : ''}
-                  </span>
-                  <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                  )}>
-                    ⌘V
-                  </kbd>
-                </button>
 
                 {/* 信息 - 仅单选 */}
                 {selectedFiles.length === 1 && (

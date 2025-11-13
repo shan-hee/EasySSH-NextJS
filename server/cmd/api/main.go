@@ -389,8 +389,6 @@ func main() {
 			sftpRoutes.POST("/mkdir", sftpHandler.CreateDirectory)         // 创建目录
 			sftpRoutes.DELETE("/delete", sftpHandler.Delete)               // 删除
 			sftpRoutes.POST("/rename", sftpHandler.Rename)                 // 重命名
-			sftpRoutes.POST("/move", sftpHandler.Move)                     // 移动
-			sftpRoutes.POST("/copy", sftpHandler.Copy)                     // 复制
 
 			// 文件内容
 			sftpRoutes.GET("/read", sftpHandler.ReadFile)                  // 读取文件
@@ -537,8 +535,11 @@ func main() {
 	// 创建 HTTP 服务器
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: r,
+		Addr:         addr,
+		Handler:      r,
+		ReadTimeout:  60 * time.Second,  // 读取请求超时
+		WriteTimeout: 300 * time.Second, // 写入响应超时（5分钟，用于长时间操作如删除大目录）
+		IdleTimeout:  120 * time.Second, // 空闲连接超时
 	}
 
 	// 启动服务器（在 goroutine 中）
