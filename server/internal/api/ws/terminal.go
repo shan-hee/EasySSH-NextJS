@@ -1,18 +1,19 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/easyssh/server/internal/domain/server"
+	"github.com/easyssh/server/internal/domain/settings"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/pkg/crypto"
@@ -22,57 +23,63 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var upgrader = websocket.Upgrader{
-    ReadBufferSize:  1024,
-    WriteBufferSize: 1024,
-    CheckOrigin: func(r *http.Request) bool {
-        origin := r.Header.Get("Origin")
-        if origin == "" {
-            // 无 Origin 头：通常为同源升级，允许
-            return true
-        }
+// getUpgrader 创建 WebSocket upgrader，集成 CORS 配置
+func (h *TerminalHandler) getUpgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				// 无 Origin 头：通常为同源升级，允许
+				return true
+			}
 
-        // 1) 环境变量显式白名单（精确匹配 Origin 字符串）
-        if env := os.Getenv("ALLOWED_ORIGINS"); env != "" {
-            for _, v := range strings.Split(env, ",") {
-                if strings.TrimSpace(v) == origin {
-                    return true
-                }
-            }
-        }
+			// 1. 优先检查 Web UI 配置的 CORS 白名单
+			corsConfig, err := h.configManager.GetCORSConfig(context.Background())
+			if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
+				for _, allowedOrigin := range corsConfig.AllowedOrigins {
+					if origin == allowedOrigin {
+						log.Printf("WebSocket allowed by CORS config: %s", origin)
+						return true
+					}
+				}
+			}
 
-        // 2) 动态允许：当 Origin 的主机名与当前请求的 Host 或 X-Forwarded-Host 一致时放行
-        //    这样默认就是“当前域名/端口”，无需额外配置
-        var originHost string
-        if u, err := url.Parse(origin); err == nil {
-            originHost = u.Hostname()
-        }
-        if originHost == "" {
-            log.Printf("WebSocket origin parse failed: %s", origin)
-            return false
-        }
+			// 2. 兜底机制：动态允许同主机名的连接
+			// 当 Origin 的主机名与当前请求的 Host 或 X-Forwarded-Host 一致时放行
+			var originHost string
+			if u, err := url.Parse(origin); err == nil {
+				originHost = u.Hostname()
+			}
+			if originHost == "" {
+				log.Printf("WebSocket origin parse failed: %s", origin)
+				return false
+			}
 
-        // 候选主机：请求的 Host
-        candidates := []string{strings.Split(r.Host, ":")[0]}
-        // 以及 X-Forwarded-Host（可能为逗号分隔）
-        if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
-            for _, h := range strings.Split(xfh, ",") {
-                h = strings.TrimSpace(h)
-                if h != "" {
-                    candidates = append(candidates, strings.Split(h, ":")[0])
-                }
-            }
-        }
+			// 候选主机：请求的 Host
+			candidates := []string{strings.Split(r.Host, ":")[0]}
+			// 以及 X-Forwarded-Host（可能为逗号分隔）
+			if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
+				for _, h := range strings.Split(xfh, ",") {
+					h = strings.TrimSpace(h)
+					if h != "" {
+						candidates = append(candidates, strings.Split(h, ":")[0])
+					}
+				}
+			}
 
-        for _, h := range candidates {
-            if h != "" && strings.EqualFold(h, originHost) {
-                return true
-            }
-        }
+			for _, h := range candidates {
+				if h != "" && strings.EqualFold(h, originHost) {
+					log.Printf("WebSocket allowed by hostname match: %s", origin)
+					return true
+				}
+			}
 
-        log.Printf("WebSocket connection rejected: origin %s not allowed (host=%s, x-forwarded-host=%s)", origin, r.Host, r.Header.Get("X-Forwarded-Host"))
-        return false
-    },
+			log.Printf("WebSocket connection rejected: origin %s not allowed (host=%s, x-forwarded-host=%s)", origin, r.Host, r.Header.Get("X-Forwarded-Host"))
+			return false
+		},
+	}
 }
 
 // TerminalHandler WebSocket 终端处理器
@@ -83,10 +90,11 @@ type TerminalHandler struct {
 	encryptor         *crypto.Encryptor
 	sshSessionService sshsession.Service
 	hostKeyCallback   ssh.HostKeyCallback // SSH主机密钥验证回调
+	configManager     settings.ConfigManager // CORS 配置管理器
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, configManager settings.ConfigManager) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
@@ -94,6 +102,7 @@ func NewTerminalHandler(serverService server.Service, serverRepo server.Reposito
 		encryptor:         encryptor,
 		sshSessionService: sshSessionService,
 		hostKeyCallback:   hostKeyCallback,
+		configManager:     configManager,
 	}
 }
 
@@ -161,6 +170,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	}
 
 	// 升级到 WebSocket
+	upgrader := h.getUpgrader()
 	wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("Failed to upgrade to WebSocket: %v", err)

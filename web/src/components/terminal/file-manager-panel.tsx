@@ -152,7 +152,7 @@ export function FileManagerPanel({
         className={cn(
           // 如果挂载到内部容器，则使用 absolute 并且位于工具栏下方
           internalContainer
-            ? "absolute right-0 z-[55] flex transition-transform duration-300 ease-out pointer-events-auto"
+            ? "absolute right-0 z-[200] flex transition-transform duration-300 ease-out pointer-events-auto"
             : "fixed top-0 right-0 h-full z-[999] flex transition-transform duration-300 ease-out",
           isOpen ? "translate-x-0" : "translate-x-full",
         )}

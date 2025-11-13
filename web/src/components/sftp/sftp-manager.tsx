@@ -367,7 +367,7 @@ export function SftpManager(props: SftpManagerProps) {
   // 右键菜单处理
   const handleContextMenu = (e: React.MouseEvent, fileName: string, fileType: "file" | "directory") => {
     e.preventDefault()
-    e.stopPropagation() // 阻止事件冒泡
+    e.stopPropagation()
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -553,6 +553,7 @@ export function SftpManager(props: SftpManagerProps) {
   // 空白区域右键菜单
   const handleBlankContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -2088,16 +2089,21 @@ export function SftpManager(props: SftpManagerProps) {
         </DialogContent>
       </Dialog>
 
-      {/* macOS 风格右键菜单 */}
-      {contextMenu && (
+      {/* macOS 风格右键菜单（使用 Portal 渲染到 body，避免被 transform/overflow 影响） */}
+      {contextMenu && typeof document !== 'undefined' && createPortal(
         <div
           key={contextMenu.key}
-          className="fixed z-[100] animate-in fade-in-0 zoom-in-95 duration-200"
+          className="fixed z-[9999] animate-in fade-in-0 zoom-in-95 duration-200"
           style={{
             left: `${contextMenu.x}px`,
             top: `${contextMenu.y}px`,
           }}
           onClick={(e) => e.stopPropagation()}
+          // 防止菜单内点击被外层终端或其他监听器捕获
+          onContextMenu={(e) => {
+            e.stopPropagation()
+            // 不阻止默认，以便允许在菜单内继续右键（若有需要）
+          }}
         >
           <div
             className={cn(
@@ -2395,7 +2401,8 @@ export function SftpManager(props: SftpManagerProps) {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       </div>
     </SftpSessionProvider>

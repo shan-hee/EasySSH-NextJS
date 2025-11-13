@@ -19,7 +19,7 @@ type ServerConfig struct {
 	Port          int
 	Env           string // development, production
 	EncryptionKey string // 加密密钥（16、24 或 32 字节用于 AES）
-	WebDevPort    int    // 前端开发端口（从 WEB_DEV_PORT 读取）
+	WebDevPort    int    // 前端开发端口（从 WEB_PORT 读取）
 }
 
 // DatabaseConfig 数据库配置
@@ -62,7 +62,7 @@ func Load() (*Config, error) {
 			Port:          getEnvInt("PORT", 8521),
 			Env:           getEnv("ENV", "development"),
 			EncryptionKey: getEnv("ENCRYPTION_KEY", "easyssh-encryption-key-32byte"), // 32 字节
-			WebDevPort:    getEnvInt("WEB_DEV_PORT", 8520),
+			WebDevPort:    getEnvInt("WEB_PORT", 8520),
 		},
 		Database: DatabaseConfig{
 			Host:            getEnv("DB_HOST", "localhost"),

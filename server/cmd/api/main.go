@@ -223,7 +223,7 @@ func main() {
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
-	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback())
+	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), *configManager)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)

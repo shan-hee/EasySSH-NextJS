@@ -295,6 +295,10 @@ export function WebTerminal({
   useEffect(() => {
     if (!containerRef.current || !terminalReady || !rightClickPaste) return
 
+    // 仅在 .xterm 节点绑定监听，避免影响右侧文件面板等悬浮内容
+    const xtermRoot = containerRef.current.querySelector('.xterm') as HTMLElement | null
+    if (!xtermRoot) return
+
     const handleContextMenu = async (e: MouseEvent) => {
       e.preventDefault()
       if (!navigator.clipboard?.readText) return
@@ -308,10 +312,9 @@ export function WebTerminal({
       }
     }
 
-    const terminalEl = containerRef.current
-    terminalEl.addEventListener('contextmenu', handleContextMenu)
+    xtermRoot.addEventListener('contextmenu', handleContextMenu)
     return () => {
-      terminalEl.removeEventListener('contextmenu', handleContextMenu)
+      xtermRoot.removeEventListener('contextmenu', handleContextMenu)
     }
   }, [rightClickPaste, terminalReady, containerRef, sendInput])
 
