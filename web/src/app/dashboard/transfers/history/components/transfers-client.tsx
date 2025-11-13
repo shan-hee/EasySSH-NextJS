@@ -11,7 +11,6 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createTransferColumns } from "./transfer-columns"
 import type { FileTransfersPageData } from "@/lib/api/file-transfers-server"
-import { deleteFileTransfer } from "../actions"
 
 // 格式化文件大小
 function formatFileSize(bytes: number): string {
@@ -99,7 +98,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     [loadData]
   )
 
-  // 删除传输记录（使用 Server Action + 乐观更新）
+  // 删除传输记录（使用 API + 乐观更新）
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这条传输记录吗？")) {
       return
@@ -109,16 +108,15 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     setOptimisticTransfers(id)
 
     startTransition(async () => {
-      const result = await deleteFileTransfer(id)
-
-      if (result.success) {
+      try {
+        await fileTransfersApi.delete(id)
         toast.success("传输记录已删除")
-        // Server Action 已自动重新验证，刷新路由即可
-        router.refresh()
-      } else {
-        // 删除失败，toast 会提示错误，router.refresh() 会恢复数据
-        toast.error(result.error || "删除失败")
-        router.refresh()
+        // 刷新数据
+        await loadData(page, pageSize)
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "删除失败"))
+        // 恢复数据
+        await loadData(page, pageSize)
       }
     })
   }

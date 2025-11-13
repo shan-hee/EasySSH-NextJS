@@ -1,12 +1,14 @@
-name: Build Frontend Docker Image
+name: Build EasySSH Docker Image
 
 on:
   push:
     branches: [main]
     paths:
-      - 'VERSION'                                     # 版本号变化
-      - 'docker/Dockerfile.web'                       # Dockerfile 变化
-      - '.github/workflows/docker-build-frontend.yml' # Workflow 自身变化
+      - 'VERSION'                           # 版本号变化
+      - 'docker/Dockerfile'                 # Dockerfile 变化
+      - 'server/**'                         # 后端代码变化
+      - 'web/**'                            # 前端代码变化
+      - '.github/workflows/docker-build.yml' # Workflow 自身变化
 
   workflow_dispatch:
     inputs:
@@ -28,14 +30,9 @@ on:
           - 'linux/amd64,linux/arm64'
           - 'linux/amd64'
           - 'linux/arm64'
-      api_base:
-        description: '后端 API 地址 (构建时注入)'
-        required: false
-        type: string
-        default: 'http://backend:8521'
 
 env:
-  DOCKER_IMAGE: shanheee/easyssh-frontend
+  DOCKER_IMAGE: shanheee/easyssh
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
@@ -96,19 +93,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 🏗️ 构建并推送前端 Docker 镜像
+      - name: 🏗️ 构建并推送 EasySSH Docker 镜像
         id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/Dockerfile.web
+          file: ./docker/Dockerfile
           platforms: ${{ github.event.inputs.platforms || env.PLATFORMS }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
-            NEXT_PUBLIC_API_BASE=${{ github.event.inputs.api_base || 'http://backend:8521' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
@@ -130,7 +126,7 @@ jobs:
 
       - name: 📊 生成构建摘要
         run: |
-          echo "## 🐳 前端 Docker 镜像构建成功" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 EasySSH Docker 镜像构建成功" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**镜像标签:**" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -141,9 +137,17 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**镜像摘要:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**API 地址:** \`${{ github.event.inputs.api_base || 'http://backend:8521' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 快速启动" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# 拉取镜像" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${DOCKER_IMAGE}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# 使用 Docker Compose 启动" >> $GITHUB_STEP_SUMMARY
+          echo "cd docker" >> $GITHUB_STEP_SUMMARY
+          echo "docker-compose up -d" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 镜像信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **版本:** v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **包含:** Go 后端 + Next.js 前端静态文件" >> $GITHUB_STEP_SUMMARY
+          echo "- **架构:** ${{ github.event.inputs.platforms || env.PLATFORMS }}" >> $GITHUB_STEP_SUMMARY

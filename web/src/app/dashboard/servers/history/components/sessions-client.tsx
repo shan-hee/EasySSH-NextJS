@@ -11,7 +11,6 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createSessionColumns } from "./session-columns"
 import type { SSHSessionsPageData } from "@/lib/api/ssh-sessions-server"
-import { deleteSSHSession } from "../actions"
 
 // 格式化数据传输量
 function formatBytes(bytes: number): string {
@@ -103,7 +102,7 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     [loadData]
   )
 
-  // 删除会话记录（使用 Server Action + 乐观更新）
+  // 删除会话记录（使用 API + 乐观更新）
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这条会话记录吗？")) {
       return
@@ -113,16 +112,15 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     setOptimisticSessions(id)
 
     startTransition(async () => {
-      const result = await deleteSSHSession(id)
-
-      if (result.success) {
+      try {
+        await sshSessionsApi.delete(id)
         toast.success("会话记录已删除")
-        // Server Action 已自动重新验证，刷新路由即可
-        router.refresh()
-      } else {
-        // 删除失败，toast 会提示错误，router.refresh() 会恢复数据
-        toast.error(result.error || "删除失败")
-        router.refresh()
+        // 刷新数据
+        await loadData(page, pageSize)
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "删除失败"))
+        // 恢复数据
+        await loadData(page, pageSize)
       }
     })
   }

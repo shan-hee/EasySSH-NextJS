@@ -25,8 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-const SIDEBAR_COOKIE_NAME = "sidebar_state"
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+const SIDEBAR_COOKIE_NAME = "sidebar_state" // 保留名称以兼容旧代码
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
@@ -84,32 +83,32 @@ function SidebarProvider({
         _setOpen(openState)
       }
 
-      // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      // 保存侧边栏状态到 localStorage（纯 CSR 模式）
+      if (typeof window !== "undefined") {
+        localStorage.setItem(SIDEBAR_COOKIE_NAME, String(openState))
+      }
     },
     [setOpenProp, open]
   )
 
-  // Read persisted state on first mount to keep sidebar state across refreshes
-  // useLayoutEffect helps avoid visible flicker before first paint
+  // 从 localStorage 读取持久化状态（纯 CSR 模式）
+  // useLayoutEffect 避免首次渲染闪烁
   React.useLayoutEffect(() => {
-    // 如果通过 openProp 控制,跳过 Cookie 读取
+    // 如果通过 openProp 控制,跳过读取
     if (openProp !== undefined) return
 
     try {
-      if (typeof document === "undefined") return
-      const match = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
-      if (match) {
-        const persisted = match.split("=")[1] === "true"
+      if (typeof window === "undefined") return
+      const persisted = localStorage.getItem(SIDEBAR_COOKIE_NAME)
+      if (persisted !== null) {
+        const persistedState = persisted === "true"
         // 只在与服务端传入的 defaultOpen 不同时才更新,避免水合不匹配
-        if (persisted !== isServerDefaultOpen) {
-          _setOpen(persisted)
+        if (persistedState !== isServerDefaultOpen) {
+          _setOpen(persistedState)
         }
       }
     } catch (_) {
-      // no-op if cookie parsing fails
+      // no-op if localStorage access fails
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

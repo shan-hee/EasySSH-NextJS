@@ -1,17 +1,31 @@
-import { cookies } from "next/headers"
+"use client"
+
+import { useEffect, useState } from "react"
 import { SidebarProvider } from "@/components/ui/sidebar"
 
-export default async function SidebarProviderServer({
+/**
+ * 客户端侧边栏提供者
+ * 纯 CSR 模式：从 localStorage 读取侧边栏状态
+ */
+export default function SidebarProviderServer({
   children,
   className,
 }: {
   children: React.ReactNode
   className?: string
 }) {
-  const cookieStore = cookies()
-  const persisted = cookieStore.get("sidebar_state")?.value === "true"
+  const [defaultOpen, setDefaultOpen] = useState(true)
+
+  useEffect(() => {
+    // 从 localStorage 读取侧边栏状态
+    const persisted = localStorage.getItem("sidebar_state")
+    if (persisted !== null) {
+      setDefaultOpen(persisted === "true")
+    }
+  }, [])
+
   return (
-    <SidebarProvider defaultOpen={persisted} className={className}>
+    <SidebarProvider defaultOpen={defaultOpen} className={className}>
       {children}
     </SidebarProvider>
   )

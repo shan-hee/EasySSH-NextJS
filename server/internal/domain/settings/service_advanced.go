@@ -8,12 +8,10 @@ import (
 )
 
 // GetCORSConfig 获取 CORS 配置
+// 如果数据库中没有配置，返回空配置（让调用方使用默认值）
 func (s *service) GetCORSConfig(ctx context.Context) (*CORSConfig, error) {
-	config := &CORSConfig{
-		AllowedOrigins: []string{"http://localhost:3000"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type", "Authorization"},
-	}
+	config := &CORSConfig{}
+	hasConfig := false
 
 	if setting, err := s.repo.GetByKey(ctx, KeyCORSAllowedOrigins); err == nil && setting != nil && setting.Value != "" {
 		origins := strings.Split(setting.Value, ",")
@@ -22,6 +20,7 @@ func (s *service) GetCORSConfig(ctx context.Context) (*CORSConfig, error) {
 			origins[i] = strings.TrimSpace(origin)
 		}
 		config.AllowedOrigins = origins
+		hasConfig = true
 	}
 
 	if setting, err := s.repo.GetByKey(ctx, KeyCORSAllowedMethods); err == nil && setting != nil && setting.Value != "" {
@@ -30,6 +29,7 @@ func (s *service) GetCORSConfig(ctx context.Context) (*CORSConfig, error) {
 			methods[i] = strings.TrimSpace(method)
 		}
 		config.AllowedMethods = methods
+		hasConfig = true
 	}
 
 	if setting, err := s.repo.GetByKey(ctx, KeyCORSAllowedHeaders); err == nil && setting != nil && setting.Value != "" {
@@ -38,6 +38,12 @@ func (s *service) GetCORSConfig(ctx context.Context) (*CORSConfig, error) {
 			headers[i] = strings.TrimSpace(header)
 		}
 		config.AllowedHeaders = headers
+		hasConfig = true
+	}
+
+	// 如果数据库中没有任何 CORS 配置，返回空配置
+	if !hasConfig {
+		return &CORSConfig{}, nil
 	}
 
 	return config, nil

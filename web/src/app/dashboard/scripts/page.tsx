@@ -85,8 +85,8 @@ export default function ScriptsPage() {
   limit: pageSize,
 })
 
- setScripts(response.data)
- setTotalRows(response.total || response.data.length)
+ setScripts(response.data || [])
+ setTotalRows(response.total || (response.data || []).length)
  setTotalPages(response.total_pages || 1)
  } catch (error: unknown) {
  console.error("加载脚本列表失败:", error)
@@ -129,8 +129,8 @@ useEffect(() => {
  }
  }, [selectedEditSuggestionIndex])
 
- // 获取所有标签
- const allTags = Array.from(new Set(scripts.flatMap(script => script.tags)))
+ // 获取所有标签（安全处理）
+ const allTags = Array.from(new Set((scripts || []).flatMap(script => script.tags || [])))
 
  // 获取可用标签（排除已选择的）
  const availableTags = allTags.filter(tag => !newScript.tags.includes(tag))

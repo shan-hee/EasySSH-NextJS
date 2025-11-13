@@ -153,7 +153,7 @@ docker pull shanheee/easyssh-frontend:v1.0.0
 cd /path/to/EasySSH-NextJS
 
 # 构建后端镜像
-docker build -f docker/Dockerfile.server -t easyssh-backend:latest .
+docker build -f docker/Dockerfile -t easyssh-backend:latest .
 
 # 构建前端镜像
 docker build -f docker/Dockerfile.web \

@@ -1,35 +1,59 @@
-import { redirect } from "next/navigation"
-import type { Metadata } from "next"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import SidebarProviderServer from "@/components/sidebar-provider-server"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
-import { verifyAuth } from "@/lib/auth-server"
 import { ClientAuthProvider } from "@/components/client-auth-provider"
 import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
-
-export const metadata: Metadata = {
-  title: "仪表盘",
-  description: "EasySSH 管理控制台 - 服务器管理、连接监控、操作审计",
-}
+import { authApi, type User } from "@/lib/api/auth"
+import { getErrorMessage } from "@/lib/error-utils"
 
 /**
- * Dashboard 布局 - Server Component
- * 在服务端验证认证状态,避免客户端加载闪烁
+ * Dashboard 布局 - Client Component
+ * 纯 CSR 模式：在客户端验证认证状态
  */
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // 服务端验证认证状态
-  const user = await verifyAuth()
+  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // 未认证:重定向到登录页
-  if (!user) {
-    redirect("/login")
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const currentUser = await authApi.getCurrentUser()
+        setUser(currentUser)
+      } catch (error: unknown) {
+        console.error("Authentication failed:", getErrorMessage(error))
+        router.push("/login")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkAuth()
+  }, [router])
+
+  // 加载中：显示空白或骨架屏
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
   }
 
-  // 已认证:渲染 Dashboard 并传递初始用户数据
+  // 未认证：不渲染（已重定向）
+  if (!user) {
+    return null
+  }
+
+  // 已认证：渲染 Dashboard
   return (
     <ClientAuthProvider initialUser={user}>
       <BreadcrumbProvider>

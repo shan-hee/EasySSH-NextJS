@@ -245,7 +245,7 @@ func main() {
 	r.Use(middleware.Logger())                                       // 日志记录
 	r.Use(middleware.RequestID())                                    // 请求 ID
 	r.Use(middleware.SecurityHeaders())                              // 安全响应头
-	r.Use(middleware.CORS(configManager))                            // 跨域（支持动态配置）
+	r.Use(middleware.CORS(cfg, configManager))                       // 跨域（支持动态配置）
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(ipWhitelistService)) // IP 白名单验证（可选）
 
@@ -508,6 +508,30 @@ func main() {
 		{
 			avatarRoutes.POST("/generate", avatarHandler.GenerateAvatar) // 生成头像
 		}
+	}
+
+	// 静态文件服务（托管前端构建产物）
+	// 注意：必须在所有 API 路由之后注册
+	staticDir := "./static"
+	if _, err := os.Stat(staticDir); err == nil {
+		log.Printf("✅ Serving static files from %s", staticDir)
+
+		// 托管静态资源（_next、assets 等）
+		r.Static("/_next", staticDir+"/_next")
+		r.StaticFile("/favicon.ico", staticDir+"/favicon.ico")
+
+		// SPA 路由回退：所有非 API 请求返回 index.html
+		r.NoRoute(func(c *gin.Context) {
+			// API 请求返回 404
+			if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "API endpoint not found"})
+				return
+			}
+			// 其他请求返回 index.html（SPA 路由）
+			c.File(staticDir + "/index.html")
+		})
+	} else {
+		log.Printf("⚠️  Static directory not found: %s (frontend not built)", staticDir)
 	}
 
 	// 创建 HTTP 服务器

@@ -179,9 +179,7 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // AI 助手
   // ===================
   '/dashboard/ai-assistant': {
-    breadcrumbs: [
-      { title: '工作台', href: '/dashboard' },
-    ],
+    showTitle: false, // AI 助手直接显示在工作台下，不需要额外层级
   },
 }
 

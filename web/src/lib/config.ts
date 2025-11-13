@@ -1,78 +1,82 @@
 /**
  * 统一的环境配置管理
  *
- * 只需要配置一个变量: NEXT_PUBLIC_API_BASE
- * 例如:
- * - 开发环境: http://localhost:8521
- * - 生产环境: https://api.yourdomain.com
+ * 纯 CSR 模式：前端静态文件由 Go 后端托管
+ * 浏览器直接访问后端 API，无需代理
  */
 
 /**
  * 获取后端基础地址
- * 支持客户端和服务端使用
+ * 纯 CSR 模式下不再需要此函数，保留用于兼容性
  *
- * @returns 后端基础地址，例如: http://localhost:8521
- * @note 默认值仅用于开发环境，生产环境必须配置 NEXT_PUBLIC_API_BASE
+ * @returns 后端基础地址
+ * @deprecated 纯 CSR 模式下使用相对路径即可
  */
 export function getApiBase(): string {
-  return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8521'
+  return process.env.NEXT_PUBLIC_API_BASE || ''
 }
 
 /**
  * 获取 API URL (带 /api/v1 路径)
  *
- * 客户端和服务端行为不同:
- * - 客户端: 返回相对路径 /api，由 Next.js rewrites 代理到后端
- * - 服务端: 返回完整 URL http://backend:8521/api/v1，直接访问后端
- *
- * 这样设计的原因:
- * - 客户端使用相对路径避免浏览器尝试访问 Docker 内部服务名
- * - 服务端使用完整 URL 在 Docker 网络中直接通信
+ * 开发模式：使用完整 URL 指向后端服务器
+ * 生产模式：使用相对路径（前端由后端托管，同域）
  */
 export function getApiUrl(): string {
-  // 客户端: 使用相对路径，让 Next.js rewrites 处理
-  if (typeof window !== 'undefined') {
-    return '/api'
+  // 开发环境：使用环境变量配置的后端地址
+  if (process.env.NEXT_PUBLIC_API_BASE) {
+    return `${process.env.NEXT_PUBLIC_API_BASE}/api/v1`
   }
 
-  // 服务端: 使用完整 URL，直接访问后端
-  return `${getApiBase()}/api/v1`
+  // 生产环境：使用相对路径
+  return '/api/v1'
 }
 
 /**
  * 获取 WebSocket Host（仅浏览器端）
- * 优先使用 NEXT_PUBLIC_WS_HOST；否则使用当前页面的 host。
- * 不再从 NEXT_PUBLIC_API_BASE 推导，避免把 Docker 内部服务名泄露到浏览器（如 backend）。
+ * 开发模式：使用后端服务器地址
+ * 生产模式：使用当前页面的 host
  */
 export function getWsHost(): string {
   if (typeof window === 'undefined') {
     throw new Error('getWsHost() can only be called on client side')
   }
 
+  // 优先使用环境变量
   const envWsHost = process.env.NEXT_PUBLIC_WS_HOST
   if (envWsHost && envWsHost.trim() !== '') {
     return envWsHost.trim()
   }
+
+  // 开发环境：如果配置了 API_BASE，从中提取 host
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE
+  if (apiBase) {
+    try {
+      const url = new URL(apiBase)
+      return url.host
+    } catch {
+      // 解析失败，继续使用默认逻辑
+    }
+  }
+
+  // 生产环境：使用当前页面的 host
   return window.location.host
 }
 
 /**
  * 获取 WebSocket URL
  * 自动根据当前协议选择 ws:// 或 wss://
+ * 纯 CSR 模式：直接使用原始路径，无需转换
  */
 export function getWsUrl(path: string): string {
   if (typeof window === 'undefined') {
     throw new Error('getWsUrl() can only be called on client side')
   }
 
-  // 使用当前页面协议决定 ws/wss，避免与 API_BASE 的协议不一致
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsHost = getWsHost()
 
-  // 标准化路径：将 /api/v1/* 统一改写为 /api/*，以命中 Next.js rewrites
-  const normalizedPath = path.replace(/^\/api\/v1(?=\/|$)/, '/api')
-
-  return `${protocol}//${wsHost}${normalizedPath}`
+  return `${protocol}//${wsHost}${path}`
 }
 
 /**
