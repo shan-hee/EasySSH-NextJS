@@ -138,23 +138,7 @@ export default function TerminalPage() {
  }, [loading, servers, searchParams, router])
 
  // 加载服务器列表
- useEffect(() => {
- loadServers()
- // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [])
-
- // 读取通用设置（仅使用本地存储集成）
- useEffect(() => {
- try {
- const mt = Number(localStorage.getItem("tab.maxTabs") || "50")
- if (!isNaN(mt)) setMaxTabs(mt)
- const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
- if (!isNaN(im)) setInactiveMinutes(im)
- } catch {}
- }, [])
-
- // 加载服务器列表
- async function loadServers() {
+ const loadServers = useCallback(async () => {
   try {
   setLoading(true)
 
@@ -188,7 +172,21 @@ export default function TerminalPage() {
  } finally {
  setLoading(false)
  }
- }
+ }, [])
+
+ useEffect(() => {
+ loadServers()
+ }, [loadServers])
+
+ // 读取通用设置（仅使用本地存储集成）
+ useEffect(() => {
+ try {
+ const mt = Number(localStorage.getItem("tab.maxTabs") || "50")
+ if (!isNaN(mt)) setMaxTabs(mt)
+ const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
+ if (!isNaN(im)) setInactiveMinutes(im)
+ } catch {}
+ }, [])
 
  // 创建"快速连接"页签
  const handleNewSession = (): string | void => {

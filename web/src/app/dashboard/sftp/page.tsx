@@ -270,7 +270,7 @@ export default function SftpPage() {
  } finally {
  setLoading(false)
  }
- }, [router])
+ }, [])
 
  useEffect(() => {
  loadServers()

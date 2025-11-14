@@ -49,7 +49,7 @@ export default function DashboardLayout({
           <AppSidebar />
           <SidebarInset>
             {/* 添加淡入动画，使界面显示更平滑 */}
-            <div className="animate-in fade-in duration-300">
+            <div className="animate-in fade-in duration-300 flex flex-1 flex-col min-h-0">
               {children}
             </div>
           </SidebarInset>
