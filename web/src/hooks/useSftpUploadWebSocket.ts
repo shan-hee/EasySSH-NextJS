@@ -78,7 +78,7 @@ export function useSftpUploadWebSocket({
     }
 
     setStatus(WSStatus.DISCONNECTED);
-  }, [taskId]);
+  }, []);
 
   // 连接 WebSocket
   const connect = useCallback(() => {

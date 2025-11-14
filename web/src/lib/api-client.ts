@@ -111,7 +111,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
           await refreshSession()
           // 刷新成功，重放原请求一次（不进入重试退避）
           return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
-        } catch (_) {
+        } catch {
           // 刷新失败，抛出原始 401
           throw error
         }
@@ -168,7 +168,7 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
       if (cookieHeader && !(headers as Record<string, string>)['Cookie']) {
         ;(headers as Record<string, string>)['Cookie'] = cookieHeader
       }
-    } catch (e) {
+    } catch {
       // 在无法获取 cookies 的上下文（如某些构建阶段）忽略透传，不影响客户端请求
     }
   }

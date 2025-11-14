@@ -128,7 +128,7 @@ export function useTerminalInstance(
             })
 
             terminal.loadAddon(webglAddon)
-          } catch (_error) {
+          } catch {
             // WebGL 不可用时自动降级到 Canvas 渲染器
           }
         })

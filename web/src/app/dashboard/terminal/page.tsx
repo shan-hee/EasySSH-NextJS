@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback, Suspense } from "react"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
@@ -11,7 +11,7 @@ import { serversApi, type Server } from "@/lib/api"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { useTabUIStore } from "@/stores/tab-ui-store"
 
-export default function TerminalPage() {
+function TerminalPageContent() {
  const router = useRouter()
  const searchParams = useSearchParams()
  const [servers, setServers] = useState<QuickServer[]>([])
@@ -382,5 +382,13 @@ export default function TerminalPage() {
  externalActiveSessionId={activeSessionId}
  />
  </div>
+ )
+}
+
+export default function TerminalPage() {
+ return (
+ <Suspense fallback={<div className="flex flex-1 items-center justify-center">加载中...</div>}>
+ <TerminalPageContent />
+ </Suspense>
  )
 }
