@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -522,19 +525,50 @@ func main() {
 	if _, err := os.Stat(staticDir); err == nil {
 		log.Printf("✅ Serving static files from %s", staticDir)
 
-		// 托管静态资源（_next、assets 等）
-		r.Static("/_next", staticDir+"/_next")
-		r.StaticFile("/favicon.ico", staticDir+"/favicon.ico")
+		// 托管 Next.js 生成的静态资源（_next 等）
+		r.Static("/_next", filepath.Join(staticDir, "_next"))
+		r.StaticFile("/favicon.ico", filepath.Join(staticDir, "favicon.ico"))
 
-		// SPA 路由回退：所有非 API 请求返回 index.html
+		// 统一处理非 API 路由：
+		// 1. 先尝试返回对应的静态文件（包括 /login、/login/index.txt 等）
+		// 2. 如果不存在则回退到 index.html（SPA 前端接管路由）
 		r.NoRoute(func(c *gin.Context) {
+			requestPath := c.Request.URL.Path
+
 			// API 请求返回 404
-			if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
+			if strings.HasPrefix(requestPath, "/api") {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not_found", "message": "API endpoint not found"})
 				return
 			}
-			// 其他请求返回 index.html（SPA 路由）
-			c.File(staticDir + "/index.html")
+
+			// 规范化路径，防止 ../ 等越界
+			cleanPath := path.Clean(requestPath)
+			if cleanPath == "/" || cleanPath == "." {
+				c.File(filepath.Join(staticDir, "index.html"))
+				return
+			}
+
+			// 去掉前导 /
+			cleanPath = strings.TrimPrefix(cleanPath, "/")
+
+			// 优先尝试直接文件
+			filePath := filepath.Join(staticDir, cleanPath)
+			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+				c.File(filePath)
+				return
+			}
+
+			// 如果是目录，尝试目录下的 index.html（例如 /login -> /static/login/index.html）
+			if info, err := os.Stat(filePath); err == nil && info.IsDir() {
+				indexPath := filepath.Join(filePath, "index.html")
+				if _, err := os.Stat(indexPath); err == nil {
+					c.File(indexPath)
+					return
+				}
+			}
+
+			// 最终回退到根 index.html
+			c.File(filepath.Join(staticDir, "index.html"))
 		})
 	} else {
 		log.Printf("⚠️  Static directory not found: %s (frontend not built)", staticDir)
