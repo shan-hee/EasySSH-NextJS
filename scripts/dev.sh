@@ -209,13 +209,5 @@ cleanup() {
 # 捕获退出信号
 trap cleanup EXIT INT TERM
 
-echo ""
-echo -e "${GREEN}✅ 开发环境启动完成！${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}前端:${NC}    http://localhost:${FRONTEND_PORT}"
-echo -e "${GREEN}后端:${NC}    http://localhost:${BACKEND_PORT}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "\n${YELLOW}按 Ctrl+C 停止所有服务${NC}\n"
-
 # 保持脚本运行
 wait
