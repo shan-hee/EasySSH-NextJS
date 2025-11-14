@@ -29,7 +29,8 @@ func SecurityHeaders() gin.HandlerFunc {
 				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net blob:; " +
 				// 显式允许 Web Worker / blob: Worker, 避免回退到 script-src 限制
 				"worker-src 'self' blob:; " +
-				"style-src 'self' 'unsafe-inline'; " +
+				// 允许从 jsDelivr 加载 Monaco 所需的样式
+				"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
 				"img-src 'self' data: https:; " +
 				"font-src 'self' data:; " +
 				"connect-src 'self' https://cdn.jsdelivr.net"
