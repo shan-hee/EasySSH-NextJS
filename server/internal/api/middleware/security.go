@@ -20,10 +20,16 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("X-XSS-Protection", "1; mode=block")
 
 		// 内容安全策略 (CSP)
-		// 默认策略: 仅允许同源资源
+		// 默认策略: 仅允许同源资源, 但为 Monaco Editor 放行 jsDelivr CDN
+		// 如需更严格或自定义策略, 可通过 CONTENT_SECURITY_POLICY 环境变量覆盖
 		csp := os.Getenv("CONTENT_SECURITY_POLICY")
 		if csp == "" {
-			csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'"
+			csp = "default-src 'self'; " +
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; " +
+				"style-src 'self' 'unsafe-inline'; " +
+				"img-src 'self' data: https:; " +
+				"font-src 'self' data:; " +
+				"connect-src 'self' https://cdn.jsdelivr.net"
 		}
 		c.Header("Content-Security-Policy", csp)
 

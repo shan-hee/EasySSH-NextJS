@@ -91,25 +91,19 @@ const RadialChartSkeleton: React.FC = () => (
     {/* 标题行 */}
     <div className="flex justify-between items-center h-7">
       <Skeleton className="h-3 w-12" />
-      <Skeleton className="h-3 w-10" />
     </div>
 
     {/* 径向图区域 */}
     <div className="h-[106px] flex items-center gap-3">
-      {/* 左侧：圆形图 */}
-      <div className="w-[100px] h-[100px] flex-shrink-0 flex items-center justify-center">
-        <Skeleton className="w-20 h-20 rounded-full" />
-      </div>
-
-      {/* 右侧：文字信息 */}
+      {/* 左侧：文字信息 */}
       <div className="flex-1 space-y-3">
         {/* RAM */}
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
             <Skeleton className="w-2 h-2 rounded-full" />
             <Skeleton className="h-2.5 w-10" />
+            <Skeleton className="h-2.5 w-8" />
           </div>
-          <Skeleton className="h-3 w-12 ml-3.5" />
           <Skeleton className="h-2 w-24 ml-3.5" />
         </div>
 
@@ -118,10 +112,15 @@ const RadialChartSkeleton: React.FC = () => (
           <div className="flex items-center gap-1.5">
             <Skeleton className="w-2 h-2 rounded-full" />
             <Skeleton className="h-2.5 w-10" />
+            <Skeleton className="h-2.5 w-8" />
           </div>
-          <Skeleton className="h-3 w-12 ml-3.5" />
           <Skeleton className="h-2 w-24 ml-3.5" />
         </div>
+      </div>
+
+      {/* 右侧：圆形图 */}
+      <div className="w-[100px] h-[100px] flex-shrink-0 flex items-center justify-center">
+        <Skeleton className="w-20 h-20 rounded-full" />
       </div>
     </div>
   </div>
