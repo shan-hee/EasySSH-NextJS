@@ -25,7 +25,10 @@ func SecurityHeaders() gin.HandlerFunc {
 		csp := os.Getenv("CONTENT_SECURITY_POLICY")
 		if csp == "" {
 			csp = "default-src 'self'; " +
-				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; " +
+				// 允许从 jsDelivr 加载 Monaco 相关脚本, 并允许 blob: 用于 Worker
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net blob:; " +
+				// 显式允许 Web Worker / blob: Worker, 避免回退到 script-src 限制
+				"worker-src 'self' blob:; " +
 				"style-src 'self' 'unsafe-inline'; " +
 				"img-src 'self' data: https:; " +
 				"font-src 'self' data:; " +
