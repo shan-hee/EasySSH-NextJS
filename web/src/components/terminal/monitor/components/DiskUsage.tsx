@@ -63,7 +63,8 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
       animation: true,
       animationDuration: 220,
       animationEasing: "cubicOut",
-      animationDurationUpdate: 220,
+      // 慢速变化数据使用更慢的动画
+      animationDurationUpdate: 300,
       animationEasingUpdate: "cubicOut",
       grid: {
         // 与上方图表对齐, 不再给左侧名称预留空间
@@ -79,7 +80,9 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
         axisPointer: { type: "none" },
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.92)",
+        backgroundColor: "rgba(15,23,42,0.88)",
+        borderColor: "rgba(148,163,184,0.15)",
+        borderWidth: 1,
         textStyle: {
           fontSize: 11,
         },
@@ -206,7 +209,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
         <span className="text-xs font-semibold">磁盘</span>
-        <span className={`text-xs font-mono font-semibold tabular-nums ${
+        <span className={`text-xs font-mono font-semibold tabular-nums transition-colors duration-500 ${
           totalPercent > 90 ? 'text-red-500' : totalPercent > 80 ? 'text-yellow-500' : 'text-muted-foreground'
         }`}>
           {totalPercent}%

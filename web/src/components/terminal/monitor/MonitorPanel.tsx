@@ -152,7 +152,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
         // 样式 - 移除边框（由外层容器处理）
         "overflow-y-auto",
         // 滚动条样式
-        "scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent",
+        "monitor-panel-scrollbar",
         className
       )}
     >

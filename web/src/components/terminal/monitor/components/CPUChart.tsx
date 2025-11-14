@@ -76,10 +76,10 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
 
     return {
       animation: true,
-      // 初始动画与更新动画保持轻量但流畅
+      // 快速变化数据使用更快的动画
       animationDuration: 200,
       animationEasing: "cubicOut",
-      animationDurationUpdate: 260,
+      animationDurationUpdate: 150,
       animationEasingUpdate: "cubicOut",
       grid: {
         left: 28,
@@ -95,7 +95,9 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         },
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.92)",
+        backgroundColor: "rgba(15,23,42,0.95)",
+        borderColor: "rgba(148,163,184,0.2)",
+        borderWidth: 1,
         textStyle: {
           fontSize: 11,
         },
@@ -160,7 +162,6 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
           // 使用 ECharts 内置平滑曲线
           smooth: true,
           smoothMonotone: "x",
-          hoverAnimation: false,
           showSymbol: false,
           symbol: "circle",
           symbolSize: 4,
@@ -175,6 +176,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
           emphasis: {
             // 悬浮时仅在当前点显示小圆点，线条和面积保持原有颜色
             focus: "none",
+            scale: false,
             lineStyle: {
               width: 2,
               color: usageColor,
@@ -201,7 +203,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
         <span className="text-xs font-semibold">CPU</span>
-        <span className={`text-xs font-mono font-semibold tabular-nums ${
+        <span className={`text-xs font-mono font-semibold tabular-nums transition-colors duration-500 ${
           currentUsage > 80 ? 'text-red-500' : currentUsage > 60 ? 'text-yellow-500' : 'text-muted-foreground'
         }`}>
           {currentUsage}%

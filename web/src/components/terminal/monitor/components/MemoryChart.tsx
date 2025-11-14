@@ -60,13 +60,16 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
       animation: true,
       animationDuration: 220,
       animationEasing: "cubicOut",
-      animationDurationUpdate: 220,
+      // 慢速变化数据使用更慢的动画
+      animationDurationUpdate: 300,
       animationEasingUpdate: "cubicOut",
       tooltip: {
         trigger: "item",
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.92)",
+        backgroundColor: "rgba(15,23,42,0.88)",
+        borderColor: "rgba(148,163,184,0.15)",
+        borderWidth: 1,
         textStyle: {
           fontSize: 11,
         },
@@ -102,9 +105,12 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
           emphasis: {
             disabled: true,
           },
-          // 圆角环形效果（无边框）
+          // 圆角环形效果（添加微妙阴影）
           itemStyle: {
             borderRadius: 8,
+            shadowColor: 'rgba(0, 0, 0, 0.15)',
+            shadowBlur: 8,
+            shadowOffsetY: 2,
           },
           label: { show: false },
           labelLine: { show: false },
@@ -134,6 +140,9 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
           },
           itemStyle: {
             borderRadius: 8,
+            shadowColor: 'rgba(0, 0, 0, 0.15)',
+            shadowBlur: 8,
+            shadowOffsetY: 2,
           },
           label: { show: false },
           labelLine: { show: false },

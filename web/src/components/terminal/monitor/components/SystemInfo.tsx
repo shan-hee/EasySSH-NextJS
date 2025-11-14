@@ -35,7 +35,8 @@ const InfoRow: React.FC<{
   return (
     <div
       className={cn(
-        "flex justify-between items-center h-5 leading-5 text-xs cursor-pointer transition-colors",
+        "flex justify-between items-center h-5 leading-5 text-xs cursor-pointer",
+        "transition-all duration-300 ease-in-out",
         "hover:bg-accent/50 rounded px-1.5 -mx-1.5",
         copied && "bg-green-500/10"
       )}
@@ -45,6 +46,7 @@ const InfoRow: React.FC<{
       <span className="text-muted-foreground shrink-0">{label}</span>
       <span className={cn(
         "font-medium truncate ml-2",
+        "transition-colors duration-300",
         monospace && "font-mono text-[11px]",
         copied && "text-green-500"
       )}>

@@ -98,7 +98,8 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
       animation: true,
       animationDuration: 220,
       animationEasing: "cubicOut",
-      animationDurationUpdate: 220,
+      // 快速变化数据使用更快的动画
+      animationDurationUpdate: 150,
       animationEasingUpdate: "cubicOut",
       grid: {
         left: 28,
@@ -117,7 +118,9 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         },
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.92)",
+        backgroundColor: "rgba(15,23,42,0.95)",
+        borderColor: "rgba(148,163,184,0.2)",
+        borderWidth: 1,
         textStyle: {
           fontSize: 11,
         },
@@ -181,7 +184,6 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           type: "line",
           smooth: true,
           smoothMonotone: "x",
-          hoverAnimation: false,
           showSymbol: false,
           symbol: "circle",
           symbolSize: 3,
@@ -192,6 +194,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           // 悬浮时仅在当前点显示小圆点，线条保持原有颜色
           emphasis: {
             focus: "none",
+            scale: false,
             lineStyle: {
               width: 2,
               color: downloadColor,
@@ -210,7 +213,6 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           type: "line",
           smooth: true,
           smoothMonotone: "x",
-          hoverAnimation: false,
           showSymbol: false,
           symbol: "circle",
           symbolSize: 3,
@@ -220,6 +222,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           },
           emphasis: {
             focus: "none",
+            scale: false,
             lineStyle: {
               width: 2,
               color: uploadColor,
