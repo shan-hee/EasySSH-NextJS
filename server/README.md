@@ -314,8 +314,11 @@ golangci-lint run
 | `REDIS_PASSWORD` | Redis 密码 | - | 否 |
 | `REDIS_DB` | Redis 数据库编号 | 0 | 否 |
 | `JWT_SECRET` | JWT 密钥 | - | ✅ |
-| `JWT_ACCESS_EXPIRE` | Access Token 过期时间（小时） | 1 | 否 |
-| `JWT_REFRESH_EXPIRE` | Refresh Token 过期时间（小时） | 168 | 否 |
+| `JWT_ACCESS_EXPIRE_MINUTES` | Access Token 过期时间（分钟，5-1440） | 15 | 否 |
+| `JWT_REFRESH_IDLE_EXPIRE_DAYS` | Refresh Token 闲置过期时间（天，1-90） | 7 | 否 |
+| `JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS` | Refresh Token 绝对过期时间（天，1-365） | 30 | 否 |
+| `JWT_REFRESH_ROTATE` | 是否启用刷新令牌轮换 | true | 否 |
+| `JWT_REFRESH_REUSE_DETECTION` | 是否启用刷新令牌复用检测 | true | 否 |
 
 ### 生成加密密钥
 

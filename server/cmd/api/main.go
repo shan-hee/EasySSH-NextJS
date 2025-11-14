@@ -25,8 +25,8 @@ import (
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/settings"
 	"github.com/easyssh/server/internal/domain/ssh"
-	"github.com/easyssh/server/internal/domain/sshkey"
 	"github.com/easyssh/server/internal/domain/sshhostkey"
+	"github.com/easyssh/server/internal/domain/sshkey"
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/domain/tabsession"
 	"github.com/easyssh/server/internal/domain/user"
@@ -72,18 +72,18 @@ func main() {
 	// 数据库迁移（自动迁移）
 	if err := database.AutoMigrate(
 		&auth.User{},
-		&auth.Session{},              // 用户会话表
+		&auth.Session{}, // 用户会话表
 		&server.Server{},
 		&auditlog.AuditLog{},
-		&script.Script{},             // 脚本表
-		&batchtask.BatchTask{},       // 批量任务表
-		&scheduledtask.ScheduledTask{}, // 定时任务表
-		&sshsession.SSHSession{},     // SSH会话表
-		&filetransfer.FileTransfer{}, // 文件传输表
-		&settings.Settings{},         // 系统设置表
-		&settings.IPWhitelist{},      // IP白名单表
-		&sshkey.SSHKey{},             // SSH密钥表
-		&sshhostkey.SSHHostKey{},     // SSH主机密钥表（TOFU安全验证）
+		&script.Script{},                 // 脚本表
+		&batchtask.BatchTask{},           // 批量任务表
+		&scheduledtask.ScheduledTask{},   // 定时任务表
+		&sshsession.SSHSession{},         // SSH会话表
+		&filetransfer.FileTransfer{},     // 文件传输表
+		&settings.Settings{},             // 系统设置表
+		&settings.IPWhitelist{},          // IP白名单表
+		&sshkey.SSHKey{},                 // SSH密钥表
+		&sshhostkey.SSHHostKey{},         // SSH主机密钥表（TOFU安全验证）
 		&tabsession.TabSessionSettings{}, // 标签/会话设置表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
@@ -92,13 +92,17 @@ func main() {
 
 	// 初始化服务层
 	// JWT 服务
+	accessTokenDuration := time.Duration(cfg.JWT.AccessExpireMinutes) * time.Minute
+	refreshIdleDuration := time.Duration(cfg.JWT.RefreshIdleExpireDays) * 24 * time.Hour
+	refreshAbsoluteDuration := time.Duration(cfg.JWT.RefreshAbsoluteExpireDays) * 24 * time.Hour
+
 	jwtService := auth.NewJWTService(auth.JWTConfig{
-		SecretKey:                 cfg.JWT.Secret,
-		AccessTokenDuration:       time.Duration(cfg.JWT.AccessExpireMinutes) * time.Minute,
-		RefreshIdleExpireDuration: time.Duration(cfg.JWT.RefreshIdleExpireDays) * 24 * time.Hour,
-		RefreshAbsoluteExpireDuration: time.Duration(cfg.JWT.RefreshAbsoluteExpireDays) * 24 * time.Hour,
-		RefreshRotate:             cfg.JWT.RefreshRotate,
-		RefreshReuseDetection:     cfg.JWT.RefreshReuseDetection,
+		SecretKey:                     cfg.JWT.Secret,
+		AccessTokenDuration:           accessTokenDuration,
+		RefreshIdleExpireDuration:     refreshIdleDuration,
+		RefreshAbsoluteExpireDuration: refreshAbsoluteDuration,
+		RefreshRotate:                 cfg.JWT.RefreshRotate,
+		RefreshReuseDetection:         cfg.JWT.RefreshReuseDetection,
 	}, redisClient.GetClient())
 
 	// 认证服务
@@ -218,8 +222,12 @@ func main() {
 	// SFTP 上传 WebSocket 处理器
 	sftpUploadWSHandler := ws.NewSFTPUploadHandler()
 
+	// 令牌有效期（秒），用于 Cookie 和 API 响应
+	accessTokenTTLSeconds := int(accessTokenDuration.Seconds())
+	refreshTokenTTLSeconds := int(refreshIdleDuration.Seconds())
+
 	// 初始化处理器
-	authHandler := rest.NewAuthHandler(authService, jwtService, configManager)
+	authHandler := rest.NewAuthHandler(authService, jwtService, configManager, accessTokenTTLSeconds, refreshTokenTTLSeconds)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
@@ -241,12 +249,12 @@ func main() {
 	r := gin.New()
 
 	// 全局中间件
-	r.Use(middleware.Recovery())                                    // 错误恢复
-	r.Use(middleware.Logger())                                       // 日志记录
-	r.Use(middleware.RequestID())                                    // 请求 ID
-	r.Use(middleware.SecurityHeaders())                              // 安全响应头
-	r.Use(middleware.CORS(cfg, configManager))                       // 跨域（支持动态配置）
-	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
+	r.Use(middleware.Recovery())                                        // 错误恢复
+	r.Use(middleware.Logger())                                          // 日志记录
+	r.Use(middleware.RequestID())                                       // 请求 ID
+	r.Use(middleware.SecurityHeaders())                                 // 安全响应头
+	r.Use(middleware.CORS(cfg, configManager))                          // 跨域（支持动态配置）
+	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))          // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(ipWhitelistService)) // IP 白名单验证（可选）
 
 	// API v1 路由组
@@ -295,10 +303,10 @@ func main() {
 			authRoutes.POST("/login", middleware.LoginRateLimitMiddleware(configManager), authHandler.Login)
 			authRoutes.POST("/logout", authHandler.Logout)
 			authRoutes.POST("/refresh", authHandler.RefreshToken)
-			authRoutes.GET("/admin-status", authHandler.CheckAdminStatus)           // 检查管理员状态
+			authRoutes.GET("/admin-status", authHandler.CheckAdminStatus) // 检查管理员状态
 			// 初始化管理员接口应用速率限制（支持动态配置）
 			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(configManager), authHandler.InitializeAdmin)
-			authRoutes.POST("/2fa/verify", authHandler.Verify2FACode)                // 验证 2FA 代码（登录时）
+			authRoutes.POST("/2fa/verify", authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
 		}
 
 		// 用户路由（需要认证）
@@ -310,13 +318,13 @@ func main() {
 			userRoutes.PUT("/me/password", authHandler.ChangePassword)
 
 			// 2FA 相关路由
-			userRoutes.GET("/me/2fa/generate", authHandler.Generate2FASecret)  // 生成 2FA secret
-			userRoutes.POST("/me/2fa/enable", authHandler.Enable2FA)           // 启用 2FA
-			userRoutes.POST("/me/2fa/disable", authHandler.Disable2FA)         // 禁用 2FA
+			userRoutes.GET("/me/2fa/generate", authHandler.Generate2FASecret) // 生成 2FA secret
+			userRoutes.POST("/me/2fa/enable", authHandler.Enable2FA)          // 启用 2FA
+			userRoutes.POST("/me/2fa/disable", authHandler.Disable2FA)        // 禁用 2FA
 
 			// 会话管理路由
-			userRoutes.GET("/me/sessions", authHandler.ListSessions)                  // 获取活跃会话列表
-			userRoutes.DELETE("/me/sessions/:session_id", authHandler.RevokeSession)  // 撤销指定会话
+			userRoutes.GET("/me/sessions", authHandler.ListSessions)                          // 获取活跃会话列表
+			userRoutes.DELETE("/me/sessions/:session_id", authHandler.RevokeSession)          // 撤销指定会话
 			userRoutes.POST("/me/sessions/revoke-others", authHandler.RevokeAllOtherSessions) // 撤销所有其他会话
 
 			// 通知设置路由
@@ -327,27 +335,27 @@ func main() {
 		userManagementRoutes := v1.Group("/users")
 		userManagementRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			userManagementRoutes.GET("", userHandler.ListUsers)                     // 获取用户列表
-			userManagementRoutes.GET("/statistics", userHandler.GetStatistics)      // 获取统计信息
-			userManagementRoutes.GET("/:id", userHandler.GetUser)                   // 获取用户详情
-			userManagementRoutes.POST("", userHandler.CreateUser)                   // 创建用户
-			userManagementRoutes.PUT("/:id", userHandler.UpdateUser)                // 更新用户
-			userManagementRoutes.DELETE("/:id", userHandler.DeleteUser)             // 删除用户
-			userManagementRoutes.POST("/:id/password", userHandler.ChangePassword)  // 修改密码
+			userManagementRoutes.GET("", userHandler.ListUsers)                    // 获取用户列表
+			userManagementRoutes.GET("/statistics", userHandler.GetStatistics)     // 获取统计信息
+			userManagementRoutes.GET("/:id", userHandler.GetUser)                  // 获取用户详情
+			userManagementRoutes.POST("", userHandler.CreateUser)                  // 创建用户
+			userManagementRoutes.PUT("/:id", userHandler.UpdateUser)               // 更新用户
+			userManagementRoutes.DELETE("/:id", userHandler.DeleteUser)            // 删除用户
+			userManagementRoutes.POST("/:id/password", userHandler.ChangePassword) // 修改密码
 		}
 
 		// 服务器路由（需要认证）
 		serverRoutes := v1.Group("/servers")
 		serverRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			serverRoutes.GET("", serverHandler.List)                       // 列表
-			serverRoutes.POST("", serverHandler.Create)                    // 创建
-			serverRoutes.GET("/statistics", serverHandler.GetStatistics)   // 统计
-			serverRoutes.PATCH("/reorder", serverHandler.Reorder)          // 批量更新排序
-			serverRoutes.GET("/:id", serverHandler.GetByID)                // 详情
-			serverRoutes.PUT("/:id", serverHandler.Update)                 // 更新
-			serverRoutes.DELETE("/:id", serverHandler.Delete)              // 删除
-			serverRoutes.POST("/:id/test", serverHandler.TestConnection)   // 连接测试
+			serverRoutes.GET("", serverHandler.List)                     // 列表
+			serverRoutes.POST("", serverHandler.Create)                  // 创建
+			serverRoutes.GET("/statistics", serverHandler.GetStatistics) // 统计
+			serverRoutes.PATCH("/reorder", serverHandler.Reorder)        // 批量更新排序
+			serverRoutes.GET("/:id", serverHandler.GetByID)              // 详情
+			serverRoutes.PUT("/:id", serverHandler.Update)               // 更新
+			serverRoutes.DELETE("/:id", serverHandler.Delete)            // 删除
+			serverRoutes.POST("/:id/test", serverHandler.TestConnection) // 连接测试
 		}
 
 		// SSH 路由（需要认证）
@@ -358,10 +366,10 @@ func main() {
 			sshRoutes.GET("/terminal/:server_id", terminalHandler.HandleSSH)
 
 			// 会话管理 REST API
-			sshRoutes.GET("/sessions", sshHandler.ListSessions)            // 会话列表
-			sshRoutes.GET("/sessions/:id", sshHandler.GetSession)          // 会话详情
-			sshRoutes.DELETE("/sessions/:id", sshHandler.CloseSession)     // 关闭会话
-			sshRoutes.GET("/statistics", sshHandler.GetStatistics)         // 统计信息
+			sshRoutes.GET("/sessions", sshHandler.ListSessions)        // 会话列表
+			sshRoutes.GET("/sessions/:id", sshHandler.GetSession)      // 会话详情
+			sshRoutes.DELETE("/sessions/:id", sshHandler.CloseSession) // 关闭会话
+			sshRoutes.GET("/statistics", sshHandler.GetStatistics)     // 统计信息
 		}
 
 		// 监控 WebSocket 路由（需要认证）
@@ -377,22 +385,22 @@ func main() {
 		sftpRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
 			// 文件浏览
-			sftpRoutes.GET("/list", sftpHandler.ListDirectory)             // 列出目录
-			sftpRoutes.GET("/stat", sftpHandler.GetFileInfo)               // 文件信息
-			sftpRoutes.GET("/disk-usage", sftpHandler.GetDiskUsage)        // 磁盘使用
+			sftpRoutes.GET("/list", sftpHandler.ListDirectory)      // 列出目录
+			sftpRoutes.GET("/stat", sftpHandler.GetFileInfo)        // 文件信息
+			sftpRoutes.GET("/disk-usage", sftpHandler.GetDiskUsage) // 磁盘使用
 
 			// 文件传输
-			sftpRoutes.POST("/upload", sftpHandler.UploadFile)             // 上传文件
-			sftpRoutes.GET("/download", sftpHandler.DownloadFile)          // 下载文件
+			sftpRoutes.POST("/upload", sftpHandler.UploadFile)    // 上传文件
+			sftpRoutes.GET("/download", sftpHandler.DownloadFile) // 下载文件
 
 			// 文件操作
-			sftpRoutes.POST("/mkdir", sftpHandler.CreateDirectory)         // 创建目录
-			sftpRoutes.DELETE("/delete", sftpHandler.Delete)               // 删除
-			sftpRoutes.POST("/rename", sftpHandler.Rename)                 // 重命名
+			sftpRoutes.POST("/mkdir", sftpHandler.CreateDirectory) // 创建目录
+			sftpRoutes.DELETE("/delete", sftpHandler.Delete)       // 删除
+			sftpRoutes.POST("/rename", sftpHandler.Rename)         // 重命名
 
 			// 文件内容
-			sftpRoutes.GET("/read", sftpHandler.ReadFile)                  // 读取文件
-			sftpRoutes.POST("/write", sftpHandler.WriteFile)               // 写入文件
+			sftpRoutes.GET("/read", sftpHandler.ReadFile)    // 读取文件
+			sftpRoutes.POST("/write", sftpHandler.WriteFile) // 写入文件
 		}
 
 		// SFTP 上传进度 WebSocket 路由（需要认证）
@@ -406,35 +414,35 @@ func main() {
 		monitoringRoutes := v1.Group("/monitoring/:server_id")
 		monitoringRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			monitoringRoutes.GET("/system", monitoringHandler.GetSystemInfo)       // 系统综合信息
-			monitoringRoutes.GET("/cpu", monitoringHandler.GetCPUInfo)             // CPU 信息
-			monitoringRoutes.GET("/memory", monitoringHandler.GetMemoryInfo)       // 内存信息
-			monitoringRoutes.GET("/disk", monitoringHandler.GetDiskInfo)           // 磁盘信息
-			monitoringRoutes.GET("/network", monitoringHandler.GetNetworkInfo)     // 网络信息
-			monitoringRoutes.GET("/processes", monitoringHandler.GetTopProcesses)  // 进程列表
+			monitoringRoutes.GET("/system", monitoringHandler.GetSystemInfo)      // 系统综合信息
+			monitoringRoutes.GET("/cpu", monitoringHandler.GetCPUInfo)            // CPU 信息
+			monitoringRoutes.GET("/memory", monitoringHandler.GetMemoryInfo)      // 内存信息
+			monitoringRoutes.GET("/disk", monitoringHandler.GetDiskInfo)          // 磁盘信息
+			monitoringRoutes.GET("/network", monitoringHandler.GetNetworkInfo)    // 网络信息
+			monitoringRoutes.GET("/processes", monitoringHandler.GetTopProcesses) // 进程列表
 		}
 
 		// 审计日志路由（需要认证）
 		auditLogRoutes := v1.Group("/audit-logs")
 		auditLogRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			auditLogRoutes.GET("", auditLogHandler.List)                          // 查询日志列表
-			auditLogRoutes.GET("/me", auditLogHandler.GetMyLogs)                  // 我的日志
-			auditLogRoutes.GET("/statistics", auditLogHandler.GetStatistics)      // 统计信息
-			auditLogRoutes.GET("/:id", auditLogHandler.GetByID)                   // 日志详情
-			auditLogRoutes.DELETE("/cleanup", auditLogHandler.CleanupOldLogs)     // 清理旧日志（管理员）
+			auditLogRoutes.GET("", auditLogHandler.List)                      // 查询日志列表
+			auditLogRoutes.GET("/me", auditLogHandler.GetMyLogs)              // 我的日志
+			auditLogRoutes.GET("/statistics", auditLogHandler.GetStatistics)  // 统计信息
+			auditLogRoutes.GET("/:id", auditLogHandler.GetByID)               // 日志详情
+			auditLogRoutes.DELETE("/cleanup", auditLogHandler.CleanupOldLogs) // 清理旧日志（管理员）
 		}
 
 		// 脚本管理路由（需要认证）
 		scriptRoutes := v1.Group("/scripts")
 		scriptRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			scriptRoutes.GET("", scriptHandler.List)                    // 脚本列表
-			scriptRoutes.POST("", scriptHandler.Create)                 // 创建脚本
-			scriptRoutes.GET("/:id", scriptHandler.GetByID)             // 脚本详情
-			scriptRoutes.PUT("/:id", scriptHandler.Update)              // 更新脚本
-			scriptRoutes.DELETE("/:id", scriptHandler.Delete)           // 删除脚本
-			scriptRoutes.POST("/:id/execute", scriptHandler.Execute)    // 执行脚本
+			scriptRoutes.GET("", scriptHandler.List)                 // 脚本列表
+			scriptRoutes.POST("", scriptHandler.Create)              // 创建脚本
+			scriptRoutes.GET("/:id", scriptHandler.GetByID)          // 脚本详情
+			scriptRoutes.PUT("/:id", scriptHandler.Update)           // 更新脚本
+			scriptRoutes.DELETE("/:id", scriptHandler.Delete)        // 删除脚本
+			scriptRoutes.POST("/:id/execute", scriptHandler.Execute) // 执行脚本
 		}
 
 		// 批量任务路由（需要认证）
@@ -494,7 +502,7 @@ func main() {
 		sshKeyRoutes := v1.Group("/ssh-keys")
 		sshKeyRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			sshKeyRoutes.GET("", sshKeyHandler.GetSSHKeys)           // 获取密钥列表
+			sshKeyRoutes.GET("", sshKeyHandler.GetSSHKeys)               // 获取密钥列表
 			sshKeyRoutes.POST("/generate", sshKeyHandler.GenerateSSHKey) // 生成密钥
 			sshKeyRoutes.POST("/import", sshKeyHandler.ImportSSHKey)     // 导入密钥
 			sshKeyRoutes.DELETE("/:id", sshKeyHandler.DeleteSSHKey)      // 删除密钥
