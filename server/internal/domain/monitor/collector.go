@@ -92,7 +92,10 @@ echo "=== NETWORK ==="
 cat /proc/net/dev | tail -n +3
 
 echo "=== DISK ==="
-df -B1 -x tmpfs -x devtmpfs 2>/dev/null | tail -n +2
+# 仅统计整机磁盘总量/已用/可用/使用率
+# 使用 --total 聚合, 并排除常见的内存盘和只读镜像文件系统
+df -B1 --total \
+  -x tmpfs -x devtmpfs -x squashfs -x overlay -x aufs 2>/dev/null | tail -n 1
 
 echo "=== LOAD ==="
 cat /proc/loadavg
@@ -322,9 +325,16 @@ func (c *Collector) parseDisk(data string) []*pb.DiskMetrics {
 			continue
 		}
 
+		fsName := fields[0]
 		total := parseUint64(fields[1])
 		used := parseUint64(fields[2])
 		mountPoint := fields[5]
+
+		// 当使用 df --total 时, 聚合行的挂载点通常为 "-" 或 "total"
+		// 将其归一为 "/" 以便前端显示更友好
+		if fsName == "total" || mountPoint == "-" {
+			mountPoint = "/"
+		}
 
 		// 跳过过小的分区 (< 100MB)
 		if total < 100*1024*1024 {

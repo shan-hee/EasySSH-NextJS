@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
 
@@ -139,7 +138,8 @@ ${colorConfig
   )
 }
 
-const ChartTooltip = RechartsPrimitive.Tooltip
+// 占位 Tooltip 组件，保留 API 但不依赖具体图表库
+const ChartTooltip: React.FC<any> = () => null
 
 type TooltipPayloadItem = {
   color?: string
@@ -307,7 +307,8 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
 )
 ChartTooltipContent.displayName = "ChartTooltipContent"
 
-const ChartLegend = RechartsPrimitive.Legend
+// 占位 Legend 组件，保留 API 但不依赖具体图表库
+const ChartLegend: React.FC<any> = () => null
 
 type LegendPayloadItem = {
   dataKey?: string

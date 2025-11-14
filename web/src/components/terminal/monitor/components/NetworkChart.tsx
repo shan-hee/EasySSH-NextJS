@@ -1,20 +1,14 @@
-/**
- * 网络流量图表组件
- * 使用 recharts 库显示上行和下行流量
- * 固定高度 142px
- */
-
 "use client"
 
 import React from 'react';
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import ReactECharts from "echarts-for-react";
+import type { EChartsOption } from "echarts";
 import type { NetworkData } from '../types/metrics';
 import {
   ChartConfig,
   ChartContainer,
-  ChartTooltip,
 } from "@/components/ui/chart";
-import { AnimatedActiveDot } from './AnimatedActiveDot';
+import { useEchartsColors } from "@/lib/echarts-theme";
 
 interface NetworkChartProps {
   data: NetworkData[];
@@ -48,18 +42,28 @@ const chartConfig = {
 
 /**
  * 网络流量图表组件
+ * 使用 ECharts 双折线图显示上行和下行流量
+ * 固定高度 142px
  */
 export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
   data,
   currentDownload,
   currentUpload,
 }) => {
-  // 转换数据格式为 recharts 需要的格式
-  const chartData = data.map(item => ({
-    time: item.time.slice(3, 8), // 只显示时间部分
-    download: item.download,
-    upload: item.upload,
-  }));
+  // 转换数据格式为图表需要的格式
+  const chartData = React.useMemo(
+    () =>
+      data.map((item) => ({
+        time: item.time.slice(3, 8), // 只显示时间部分
+        download: item.download,
+        upload: item.upload,
+      })),
+    [data]
+  );
+
+  const colors = useEchartsColors(chartConfig);
+  const downloadColor = colors.download || "#22c55e";
+  const uploadColor = colors.upload || "#f97316";
 
   // 计算Y轴的最大值用于显示刻度
   // 找出实际数据的最大值
@@ -84,13 +88,153 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
     return `${value}K`;
   };
 
-  // 计算 X 轴刻度间隔 - 根据数据点数量动态调整
-  const getXAxisInterval = () => {
-    const dataLength = chartData.length;
-    if (dataLength <= 2) return 0; // 显示所有刻度
-    if (dataLength <= 5) return 1; // 每隔 1 个显示
-    return 'preserveStartEnd'; // 只显示首尾
-  };
+  const option: EChartsOption = React.useMemo(() => {
+    const times = chartData.map((item) => item.time);
+    const downloadValues = chartData.map((item) => item.download);
+    const uploadValues = chartData.map((item) => item.upload);
+
+    return {
+      color: [downloadColor, uploadColor],
+      animation: true,
+      animationDuration: 220,
+      animationEasing: "cubicOut",
+      animationDurationUpdate: 220,
+      animationEasingUpdate: "cubicOut",
+      grid: {
+        left: 28,
+        right: 8,
+        top: 8,
+        bottom: 16,
+      },
+      legend: {
+        show: false,
+      },
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          // 恢复为简单的直线指示，不使用十字准星
+          type: "line",
+        },
+        borderRadius: 6,
+        padding: 8,
+        backgroundColor: "rgba(15,23,42,0.92)",
+        textStyle: {
+          fontSize: 11,
+        },
+        formatter: (params: any) => {
+          const list = Array.isArray(params) ? params : [params];
+          const label = list[0]?.axisValue ?? "";
+          const lines = list
+            .map((p: any) => {
+              const value = typeof p.data === "number" ? p.data : p.data?.value ?? 0;
+              const name = p.seriesName === "download" ? "下载" : "上传";
+              const color = p.color || (p.seriesName === "download" ? downloadColor : uploadColor);
+              return `
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                  <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${color};"></span>
+                  <span>${name}:</span>
+                  <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
+                    ${formatSpeed(value)}
+                  </span>
+                </div>
+              `;
+            })
+            .join("");
+          return `
+            <div style="font-size:11px;">
+              <div style="margin-bottom:4px;">时间: ${label}</div>
+              ${lines}
+            </div>
+          `;
+        },
+      },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: times,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: "rgba(148,163,184,0.9)",
+          fontSize: 10,
+        },
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: maxValue,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { show: false },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: "rgba(148,163,184,0.3)",
+            opacity: 0.3,
+            type: "dashed",
+          },
+        },
+      },
+      series: [
+        {
+          name: "下载",
+          type: "line",
+          smooth: true,
+          smoothMonotone: "x",
+          hoverAnimation: false,
+          showSymbol: false,
+          symbol: "circle",
+          symbolSize: 3,
+          lineStyle: {
+            width: 2,
+            color: downloadColor,
+          },
+          // 悬浮时仅在当前点显示小圆点，线条保持原有颜色
+          emphasis: {
+            focus: "none",
+            lineStyle: {
+              width: 2,
+              color: downloadColor,
+            },
+            itemStyle: {
+              borderWidth: 2,
+              borderColor: downloadColor,
+              // 填充用背景色，形成「空心圆」效果
+              color: "rgba(15,23,42,1)",
+            },
+          },
+          data: downloadValues,
+        },
+        {
+          name: "上传",
+          type: "line",
+          smooth: true,
+          smoothMonotone: "x",
+          hoverAnimation: false,
+          showSymbol: false,
+          symbol: "circle",
+          symbolSize: 3,
+          lineStyle: {
+            width: 2,
+            color: uploadColor,
+          },
+          emphasis: {
+            focus: "none",
+            lineStyle: {
+              width: 2,
+              color: uploadColor,
+            },
+            itemStyle: {
+              borderWidth: 2,
+              borderColor: uploadColor,
+              color: "rgba(15,23,42,1)",
+            },
+          },
+          data: uploadValues,
+        },
+      ],
+    };
+  }, [chartData, downloadColor, uploadColor, maxValue]);
 
   return (
     <div className="space-y-1">
@@ -121,88 +265,13 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
-            {({ width, height }) => (
-            <LineChart
-              width={width}
-              height={height}
-              data={chartData}
-              margin={{
-                left: 12,
-                right: 12,
-                top: 8,
-                bottom: 0,
-              }}
-            >
-              <CartesianGrid
-                vertical={false}
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-                opacity={0.3}
+            {(_size) => (
+              <ReactECharts
+                option={option}
+                style={{ width: "100%", height: "100%" }}
+                notMerge={false}
+                lazyUpdate={true}
               />
-              <XAxis
-                dataKey="time"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                interval={getXAxisInterval()}
-              />
-              <YAxis hide domain={[0, maxValue]} />
-              <ChartTooltip
-                cursor={false}
-                content={({ active, payload, label }) => {
-                  if (!active || !payload || payload.length === 0) {
-                    return null;
-                  }
-
-                  return (
-                    <div className="rounded-lg border bg-background px-3 py-2 shadow-xl">
-                      <div className="mb-1.5 text-xs font-medium text-foreground">
-                        时间: {label}
-                      </div>
-                      <div className="space-y-1">
-                        {payload.map((item, index) => (
-                          <div key={index} className="flex items-center gap-2 text-xs">
-                            <div
-                              className="h-2 w-2 rounded-full"
-                              style={{ backgroundColor: item.color }}
-                            />
-                            <span className="text-muted-foreground">
-                              {item.name === 'download' ? '下载' : '上传'}:
-                            </span>
-                            <span className="font-mono font-medium text-foreground">
-                              {formatSpeed(item.value as number)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                }}
-              />
-              <Line
-                dataKey="download"
-                type="natural"
-                stroke="var(--color-download)"
-                strokeWidth={2}
-                dot={false}
-                activeDot={<AnimatedActiveDot r={3} animationDuration={300} />}
-                animationDuration={300}
-                animationEasing="ease-out"
-                isAnimationActive={true}
-              />
-              <Line
-                dataKey="upload"
-                type="natural"
-                stroke="var(--color-upload)"
-                strokeWidth={2}
-                dot={false}
-                activeDot={<AnimatedActiveDot r={3} animationDuration={300} />}
-                animationDuration={300}
-                animationEasing="ease-out"
-                isAnimationActive={true}
-              />
-            </LineChart>
             )}
           </ChartContainer>
         )}

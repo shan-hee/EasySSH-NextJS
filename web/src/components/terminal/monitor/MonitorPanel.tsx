@@ -74,6 +74,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
       return {
         time: time.toTimeString().split(' ')[0],
         usage: Math.round(m.cpu.usagePercent),
+        timestamp: time.getTime(),
       };
     });
 
@@ -83,6 +84,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
         time: time.toTimeString().split(' ')[0],
         download: Math.round(m.network.bytesRecvPerSec / 1024), // bytes to KB
         upload: Math.round(m.network.bytesSentPerSec / 1024),
+        timestamp: time.getTime(),
       };
     });
 

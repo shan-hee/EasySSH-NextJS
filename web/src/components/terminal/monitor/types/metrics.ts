@@ -20,6 +20,7 @@ export interface SystemInfo {
 export interface CPUData {
   time: string;        // 时间 "14:23:45"
   usage: number;       // 使用率 0-100
+  timestamp?: number;  // 时间戳（毫秒），用于 ECharts time 轴
 }
 
 /**
@@ -51,6 +52,7 @@ export interface NetworkData {
   time: string;        // 时间
   download: number;    // 下行速率 KB/s
   upload: number;      // 上行速率 KB/s
+  timestamp?: number;  // 时间戳（毫秒），用于 ECharts time 轴
 }
 
 /**

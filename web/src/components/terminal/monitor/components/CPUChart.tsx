@@ -1,20 +1,14 @@
-/**
- * CPU 使用率图表组件
- * 使用 recharts AreaChart 显示最近 20 个数据点的 CPU 使用率
- * 固定高度 142px
- */
-
 "use client"
 
 import React from 'react';
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import ReactECharts from "echarts-for-react";
+import type { EChartsOption } from "echarts";
 import type { CPUData } from '../types/metrics';
 import {
   ChartConfig,
   ChartContainer,
-  ChartTooltip,
 } from "@/components/ui/chart";
-import { AnimatedActiveDot } from './AnimatedActiveDot';
+import { useEchartsColors } from "@/lib/echarts-theme";
 
 interface CPUChartProps {
   data: CPUData[];
@@ -33,25 +27,174 @@ const chartConfig = {
 
 /**
  * CPU 使用率图表组件
+ * 使用 ECharts 折线面积图显示最近 20 个数据点的 CPU 使用率
+ * 固定高度 142px
  */
 export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsage }) => {
-  // 转换数据格式为 recharts 需要的格式
-  const chartData = data.map(item => ({
-    time: item.time.slice(3, 8), // 只显示时间部分
-    usage: item.usage,
-  }));
+  // 转换数据格式为图表需要的格式
+  const chartData = React.useMemo(
+    () =>
+      data.map((item) => ({
+        // 显示用的时间（mm:ss），保持与网络图一致
+        time: item.time.slice(3, 8),
+        usage: item.usage,
+      })),
+    [data]
+  );
 
-  // Y 轴刻度值
-  const yAxisTicks = [0, 25, 50, 75, 100];
+  const colors = useEchartsColors(chartConfig);
+  const usageColor = colors.usage || "#4b9cff";
 
-  // 计算 X 轴刻度间隔 - 根据数据点数量动态调整
-  // 数据点少时显示更多刻度，数据点多时显示更少刻度
-  const getXAxisInterval = () => {
-    const dataLength = chartData.length;
-    if (dataLength <= 2) return 0; // 显示所有刻度
-    if (dataLength <= 5) return 1; // 每隔 1 个显示
-    return 'preserveStartEnd'; // 只显示首尾
-  };
+  // 动态 Y 轴上限：根据当前数据的最大值自适应
+  const dataMax = chartData.length > 0
+    ? Math.max(...chartData.map((item) => item.usage))
+    : 0;
+
+  // 为 Y 轴添加适当的上方留白，并限制在 [20, 100] 区间内
+  const maxValue = React.useMemo(() => {
+    if (dataMax <= 0) return 100;
+    const padded = dataMax * 1.2;
+    const stepped = Math.ceil(padded / 5) * 5; // 向上取 5 的倍数，刻度更整齐
+    return Math.min(100, Math.max(20, stepped));
+  }, [dataMax]);
+
+  // 根据动态上限生成左侧内嵌刻度
+  const yAxisTicks = React.useMemo(() => {
+    const top = maxValue || 100;
+    return [
+      0,
+      Math.round(top * 0.25),
+      Math.round(top * 0.5),
+      Math.round(top * 0.75),
+      Math.round(top),
+    ];
+  }, [maxValue]);
+
+  const option: EChartsOption = React.useMemo(() => {
+    const times = chartData.map((item) => item.time);
+    const values = chartData.map((item) => item.usage);
+
+    return {
+      animation: true,
+      // 初始动画与更新动画保持轻量但流畅
+      animationDuration: 200,
+      animationEasing: "cubicOut",
+      animationDurationUpdate: 260,
+      animationEasingUpdate: "cubicOut",
+      grid: {
+        left: 28,
+        right: 8,
+        top: 8,
+        bottom: 16,
+      },
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "line",
+          animation: false,
+        },
+        borderRadius: 6,
+        padding: 8,
+        backgroundColor: "rgba(15,23,42,0.92)",
+        textStyle: {
+          fontSize: 11,
+        },
+        formatter: (params: any) => {
+          const p = Array.isArray(params) ? params[0] : params;
+          const raw = p.data;
+          const value =
+            typeof raw === "number"
+              ? raw
+              : typeof p.value === "number"
+              ? p.value
+              : raw?.usage ?? 0;
+          const label = p.axisValue ?? "";
+          return `
+            <div style="font-size:11px;">
+              <div style="margin-bottom:4px;">时间: ${label}</div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span
+                  style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${usageColor};"
+                ></span>
+                <span>CPU: </span>
+                <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
+                  ${value}%
+                </span>
+              </div>
+            </div>
+          `;
+        },
+      },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: times,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: "rgba(148,163,184,0.9)",
+          fontSize: 10,
+        },
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: maxValue,
+        splitNumber: 4,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { show: false },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: "rgba(148,163,184,0.3)",
+            opacity: 0.3,
+            type: "dashed",
+          },
+        },
+      },
+      series: [
+        {
+          name: "CPU",
+          type: "line",
+          // 使用 ECharts 内置平滑曲线
+          smooth: true,
+          smoothMonotone: "x",
+          hoverAnimation: false,
+          showSymbol: false,
+          symbol: "circle",
+          symbolSize: 4,
+          lineStyle: {
+            width: 2,
+            color: usageColor,
+          },
+          areaStyle: {
+            opacity: 0.25,
+            color: usageColor,
+          },
+          emphasis: {
+            // 悬浮时仅在当前点显示小圆点，线条和面积保持原有颜色
+            focus: "none",
+            lineStyle: {
+              width: 2,
+              color: usageColor,
+            },
+            // 明确指定与正常状态一致的面积样式，避免 ECharts 默认高亮修改填充
+            areaStyle: {
+              opacity: 0.25,
+              color: usageColor,
+            },
+            itemStyle: {
+              borderWidth: 2,
+              borderColor: usageColor,
+              color: "rgba(15,23,42,1)", // 空心圆效果
+            },
+          },
+          data: values,
+        },
+      ],
+    };
+  }, [chartData, usageColor, maxValue]);
 
   return (
     <div className="space-y-1">
@@ -83,93 +226,13 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
-            {({ width, height }) => (
-            <AreaChart
-              width={width}
-              height={height}
-              data={chartData}
-              margin={{
-                left: 12,
-                right: 12,
-                top: 8,
-                bottom: 0,
-              }}
-            >
-              <defs>
-                <linearGradient id="fillCPU" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor="var(--color-usage)"
-                    stopOpacity={0.8}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="var(--color-usage)"
-                    stopOpacity={0.1}
-                  />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                vertical={false}
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-                opacity={0.3}
+            {(_size) => (
+              <ReactECharts
+                option={option}
+                style={{ width: "100%", height: "100%" }}
+                notMerge={false}
+                lazyUpdate={true}
               />
-              <XAxis
-                dataKey="time"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                interval={getXAxisInterval()}
-              />
-              <YAxis hide domain={[0, 100]} />
-              <ChartTooltip
-                cursor={false}
-                content={({ active, payload, label }) => {
-                  if (!active || !payload || payload.length === 0) {
-                    return null;
-                  }
-
-                  const usage = payload[0].value as number;
-
-                  return (
-                    <div className="rounded-lg border bg-background px-2.5 py-2 shadow-xl">
-                      <div className="mb-1.5 text-xs font-medium text-foreground">
-                        时间: {label}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs font-medium mb-1">
-                        <div
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: 'var(--chart-1)' }}
-                        />
-                        <span>CPU</span>
-                      </div>
-                      <div className="text-xs font-mono pl-3.5">
-                        <div className={`font-medium ${
-                          usage > 80 ? 'text-red-500' : usage > 60 ? 'text-yellow-500' : ''
-                        }`}>
-                          {usage}%
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }}
-              />
-              <Area
-                dataKey="usage"
-                type="natural"
-                fill="url(#fillCPU)"
-                fillOpacity={0.4}
-                stroke="var(--color-usage)"
-                strokeWidth={2}
-                dot={false}
-                activeDot={<AnimatedActiveDot r={3} animationDuration={300} />}
-                animationDuration={300}
-                animationEasing="ease-out"
-                isAnimationActive={true}
-              />
-            </AreaChart>
             )}
           </ChartContainer>
         )}

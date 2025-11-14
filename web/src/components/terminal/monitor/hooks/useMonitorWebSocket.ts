@@ -72,7 +72,7 @@ export function useMonitorWebSocket({
 }: UseMonitorWebSocketOptions) {
   const [metrics, setMetrics] = useState<MonitorMetrics | null>(null);
   const [status, setStatus] = useState<WSStatus>(WSStatus.DISCONNECTED);
-  // 历史数据队列 - 维护最近 10 个数据点
+  // 历史数据队列 - 维护最近 20 个数据点
   const metricsHistoryRef = useRef<MonitorMetrics[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -156,7 +156,7 @@ export function useMonitorWebSocket({
       }
 
       setMetrics(hookMetrics)
-      metricsHistoryRef.current = [...metricsHistoryRef.current, hookMetrics].slice(-10)
+      metricsHistoryRef.current = [...metricsHistoryRef.current, hookMetrics].slice(-20)
 
       // ==================== 核心修复：同步本地延迟数据 ====================
       // 从 Store 中获取延迟数据并更新到本地状态
@@ -318,8 +318,8 @@ export function useMonitorWebSocket({
               timestamp: Number(metricsData.timestamp || 0),
             };
 
-            // 更新历史数据队列（最多保留 10 个数据点）
-            metricsHistoryRef.current = [...metricsHistoryRef.current, formattedMetrics].slice(-10);
+            // 更新历史数据队列（最多保留 20 个数据点）
+            metricsHistoryRef.current = [...metricsHistoryRef.current, formattedMetrics].slice(-20);
 
             // 批量更新：单次 setState 避免多次重新渲染
             setMetrics(formattedMetrics);
