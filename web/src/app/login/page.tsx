@@ -1,14 +1,31 @@
+"use client"
+
 import { LoginForm } from "@/components/login-form"
 import LightRays from "@/components/LightRays"
+import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
 
 export default function LoginPage() {
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  // 等待客户端挂载，避免 hydration 不匹配
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // 根据主题选择光线颜色和参数
+  const isLightTheme = mounted && resolvedTheme === "light"
+  const raysColor = isLightTheme ? "#3b82f6" : "#ffffff" // 浅色主题使用蓝色，深色主题使用白色
+  const raysOpacity = isLightTheme ? "opacity-30" : "opacity-60" // 浅色主题降低透明度
+
   return (
-    <div className="relative bg-zinc-950 flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10 overflow-hidden">
+    <div className="relative bg-zinc-50 dark:bg-zinc-950 flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10 overflow-hidden">
       {/* 光线背景 */}
       <div className="absolute inset-0 z-0">
         <LightRays
           raysOrigin="top-center"
-          raysColor="#ffffff"
+          raysColor={raysColor}
           raysSpeed={1}
           lightSpread={0.3}
           rayLength={3}
@@ -19,7 +36,7 @@ export default function LoginPage() {
           noiseAmount={0}
           distortion={0}
           pulsating={false}
-          className="opacity-60"
+          className={raysOpacity}
         />
       </div>
 

@@ -162,11 +162,11 @@ export function LoginForm({
                   />
                 </div>
                 <div className="space-y-1">
-                  <h1 className="text-2xl font-bold text-zinc-50">
+                  <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
                     {requires2FA ? "双因子认证" : `欢迎使用 ${config?.system_name || "EasySSH"}`}
                   </h1>
                   {requires2FA && (
-                    <p className="text-sm text-zinc-400">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
                       请输入认证应用中的验证码
                     </p>
                   )}
@@ -182,7 +182,7 @@ export function LoginForm({
               <div className="space-y-4">
                 <FadeSlideIn delay={0.1}>
                   <Field>
-                    <FieldLabel htmlFor="2fa-code" className="text-zinc-200">
+                    <FieldLabel htmlFor="2fa-code" className="text-zinc-700 dark:text-zinc-200">
                       验证码
                     </FieldLabel>
                     <div className="flex justify-center">
@@ -205,7 +205,7 @@ export function LoginForm({
                       </InputOTPGroup>
                     </InputOTP>
                   </div>
-                  <FieldDescription className="text-zinc-500 text-xs text-center">
+                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs text-center">
                     打开认证应用（如 Google Authenticator）获取验证码
                   </FieldDescription>
                 </Field>
@@ -249,7 +249,7 @@ export function LoginForm({
 
                 {/* 备份码提示 */}
                 <FadeSlideIn delay={0.4}>
-                  <div className="text-center text-xs text-zinc-500">
+                  <div className="text-center text-xs text-zinc-600 dark:text-zinc-500">
                     无法访问认证应用？使用备份码登录
                   </div>
                 </FadeSlideIn>
@@ -260,11 +260,11 @@ export function LoginForm({
               {/* 账号输入 */}
               <FadeSlideIn delay={0.1}>
                 <Field>
-                  <FieldLabel htmlFor="username" className="text-zinc-200">
+                  <FieldLabel htmlFor="username" className="text-zinc-700 dark:text-zinc-200">
                     账号
                   </FieldLabel>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="username"
                       type="text"
@@ -273,7 +273,7 @@ export function LoginForm({
                       autoComplete="username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
+                      className="pl-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
                       required
                     />
                   </div>
@@ -283,11 +283,11 @@ export function LoginForm({
               {/* 密码输入 */}
               <FadeSlideIn delay={0.2}>
                 <Field>
-                  <FieldLabel htmlFor="password" className="text-zinc-200">
+                  <FieldLabel htmlFor="password" className="text-zinc-700 dark:text-zinc-200">
                     密码
                   </FieldLabel>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
@@ -296,13 +296,13 @@ export function LoginForm({
                       autoComplete="current-password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 pr-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:ring-zinc-600"
+                      className="pl-10 pr-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
                     >
                       {showPassword ? (
                         <EyeOff className="h-4 w-4" />
@@ -325,7 +325,7 @@ export function LoginForm({
                     />
                     <Label
                       htmlFor="remember"
-                      className="text-sm text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors"
+                      className="text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors"
                     >
                       记住密码
                     </Label>
@@ -333,7 +333,7 @@ export function LoginForm({
                   <Button
                     type="button"
                     variant="link"
-                    className="text-sm text-zinc-400 hover:text-zinc-200 p-0 h-auto no-underline hover:no-underline transition-colors"
+                    className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto no-underline hover:no-underline transition-colors"
                     onClick={() => {
                       toast.info("忘记密码", {
                         description: "请联系管理员重置密码",
@@ -375,12 +375,12 @@ export function LoginForm({
 
             {/* 注册提示 */}
             <FadeSlideIn delay={0.5}>
-              <div className="text-center text-sm text-zinc-400">
+              <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
                 还没有账号？
                 <Button
                   type="button"
                   variant="link"
-                  className="text-zinc-400 hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
+                  className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
                   onClick={() => {
                     toast.info("申请开通账号", {
                       description: "请联系管理员开通账号权限",
@@ -394,7 +394,7 @@ export function LoginForm({
 
             {/* 版本信息 */}
             <FadeSlideIn delay={0.6}>
-              <div className="text-center text-xs text-zinc-600">
+              <div className="text-center text-xs text-zinc-500 dark:text-zinc-600">
                 {config?.system_name || "EasySSH"} v1.0.0 | © 2025 All rights reserved
               </div>
             </FadeSlideIn>
