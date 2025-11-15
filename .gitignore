@@ -72,6 +72,9 @@ next-env.d.ts
 /docker/volumes/
 /docker/data/
 
+# Docker compose dev config
+docker-compose.dev.yml
+
 # ========================================
 # IDE & System
 # ========================================

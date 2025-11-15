@@ -10,7 +10,7 @@ version: '3.8'
 
 services:
   # ================================
-  # EasySSH 服务 (本地构建)
+  # EasySSH 服务 (Go API + 静态文件托管)
   # ================================
   easyssh:
     build:
@@ -20,7 +20,7 @@ services:
     container_name: easyssh-dev
     restart: unless-stopped
     ports:
-      - "${PORT:-8521}:8521"
+      - "${PORT:-8520}:8520"
     environment:
       # ------------------------------
       # 数据库配置（PostgreSQL）
@@ -28,15 +28,15 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER:-easyssh}
-      DB_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}
+      DB_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 16
       DB_NAME: ${DB_NAME:-Easyssh_db}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
 
       # 数据库连接池配置
-      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}
-      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-100}
-      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-60}
-      DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-10}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}  # 最大空闲连接数
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-100}  # 最大打开连接数
+      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-60}  # 连接最大生命周期（分钟）
+      DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-10}  # 连接最大空闲时间（分钟）
 
       # ------------------------------
       # 缓存配置（Redis）
@@ -44,38 +44,42 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: ${REDIS_DB:-0}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}  # 留空表示无密码 | 生成: openssl rand -base64 16
 
       # ------------------------------
       # 应用运行与端口
       # ------------------------------
       ENV: ${ENV:-development}
-      PORT: 8521
+      PORT: 8520
 
       # ------------------------------
-      # 安全密钥（开发环境）
+      # 安全密钥（请务必替换为强随机值）
       # ------------------------------
-      JWT_SECRET: ${JWT_SECRET:-easyssh-dev-secret}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-dev-encryption-key-32b}
+      JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-development}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 48
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 24
 
       # ------------------------------
       # JWT 过期与刷新策略
       # ------------------------------
-      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-60}
-      JWT_REFRESH_IDLE_EXPIRE_DAYS: ${JWT_REFRESH_IDLE_EXPIRE_DAYS:-7}
-      JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS: ${JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS:-30}
-      JWT_REFRESH_ROTATE: ${JWT_REFRESH_ROTATE:-true}
-      JWT_REFRESH_REUSE_DETECTION: ${JWT_REFRESH_REUSE_DETECTION:-true}
+      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-15}  # 访问令牌过期时间（分钟）
+      JWT_REFRESH_IDLE_EXPIRE_DAYS: ${JWT_REFRESH_IDLE_EXPIRE_DAYS:-7}  # 刷新令牌闲置过期时间（天）
+      JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS: ${JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS:-30}  # 刷新令牌绝对过期时间（天）
+      JWT_REFRESH_ROTATE: ${JWT_REFRESH_ROTATE:-true}  # 刷新令牌轮换
+      JWT_REFRESH_REUSE_DETECTION: ${JWT_REFRESH_REUSE_DETECTION:-true}  # 复用检测
 
       # ------------------------------
-      # Cookie-only 策略相关（开发环境）
+      # Cookie-only 策略相关
       # ------------------------------
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}  # 开发环境使用 HTTP
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
-      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}    # HTTPS 环境 true | HTTP 开发 false
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}        # 多子域共享：.example.com；留空=当前域
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax} # lax|none|strict（跨域直连需 none + HTTPS）
 
-      # WebSocket Origin 白名单
+      # WebSocket Origin 白名单（逗号分隔）
+      # 未设置：默认允许与当前请求 Host / X-Forwarded-Host 同主机名的 Origin（同域/同端口）
+      # 跨域直连/多前端域时显式配置（需包含协议与端口）：
+      #   例：ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,7 +88,7 @@ services:
     networks:
       - easyssh-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8521/api/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8520/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -99,7 +103,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-easyssh}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}  # ⚠️ 和 DB_PASSWORD 一致
       POSTGRES_DB: ${DB_NAME:-Easyssh_db}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
