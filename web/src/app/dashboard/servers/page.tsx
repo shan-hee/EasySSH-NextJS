@@ -38,6 +38,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { AnimatedList } from "@/components/ui/animated-list"
 
 // 可排序的服务器项组件
 function SortableServerItem({
@@ -66,9 +67,7 @@ function SortableServerItem({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: isDragging
-      ? transition
-      : 'transform 350ms cubic-bezier(0.25, 0.8, 0.25, 1)', // 平滑过渡动画
+    transition: transition || 'transform 250ms ease', // 保留拖拽动画，缩短时长避免与 AnimatedList 冲突
     opacity: isDragging ? 0.5 : 1,
   }
 
@@ -517,21 +516,6 @@ export default function ServersPage() {
  }
  }
 
- // 加载中状态
- if (loading) {
- return (
- <>
- <PageHeader title="连接配置" />
- <div className="flex flex-1 items-center justify-center p-4">
- <div className="flex flex-col items-center gap-4">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
- <p className="text-sm text-muted-foreground">加载服务器列表...</p>
- </div>
- </div>
- </>
- )
- }
-
  return (
  <>
  <PageHeader title="连接配置" />
@@ -541,8 +525,8 @@ export default function ServersPage() {
 
  <div className="flex-1 flex flex-col items-center px-8 py-8 overflow-y-auto">
  <div className="max-w-3xl w-full space-y-6">
- {/* 搜索栏和添加按钮 */}
- {servers.length > 0 && (
+ {/* 搜索栏和添加按钮 - 始终显示（有服务器时） */}
+ {(loading || servers.length > 0) && (
  <div className="space-y-4">
  <div className="flex items-center justify-between gap-4">
  {/* 左侧：搜索框 */}
@@ -563,7 +547,7 @@ export default function ServersPage() {
  </Button>
  </div>
 
- {/* 标签切换 */}
+ {/* 标签切换 - 始终显示 */}
  <div className="flex gap-2 items-center">
  <Button
  variant={activeTab === 'all' ? 'default' : 'outline'}
@@ -613,12 +597,22 @@ export default function ServersPage() {
  </div>
  )}
 
+ {/* 加载状态 */}
+ {loading && (
+ <div className="space-y-4">
+ <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
+ <div className="flex flex-col items-center justify-center py-12 gap-4">
+ <Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600" />
+ <p className="text-sm text-zinc-500 dark:text-zinc-600">加载服务器列表...</p>
+ </div>
+ </div>
+ )}
+
  {/* 服务器列表 */}
- {filteredServers.length > 0 && (
+ {!loading && filteredServers.length > 0 && (
  <div className="space-y-4">
  <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
 
- <div className="space-y-2">
  {isMounted ? (
  <DndContext
  sensors={sensors}
@@ -630,6 +624,7 @@ export default function ServersPage() {
  items={filteredServers.map(s => s.id)}
  strategy={verticalListSortingStrategy}
  >
+ <AnimatedList className="space-y-2">
  {filteredServers.map((server) => (
  <SortableServerItem
  key={server.id}
@@ -641,6 +636,7 @@ export default function ServersPage() {
  onDelete={handleDelete}
  />
  ))}
+ </AnimatedList>
  </SortableContext>
 
  <DragOverlay>
@@ -664,7 +660,8 @@ export default function ServersPage() {
  </DndContext>
  ) : (
  // 服务端渲染时的静态列表
- filteredServers.map((server) => (
+ <AnimatedList className="space-y-2">
+ {filteredServers.map((server) => (
  <div
  key={server.id}
  className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40"}
@@ -685,14 +682,14 @@ export default function ServersPage() {
  </div>
  </div>
  </div>
- ))
+ ))}
+ </AnimatedList>
  )}
- </div>
  </div>
  )}
 
  {/* 空状态 - 筛选后无结果 */}
- {filteredServers.length === 0 && servers.length > 0 && (
+ {!loading && filteredServers.length === 0 && servers.length > 0 && (
  <div className="text-center space-y-3 py-8">
  <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}>
  <Search className={"h-6 w-6 text-zinc-400 dark:text-zinc-600"} />
@@ -709,7 +706,7 @@ export default function ServersPage() {
  )}
 
  {/* 空状态 - 完全没有服务器 */}
- {servers.length === 0 && (
+ {!loading && servers.length === 0 && (
  <>
  <div className="flex items-center justify-between gap-4">
  {/* 左侧：搜索框（禁用状态） */}
