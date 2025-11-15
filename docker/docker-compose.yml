@@ -9,7 +9,7 @@ services:
     container_name: easyssh
     restart: unless-stopped
     ports:
-      - "${PORT:-8521}:8521"
+      - "${PORT:-8520}:8520"
     environment:
       # ------------------------------
       # 数据库配置（PostgreSQL）
@@ -39,7 +39,7 @@ services:
       # 应用运行与端口
       # ------------------------------
       ENV: ${ENV:-production}
-      PORT: 8521
+      PORT: 8520
 
       # ------------------------------
       # 安全密钥（请务必替换为强随机值）
@@ -68,6 +68,7 @@ services:
       # 跨域直连/多前端域时显式配置（需包含协议与端口）：
       #   例：ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,7 +77,7 @@ services:
     networks:
       - easyssh-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8521/api/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8520/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 3
