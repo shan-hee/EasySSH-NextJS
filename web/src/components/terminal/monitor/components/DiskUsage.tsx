@@ -141,9 +141,17 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
         axisLabel: {
           color: "rgba(148,163,184,0.9)",
           fontSize: 9,
+          // 强制显示最大值标签
+          showMaxLabel: true,
+          showMinLabel: true,
           formatter: (value: number) => {
             const unit = chartData[0]?.unit || "GB";
-            return `${value}${unit}`;
+            // 对于最大值，显示2位小数
+            if (maxTotal && Math.abs(value - maxTotal) < 0.01) {
+              return `${maxTotal.toFixed(2)}${unit}`;
+            }
+            // 其他刻度显示整数
+            return `${Math.round(value)}${unit}`;
           },
         },
         splitLine: {
