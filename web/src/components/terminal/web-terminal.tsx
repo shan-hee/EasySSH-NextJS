@@ -301,11 +301,12 @@ export function WebTerminal({
 
     const handleContextMenu = async (e: MouseEvent) => {
       e.preventDefault()
-      if (!navigator.clipboard?.readText) return
+      if (!navigator.clipboard?.readText || !terminal) return
       try {
         const text = await navigator.clipboard.readText()
         if (text) {
-          sendInput(text)
+          // 使用 xterm.js 的 paste() 方法，自动处理 bracketed paste mode
+          terminal.paste(text)
         }
       } catch (err) {
         console.error('Failed to read from clipboard:', err)
@@ -316,7 +317,7 @@ export function WebTerminal({
     return () => {
       xtermRoot.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [rightClickPaste, terminalReady, containerRef, sendInput])
+  }, [rightClickPaste, terminalReady, containerRef, terminal])
 
   // ==================== 动态处理快捷键功能 ====================
   type ParsedShortcut = {
@@ -385,10 +386,11 @@ export function WebTerminal({
     // 粘贴
     if (matchesShortcut(event, shortcuts.paste)) {
       event.preventDefault()
-      if (navigator.clipboard?.readText) {
+      if (navigator.clipboard?.readText && terminal) {
         navigator.clipboard.readText().then((text) => {
           if (text) {
-            sendInput(text)
+            // 使用 xterm.js 的 paste() 方法，自动处理 bracketed paste mode
+            terminal.paste(text)
           }
         }).catch(() => {})
       }

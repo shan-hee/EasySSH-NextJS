@@ -235,11 +235,6 @@ export function FileEditor({
                   </Badge>
                 )}
               </div>
-              <span className={cn(
-                "text-xs font-mono text-zinc-400 dark:text-zinc-500",
-              )}>
-                {filePath}
-              </span>
             </div>
 
             {/* 右侧：操作按钮 */}
@@ -482,11 +477,6 @@ export function FileEditor({
               </Badge>
             )}
           </div>
-          <span className={cn(
-            "text-xs font-mono text-zinc-400 dark:text-zinc-500",
-          )}>
-            {filePath}
-          </span>
         </div>
 
         {/* 右侧：操作按钮 */}

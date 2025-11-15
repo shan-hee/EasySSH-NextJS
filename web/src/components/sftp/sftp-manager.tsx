@@ -993,8 +993,9 @@ export function SftpManager(props: SftpManagerProps) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  // 路径分段
-  const pathSegments = useMemo(() => currentPath.split("/").filter(Boolean), [currentPath])
+  // 路径分段 - 根据编辑器状态动态选择路径源
+  const displayPath = editorState.isOpen ? editorState.filePath : currentPath
+  const pathSegments = useMemo(() => displayPath.split("/").filter(Boolean), [displayPath])
 
   // 同步路径输入框的值
   useEffect(() => {
@@ -1257,18 +1258,25 @@ export function SftpManager(props: SftpManagerProps) {
                   </button>
                   {pathSegments.map((segment, index) => {
                     const segmentPath = "/" + pathSegments.slice(0, index + 1).join("/")
+                    const isLastSegment = index === pathSegments.length - 1
+                    const isFileName = editorState.isOpen && isLastSegment
+
                     return (
                       <div key={index} className="flex items-center gap-1">
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (isFileName) {
+                              // 点击文件名时不做任何操作（文件已打开）
+                              return
+                            }
                             onNavigate(segmentPath)
                           }}
                           className={cn(
-                            "px-1.5 py-0.5 rounded-md whitespace-nowrap",
-                            "text-zinc-600 dark:text-zinc-400",
-                            "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
-                            "transition-all duration-200",
+                            "px-1.5 py-0.5 rounded-md whitespace-nowrap transition-all duration-200",
+                            isFileName
+                              ? "font-semibold text-blue-600 dark:text-blue-400 cursor-default"
+                              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
                           )}
                         >
                           {segment}
@@ -1348,107 +1356,107 @@ export function SftpManager(props: SftpManagerProps) {
         </div>
       </div>
 
-      {/* 搜索栏 */}
-      <div className="px-3 py-2 border-b flex items-center gap-2">
-        {/* 返回上级目录按钮 */}
-        {pathSegments.length > 0 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+      {/* 如果编辑器打开，只显示编辑器；否则显示搜索栏+文件列表 */}
+      {editorState.isOpen ? (
+        <FileEditor
+          fileName={editorState.fileName}
+          filePath={editorState.filePath}
+          fileContent={editorState.content}
+          isOpen={editorState.isOpen}
+          onClose={handleCloseEditor}
+          onSave={handleSaveFile}
+          onDownload={() => onDownload(editorState.fileName)}
+        />
+      ) : (
+        <>
+          {/* 搜索栏 */}
+          <div className="px-3 py-2 border-b flex items-center gap-2">
+            {/* 返回上级目录按钮 */}
+            {pathSegments.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+                )}
+                onClick={() => {
+                  const parentPath = pathSegments.slice(0, -1).join("/")
+                  onNavigate(parentPath ? `/${parentPath}` : "/")
+                }}
+                title="返回上级目录"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </Button>
             )}
-            onClick={() => {
-              const parentPath = pathSegments.slice(0, -1).join("/")
-              onNavigate(parentPath ? `/${parentPath}` : "/")
-            }}
-            title="返回上级目录"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-          </Button>
-        )}
 
-        <div className="relative flex-1 max-w-xs">
-          <Search className={cn(
-            "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500",
-          )} />
-          <Input
-            placeholder="搜索文件..."
-            className={cn(
-              "h-7 pl-8 pr-2 text-xs border-0 bg-zinc-100 dark:bg-zinc-900/50",
+            <div className="relative flex-1 max-w-xs">
+              <Search className={cn(
+                "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500",
+              )} />
+              <Input
+                placeholder="搜索文件..."
+                className={cn(
+                  "h-7 pl-8 pr-2 text-xs border-0 bg-zinc-100 dark:bg-zinc-900/50",
+                )}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            {/* 显示/隐藏隐藏文件按钮 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-md transition-all duration-200",
+                showHidden
+                  ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
+                  : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+              )}
+              onClick={() => setShowHidden(!showHidden)}
+              title={showHidden ? "隐藏隐藏文件" : "显示隐藏文件"}
+            >
+              {showHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            </Button>
+
+            {/* 刷新按钮 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+              )}
+              onClick={onRefresh}
+              title="刷新"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+
+            {/* 已选择文件提示 */}
+            {selectedFiles.length > 0 && (
+              <div className={cn(
+                "flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400",
+              )}>
+                <span>已选择 {selectedFiles.length} 项</span>
+              </div>
             )}
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        {/* 显示/隐藏隐藏文件按钮 */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-7 w-7 rounded-md transition-all duration-200",
-            showHidden
-              ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
-              : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
-          )}
-          onClick={() => setShowHidden(!showHidden)}
-          title={showHidden ? "隐藏隐藏文件" : "显示隐藏文件"}
-        >
-          {showHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-        </Button>
-
-        {/* 刷新按钮 */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
-          )}
-          onClick={onRefresh}
-          title="刷新"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </Button>
-
-        {/* 已选择文件提示 */}
-        {selectedFiles.length > 0 && (
-          <div className={cn(
-            "flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400",
-          )}>
-            <span>已选择 {selectedFiles.length} 项</span>
           </div>
-        )}
-      </div>
 
-      {/* 主内容区域 - 文件列表 */}
-      <div
-        ref={dropZoneRef}
-        className={cn(
-          "flex-1 relative min-h-0",
-          viewMode === "grid" ? "overflow-auto scrollbar-custom" : "",
-          isDragging && "bg-blue-500/10"
-        )}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        onClick={() => setSelectedFiles([])}
-        onContextMenu={handleBlankContextMenu}
-      >
-        {/* 如果编辑器打开，显示编辑器；否则显示文件列表 */}
-        {editorState.isOpen ? (
-          <FileEditor
-            fileName={editorState.fileName}
-            filePath={editorState.filePath}
-            fileContent={editorState.content}
-            isOpen={editorState.isOpen}
-            onClose={handleCloseEditor}
-            onSave={handleSaveFile}
-            onDownload={() => onDownload(editorState.fileName)}
-          />
-        ) : (
-          <>
+          {/* 主内容区域 - 文件列表 */}
+          <div
+            ref={dropZoneRef}
+            className={cn(
+              "flex-1 relative min-h-0",
+              viewMode === "grid" ? "overflow-auto scrollbar-custom" : "",
+              isDragging && "bg-blue-500/10"
+            )}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onClick={() => setSelectedFiles([])}
+            onContextMenu={handleBlankContextMenu}
+          >
             {/* 拖拽遮罩 */}
             {isDragging && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm border-2 border-dashed border-blue-500 m-4 rounded-lg">
@@ -1916,9 +1924,9 @@ export function SftpManager(props: SftpManagerProps) {
               tabIndex={-1}
               onChange={handleInputChange}
             />
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
 
       {/* 传输任务面板 */}
       {transferTasks.length > 0 && (
