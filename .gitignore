@@ -73,7 +73,7 @@ next-env.d.ts
 /docker/data/
 
 # Docker compose dev config
-docker-compose.dev.yml
+/docker/docker-compose.test.yml
 
 # ========================================
 # IDE & System

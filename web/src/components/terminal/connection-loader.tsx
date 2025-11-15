@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type LoaderState = "entering" | "loading" | "exiting"
 
@@ -18,20 +18,44 @@ export function ConnectionLoader({
   onAnimationComplete
 }: ConnectionLoaderProps) {
   const [animationState, setAnimationState] = useState<LoaderState>(state)
+  const isEnteringRef = useRef(false)  // 标记是否正在播放进入动画
+  const pendingExitRef = useRef(false) // 缓存待执行的退出请求
 
+  // 处理外部 state 变化
   useEffect(() => {
-    setAnimationState(state)
+    if (state === "entering") {
+      setAnimationState("entering")
+      isEnteringRef.current = true
+      pendingExitRef.current = false
+    } else if (state === "exiting") {
+      // 如果正在播放进入动画，缓存退出请求
+      if (isEnteringRef.current) {
+        pendingExitRef.current = true
+      } else {
+        // 否则立即切换到退出
+        setAnimationState("exiting")
+      }
+    } else {
+      setAnimationState(state)
+    }
   }, [state])
 
+  // 处理动画状态转换
   useEffect(() => {
     if (animationState === "entering") {
-      // 进入动画持续 500ms
       const timer = setTimeout(() => {
-        setAnimationState("loading")
+        isEnteringRef.current = false
+
+        // 进入动画完成，检查是否有待执行的退出
+        if (pendingExitRef.current) {
+          setAnimationState("exiting")
+          pendingExitRef.current = false
+        } else {
+          setAnimationState("loading")
+        }
       }, 500)
       return () => clearTimeout(timer)
     } else if (animationState === "exiting") {
-      // 退出动画持续 500ms
       const timer = setTimeout(() => {
         onAnimationComplete?.()
       }, 500)
