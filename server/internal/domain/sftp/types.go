@@ -13,8 +13,6 @@ type FileInfo struct {
 	Mode       os.FileMode `json:"mode"`
 	IsDir      bool        `json:"is_dir"`
 	ModTime    time.Time   `json:"mod_time"`
-	Owner      string      `json:"owner,omitempty"`
-	Group      string      `json:"group,omitempty"`
 	Permission string      `json:"permission"`
 }
 

@@ -69,6 +69,7 @@ import { parseFileSize } from "@/lib/format-utils"
 import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
 import { FileEditor } from "@/components/sftp/file-editor"
+import { ChmodDialog } from "@/components/sftp/chmod-dialog"
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner"
 import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransfer"
 
@@ -78,8 +79,6 @@ interface FileItem {
   size: string
   modified: string
   permissions: string
-  owner: string
-  group: string
 }
 
 type EnhancedFileItem = FileItem & {
@@ -221,6 +220,17 @@ export function SftpManager(props: SftpManagerProps) {
     fileName: "",
     filePath: "",
     content: "",
+  })
+  const [chmodDialog, setChmodDialog] = useState<{
+    isOpen: boolean
+    fileName: string
+    filePath: string
+    permissions: string
+  }>({
+    isOpen: false,
+    fileName: "",
+    filePath: "",
+    permissions: "",
   })
   const [pathInputValue, setPathInputValue] = useState(currentPath)
   const [isEditingPath, setIsEditingPath] = useState(false)
@@ -1139,6 +1149,19 @@ export function SftpManager(props: SftpManagerProps) {
 
   const stickyHeaderCellClass = "sticky top-0 z-20 bg-background supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
 
+  // 处理修改权限
+  const handleChmod = async (mode: string) => {
+    try {
+      const { sftpApi } = await import("@/lib/api/sftp")
+      await sftpApi.chmod(serverId, chmodDialog.filePath, mode)
+      // 刷新文件列表
+      onRefresh()
+    } catch (error) {
+      console.error("Failed to chmod:", error)
+      alert(`修改权限失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   // 主界面内容
   const managerContent = (
     <SftpSessionProvider value={sessionContextValue}>
@@ -1704,9 +1727,6 @@ export function SftpManager(props: SftpManagerProps) {
                 <TableHead className={cn(stickyHeaderCellClass)}>
                   权限
                 </TableHead>
-                <TableHead className={cn(stickyHeaderCellClass)}>
-                  所有者
-                </TableHead>
                 <TableHead className={cn(stickyHeaderCellClass, "text-right")}>
                   操作
                 </TableHead>
@@ -1769,10 +1789,6 @@ export function SftpManager(props: SftpManagerProps) {
 
                   <TableCell>
                     <span className="font-mono text-xs text-muted-foreground">-</span>
-                  </TableCell>
-
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground">-</span>
                   </TableCell>
 
                   <TableCell className="text-right">
@@ -1860,12 +1876,6 @@ export function SftpManager(props: SftpManagerProps) {
                     </span>
                   </TableCell>
 
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground">
-                      {file.owner}:{file.group}
-                    </span>
-                  </TableCell>
-
                   <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -1936,6 +1946,24 @@ export function SftpManager(props: SftpManagerProps) {
                           重命名
                         </DropdownMenuItem>
 
+                        {/* 修改权限 */}
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setChmodDialog({
+                              isOpen: true,
+                              fileName: file.name,
+                              filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
+                              permissions: file.permissions,
+                            })
+                          }}
+                          className={cn(
+                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
+                          )}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          修改权限
+                        </DropdownMenuItem>
+
                         <DropdownMenuSeparator className={cn(
                           "bg-zinc-200 dark:bg-zinc-700/50",
                         )} />
@@ -1972,6 +2000,15 @@ export function SftpManager(props: SftpManagerProps) {
           </div>
         </>
       )}
+
+      {/* 权限修改对话框 */}
+      <ChmodDialog
+        open={chmodDialog.isOpen}
+        onOpenChange={(open) => setChmodDialog(prev => ({ ...prev, isOpen: open }))}
+        fileName={chmodDialog.fileName}
+        currentPermissions={chmodDialog.permissions}
+        onConfirm={handleChmod}
+      />
 
       {/* 传输任务面板 */}
       {transferTasks.length > 0 && (
@@ -2258,24 +2295,27 @@ export function SftpManager(props: SftpManagerProps) {
                   </button>
                 )}
 
-                {/* 信息 - 仅单选 */}
-                {selectedFiles.length === 1 && (
+                {/* 修改权限 - 仅单选 */}
+                {selectedFiles.length === 1 && contextMenu.fileName && (
                   <button
                     className={cn(
                       "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
                     )}
                     onClick={() => {
-                      // TODO: 显示文件详细信息
+                      const file = filteredFiles.find(f => f.name === contextMenu.fileName)
+                      if (file) {
+                        setChmodDialog({
+                          isOpen: true,
+                          fileName: file.name,
+                          filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
+                          permissions: file.permissions,
+                        })
+                      }
                       closeContextMenu()
                     }}
                   >
                     <FileText className="h-4 w-4" />
-                    <span className="flex-1">属性</span>
-                    <kbd className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                    )}>
-                      ⌘I
-                    </kbd>
+                    <span className="flex-1">修改权限</span>
                   </button>
                 )}
 

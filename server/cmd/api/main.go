@@ -399,6 +399,7 @@ func main() {
 			sftpRoutes.POST("/mkdir", sftpHandler.CreateDirectory) // 创建目录
 			sftpRoutes.DELETE("/delete", sftpHandler.Delete)       // 删除
 			sftpRoutes.POST("/rename", sftpHandler.Rename)         // 重命名
+			sftpRoutes.POST("/chmod", sftpHandler.Chmod)           // 修改权限
 
 			// 批量操作
 			sftpRoutes.POST("/batch-delete", sftpHandler.BatchDelete)     // 批量删除

@@ -59,6 +59,7 @@ func (c *Client) ListDirectory(path string) (*DirectoryListing, error) {
 	}
 
 	files := make([]*FileInfo, 0, len(entries))
+
 	for _, entry := range entries {
 		fileInfo := &FileInfo{
 			Name:       entry.Name(),
@@ -68,12 +69,6 @@ func (c *Client) ListDirectory(path string) (*DirectoryListing, error) {
 			IsDir:      entry.IsDir(),
 			ModTime:    entry.ModTime(),
 			Permission: entry.Mode().String(),
-		}
-
-		// 尝试获取 Unix 权限信息
-		if sys := entry.Sys(); sys != nil {
-			// 可以从 sys 中提取 owner 和 group 信息
-			// 但需要类型断言，这里简化处理
 		}
 
 		files = append(files, fileInfo)
@@ -94,7 +89,7 @@ func (c *Client) GetFileInfo(path string) (*FileInfo, error) {
 		return nil, fmt.Errorf("failed to stat file: %w", err)
 	}
 
-	return &FileInfo{
+	fileInfo := &FileInfo{
 		Name:       stat.Name(),
 		Path:       path,
 		Size:       stat.Size(),
@@ -102,7 +97,9 @@ func (c *Client) GetFileInfo(path string) (*FileInfo, error) {
 		IsDir:      stat.IsDir(),
 		ModTime:    stat.ModTime(),
 		Permission: stat.Mode().String(),
-	}, nil
+	}
+
+	return fileInfo, nil
 }
 
 // UploadFile 上传文件
@@ -353,6 +350,15 @@ func (c *Client) RenameFile(oldPath, newPath string) error {
 	err := c.sftpClient.Rename(oldPath, newPath)
 	if err != nil {
 		return fmt.Errorf("failed to rename: %w", err)
+	}
+	return nil
+}
+
+// Chmod 修改文件或目录权限
+func (c *Client) Chmod(path string, mode os.FileMode) error {
+	err := c.sftpClient.Chmod(path, mode)
+	if err != nil {
+		return fmt.Errorf("failed to chmod: %w", err)
 	}
 	return nil
 }

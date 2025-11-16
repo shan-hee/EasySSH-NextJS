@@ -8,8 +8,6 @@ interface FileItem {
   size: string
   modified: string
   permissions: string
-  owner: string
-  group: string
 }
 
 interface SftpSessionContextValue {

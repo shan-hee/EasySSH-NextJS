@@ -445,6 +445,54 @@ func (h *SFTPHandler) Rename(c *gin.Context) {
 	})
 }
 
+// Chmod 修改文件或目录权限
+// POST /api/v1/sftp/:server_id/chmod
+func (h *SFTPHandler) Chmod(c *gin.Context) {
+	// 解析服务器 ID
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	// 解析请求
+	var req struct {
+		Path string `json:"path" binding:"required"`
+		Mode string `json:"mode" binding:"required"` // 八进制字符串，如 "0755"
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 解析权限模式（八进制字符串转为 os.FileMode）
+	var mode uint32
+	_, err = fmt.Sscanf(req.Mode, "%o", &mode)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_mode", "Invalid permission mode format")
+		return
+	}
+
+	// 创建 SFTP 客户端
+	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer sftpClient.Close()
+
+	// 修改权限
+	if err := sftpClient.Chmod(req.Path, os.FileMode(mode)); err != nil {
+		RespondError(c, http.StatusInternalServerError, "chmod_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"path": req.Path,
+		"mode": req.Mode,
+	})
+}
+
 // ReadFile 读取文件内容
 // GET /api/v1/sftp/:server_id/read?path=/path/to/file
 func (h *SFTPHandler) ReadFile(c *gin.Context) {

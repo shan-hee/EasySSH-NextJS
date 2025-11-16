@@ -24,10 +24,10 @@ export interface FileItem {
   type: 'file' | 'directory';
   size: string; // 格式化后的大小,如 "1.5 MB"
   sizeBytes: number; // 原始字节数
-  modifiedTime: string;
-  permissions?: string;
-  owner?: string;
-  group?: string;
+  modified: string; // 修改时间，格式化为 YYYY-MM-DD HH:mm:ss
+  permissions: string; // 权限字符串，如 "drwxr-xr-x"
+  owner: string;
+  group: string;
 }
 
 /**
@@ -46,15 +46,55 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    * 转换后端FileInfo为前端FileItem
    */
   const convertFileInfo = useCallback((info: FileInfo): FileItem => {
+    // 将数字模式转换为权限字符串（如果需要）
+    const formatMode = (mode: number, isDir: boolean): string => {
+      if (!mode && mode !== 0) {
+        return '---------'
+      }
+      const perms = [
+        mode & 0o400 ? 'r' : '-',
+        mode & 0o200 ? 'w' : '-',
+        mode & 0o100 ? 'x' : '-',
+        mode & 0o040 ? 'r' : '-',
+        mode & 0o020 ? 'w' : '-',
+        mode & 0o010 ? 'x' : '-',
+        mode & 0o004 ? 'r' : '-',
+        mode & 0o002 ? 'w' : '-',
+        mode & 0o001 ? 'x' : '-',
+      ]
+      return (isDir ? 'd' : '-') + perms.join('')
+    }
+
+    // 格式化修改时间
+    const formatModTime = (modTime: string): string => {
+      if (!modTime) return '-'
+      try {
+        const date = new Date(modTime)
+        if (isNaN(date.getTime())) {
+          return '-'
+        }
+        // 格式化为 YYYY-MM-DD HH:mm:ss
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        const seconds = String(date.getSeconds()).padStart(2, '0')
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+      } catch {
+        return '-'
+      }
+    }
+
     return {
       name: info.name,
       type: info.is_dir ? 'directory' : 'file',
       size: formatBytesString(info.size),
       sizeBytes: info.size,
-      modifiedTime: info.mod_time,
-      permissions: info.permissions,
-      owner: info.owner,
-      group: info.group,
+      modified: formatModTime(info.mod_time),
+      permissions: info.permission || formatMode(info.mode, info.is_dir),
+      owner: info.owner || 'unknown',
+      group: info.group || 'unknown',
     };
   }, []);
 

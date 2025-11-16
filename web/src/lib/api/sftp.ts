@@ -8,14 +8,12 @@ export interface FileInfo {
   name: string
   path: string
   size: number
-  mode: string
+  mode: number  // os.FileMode 序列化为数字
   mod_time: string
   is_dir: boolean
   is_link: boolean
   link_target?: string
-  owner?: string
-  group?: string
-  permissions?: string
+  permission?: string  // 权限字符串，如 "drwxr-xr-x"
 }
 
 /**
@@ -103,6 +101,16 @@ export const sftpApi = {
     return apiFetch<void>(`/sftp/${serverId}/rename`, {
       method: "POST",
       body: { old_path: oldPath, new_path: newPath },
+    })
+  },
+
+  /**
+   * 修改文件或目录权限
+   */
+  async chmod(serverId: string, path: string, mode: string): Promise<void> {
+    return apiFetch<void>(`/sftp/${serverId}/chmod`, {
+      method: "POST",
+      body: { path, mode },
     })
   },
 
