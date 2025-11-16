@@ -26,8 +26,6 @@ export interface FileItem {
   sizeBytes: number; // 原始字节数
   modified: string; // 修改时间，格式化为 YYYY-MM-DD HH:mm:ss
   permissions: string; // 权限字符串，如 "drwxr-xr-x"
-  owner: string;
-  group: string;
 }
 
 /**
@@ -93,8 +91,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
       sizeBytes: info.size,
       modified: formatModTime(info.mod_time),
       permissions: info.permission || formatMode(info.mode, info.is_dir),
-      owner: info.owner || 'unknown',
-      group: info.group || 'unknown',
     };
   }, []);
 

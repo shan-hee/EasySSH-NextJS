@@ -48,8 +48,6 @@ type ComponentFile = {
  size: string
  modified: string
  permissions: string
- owner: string
- group: string
 }
 
 function formatFileSize(bytes: number): string {
@@ -110,8 +108,6 @@ function convertFileInfo(file: FileInfo): ComponentFile {
  size: file.is_dir ? "-" : formatFileSize(file.size),
  modified: formatModTime(file.mod_time),
  permissions,
- owner: file.owner || "unknown",
- group: file.group || "unknown",
  }
 }
 
@@ -434,8 +430,6 @@ export default function SftpPage() {
  size: "-",
  modified: "",
  permissions: "drwxr-xr-x",
- owner: "root",
- group: "root",
  },
  ...convertedFiles,
  ]
@@ -479,8 +473,6 @@ export default function SftpPage() {
  size: "-",
  modified: "",
  permissions: "drwxr-xr-x",
- owner: "root",
- group: "root",
  },
  ...convertedFiles,
  ]
@@ -536,8 +528,6 @@ export default function SftpPage() {
  size: "-",
  modified: "",
  permissions: "drwxr-xr-x",
- owner: "root",
- group: "root",
  },
  ...convertedFiles,
  ]

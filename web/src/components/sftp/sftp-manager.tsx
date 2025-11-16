@@ -820,14 +820,11 @@ export function SftpManager(props: SftpManagerProps) {
     // 如果提供了批量下载接口，使用批量下载
     if (onBatchDownload) {
       try {
-        setIsLoading(true)
         await onBatchDownload(selectedFiles)
         setSelectedFiles([])
       } catch (error) {
         console.error('[SftpManager] 批量下载失败:', error)
         alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
-      } finally {
-        setIsLoading(false)
       }
     } else {
       // 降级到循环调用单个下载
@@ -845,7 +842,6 @@ export function SftpManager(props: SftpManagerProps) {
     // 如果提供了批量删除接口，使用批量删除
     if (onBatchDelete) {
       try {
-        setIsLoading(true)
         const result = await onBatchDelete(selectedFiles)
 
         // 显示结果
@@ -858,8 +854,6 @@ export function SftpManager(props: SftpManagerProps) {
       } catch (error) {
         console.error('[SftpManager] 批量删除失败:', error)
         alert(`批量删除失败: ${error instanceof Error ? error.message : '未知错误'}`)
-      } finally {
-        setIsLoading(false)
       }
     } else {
       // 降级到循环调用单个删除
