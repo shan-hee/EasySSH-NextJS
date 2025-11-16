@@ -1672,7 +1672,7 @@ export function SftpManager(props: SftpManagerProps) {
               {creatingNew && (
                 <TableRow
                   className={cn(
-                    "cursor-pointer transition-colors bg-zinc-100 dark:bg-zinc-800/50",
+                    "cursor-pointer transition-colors bg-zinc-100 dark:bg-zinc-800/50 border-b-0",
                   )}
                 >
                   <TableCell onClick={e => e.stopPropagation()}>
@@ -1751,7 +1751,7 @@ export function SftpManager(props: SftpManagerProps) {
                     }}
                     onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
                     className={cn(
-                      "cursor-pointer transition-colors",
+                      "cursor-pointer transition-colors border-b-0",
                       (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-zinc-100 dark:bg-zinc-800/50",
                       "hover:bg-zinc-50 dark:hover:bg-zinc-800/30",
                       draggedFileName === file.name && "opacity-50"

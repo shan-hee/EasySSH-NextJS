@@ -9,7 +9,6 @@ import (
 
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/ssh"
 )
 
 // Service 服务器服务接口
@@ -28,9 +27,6 @@ type Service interface {
 
 	// Delete 删除服务器
 	Delete(ctx context.Context, userID, serverID uuid.UUID) error
-
-	// TestConnection 测试服务器连接
-	TestConnection(ctx context.Context, userID, serverID uuid.UUID) (*ConnectionTestResult, error)
 
 	// Search 搜索服务器
 	Search(ctx context.Context, userID uuid.UUID, query string, limit, offset int) ([]*Server, int64, error)
@@ -73,22 +69,15 @@ type UpdateServerRequest struct {
 	Description *string     `json:"description"`
 }
 
-// ConnectionTestResult 连接测试结果
-type ConnectionTestResult struct {
-	Success     bool      `json:"success"`
-	Message     string    `json:"message"`
-	Latency     int64     `json:"latency_ms"`
-	ServerInfo  string    `json:"server_info,omitempty"`
-	TestedAt    time.Time `json:"tested_at"`
-}
-
 // ServerStatistics 服务器统计
 type ServerStatistics struct {
-	Total   int64 `json:"total"`
-	Online  int64 `json:"online"`
-	Offline int64 `json:"offline"`
-	Error   int64 `json:"error"`
-	Unknown int64 `json:"unknown"`
+	Total   int64              `json:"total"`
+	Online  int64              `json:"online"`
+	Offline int64              `json:"offline"`
+	Error   int64              `json:"error"`
+	Unknown int64              `json:"unknown"`
+	ByGroup map[string]int64   `json:"by_group"`
+	ByTag   map[string]int64   `json:"by_tag"`
 }
 
 // serverService 服务器服务实现
@@ -247,91 +236,6 @@ func (s *serverService) Delete(ctx context.Context, userID, serverID uuid.UUID) 
 	return s.repo.Delete(ctx, serverID)
 }
 
-func (s *serverService) TestConnection(ctx context.Context, userID, serverID uuid.UUID) (*ConnectionTestResult, error) {
-	// 查找服务器并验证权限
-	server, err := s.repo.FindByUserIDAndID(ctx, userID, serverID)
-	if err != nil {
-		return nil, err
-	}
-
-	startTime := time.Now()
-	result := &ConnectionTestResult{
-		TestedAt: startTime,
-	}
-
-	// 解密认证信息
-	var authMethods []ssh.AuthMethod
-	if server.AuthMethod == AuthMethodPassword {
-		password, err := s.encryptor.Decrypt(server.Password)
-		if err != nil {
-			result.Success = false
-			result.Message = "Failed to decrypt password"
-			return result, nil
-		}
-		authMethods = append(authMethods, ssh.Password(password))
-	} else {
-		privateKey, err := s.encryptor.Decrypt(server.PrivateKey)
-		if err != nil {
-			result.Success = false
-			result.Message = "Failed to decrypt private key"
-			return result, nil
-		}
-
-		signer, err := ssh.ParsePrivateKey([]byte(privateKey))
-		if err != nil {
-			result.Success = false
-			result.Message = "Failed to parse private key"
-			return result, nil
-		}
-		authMethods = append(authMethods, ssh.PublicKeys(signer))
-	}
-
-	// 配置 SSH 客户端
-	config := &ssh.ClientConfig{
-		User:            server.Username,
-		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 注意：生产环境应该验证主机密钥
-		Timeout:         10 * time.Second,
-	}
-
-	// 连接测试
-	addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
-	client, err := ssh.Dial("tcp", addr, config)
-	if err != nil {
-		result.Success = false
-		result.Message = fmt.Sprintf("Connection failed: %v", err)
-		result.Latency = time.Since(startTime).Milliseconds()
-
-		// 更新服务器状态
-		server.UpdateStatus(StatusOffline)
-		s.repo.Update(ctx, server)
-
-		return result, nil
-	}
-	defer client.Close()
-
-	// 连接成功
-	result.Success = true
-	result.Message = "Connection successful"
-	result.Latency = time.Since(startTime).Milliseconds()
-
-	// 获取服务器信息
-	session, err := client.NewSession()
-	if err == nil {
-		defer session.Close()
-		output, err := session.Output("uname -a")
-		if err == nil {
-			result.ServerInfo = string(output)
-		}
-	}
-
-	// 更新服务器状态
-	server.UpdateStatus(StatusOnline)
-	s.repo.Update(ctx, server)
-
-	return result, nil
-}
-
 func (s *serverService) Search(ctx context.Context, userID uuid.UUID, query string, limit, offset int) ([]*Server, int64, error) {
 	return s.repo.Search(ctx, userID, query, limit, offset)
 }
@@ -347,10 +251,13 @@ func (s *serverService) GetStatistics(ctx context.Context, userID uuid.UUID) (*S
 	}
 
 	stats := &ServerStatistics{
-		Total: int64(len(servers)),
+		Total:   int64(len(servers)),
+		ByGroup: make(map[string]int64),
+		ByTag:   make(map[string]int64),
 	}
 
 	for _, server := range servers {
+		// 统计状态
 		switch server.Status {
 		case StatusOnline:
 			stats.Online++
@@ -360,6 +267,18 @@ func (s *serverService) GetStatistics(ctx context.Context, userID uuid.UUID) (*S
 			stats.Error++
 		default:
 			stats.Unknown++
+		}
+
+		// 统计分组
+		if server.Group != "" {
+			stats.ByGroup[server.Group]++
+		}
+
+		// 统计标签
+		if len(server.Tags) > 0 {
+			for _, tag := range server.Tags {
+				stats.ByTag[tag]++
+			}
 		}
 	}
 

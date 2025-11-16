@@ -128,14 +128,13 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
 
           {!isLoading && offlineServers.length > 0 && (
             <div className={"rounded-lg border p-3 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/30 dark:border-zinc-800/30"}>
-              <div className={"text-xs mb-2 flex items-center gap-2 text-zinc-600 dark:text-zinc-500"}>
-                <span className={"w-1.5 h-1.5 rounded-full inline-block bg-zinc-400 dark:bg-zinc-600"} />
+              <div className={"text-xs mb-2 text-zinc-600 dark:text-zinc-500"}>
                 离线服务器
               </div>
               <div className="space-y-1.5">
                 {offlineServers.map((server) => (
-                  <div key={server.id} className={"flex items-center gap-2 text-xs pl-3 text-zinc-500 dark:text-zinc-600"}>
-                    <div className={"w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-700"}></div>
+                  <div key={server.id} className={"flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-600"}>
+                    <div className={"w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"}></div>
                     {server.name || server.host} <span className="font-mono">({server.host})</span>
                   </div>
                 ))}

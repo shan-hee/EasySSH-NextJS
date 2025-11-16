@@ -194,6 +194,11 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 	// 连接到服务器
 	if err := client.Connect(srv.Host, srv.Port); err != nil {
+		// 连接失败，更新服务器状态为离线
+		srv.UpdateStatus(server.StatusOffline)
+		if updateErr := h.serverRepo.UpdateStatus(c.Request.Context(), srv.ID, srv.Status, srv.LastConnected); updateErr != nil {
+			log.Printf("Failed to update server status to offline: %v", updateErr)
+		}
 		h.sendError(wsConn, "connection_failed", err.Error())
 		return
 	}

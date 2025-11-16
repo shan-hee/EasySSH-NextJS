@@ -5,6 +5,12 @@ import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
 import { EditServerDialog } from "@/components/servers/edit-server-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
@@ -17,7 +23,6 @@ import {
  Terminal,
  Edit,
  Trash2,
- TestTube2,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -43,16 +48,12 @@ import { AnimatedList } from "@/components/ui/animated-list"
 // 可排序的服务器项组件
 function SortableServerItem({
   server,
-  testingServerId,
   onConnect,
-  onTest,
   onEdit,
   onDelete,
 }: {
   server: Server
-  testingServerId: string | null
   onConnect: (id: string) => void
-  onTest: (id: string, e: React.MouseEvent) => void
   onEdit: (server: Server) => void
   onDelete: (id: string) => void
 }) {
@@ -79,38 +80,38 @@ function SortableServerItem({
       {...listeners}
       className="group flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40 cursor-grab active:cursor-grabbing"
     >
-      <div
-        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-          server.status === 'online'
-            ? 'bg-green-500'
-            : 'bg-zinc-400 dark:bg-zinc-600'
-        }`}
-      />
+      <ServerIcon className="h-5 w-5 text-zinc-400 dark:text-zinc-600 flex-shrink-0" />
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className={"text-sm font-medium transition-colors truncate text-zinc-900 dark:text-white"}>
-            {server.name || server.host}
-          </div>
-          {/* 测试气泡按钮 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            onClick={(e) => onTest(server.id, e)}
-            disabled={testingServerId === server.id}
-            title="测试连接"
-          >
-            {testingServerId === server.id ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <TestTube2 className="h-3 w-3" />
+      <div className="flex-1 min-w-0 flex items-center gap-4">
+        <div className="flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className={"text-sm font-medium transition-colors truncate text-zinc-900 dark:text-white"}>
+              {server.name || server.host}
+            </div>
+            {server.status !== 'online' && (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex-shrink-0 text-red-500 font-bold text-lg animate-pulse cursor-default select-none">
+                      !
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>离线</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
-          </Button>
+          </div>
+          <div className={"text-xs font-mono whitespace-nowrap text-zinc-500 dark:text-zinc-600"}>
+            {server.username}@{server.host}:{server.port}
+          </div>
         </div>
-        <div className={"text-xs font-mono truncate text-zinc-500 dark:text-zinc-600"}>
-          {server.username}@{server.host}:{server.port}
-        </div>
+        {server.description && (
+          <div className={"flex-1 text-xs truncate text-zinc-400 dark:text-zinc-600 text-left"}>
+            {server.description}
+          </div>
+        )}
       </div>
 
       {server.group && (
@@ -120,9 +121,13 @@ function SortableServerItem({
       )}
 
       {server.tags && server.tags.length > 0 && (
-        <Badge variant="outline" className="text-xs flex-shrink-0">
-          {server.tags[0]}
-        </Badge>
+        <div className="flex gap-1 flex-shrink-0">
+          {server.tags.map((tag) => (
+            <Badge key={tag} variant="outline" className="text-xs">
+              {tag}
+            </Badge>
+          ))}
+        </div>
       )}
 
       {/* 操作按钮组 */}
@@ -132,7 +137,6 @@ function SortableServerItem({
           size="sm"
           className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           onClick={() => onConnect(server.id)}
-          disabled={server.status !== 'online'}
           title="连接终端">
           <Terminal className="h-4 w-4" />
         </Button>
@@ -167,9 +171,7 @@ export default function ServersPage() {
  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
  const [editingServer, setEditingServer] = useState<Server | null>(null)
  const [loading, setLoading] = useState(true)
- const [activeTab, setActiveTab] = useState<'all' | 'online' | 'offline'>('all')
- const [testingServerId, setTestingServerId] = useState<string | null>(null)
- const [isBatchTesting, setIsBatchTesting] = useState(false)
+ const [activeTab, setActiveTab] = useState<string>('all')
  const [draggedServer, setDraggedServer] = useState<Server | null>(null)
  const [isMounted, setIsMounted] = useState(false)
  const [statistics, setStatistics] = useState({
@@ -177,7 +179,8 @@ export default function ServersPage() {
  online: 0,
  offline: 0,
  error: 0,
- unknown: 0
+ unknown: 0,
+ by_tag: {} as Record<string, number>
  })
 
  // 配置拖拽传感器
@@ -205,11 +208,14 @@ export default function ServersPage() {
  useEffect(() => {
  let filtered = [...servers]
 
- // 按标签过滤
+ // 按状态或用户标签过滤
  if (activeTab === 'online') {
  filtered = filtered.filter(s => s.status === 'online')
  } else if (activeTab === 'offline') {
- filtered = filtered.filter(s => s.status === 'offline' || s.status === 'error')
+ filtered = filtered.filter(s => s.status === 'offline' || s.status === 'error' || s.status === 'unknown')
+ } else if (activeTab !== 'all') {
+ // 用户自定义标签过滤
+ filtered = filtered.filter(s => s.tags && s.tags.includes(activeTab))
  }
 
  // 按搜索词过滤
@@ -271,107 +277,6 @@ export default function ServersPage() {
  setIsEditDialogOpen(true)
  }
 
- const handleTestConnection = async (serverId: string, e: React.MouseEvent) => {
- e.stopPropagation()
-
- // 认证基于 HttpOnly Cookie
-
- setTestingServerId(serverId)
- toast.info("正在测试连接...")
-
- try {
- const result = await serversApi.testConnection(serverId)
- if (result.success) {
- toast.success(`连接测试成功！延迟: ${result.latency_ms}ms`)
-
- // 乐观更新：只更新当前服务器的状态，保持列表顺序不变
- setServers(prev => prev.map(s =>
- s.id === serverId ? { ...s, status: 'online' as const } : s
- ))
-
- // 只刷新统计信息
- await loadStatistics()
- } else {
- toast.error("连接测试失败: " + result.message)
-
- // 更新为离线状态
- setServers(prev => prev.map(s =>
- s.id === serverId ? { ...s, status: 'offline' as const } : s
- ))
-
- await loadStatistics()
- }
- } catch (error: unknown) {
- toast.error(getErrorMessage(error, "测试失败"))
-
- // 异常时标记为错误状态
- setServers(prev => prev.map(s =>
- s.id === serverId ? { ...s, status: 'error' as const } : s
- ))
-
- await loadStatistics()
- } finally {
- setTestingServerId(null)
- }
- }
-
- // 批量测试离线服务器
- const handleBatchTestOffline = async () => {
- // 认证基于 HttpOnly Cookie
-
- // 获取所有离线和错误状态的服务器
- const offlineServers = servers.filter(s => s.status === 'offline' || s.status === 'error')
-
- if (offlineServers.length === 0) {
- toast.info("没有离线服务器需要测试")
- return
- }
-
- setIsBatchTesting(true)
- toast.info(`开始测试 ${offlineServers.length} 台离线服务器...`)
-
- let successCount = 0
- let failCount = 0
-
- // 并发测试所有离线服务器
- const testPromises = offlineServers.map(async (server) => {
- try {
- const result = await serversApi.testConnection(server.id)
-
- // 更新服务器状态
- setServers(prev => prev.map(s =>
- s.id === server.id ? { ...s, status: result.success ? 'online' as const : 'offline' as const } : s
- ))
-
- if (result.success) {
- successCount++
- } else {
- failCount++
- }
- } catch {
- failCount++
- setServers(prev => prev.map(s =>
- s.id === server.id ? { ...s, status: 'error' as const } : s
- ))
- }
- })
-
- await Promise.all(testPromises)
-
- // 刷新统计信息
- await loadStatistics()
-
- setIsBatchTesting(false)
-
- // 显示测试结果
- if (successCount > 0 && failCount > 0) {
- toast.success(`测试完成：${successCount} 台恢复在线，${failCount} 台仍然离线`)
- } else if (successCount > 0) {
- toast.success(`测试完成：${successCount} 台服务器恢复在线！`)
- } else {
- toast.error(`测试完成：所有服务器仍然离线`)
- }
- }
 
  const handleDelete = async (serverId: string) => {
  if (!confirm("确定要删除这台服务器吗？此操作不可恢复。")) {
@@ -486,18 +391,39 @@ export default function ServersPage() {
  return
  }
 
- const updatedServer = await serversApi.update(editingServer.id, {
+ const updateData: {
+ name?: string
+ host: string
+ port: number
+ username: string
+ auth_method: "password" | "key"
+ password?: string
+ private_key?: string
+ group?: string
+ tags?: string[]
+ description?: string
+ } = {
  name: data.name,
  host: data.host,
  port: parseInt(data.port) || 22,
  username: data.username,
  auth_method: data.authMethod === "privateKey" ? "key" : "password",
- password: data.password,
- private_key: data.privateKey,
  group: data.group,
  tags: data.tags,
  description: data.description,
- })
+ }
+
+ // 只有在填写了密码时才发送
+ if (data.password) {
+ updateData.password = data.password
+ }
+
+ // 只有在填写了私钥时才发送
+ if (data.privateKey) {
+ updateData.private_key = data.privateKey
+ }
+
+ const updatedServer = await serversApi.update(editingServer.id, updateData)
 
  toast.success("服务器更新成功")
  setIsEditDialogOpen(false)
@@ -548,7 +474,7 @@ export default function ServersPage() {
  </div>
 
  {/* 标签切换 - 始终显示 */}
- <div className="flex gap-2 items-center">
+ <div className="flex gap-2 items-center flex-wrap">
  <Button
  variant={activeTab === 'all' ? 'default' : 'outline'}
  size="sm"
@@ -572,27 +498,20 @@ export default function ServersPage() {
  onClick={() => setActiveTab('offline')}
  className="h-8"
  >
- <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 mr-1.5" />
- 离线 ({statistics.offline})
+ <div className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />
+ 离线 ({statistics.offline + statistics.error + statistics.unknown})
  </Button>
-
- {/* 一键测试离线服务器按钮 */}
- {statistics.offline > 0 && (
+ {statistics.by_tag && Object.entries(statistics.by_tag).map(([tag, count]) => (
  <Button
- variant="ghost"
+ key={tag}
+ variant={activeTab === tag ? 'default' : 'outline'}
  size="sm"
- className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
- onClick={handleBatchTestOffline}
- disabled={isBatchTesting}
- title="一键测试所有离线服务器"
+ onClick={() => setActiveTab(tag)}
+ className="h-8"
  >
- {isBatchTesting ? (
- <Loader2 className="h-4 w-4 animate-spin" />
- ) : (
- <TestTube2 className="h-4 w-4" />
- )}
+ {tag} ({count})
  </Button>
- )}
+ ))}
  </div>
  </div>
  )}
@@ -629,9 +548,7 @@ export default function ServersPage() {
  <SortableServerItem
  key={server.id}
  server={server}
- testingServerId={testingServerId}
  onConnect={handleConnect}
- onTest={handleTestConnection}
  onEdit={handleEdit}
  onDelete={handleDelete}
  />
@@ -642,13 +559,6 @@ export default function ServersPage() {
  <DragOverlay>
  {draggedServer ? (
  <div className="flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30 shadow-lg opacity-80">
- <div
- className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
- draggedServer.status === 'online'
- ? 'bg-green-500'
- : 'bg-zinc-400 dark:bg-zinc-600'
- }`}
- />
  <div className="flex-1 min-w-0">
  <div className="text-sm font-medium text-zinc-900 dark:text-white">
  {draggedServer.name || draggedServer.host}
@@ -666,20 +576,38 @@ export default function ServersPage() {
  key={server.id}
  className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40"}
  >
- <div
- className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
- server.status === 'online'
- ? 'bg-green-500'
- : 'bg-zinc-400 dark:bg-zinc-600'
- }`}
- />
- <div className="flex-1 min-w-0">
+ <ServerIcon className="h-5 w-5 text-zinc-400 dark:text-zinc-600 flex-shrink-0" />
+
+ <div className="flex-1 min-w-0 flex items-center gap-4">
+ <div className="flex-shrink-0">
+ <div className="flex items-center gap-2">
  <div className={"text-sm font-medium transition-colors truncate text-zinc-900 dark:text-white"}>
  {server.name || server.host}
  </div>
- <div className={"text-xs font-mono truncate text-zinc-500 dark:text-zinc-600"}>
+ {server.status !== 'online' && (
+ <TooltipProvider delayDuration={0}>
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <span className="flex-shrink-0 text-red-500 font-bold text-lg animate-pulse cursor-default select-none">
+ !
+ </span>
+ </TooltipTrigger>
+ <TooltipContent side="top">
+ <p>离线</p>
+ </TooltipContent>
+ </Tooltip>
+ </TooltipProvider>
+ )}
+ </div>
+ <div className={"text-xs font-mono whitespace-nowrap text-zinc-500 dark:text-zinc-600"}>
  {server.username}@{server.host}:{server.port}
  </div>
+ </div>
+ {server.description && (
+ <div className={"flex-1 text-xs truncate text-zinc-400 dark:text-zinc-600 text-left"}>
+ {server.description}
+ </div>
+ )}
  </div>
  </div>
  ))}

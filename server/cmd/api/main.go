@@ -358,7 +358,6 @@ func main() {
 			serverRoutes.GET("/:id", serverHandler.GetByID)              // 详情
 			serverRoutes.PUT("/:id", serverHandler.Update)               // 更新
 			serverRoutes.DELETE("/:id", serverHandler.Delete)            // 删除
-			serverRoutes.POST("/:id/test", serverHandler.TestConnection) // 连接测试
 		}
 
 		// SSH 路由（需要认证）

@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { Globe, Monitor, Server, Wifi } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -8,7 +9,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { useLatencyData } from "./monitor/contexts/MonitorWebSocketContext"
-import { useNetworkLatency } from "@/hooks/useNetworkLatency"
 
 interface NetworkNode {
   name: string
@@ -29,16 +29,23 @@ export function NetworkLatencyPopover() {
   // 【性能优化】只订阅延迟数据，不订阅监控数据
   const latencyData = useLatencyData();
 
-  // 综合网络延迟测量
-  const latency = useNetworkLatency({
-    sshLatencyMs: latencyData.sshLatencyMs,
-    // 使用平滑后的 RTT 作为展示/汇总
-    localLatencyMsOverride: latencyData.localLatencySmoothedMs || latencyData.localLatencyMs,
-    enabled: true,
-  });
+  // 计算综合网络延迟和节点拓扑
+  const { currentLatency, nodes } = useMemo(() => {
+    const localLatency = latencyData.localLatencySmoothedMs || latencyData.localLatencyMs || 0;
+    const sshLatency = latencyData.sshLatencyMs || 0;
+    const total = localLatency + sshLatency;
 
-  const currentLatency = latency.total;
-  const nodes = latency.nodes;
+    const networkNodes: NetworkNode[] = [
+      { name: "本地", latency: 0, icon: "monitor" },
+      { name: "EasySSH", latency: localLatency, icon: "wifi" },
+      { name: "服务器", latency: total, icon: "server" },
+    ];
+
+    return {
+      currentLatency: total,
+      nodes: networkNodes,
+    };
+  }, [latencyData.localLatencyMs, latencyData.localLatencySmoothedMs, latencyData.sshLatencyMs]);
   // 获取节点图标
   const getNodeIcon = (icon?: string) => {
     const iconClass = "h-3.5 w-3.5"

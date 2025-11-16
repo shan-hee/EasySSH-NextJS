@@ -193,36 +193,6 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 	RespondNoContent(c)
 }
 
-// TestConnection 测试服务器连接
-// POST /api/v1/servers/:id/test
-func (h *ServerHandler) TestConnection(c *gin.Context) {
-	// 从上下文获取用户 ID
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	// 解析服务器 ID
-	serverID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID format")
-		return
-	}
-
-	// 测试连接
-	result, err := h.serverService.TestConnection(c.Request.Context(), userID, serverID)
-	if err != nil {
-		if errors.Is(err, server.ErrServerNotFound) {
-			RespondError(c, http.StatusNotFound, "server_not_found", "Server not found")
-			return
-		}
-		RespondError(c, http.StatusInternalServerError, "test_failed", err.Error())
-		return
-	}
-
-	RespondSuccess(c, result)
-}
 
 // GetStatistics 获取服务器统计
 // GET /api/v1/servers/statistics

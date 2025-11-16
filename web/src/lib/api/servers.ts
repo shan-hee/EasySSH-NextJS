@@ -89,16 +89,6 @@ export interface ServerStatisticsResponse {
 }
 
 /**
- * 测试连接响应
- */
-export interface TestConnectionResponse {
-  success: boolean
-  message: string
-  latency_ms?: number
-  server_info?: string
-}
-
-/**
  * 服务器 API 服务
  */
 export const serversApi = {
@@ -154,15 +144,6 @@ export const serversApi = {
   async delete(id: string): Promise<void> {
     return apiFetch<void>(`/servers/${id}`, {
       method: "DELETE",
-    })
-  },
-
-  /**
-   * 测试服务器连接
-   */
-  async testConnection(id: string): Promise<TestConnectionResponse> {
-    return apiFetch<TestConnectionResponse>(`/servers/${id}/test`, {
-      method: "POST",
     })
   },
 
