@@ -3,8 +3,8 @@ package rest
 import (
 	"archive/zip"
 	"fmt"
-	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
