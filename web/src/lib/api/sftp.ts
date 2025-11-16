@@ -39,6 +39,24 @@ export interface DiskUsageResponse {
 }
 
 /**
+ * 批量操作错误信息
+ */
+export interface BatchOperationError {
+  path: string
+  error: string
+  message: string
+}
+
+/**
+ * 批量删除响应
+ */
+export interface BatchDeleteResponse {
+  success: string[]
+  failed: BatchOperationError[]
+  total: number
+}
+
+/**
  * SFTP API 服务
  */
 export const sftpApi = {
@@ -201,5 +219,58 @@ export const sftpApi = {
       xhr.withCredentials = true
       xhr.send(formData)
     })
+  },
+
+  /**
+   * 批量删除文件或目录
+   */
+  async batchDelete(serverId: string, paths: string[]): Promise<BatchDeleteResponse> {
+    return apiFetch<BatchDeleteResponse>(`/sftp/${serverId}/batch-delete`, {
+      method: "POST",
+      body: { paths },
+      timeout: 600000, // 10分钟超时（批量操作可能需要更长时间）
+      retry: false,    // 禁用重试（删除操作不应重试）
+    })
+  },
+
+  /**
+   * 批量下载文件（打包为 ZIP）
+   */
+  async batchDownload(serverId: string, paths: string[]): Promise<void> {
+    const apiUrl = getApiUrl()
+    const response = await fetch(`${apiUrl}/sftp/${serverId}/batch-download`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // 凭 Cookie 认证
+      body: JSON.stringify({ paths }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Batch download failed" }))
+      throw new Error(error.message || "Batch download failed")
+    }
+
+    // 获取文件名（从响应头）
+    const contentDisposition = response.headers.get("Content-Disposition")
+    let filename = "files.zip"
+    if (contentDisposition) {
+      const matches = /filename=([^;]+)/.exec(contentDisposition)
+      if (matches && matches[1]) {
+        filename = matches[1].trim()
+      }
+    }
+
+    // 下载文件
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
   },
 }

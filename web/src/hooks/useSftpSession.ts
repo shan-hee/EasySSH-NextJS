@@ -281,6 +281,58 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     [serverId, currentPath, refresh]
   );
 
+  /**
+   * 批量删除文件或目录
+   */
+  const batchDeleteFiles = useCallback(
+    async (fileNames: string[]) => {
+      try {
+        // 构建完整路径
+        const fullPaths = fileNames.map((fileName) =>
+          currentPath.endsWith('/')
+            ? `${currentPath}${fileName}`
+            : `${currentPath}/${fileName}`
+        );
+
+        // 调用批量删除 API
+        const result = await sftpApi.batchDelete(serverId, fullPaths);
+
+        // 刷新目录
+        refresh();
+
+        // 返回结果供调用者处理
+        return result;
+      } catch (error) {
+        console.error('[useSftpSession] 批量删除失败:', error);
+        throw error;
+      }
+    },
+    [serverId, currentPath, refresh]
+  );
+
+  /**
+   * 批量下载文件（打包为 ZIP）
+   */
+  const batchDownloadFiles = useCallback(
+    async (fileNames: string[]) => {
+      try {
+        // 构建完整路径
+        const fullPaths = fileNames.map((fileName) =>
+          currentPath.endsWith('/')
+            ? `${currentPath}${fileName}`
+            : `${currentPath}/${fileName}`
+        );
+
+        // 调用批量下载 API
+        await sftpApi.batchDownload(serverId, fullPaths);
+      } catch (error) {
+        console.error('[useSftpSession] 批量下载失败:', error);
+        throw error;
+      }
+    },
+    [serverId, currentPath]
+  );
+
   // 初始加载
   useEffect(() => {
     if (serverId) {
@@ -307,6 +359,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     renameFile,
     readFile,
     saveFile,
+
+    // 批量操作
+    batchDeleteFiles,
+    batchDownloadFiles,
 
     // 传输管理
     cancelTransfer: fileTransfer.cancelTask,

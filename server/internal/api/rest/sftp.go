@@ -1,7 +1,9 @@
 package rest
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -544,4 +546,235 @@ func (h *SFTPHandler) GetDiskUsage(c *gin.Context) {
 	}
 
 	RespondSuccess(c, diskUsage)
+}
+
+// BatchOperationError 批量操作错误信息
+type BatchOperationError struct {
+	Path    string `json:"path"`
+	Error   string `json:"error"`
+	Message string `json:"message"`
+}
+
+// BatchDeleteRequest 批量删除请求
+type BatchDeleteRequest struct {
+	Paths []string `json:"paths" binding:"required,min=1,max=100"`
+}
+
+// BatchDeleteResponse 批量删除响应
+type BatchDeleteResponse struct {
+	Success []string              `json:"success"`
+	Failed  []BatchOperationError `json:"failed"`
+	Total   int                   `json:"total"`
+}
+
+// BatchDelete 批量删除文件或目录
+// DELETE /api/v1/sftp/:server_id/batch-delete
+func (h *SFTPHandler) BatchDelete(c *gin.Context) {
+	// 解析服务器 ID
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	// 解析请求
+	var req BatchDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 记录批量删除操作开始
+	startTime := time.Now()
+	fmt.Printf("[SFTP BatchDelete] Starting batch delete operation: server=%s, count=%d\n", serverID, len(req.Paths))
+
+	// 创建 SFTP 客户端
+	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	if err != nil {
+		fmt.Printf("[SFTP BatchDelete] Failed to create SFTP client: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer sftpClient.Close()
+
+	// 批量删除
+	success := []string{}
+	failed := []BatchOperationError{}
+
+	for _, path := range req.Paths {
+		// 获取文件信息以判断类型
+		fileInfo, err := sftpClient.GetFileInfo(path)
+		if err != nil {
+			fmt.Printf("[SFTP BatchDelete] File not found: %s, error: %v\n", path, err)
+			failed = append(failed, BatchOperationError{
+				Path:    path,
+				Error:   "file_not_found",
+				Message: err.Error(),
+			})
+			continue
+		}
+
+		// 删除文件或目录
+		var deleteErr error
+		if fileInfo.IsDir {
+			fmt.Printf("[SFTP BatchDelete] Deleting directory: %s\n", path)
+			deleteErr = sftpClient.DeleteDirectory(path)
+		} else {
+			fmt.Printf("[SFTP BatchDelete] Deleting file: %s\n", path)
+			deleteErr = sftpClient.DeleteFile(path)
+		}
+
+		if deleteErr != nil {
+			fmt.Printf("[SFTP BatchDelete] Delete failed: %s, error: %v\n", path, deleteErr)
+			failed = append(failed, BatchOperationError{
+				Path:    path,
+				Error:   "delete_failed",
+				Message: deleteErr.Error(),
+			})
+		} else {
+			success = append(success, path)
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("[SFTP BatchDelete] Batch delete completed in %v: success=%d, failed=%d\n", elapsed, len(success), len(failed))
+
+	RespondSuccess(c, BatchDeleteResponse{
+		Success: success,
+		Failed:  failed,
+		Total:   len(req.Paths),
+	})
+}
+
+// BatchDownloadRequest 批量下载请求
+type BatchDownloadRequest struct {
+	Paths []string `json:"paths" binding:"required,min=1,max=100"`
+}
+
+// BatchDownload 批量下载文件（打包为 ZIP）
+// POST /api/v1/sftp/:server_id/batch-download
+func (h *SFTPHandler) BatchDownload(c *gin.Context) {
+	// 解析服务器 ID
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	// 解析请求
+	var req BatchDownloadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 记录批量下载操作开始
+	startTime := time.Now()
+	fmt.Printf("[SFTP BatchDownload] Starting batch download operation: server=%s, count=%d\n", serverID, len(req.Paths))
+
+	// 创建 SFTP 客户端
+	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	if err != nil {
+		fmt.Printf("[SFTP BatchDownload] Failed to create SFTP client: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer sftpClient.Close()
+
+	// 设置响应头
+	timestamp := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("files-%s.zip", timestamp)
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Transfer-Encoding", "chunked")
+
+	// 创建 ZIP 写入器（直接写入响应）
+	zipWriter := zip.NewWriter(c.Writer)
+	defer zipWriter.Close()
+
+	// 遍历文件列表
+	successCount := 0
+	failedCount := 0
+
+	for _, path := range req.Paths {
+		// 获取文件信息
+		fileInfo, err := sftpClient.GetFileInfo(path)
+		if err != nil {
+			fmt.Printf("[SFTP BatchDownload] File not found: %s, error: %v\n", path, err)
+			failedCount++
+			continue
+		}
+
+		if fileInfo.IsDir {
+			// 递归添加目录
+			if err := h.addDirToZip(sftpClient, zipWriter, path, filepath.Base(path)); err != nil {
+				fmt.Printf("[SFTP BatchDownload] Failed to add directory to ZIP: %s, error: %v\n", path, err)
+				failedCount++
+			} else {
+				successCount++
+			}
+		} else {
+			// 添加单个文件
+			if err := h.addFileToZip(sftpClient, zipWriter, path, filepath.Base(path)); err != nil {
+				fmt.Printf("[SFTP BatchDownload] Failed to add file to ZIP: %s, error: %v\n", path, err)
+				failedCount++
+			} else {
+				successCount++
+			}
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("[SFTP BatchDownload] Batch download completed in %v: success=%d, failed=%d\n", elapsed, successCount, failedCount)
+}
+
+// addFileToZip 添加单个文件到 ZIP
+func (h *SFTPHandler) addFileToZip(sftpClient *sftp.Client, zipWriter *zip.Writer, remotePath, zipPath string) error {
+	// 创建 ZIP 条目
+	writer, err := zipWriter.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create ZIP entry: %w", err)
+	}
+
+	// 下载文件并写入 ZIP
+	if err := sftpClient.DownloadFile(remotePath, writer); err != nil {
+		return fmt.Errorf("failed to download file: %w", err)
+	}
+
+	return nil
+}
+
+// addDirToZip 递归添加目录到 ZIP
+func (h *SFTPHandler) addDirToZip(sftpClient *sftp.Client, zipWriter *zip.Writer, remotePath, baseDir string) error {
+	// 列出目录内容
+	listing, err := sftpClient.ListDirectory(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to list directory: %w", err)
+	}
+
+	// 遍历目录中的文件
+	for _, file := range listing.Files {
+		// 跳过 . 和 ..
+		if file.Name == "." || file.Name == ".." {
+			continue
+		}
+
+		zipPath := filepath.Join(baseDir, file.Name)
+
+		if file.IsDir {
+			// 递归添加子目录
+			if err := h.addDirToZip(sftpClient, zipWriter, file.Path, zipPath); err != nil {
+				fmt.Printf("[SFTP BatchDownload] Failed to add subdirectory: %s, error: %v\n", file.Path, err)
+				// 继续处理其他文件，不中断整个操作
+			}
+		} else {
+			// 添加文件
+			if err := h.addFileToZip(sftpClient, zipWriter, file.Path, zipPath); err != nil {
+				fmt.Printf("[SFTP BatchDownload] Failed to add file: %s, error: %v\n", file.Path, err)
+				// 继续处理其他文件，不中断整个操作
+			}
+		}
+	}
+
+	return nil
 }

@@ -400,6 +400,10 @@ func main() {
 			sftpRoutes.DELETE("/delete", sftpHandler.Delete)       // 删除
 			sftpRoutes.POST("/rename", sftpHandler.Rename)         // 重命名
 
+			// 批量操作
+			sftpRoutes.POST("/batch-delete", sftpHandler.BatchDelete)     // 批量删除
+			sftpRoutes.POST("/batch-download", sftpHandler.BatchDownload) // 批量下载
+
 			// 文件内容
 			sftpRoutes.GET("/read", sftpHandler.ReadFile)    // 读取文件
 			sftpRoutes.POST("/write", sftpHandler.WriteFile) // 写入文件

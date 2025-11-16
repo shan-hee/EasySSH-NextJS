@@ -680,6 +680,64 @@ export default function SftpPage() {
  }
  }
 
+ // 批量删除文件
+ const handleBatchDelete = async (sessionId: string, fileNames: string[]) => {
+ const session = sessions.find(s => s.id === sessionId)
+ if (!session || !session.isConnected) {
+ throw new Error("会话未连接")
+ }
+
+ // 构建完整路径
+ const filePaths = fileNames.map(fileName =>
+ `${session.currentPath}/${fileName}`.replace("//", "/")
+ )
+
+ try {
+ const result = await sftpApi.batchDelete(session.serverId, filePaths)
+
+ // 显示结果
+ if (result.success.length > 0) {
+ toast.success(`成功删除 ${result.success.length} 个文件`)
+ }
+
+ if (result.failed.length > 0) {
+ const failedNames = result.failed.map(f => f.path.split('/').pop()).join(', ')
+ toast.error(`${result.failed.length} 个文件删除失败: ${failedNames}`)
+ }
+
+ // 刷新文件列表
+ await handleRefreshSession(sessionId)
+
+ return result
+ } catch (error: unknown) {
+ console.error("Failed to batch delete:", error)
+ toast.error(getErrorMessage(error, "批量删除失败"))
+ throw error
+ }
+ }
+
+ // 批量下载文件
+ const handleBatchDownload = async (sessionId: string, fileNames: string[]) => {
+ const session = sessions.find(s => s.id === sessionId)
+ if (!session || !session.isConnected) {
+ throw new Error("会话未连接")
+ }
+
+ // 构建完整路径
+ const filePaths = fileNames.map(fileName =>
+ `${session.currentPath}/${fileName}`.replace("//", "/")
+ )
+
+ try {
+ await sftpApi.batchDownload(session.serverId, filePaths)
+ toast.success(`开始下载 ${fileNames.length} 个文件`)
+ } catch (error: unknown) {
+ console.error("Failed to batch download:", error)
+ toast.error(getErrorMessage(error, "批量下载失败"))
+ throw error
+ }
+ }
+
  // 获取网格布局类名
  const getGridLayout = (count: number) => {
  if (count === 1) return "grid-cols-1"
@@ -930,6 +988,8 @@ export default function SftpPage() {
  onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
  onDownload={(fileName) => handleDownload(session.id, fileName)}
  onDelete={(fileName) => handleDelete(session.id, fileName)}
+ onBatchDelete={(fileNames) => handleBatchDelete(session.id, fileNames)}
+ onBatchDownload={(fileNames) => handleBatchDownload(session.id, fileNames)}
  onCreateFolder={(name) => handleCreateFolder(session.id, name)}
  onRename={(oldName, newName) => handleRename(session.id, oldName, newName)}
  onDisconnect={() => handleDisconnect(session.id)}
@@ -998,6 +1058,8 @@ export default function SftpPage() {
  onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
  onDownload={(fileName) => handleDownload(session.id, fileName)}
  onDelete={(fileName) => handleDelete(session.id, fileName)}
+ onBatchDelete={(fileNames) => handleBatchDelete(session.id, fileNames)}
+ onBatchDownload={(fileNames) => handleBatchDownload(session.id, fileNames)}
  onCreateFolder={(name) => handleCreateFolder(session.id, name)}
  onRename={(oldName, newName) => handleRename(session.id, oldName, newName)}
  onDisconnect={() => handleDisconnect(session.id)}

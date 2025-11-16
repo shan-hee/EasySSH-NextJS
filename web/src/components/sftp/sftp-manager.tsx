@@ -107,6 +107,8 @@ interface SftpManagerProps {
   onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
+  onBatchDelete?: (fileNames: string[]) => Promise<{ success: string[]; failed: any[]; total: number }>
+  onBatchDownload?: (fileNames: string[]) => Promise<void>
   onCreateFolder: (name: string) => void
   onCreateFile?: (name: string) => void
   onRename: (oldName: string, newName: string) => void
@@ -142,6 +144,8 @@ export function SftpManager(props: SftpManagerProps) {
     onUpload,
     onDownload,
     onDelete,
+    onBatchDelete,
+    onBatchDownload,
     onCreateFolder,
     onCreateFile,
     onRename,
@@ -799,19 +803,60 @@ export function SftpManager(props: SftpManagerProps) {
     }
   }
 
-  // 批量下载 - 移除内部进度管理
-  const handleBatchDownload = useCallback(() => {
-    selectedFiles.forEach(fileName => {
-      onDownload(fileName)
-    })
-    setSelectedFiles([])
-  }, [selectedFiles, onDownload])
+  // 批量下载
+  const handleBatchDownload = useCallback(async () => {
+    if (selectedFiles.length === 0) return
+
+    // 如果提供了批量下载接口，使用批量下载
+    if (onBatchDownload) {
+      try {
+        setIsLoading(true)
+        await onBatchDownload(selectedFiles)
+        setSelectedFiles([])
+      } catch (error) {
+        console.error('[SftpManager] 批量下载失败:', error)
+        alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      // 降级到循环调用单个下载
+      selectedFiles.forEach(fileName => {
+        onDownload(fileName)
+      })
+      setSelectedFiles([])
+    }
+  }, [selectedFiles, onDownload, onBatchDownload])
 
   // 批量删除
-  const handleBatchDelete = useCallback(() => {
-    selectedFiles.forEach(fileName => onDelete(fileName))
-    setSelectedFiles([])
-  }, [selectedFiles, onDelete])
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedFiles.length === 0) return
+
+    // 如果提供了批量删除接口，使用批量删除
+    if (onBatchDelete) {
+      try {
+        setIsLoading(true)
+        const result = await onBatchDelete(selectedFiles)
+
+        // 显示结果
+        if (result.failed.length > 0) {
+          const failedNames = result.failed.map(f => f.path.split('/').pop()).join(', ')
+          alert(`删除完成：成功 ${result.success.length} 个，失败 ${result.failed.length} 个\n失败的文件：${failedNames}`)
+        }
+
+        setSelectedFiles([])
+      } catch (error) {
+        console.error('[SftpManager] 批量删除失败:', error)
+        alert(`批量删除失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      // 降级到循环调用单个删除
+      selectedFiles.forEach(fileName => onDelete(fileName))
+      setSelectedFiles([])
+    }
+  }, [selectedFiles, onDelete, onBatchDelete])
 
   // 清除已完成任务 - 使用外部传入的处理函数
   const handleClearCompleted = () => {
