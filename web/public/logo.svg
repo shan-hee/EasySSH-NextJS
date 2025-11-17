@@ -1,25 +1,25 @@
 <svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
   <defs>
 
-    <!-- 彩虹渐变 tile：放大到 480×480，让条纹极粗 -->
+    <!-- 柔化后的彩虹渐变（蓝色不突兀） -->
     <linearGradient id="rainbow-gradient"
                     x1="0" y1="0" x2="480" y2="480"
                     gradientUnits="userSpaceOnUse">
       <stop offset="0%"    stop-color="#ff0000"/>
       <stop offset="7.14%" stop-color="#ff7f00"/>
       <stop offset="14.28%" stop-color="#ffff00"/>
-      <stop offset="21.42%" stop-color="#00ff00"/>
-      <stop offset="28.56%" stop-color="#0000ff"/>
-      <stop offset="35.71%" stop-color="#4b0082"/>
-      <stop offset="42.85%" stop-color="#8b00ff"/>
-      <stop offset="50%"   stop-color="#ff0000"/>
+      <stop offset="21.42%" stop-color="#00ff66"/>
+      <stop offset="28.56%" stop-color="#3f6fff"/>  <!-- 柔和亮蓝 -->
+      <stop offset="35.71%" stop-color="#6b33c9"/>  <!-- 柔和靛色 -->
+      <stop offset="42.85%" stop-color="#a84dff"/>  <!-- 柔和紫色 -->
+      <stop offset="50%"    stop-color="#ff0000"/>
       <stop offset="57.14%" stop-color="#ff7f00"/>
       <stop offset="64.28%" stop-color="#ffff00"/>
-      <stop offset="71.42%" stop-color="#00ff00"/>
-      <stop offset="78.56%" stop-color="#0000ff"/>
-      <stop offset="85.71%" stop-color="#4b0082"/>
-      <stop offset="92.85%" stop-color="#8b00ff"/>
-      <stop offset="100%"  stop-color="#ff0000"/>
+      <stop offset="71.42%" stop-color="#00ff66"/>
+      <stop offset="78.56%" stop-color="#3f6fff"/>
+      <stop offset="85.71%" stop-color="#6b33c9"/>
+      <stop offset="92.85%" stop-color="#a84dff"/>
+      <stop offset="100%"   stop-color="#ff0000"/>
     </linearGradient>
 
     <!-- 使用 480×480 pattern（极粗彩虹条纹） -->
@@ -45,7 +45,7 @@
       </g>
     </mask>
 
-    <!-- 稍微柔一点的发光 -->
+    <!-- 柔光效果 -->
     <filter id="icon-glow" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
       <feMerge>
@@ -56,7 +56,7 @@
 
   </defs>
 
-  <!-- 彩虹图标 -->
+  <!-- 彩虹图标主体 -->
   <rect
     width="240" height="240"
     fill="url(#rainbow-pattern)"
