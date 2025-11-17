@@ -10,9 +10,11 @@ import (
 )
 
 var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrUserNotFound       = errors.New("user not found")
+	ErrUserAlreadyExists  = errors.New("user already exists")
 	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrSessionNotFound    = errors.New("session not found or has been revoked")
+	ErrSessionExpired     = errors.New("session has expired")
 )
 
 // Repository 用户数据访问接口
@@ -194,10 +196,6 @@ func (r *gormRepository) CountAdmins(ctx context.Context) (int64, error) {
 }
 
 // === Session Management ===
-
-var (
-	ErrSessionNotFound = errors.New("session not found")
-)
 
 // CreateSession 创建会话
 func (r *gormRepository) CreateSession(ctx context.Context, session *Session) error {

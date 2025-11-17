@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"os"
@@ -123,6 +125,57 @@ func clearAuthCookies(c *gin.Context, configManager interface{}) {
 	})
 }
 
+// extractDeviceInfo 从请求中提取设备信息
+func extractDeviceInfo(c *gin.Context) (deviceType, deviceName, ipAddress, userAgent string) {
+	// 获取 User-Agent
+	userAgent = c.GetHeader("User-Agent")
+	if userAgent == "" {
+		userAgent = "Unknown"
+	}
+
+	// 解析设备类型和名称
+	ua := strings.ToLower(userAgent)
+
+	// 判断设备类型
+	if strings.Contains(ua, "mobile") || strings.Contains(ua, "android") || strings.Contains(ua, "iphone") {
+		deviceType = "mobile"
+	} else if strings.Contains(ua, "tablet") || strings.Contains(ua, "ipad") {
+		deviceType = "tablet"
+	} else {
+		deviceType = "desktop"
+	}
+
+	// 解析浏览器/设备名称
+	switch {
+	case strings.Contains(ua, "edg/") || strings.Contains(ua, "edge"):
+		deviceName = "Microsoft Edge"
+	case strings.Contains(ua, "chrome") && !strings.Contains(ua, "edg"):
+		deviceName = "Google Chrome"
+	case strings.Contains(ua, "firefox"):
+		deviceName = "Mozilla Firefox"
+	case strings.Contains(ua, "safari") && !strings.Contains(ua, "chrome"):
+		deviceName = "Safari"
+	case strings.Contains(ua, "opera") || strings.Contains(ua, "opr/"):
+		deviceName = "Opera"
+	default:
+		deviceName = "Unknown Browser"
+	}
+
+	// 获取 IP 地址（考虑代理）
+	ipAddress = c.ClientIP()
+	if ipAddress == "" {
+		ipAddress = "Unknown"
+	}
+
+	return deviceType, deviceName, ipAddress, userAgent
+}
+
+// hashRefreshToken 对 refresh token 进行哈希处理
+func hashRefreshToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
 // AuthHandler 认证处理器
 type AuthHandler struct {
 	authService            auth.Service
@@ -237,7 +290,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, accessToken, refreshToken, err := h.authService.Login(c.Request.Context(), req.Username, req.Password)
+	// 提取设备信息
+	deviceType, deviceName, ipAddress, userAgent := extractDeviceInfo(c)
+	sessionInfo := &auth.SessionInfo{
+		DeviceType: deviceType,
+		DeviceName: deviceName,
+		IPAddress:  ipAddress,
+		UserAgent:  userAgent,
+	}
+
+	user, accessToken, refreshToken, err := h.authService.Login(c.Request.Context(), req.Username, req.Password, sessionInfo)
 	if err != nil {
 		// 登录失败时也设置用户名,以便审计日志记录
 		c.Set("username", req.Username)
@@ -333,7 +395,11 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), refreshToken)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrExpiredToken) {
+		// 会话相关错误或 token 无效错误，清除 Cookie 并返回 401
+		if errors.Is(err, auth.ErrInvalidToken) ||
+		   errors.Is(err, auth.ErrExpiredToken) ||
+		   errors.Is(err, auth.ErrSessionNotFound) ||
+		   errors.Is(err, auth.ErrSessionExpired) {
 			// 清除无效的 Cookie
 			clearAuthCookies(c, h.configManager)
 			RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid or expired refresh token")
@@ -539,6 +605,15 @@ func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
 		runMode = RunModeProduction
 	}
 
+	// 提取设备信息
+	deviceType, deviceName, ipAddress, userAgent := extractDeviceInfo(c)
+	sessionInfo := &auth.SessionInfo{
+		DeviceType: deviceType,
+		DeviceName: deviceName,
+		IPAddress:  ipAddress,
+		UserAgent:  userAgent,
+	}
+
 	// 初始化管理员
 	user, accessToken, refreshToken, err := h.authService.InitializeAdmin(
 		c.Request.Context(),
@@ -546,6 +621,7 @@ func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
 		req.Email,
 		req.Password,
 		string(runMode),
+		sessionInfo,
 	)
 	if err != nil {
 		if err.Error() == "admin already exists" {

@@ -13,6 +13,20 @@ async function refreshSession(): Promise<void> {
   refreshPromise = (async () => {
     const apiUrl = getApiUrl()
     const url = `${apiUrl}/auth/refresh`
+
+    // 根据是否跨域选择 credentials 策略，保持与 apiFetchInternal 一致
+    let credentials: RequestCredentials = 'same-origin'
+    try {
+      if (typeof window !== 'undefined') {
+        const reqUrl = new URL(url, window.location.href)
+        if (reqUrl.origin !== window.location.origin) {
+          credentials = 'include'
+        }
+      }
+    } catch {
+      // 忽略 URL 解析错误，回退到 same-origin
+    }
+
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -20,7 +34,7 @@ async function refreshSession(): Promise<void> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({}), // 刻意不传 refresh_token，后端将从 Cookie 读取
-      credentials: 'same-origin',
+      credentials,
     })
     if (!res.ok) {
       throw new Error(`Refresh failed: ${res.status}`)

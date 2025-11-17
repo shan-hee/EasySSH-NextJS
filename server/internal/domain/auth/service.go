@@ -14,13 +14,21 @@ import (
 	"github.com/google/uuid"
 )
 
+// SessionInfo 会话信息
+type SessionInfo struct {
+	DeviceType string
+	DeviceName string
+	IPAddress  string
+	UserAgent  string
+}
+
 // Service 认证服务接口
 type Service interface {
 	// Register 注册新用户
 	Register(ctx context.Context, username, email, password string, role UserRole) (*User, error)
 
 	// Login 用户登录
-	Login(ctx context.Context, username, password string) (*User, string, string, error)
+	Login(ctx context.Context, username, password string, sessionInfo *SessionInfo) (*User, string, string, error)
 
 	// Logout 用户登出
 	Logout(ctx context.Context, accessToken string) error
@@ -47,7 +55,7 @@ type Service interface {
 	HasAdmin(ctx context.Context) (bool, error)
 
 	// InitializeAdmin 初始化管理员账户（仅在没有管理员时）
-	InitializeAdmin(ctx context.Context, username, email, password, runMode string) (*User, string, string, error)
+	InitializeAdmin(ctx context.Context, username, email, password, runMode string, sessionInfo *SessionInfo) (*User, string, string, error)
 
 	// 2FA 相关方法
 
@@ -152,7 +160,7 @@ func (s *authService) Register(ctx context.Context, username, email, password st
 	return user, nil
 }
 
-func (s *authService) Login(ctx context.Context, username, password string) (*User, string, string, error) {
+func (s *authService) Login(ctx context.Context, username, password string, sessionInfo *SessionInfo) (*User, string, string, error) {
 	// 查找用户
 	user, err := s.repo.FindByUsername(ctx, username)
 	if err != nil {
@@ -173,26 +181,41 @@ func (s *authService) Login(ctx context.Context, username, password string) (*Us
 		return nil, "", "", fmt.Errorf("failed to generate tokens: %w", err)
 	}
 
+	// 创建会话记录
+	if sessionInfo != nil {
+		session := &Session{
+			UserID:       user.ID,
+			RefreshToken: s.hashToken(refreshToken), // 存储哈希值
+			DeviceType:   sessionInfo.DeviceType,
+			DeviceName:   sessionInfo.DeviceName,
+			IPAddress:    sessionInfo.IPAddress,
+			Location:     "", // TODO: 可以集成 IP 地理位置服务
+			UserAgent:    sessionInfo.UserAgent,
+			LastActivity: time.Now(),
+			ExpiresAt:    time.Now().Add(7 * 24 * time.Hour), // 7天过期
+		}
+
+		if err := s.repo.CreateSession(ctx, session); err != nil {
+			// 会话创建失败不应阻止登录，记录错误
+			fmt.Printf("Failed to create session: %v\n", err)
+		}
+	}
+
 	// 异步发送登录通知邮件（不影响登录流程）
-	if s.emailService != nil && user.NotifyEmailLogin {
+	if s.emailService != nil && user.NotifyEmailLogin && sessionInfo != nil {
 		go func() {
 			// 使用新的上下文，避免影响主流程
 			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-
-			// 获取登录信息（这里简化处理，实际应从请求中获取）
-			ipAddress := "Unknown"
-			location := "Unknown"
-			deviceInfo := "Unknown"
 
 			// 发送邮件
 			if err := s.emailService.SendLoginNotification(
 				notifyCtx,
 				user.Email,
 				user.Username,
-				ipAddress,
-				location,
-				deviceInfo,
+				sessionInfo.IPAddress,
+				"", // location
+				sessionInfo.DeviceName,
 				time.Now(),
 			); err != nil {
 				// 记录错误但不影响登录
@@ -202,6 +225,12 @@ func (s *authService) Login(ctx context.Context, username, password string) (*Us
 	}
 
 	return user, accessToken, refreshToken, nil
+}
+
+// hashToken 对 token 进行哈希处理
+func (s *authService) hashToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return fmt.Sprintf("%x", hash)
 }
 
 func (s *authService) Logout(ctx context.Context, accessToken string) error {
@@ -218,7 +247,49 @@ func (s *authService) GetUserByID(ctx context.Context, userID uuid.UUID) (*User,
 }
 
 func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) {
-	return s.jwtService.RefreshToken(refreshToken)
+	// 先刷新令牌（验证 JWT token 的有效性）
+	newAccessToken, newRefreshToken, err := s.jwtService.RefreshToken(refreshToken)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 验证会话是否存在（安全检查：撤销的会话不能刷新 token）
+	// 注意：如果启用了 token 轮换，这里应该用新的 refresh token 的哈希
+	tokenHashToFind := s.hashToken(refreshToken)
+	if newRefreshToken != "" {
+		// 如果生成了新 token，仍然用旧 token 的哈希查找会话
+		// 因为会话中存储的是旧 token 的哈希
+		tokenHashToFind = s.hashToken(refreshToken)
+	}
+
+	session, err := s.repo.FindSessionByRefreshToken(ctx, tokenHashToFind)
+	if err != nil || session == nil {
+		// 会话不存在或已被撤销，拒绝刷新
+		// 注意：token 已经生成了，但我们不返回它
+		return "", "", ErrSessionNotFound
+	}
+
+	// 检查会话是否过期
+	if session.IsExpired() {
+		// 会话已过期，删除并拒绝刷新
+		_ = s.repo.DeleteSession(ctx, session.ID)
+		return "", "", ErrSessionExpired
+	}
+
+	// 更新会话活动时间
+	session.UpdateActivity()
+
+	// 如果生成了新的 refresh token，更新会话中的 token 哈希
+	if newRefreshToken != "" {
+		session.RefreshToken = s.hashToken(newRefreshToken)
+	}
+
+	if err := s.repo.UpdateSession(ctx, session); err != nil {
+		// 更新失败不应阻止令牌刷新，记录错误
+		fmt.Printf("Failed to update session activity: %v\n", err)
+	}
+
+	return newAccessToken, newRefreshToken, nil
 }
 
 func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
@@ -302,7 +373,7 @@ func (s *authService) HasAdmin(ctx context.Context) (bool, error) {
 }
 
 // InitializeAdmin 初始化管理员账户（仅在没有管理员时）
-func (s *authService) InitializeAdmin(ctx context.Context, username, email, password, runMode string) (*User, string, string, error) {
+func (s *authService) InitializeAdmin(ctx context.Context, username, email, password, runMode string, sessionInfo *SessionInfo) (*User, string, string, error) {
 	// 检查是否已存在管理员
 	hasAdmin, err := s.repo.HasAdmin(ctx)
 	if err != nil {
@@ -362,6 +433,26 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 	accessToken, refreshToken, err := s.jwtService.GenerateTokens(user)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to generate tokens: %w", err)
+	}
+
+	// 创建会话记录
+	if sessionInfo != nil {
+		session := &Session{
+			UserID:       user.ID,
+			RefreshToken: s.hashToken(refreshToken), // 存储哈希值
+			DeviceType:   sessionInfo.DeviceType,
+			DeviceName:   sessionInfo.DeviceName,
+			IPAddress:    sessionInfo.IPAddress,
+			Location:     "", // TODO: 可以集成 IP 地理位置服务
+			UserAgent:    sessionInfo.UserAgent,
+			LastActivity: time.Now(),
+			ExpiresAt:    time.Now().Add(7 * 24 * time.Hour), // 7天过期
+		}
+
+		if err := s.repo.CreateSession(ctx, session); err != nil {
+			// 会话创建失败不应阻止初始化，记录错误
+			fmt.Printf("Failed to create session: %v\n", err)
+		}
 	}
 
 	return user, accessToken, refreshToken, nil
@@ -610,24 +701,28 @@ func (s *authService) ListUserSessions(ctx context.Context, userID uuid.UUID) ([
 
 // RevokeSession 撤销指定会话
 func (s *authService) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error {
-	// 首先验证会话属于该用户
+	// 首先验证会话属于该用户，并获取会话信息
 	sessions, err := s.repo.ListUserSessions(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("failed to list user sessions: %w", err)
 	}
 
-	// 检查会话是否属于该用户
-	found := false
+	// 检查会话是否属于该用户，并保存会话信息
+	var targetSession *Session
 	for _, session := range sessions {
 		if session.ID == sessionID {
-			found = true
+			targetSession = session
 			break
 		}
 	}
 
-	if !found {
+	if targetSession == nil {
 		return errors.New("session not found or does not belong to user")
 	}
+
+	// 注意：refresh token 在数据库中存储的是哈希值，无法直接加入黑名单
+	// 但是当用户尝试使用该 refresh token 时，会在 RefreshAccessToken 中检查会话是否存在
+	// 所以只需要删除会话记录即可
 
 	// 删除会话
 	return s.repo.DeleteSession(ctx, sessionID)
