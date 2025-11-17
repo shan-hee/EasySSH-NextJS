@@ -10,7 +10,16 @@ import { getErrorMessage } from "@/lib/error-utils"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createTransferColumns } from "./transfer-columns"
-import type { FileTransfersPageData } from "@/lib/api/file-transfers-server"
+
+// 定义页面数据类型
+interface FileTransfersPageData {
+  transfers: FileTransfer[]
+  statistics: FileTransferStatistics
+  currentPage: number
+  pageSize: number
+  totalPages: number
+  totalCount: number
+}
 
 // 格式化文件大小
 function formatFileSize(bytes: number): string {
