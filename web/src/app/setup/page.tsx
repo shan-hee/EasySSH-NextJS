@@ -26,16 +26,16 @@ export default function SetupPage() {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const status = await authApi.checkAdminStatus()
-        if (status.has_admin) {
-          // 已有管理员,重定向到登录页
+        const status = await authApi.checkStatus()
+        if (!status.need_init) {
+          // 无需初始化（已有管理员），重定向到登录页
           router.replace("/login")
         } else {
-          // 需要初始化,显示欢迎页面
+          // 需要初始化，显示欢迎页面
           setStep("welcome")
         }
       } catch (error) {
-        console.error("Failed to check admin status:", error)
+        console.error("Failed to check status:", error)
         setError("无法连接到服务器,请检查后端服务是否运行")
       }
     }

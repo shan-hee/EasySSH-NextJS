@@ -69,11 +69,12 @@ export interface RefreshTokenResponse {
 }
 
 /**
- * 管理员状态响应
+ * 系统和认证状态响应
  */
-export interface AdminStatusResponse {
-  has_admin: boolean
-  need_init: boolean
+export interface AuthStatusResponse {
+  need_init: boolean        // 是否需要初始化（无管理员）
+  is_authenticated: boolean // 是否已登录
+  user?: User              // 已登录时返回用户信息
 }
 
 /**
@@ -152,10 +153,10 @@ export const authApi = {
   },
 
   /**
-   * 检查管理员状态
+   * 检查系统和认证状态
    */
-  async checkAdminStatus(): Promise<AdminStatusResponse> {
-    return apiFetch<AdminStatusResponse>("/auth/admin-status", {
+  async checkStatus(): Promise<AuthStatusResponse> {
+    return apiFetch<AuthStatusResponse>("/auth/status", {
       method: "GET",
     })
   },

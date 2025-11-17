@@ -306,7 +306,8 @@ func main() {
 			authRoutes.POST("/login", middleware.LoginRateLimitMiddleware(configManager), authHandler.Login)
 			authRoutes.POST("/logout", authHandler.Logout)
 			authRoutes.POST("/refresh", authHandler.RefreshToken)
-			authRoutes.GET("/admin-status", authHandler.CheckAdminStatus) // 检查管理员状态
+			// 使用可选认证中间件，支持未登录和已登录状态
+			authRoutes.GET("/status", middleware.OptionalAuth(jwtService), authHandler.CheckStatus) // 检查系统和认证状态
 			// 初始化管理员接口应用速率限制（支持动态配置）
 			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(configManager), authHandler.InitializeAdmin)
 			authRoutes.POST("/2fa/verify", authHandler.Verify2FACode) // 验证 2FA 代码（登录时）

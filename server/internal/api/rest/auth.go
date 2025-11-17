@@ -485,19 +485,43 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	RespondSuccessWithMessage(c, nil, "Profile updated successfully")
 }
 
-// CheckAdminStatus 检查管理员状态
-// GET /api/v1/auth/admin-status
-func (h *AuthHandler) CheckAdminStatus(c *gin.Context) {
+// CheckStatus 检查系统和认证状态
+// GET /api/v1/auth/status
+func (h *AuthHandler) CheckStatus(c *gin.Context) {
+	// 检查是否需要初始化
 	hasAdmin, err := h.authService.HasAdmin(c.Request.Context())
 	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "check_failed", "Failed to check admin status")
+		RespondError(c, http.StatusInternalServerError, "check_failed", "Failed to check system status")
 		return
 	}
 
-	RespondSuccess(c, gin.H{
-		"has_admin": hasAdmin,
-		"need_init": !hasAdmin,
-	})
+	response := gin.H{
+		"need_init":         !hasAdmin,
+		"is_authenticated":  false,
+	}
+
+	// 如果已有管理员，检查当前用户是否已认证
+	if hasAdmin {
+		userIDStr, exists := c.Get("user_id")
+		if exists && userIDStr != "" {
+			// 解析 UUID
+			userID, err := uuid.Parse(userIDStr.(string))
+			if err == nil {
+				// 用户已认证，获取用户信息
+				user, err := h.authService.GetUserByID(c.Request.Context(), userID)
+				if err == nil && user != nil {
+					response["is_authenticated"] = true
+					response["user"] = gin.H{
+						"id":       user.ID,
+						"username": user.Username,
+						"role":     user.Role,
+					}
+				}
+			}
+		}
+	}
+
+	RespondSuccess(c, response)
 }
 
 // InitializeAdmin 初始化管理员账户

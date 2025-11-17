@@ -26,6 +26,9 @@ export default function DashboardLayout({
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // 获取当前用户信息
+        // 注意：如果从首页跳转过来，首页的 checkStatus() 可能已经获取了用户信息
+        // 未来可以考虑通过 state 传递来避免重复请求
         const currentUser = await authApi.getCurrentUser()
         setUser(currentUser)
       } catch (error: unknown) {
