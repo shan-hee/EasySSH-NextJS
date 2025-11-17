@@ -45,7 +45,7 @@ func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback 
 	}
 
 	// 配置 SSH 客户端
-	// 如果没有提供主机密钥验证回调，使用不安全的模式（向后兼容）
+	// 如果没有提供主机密钥验证回调，显式使用不安全的模式（不推荐）
 	if hostKeyCallback == nil {
 		hostKeyCallback = ssh.InsecureIgnoreHostKey()
 	}

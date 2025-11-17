@@ -108,9 +108,9 @@ func main() {
 		RefreshReuseDetection:         cfg.JWT.RefreshReuseDetection,
 	}, redisClient.GetClient())
 
-	// 认证服务
+	// 认证服务（会话过期时间与 JWT 刷新闲置过期时间保持一致）
 	authRepo := auth.NewRepository(database)
-	authService := auth.NewService(authRepo, jwtService)
+	authService := auth.NewService(authRepo, jwtService, refreshIdleDuration)
 
 	// 系统设置服务（需要在邮件服务之前初始化）
 	settingsRepo := settings.NewRepository(database)

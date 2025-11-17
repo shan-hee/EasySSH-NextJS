@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity, FileText, Server, ServerOff } from "lucide-react"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { isApiError } from "@/lib/api-client"
 
 /**
  * 统计卡片骨架屏 - 精确匹配真实卡片的高度和布局
@@ -41,19 +43,28 @@ function StatsCardSkeleton() {
  */
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const { isAuthenticated } = useClientAuth()
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return
+    }
+
     const loadStats = async () => {
       try {
         const data = await dashboardApi.getStats()
         setStats(data)
       } catch (error: unknown) {
+        // 401 交给全局认证处理逻辑（跳登录），这里不再重复弹错误
+        if (isApiError(error) && error.status === 401) {
+          return
+        }
         toast.error(getErrorMessage(error, "无法加载仪表盘数据"))
       }
     }
 
     loadStats()
-  }, [])
+  }, [isAuthenticated])
 
   return (
     <>

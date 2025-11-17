@@ -1,7 +1,7 @@
 "use client"
 
 import { Server, Activity, History } from "lucide-react"
-import type { DashboardStats } from "@/lib/api/dashboard-server"
+import type { DashboardStats } from "@/lib/api/dashboard"
 
 interface DashboardStatsCardsProps {
   stats: DashboardStats

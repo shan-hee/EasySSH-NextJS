@@ -224,7 +224,7 @@ func (c *Client) DeleteDirectory(path string) error {
         }
     }
 
-    // 回退：SFTP 递归删除（较慢，但兼容）
+    // 回退：SFTP 递归删除（较慢，但通用）
     fmt.Printf("[SFTP DeleteDirectory] Using SFTP recursive delete: %s\n", path)
     err := c.removeAll(path)
     if err != nil {

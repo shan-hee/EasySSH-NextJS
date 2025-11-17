@@ -10,7 +10,6 @@ import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createSessionColumns } from "./session-columns"
-import type { SSHSessionsPageData } from "@/lib/api/ssh-sessions-server"
 
 // 格式化数据传输量
 function formatBytes(bytes: number): string {
@@ -19,6 +18,15 @@ function formatBytes(bytes: number): string {
   const sizes = ["B", "KB", "MB", "GB", "TB"]
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
+}
+
+interface SSHSessionsPageData {
+  sessions: SSHSessionDetail[]
+  statistics: SSHSessionStatistics
+  totalPages: number
+  totalCount: number
+  currentPage: number
+  pageSize: number
 }
 
 interface SessionsClientProps {

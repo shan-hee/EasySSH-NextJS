@@ -3,6 +3,36 @@ import { getApiUrl } from "@/lib/config"
 // 全局刷新会话 Promise，避免并发重复刷新
 let refreshPromise: Promise<void> | null = null
 
+// 全局 401 处理标记，避免重复跳转
+let hasRedirectedFor401 = false
+
+function handleGlobalUnauthorized(error: unknown) {
+  if (typeof window === 'undefined') return
+  if (hasRedirectedFor401) return
+  hasRedirectedFor401 = true
+
+  // 打一条调试日志，方便排查
+  // eslint-disable-next-line no-console
+  console.error("[apiFetch] Unauthorized, redirecting to /login", error)
+
+  const currentPath = window.location.pathname + window.location.search + window.location.hash
+  // 避免在登录页上再次重定向自己
+  if (!currentPath.startsWith("/login")) {
+    try {
+      const params = new URLSearchParams()
+      if (currentPath && currentPath !== "/") {
+        params.set("next", currentPath)
+      }
+      const query = params.toString()
+      window.location.href = query ? `/login?${query}` : "/login"
+    } catch {
+      window.location.href = "/login"
+    }
+  } else {
+    window.location.reload()
+  }
+}
+
 async function refreshSession(): Promise<void> {
   if (typeof window === 'undefined') {
     // 仅在浏览器端执行刷新；服务端不做刷新以免无法设置浏览器 Cookie
@@ -123,10 +153,19 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       if (typeof window !== 'undefined' && isApiError(error) && error.status === 401) {
         try {
           await refreshSession()
-          // 刷新成功，重放原请求一次（不进入重试退避）
-          return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
-        } catch {
-          // 刷新失败，抛出原始 401
+          // 刷新成功，重放原请求一次（不进入重试退避）。
+          // 如果重放后仍然是 401，则认为会话已失效，统一跳转登录页。
+          try {
+            return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
+          } catch (retryError) {
+            if (isApiError(retryError) && retryError.status === 401) {
+              handleGlobalUnauthorized(retryError)
+            }
+            throw retryError
+          }
+        } catch (refreshError) {
+          // 刷新失败，统一跳转登录页
+          handleGlobalUnauthorized(refreshError)
           throw error
         }
       }
@@ -167,24 +206,6 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   const headers: HeadersInit = {
     Accept: "application/json",
     ...options.headers,
-  }
-
-  // 服务端环境：将当前请求的 Cookie 透传给后端，便于基于 Cookie 鉴权
-  // 说明：不能在模块顶层静态导入 next/headers（会被客户端引用到），需在运行时按需动态导入
-  if (typeof window === 'undefined') {
-    try {
-      const { cookies } = await import('next/headers')
-      const cookieStore = await cookies()
-      const cookieHeader = cookieStore
-        .getAll()
-        .map((c) => `${c.name}=${c.value}`)
-        .join('; ')
-      if (cookieHeader && !(headers as Record<string, string>)['Cookie']) {
-        ;(headers as Record<string, string>)['Cookie'] = cookieHeader
-      }
-    } catch {
-      // 在无法获取 cookies 的上下文（如某些构建阶段）忽略透传，不影响客户端请求
-    }
   }
 
   // 创建超时控制器

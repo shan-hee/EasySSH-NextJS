@@ -19,24 +19,12 @@ func AuthMiddleware(jwtService auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var tokenString string
 
-		// 1. 优先从 HttpOnly Cookie 获取 token (最安全)
+		// 1. 从 HttpOnly Cookie 获取 token（推荐）
 		if cookie, err := c.Cookie(AccessTokenCookieName); err == nil && cookie != "" {
 			tokenString = cookie
 		}
 
-		// 2. 如果 Cookie 中没有，从请求头获取 Authorization (兼容性)
-		if tokenString == "" {
-			authHeader := c.GetHeader("Authorization")
-			if authHeader != "" {
-				// 解析 Bearer token
-				parts := strings.SplitN(authHeader, " ", 2)
-				if len(parts) == 2 && parts[0] == "Bearer" {
-					tokenString = parts[1]
-				}
-			}
-		}
-
-		// 3. 如果 Header 中也没有，尝试从 Query 参数获取（用于 WebSocket）
+		// 2. 如果 Cookie 中没有，尝试从 Query 参数获取（用于 WebSocket）
 		if tokenString == "" {
 			tokenString = c.Query("token")
 		}
@@ -132,20 +120,9 @@ func OptionalAuth(jwtService auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var tokenString string
 
-		// 1. 优先从 Cookie 获取
+		// 1. 从 Cookie 获取
 		if cookie, err := c.Cookie(AccessTokenCookieName); err == nil && cookie != "" {
 			tokenString = cookie
-		}
-
-		// 2. 从 Authorization Header 获取
-		if tokenString == "" {
-			authHeader := c.GetHeader("Authorization")
-			if authHeader != "" {
-				parts := strings.SplitN(authHeader, " ", 2)
-				if len(parts) == 2 && parts[0] == "Bearer" {
-					tokenString = parts[1]
-				}
-			}
 		}
 
 		// 如果没有 token，直接继续（可选认证）

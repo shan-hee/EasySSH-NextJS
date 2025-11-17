@@ -93,15 +93,9 @@ func GetPaginationParams(c *gin.Context) (limit, offset int) {
 		}
 	}
 
-	// 支持 limit 参数（优先）和 page_size 参数（向后兼容）
+	// 使用 limit 参数控制单页数量
 	if l, ok := c.GetQuery("limit"); ok && l != "" {
 		if val, err := c.GetQuery("limit"); err == false {
-			if v := parseInt(val, 20); v > 0 && v <= 100 {
-				limitVal = v
-			}
-		}
-	} else if ps, ok := c.GetQuery("page_size"); ok && ps != "" {
-		if val, err := c.GetQuery("page_size"); err == false {
 			if v := parseInt(val, 20); v > 0 && v <= 100 {
 				limitVal = v
 			}

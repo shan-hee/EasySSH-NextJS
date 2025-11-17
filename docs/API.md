@@ -68,133 +68,62 @@ OpenAPI 规范定义了以下模块：
 
 ## 前后端通信
 
-### 反向代理配置
+### 通信方式（Cookie‑only + 纯 CSR）
 
-前端通过 Next.js 的 `rewrites` 功能将 API 请求转发到后端：
-
-**配置文件**: `web/next.config.ts:5-18`
-
-```typescript
-async rewrites() {
-  const backendUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8521";
-
-  return [
-    {
-      source: "/api/:path*",
-      destination: `${backendUrl}/api/v1/:path*`,
-    },
-    {
-      source: "/ws/:path*",
-      destination: `${backendUrl}/ws/:path*`,
-    },
-  ];
-}
-```
+- 认证仅依赖 HttpOnly Cookie，前端不使用 `Authorization` 头。
+- 刷新接口 `POST /api/v1/auth/refresh` 无请求体，后端从 Cookie 读取 refresh token 并通过 `Set‑Cookie` 回写。
+- 开发模式：设置 `NEXT_PUBLIC_API_BASE=http://localhost:<后端端口>`，前端直接请求 `<base>/api/v1`；`apiFetch` 会在跨域时自动携带 Cookie。
+- 生产模式：前端静态文件由后端托管，使用相对路径 `/api/v1` 即可（同源）。
 
 ### 环境变量配置
 
 **统一配置文件**: 项目根目录 `.env`
 
 ```bash
-# 后端 API 地址
+# 开发：前端直连后端
 NEXT_PUBLIC_API_BASE=http://localhost:8521
 
-# AI 配置（可选）
-OPENAI_API_KEY=your_api_key
+# Cookie 策略
+COOKIE_SECURE=false
+COOKIE_SAMESITE=lax
+
+# 跨域来源（开发）
+ALLOWED_ORIGINS=http://localhost:8520,http://127.0.0.1:8520
 ```
 
-**生产环境**:
-
-在部署时设置环境变量：
-```bash
-NEXT_PUBLIC_API_BASE=https://api.yourdomain.com
-```
+**生产环境**：同域部署无需配置 `NEXT_PUBLIC_API_BASE`；跨域部署请设置为后端完整地址，并将 `COOKIE_SECURE=true`、`COOKIE_SAMESITE=none`（需 HTTPS）。
 
 ### 前端 API 调用示例
 
-**使用 openapi-fetch（推荐）**
+**使用 fetch API（内置封装）**
 
 ```typescript
-// lib/api-client.ts
-import createClient from 'openapi-fetch';
-import type { paths } from '@/types/openapi';
+import { apiFetch } from '@/lib/api-client';
 
-const client = createClient<paths>({
-  baseUrl: '/api/v1',  // 使用反向代理
-});
+// 登录
+await apiFetch('/auth/login', { method: 'POST', body: { username, password } });
 
-// 使用示例
-export async function getServers() {
-  const { data, error } = await client.GET('/servers', {
-    params: {
-      query: {
-        page: 1,
-        per_page: 20,
-      },
-    },
-  });
+// 获取用户
+const me = await apiFetch('/users/me');
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
-}
-
-export async function createServer(serverData: ServerCreate) {
-  const { data, error } = await client.POST('/servers', {
-    body: serverData,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
-}
+// 刷新（无请求体，自动携带 Cookie）
+await apiFetch('/auth/refresh', { method: 'POST' });
 ```
 
-**使用 fetch API**
+### WebSocket 连接（系统监控）
 
 ```typescript
-// 登录示例
-async function login(username: string, password: string) {
-  const response = await fetch('/api/v1/auth/login', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ username, password }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Login failed');
-  }
-
-  const data = await response.json();
-  return data;
-}
-```
-
-### WebSocket 连接（SSH 终端）
-
-```typescript
-// 连接到 SSH 会话
-const ws = new WebSocket(`ws://localhost:8520/ws/ssh/${serverId}`);
+// 连接到监控 WS（生产同源；开发按需替换端口）
+const ws = new WebSocket(`ws://localhost:8521/api/v1/monitor/server/${serverId}?interval=2`);
 
 ws.onopen = () => {
-  console.log('SSH connection established');
+  console.log('Monitor connection established');
 };
 
 ws.onmessage = (event) => {
-  // 处理终端输出
-  console.log('Received:', event.data);
+  // 处理监控数据（二进制 Protobuf）
+  console.log('Received bytes:', event.data);
 };
-
-ws.send(JSON.stringify({
-  type: 'input',
-  data: 'ls -la\n',
-}));
 ```
 
 ## 后端实现指南

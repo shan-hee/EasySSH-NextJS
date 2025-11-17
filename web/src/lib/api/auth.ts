@@ -53,16 +53,7 @@ export interface RegisterResponse {
   user: User
 }
 
-/**
- * 刷新令牌请求
- */
-export interface RefreshTokenRequest {
-  refresh_token: string
-}
-
-/**
- * 刷新令牌响应
- */
+// 刷新令牌响应（兼容返回体，但前端不使用返回的 token 值）
 export interface RefreshTokenResponse {
   access_token: string
   refresh_token: string
@@ -112,13 +103,12 @@ export const authApi = {
   },
 
   /**
-   * 刷新访问令牌
-   * Cookie 会自动携带,无需传递 refresh_token
+   * 刷新访问令牌（Cookie-only）
+   * 不传任何请求体，后端从 HttpOnly Cookie 读取 refresh token
    */
-  async refreshToken(data: RefreshTokenRequest): Promise<RefreshTokenResponse> {
+  async refreshToken(): Promise<RefreshTokenResponse> {
     return apiFetch<RefreshTokenResponse>("/auth/refresh", {
       method: "POST",
-      body: data,
     })
   },
 

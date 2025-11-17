@@ -25,8 +25,9 @@ func CORS(cfg *config.Config, configManager *settings.ConfigManager) gin.Handler
 			"http://localhost:3000",
 			fmt.Sprintf("http://localhost:%d", cfg.Server.WebDevPort),
 		}
-		allowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
-		allowedHeaders = []string{"Content-Type", "Authorization"}
+    allowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
+    // Cookie-only 认证，不默认暴露 Authorization 头
+    allowedHeaders = []string{"Content-Type"}
 
 		// 尝试从数据库读取 CORS 配置（带缓存），追加到默认值后面
 		corsConfig, err := configManager.GetCORSConfig(context.Background())

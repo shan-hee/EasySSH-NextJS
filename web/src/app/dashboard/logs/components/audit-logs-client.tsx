@@ -11,7 +11,15 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
 import { exportLogsToCSV, exportLogsToJSON, downloadFile } from "@/components/ui/batch-actions"
 import { auditLogColumns } from "./audit-log-columns"
-import type { AuditLogsPageData } from "@/lib/api/audit-logs-server"
+
+interface AuditLogsPageData {
+  logs: AuditLog[]
+  statistics: AuditLogStatisticsResponse | null
+  totalPages: number
+  totalCount: number
+  currentPage: number
+  pageSize: number
+}
 
 interface AuditLogsClientProps {
   initialData?: AuditLogsPageData

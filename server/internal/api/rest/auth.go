@@ -375,15 +375,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // RefreshToken 刷新访问令牌
 // POST /api/v1/auth/refresh
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var req RefreshTokenRequest
-	// 兼容：请求体可选。若未提供 refresh_token，则尝试从 Cookie 中读取
-	_ = c.ShouldBindJSON(&req)
-
-	refreshToken := strings.TrimSpace(req.RefreshToken)
-	if refreshToken == "" {
-		if cookieToken, err := c.Cookie(RefreshTokenCookieName); err == nil {
-			refreshToken = cookieToken
-		}
+	// 仅从 HttpOnly Cookie 读取 refresh token
+	refreshToken, err := c.Cookie(RefreshTokenCookieName)
+	if err == nil {
+		refreshToken = strings.TrimSpace(refreshToken)
 	}
 
 	if refreshToken == "" {
@@ -892,15 +887,8 @@ func (h *AuthHandler) ListSessions(c *gin.Context) {
 		return
 	}
 
-	// 获取当前请求的 token
-	authHeader := c.GetHeader("Authorization")
-	currentToken := ""
-	if authHeader != "" {
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) == 2 && parts[0] == "Bearer" {
-			currentToken = parts[1]
-		}
-	}
+    // 获取当前请求的 token（Cookie-only）
+    currentToken, _ := c.Cookie(AccessTokenCookieName)
 
 	// 转换为响应格式
 	var response []SessionResponse

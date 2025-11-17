@@ -14,9 +14,7 @@ interface ClientAuthContextType {
 
 const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined)
 
-// Token 键常量 (仅用于兼容性,实际由后端 HttpOnly Cookie 管理)
-export const TOKEN_KEY = "easyssh_access_token"
-export const REFRESH_TOKEN_KEY = "easyssh_refresh_token"
+// 纯 Cookie-only 模式：不在前端存储任何 token
 
 interface ClientAuthProviderProps {
   children: ReactNode

@@ -90,11 +90,12 @@ type Service interface {
 
 // authService 认证服务实现
 type authService struct {
-	repo         Repository
-	jwtService   JWTService
-	totpService  TOTPService
-	emailService EmailService // 可选的邮件服务
-	runMode      string       // 存储运行模式
+	repo                Repository
+	jwtService          JWTService
+	totpService         TOTPService
+	emailService        EmailService   // 可选的邮件服务
+	runMode             string         // 存储运行模式
+	sessionIdleDuration time.Duration  // 会话闲置过期时间（用于 user_sessions.ExpiresAt）
 }
 
 // EmailService 邮件服务接口（可选依赖）
@@ -105,13 +106,15 @@ type EmailService interface {
 }
 
 // NewService 创建认证服务
-func NewService(repo Repository, jwtService JWTService) Service {
+// sessionIdleDuration 用于 user_sessions.ExpiresAt，通常应与 JWT 刷新闲置过期时间保持一致
+func NewService(repo Repository, jwtService JWTService, sessionIdleDuration time.Duration) Service {
 	return &authService{
-		repo:         repo,
-		jwtService:   jwtService,
-		totpService:  NewTOTPService(),
-		emailService: nil, // 默认不启用邮件服务
-		runMode:      "production",
+		repo:                repo,
+		jwtService:          jwtService,
+		totpService:         NewTOTPService(),
+		emailService:        nil, // 默认不启用邮件服务
+		runMode:             "production",
+		sessionIdleDuration: sessionIdleDuration,
 	}
 }
 
@@ -192,7 +195,7 @@ func (s *authService) Login(ctx context.Context, username, password string, sess
 			Location:     "", // TODO: 可以集成 IP 地理位置服务
 			UserAgent:    sessionInfo.UserAgent,
 			LastActivity: time.Now(),
-			ExpiresAt:    time.Now().Add(7 * 24 * time.Hour), // 7天过期
+			ExpiresAt:    time.Now().Add(s.sessionIdleDuration),
 		}
 
 		if err := s.repo.CreateSession(ctx, session); err != nil {
@@ -276,8 +279,10 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return "", "", ErrSessionExpired
 	}
 
-	// 更新会话活动时间
-	session.UpdateActivity()
+    // 更新会话活动时间 + 滑动闲置过期
+    session.UpdateActivity()
+    // 与 JWT 刷新闲置窗口对齐：每次刷新将会话过期时间顺延
+    session.ExpiresAt = time.Now().Add(s.sessionIdleDuration)
 
 	// 如果生成了新的 refresh token，更新会话中的 token 哈希
 	if newRefreshToken != "" {
@@ -846,4 +851,3 @@ func urlEncodeSVG(svg string) string {
 
 	return svg
 }
-

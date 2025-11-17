@@ -15,7 +15,7 @@
 
 ## 项目架构
 
-**纯 CSR (Client-Side Rendering) 架构**：前端静态文件由 Go 后端托管，单容器部署。
+**纯 CSR (Client‑Side Rendering) 架构**：前端静态文件由 Go 后端托管，单容器部署（无 SSR / Server Components）。
 
 ```
 EasySSH-NextJS/
@@ -35,7 +35,7 @@ EasySSH-NextJS/
 │  │   Go 后端 (:8521)            │  │
 │  │  ├─ API 服务                 │  │
 │  │  ├─ WebSocket (SSH)          │  │
-│  │  └─ 静态文件托管 (Next.js)   │  │
+│  │  └─ 静态文件托管 (Next.js 静态导出) │  │
 │  └──────────────────────────────┘  │
 │           ↓         ↓                │
 │  ┌──────────┐  ┌──────────┐        │
@@ -43,6 +43,29 @@ EasySSH-NextJS/
 │  └──────────┘  └──────────┘        │
 └─────────────────────────────────────┘
 ```
+
+## 认证与安全（Cookie‑only）
+
+- 认证完全基于 HttpOnly Cookie（`easyssh_access_token` / `easyssh_refresh_token`）。
+- 前端不使用 `Authorization` 头；刷新接口 `POST /api/v1/auth/refresh` 无请求体，后端仅从 Cookie 读取 refresh token。
+- 开发模式跨域时，前端会自动携带 Cookie（`credentials: include`）；生产同域部署由 Go 托管静态文件，浏览器会自动携带 Cookie。
+
+Cookie 配置建议：
+
+- 开发（HTTP）：`COOKIE_SECURE=false`，`COOKIE_SAMESITE=lax`
+- 生产（HTTPS）：
+  - 同域：`COOKIE_SECURE=true`，`COOKIE_SAMESITE=lax`
+  - 跨域：`COOKIE_SECURE=true`，`COOKIE_SAMESITE=none`（必须 HTTPS）
+
+跨域开发（前端直连后端）：
+
+- 设置 `NEXT_PUBLIC_API_BASE=http://localhost:<后端端口>`，前端将直连 `<base>/api/v1`；
+- 在 `.env` 中配置 `ALLOWED_ORIGINS=http://localhost:<前端端口>,http://127.0.0.1:<前端端口>` 以允许跨域携带 Cookie（`scripts/dev.sh` 会自动写入）。
+
+WebSocket（系统监控）：
+
+- 监控 WS 路径：`/api/v1/monitor/server/:server_id?interval=2`
+- 前端通过 `getWsUrl(path)` 自动选择 `ws://`/`wss://` 并拼接 Host，详见 `web/src/lib/config.ts`。
 
 ## 技术栈
 
@@ -88,7 +111,7 @@ cp .env.example .env
 # 如需修改，编辑 .env 文件
 ```
 
-**说明**：`.env.example` 默认是生产环境配置，但 `dev.sh` 脚本会自动将其调整为开发环境配置（localhost、debug 模式等）。
+**说明**：`.env.example` 偏向生产配置；执行 `scripts/dev.sh` 将自动写入开发所需参数（`ENV=development`、`COOKIE_SECURE=false`、`COOKIE_SAMESITE=lax`、`NEXT_PUBLIC_API_BASE`、`ALLOWED_ORIGINS` 等）。
 
 #### 2. 启动服务
 
@@ -100,10 +123,10 @@ cp .env.example .env
 脚本会自动：
 - ✅ 检查必需的工具（Go、pnpm）
 - ✅ 创建 .env 文件（如果不存在）
-- ✅ **自动配置开发环境参数**（DB_HOST=localhost, ENV=development 等）
+- ✅ 自动配置开发环境参数（`ENV / COOKIE_SECURE / COOKIE_SAMESITE / NEXT_PUBLIC_API_BASE / ALLOWED_ORIGINS` 等）
 - ✅ 安装前端依赖（如果需要）
-- ✅ 启动后端服务（端口 8521，支持热重载）
-- ✅ 启动前端服务（端口 8520）
+- ✅ 启动后端服务（默认端口 8521，支持热重载）
+- ✅ 启动前端服务（默认端口 8520）
 
 #### 3. 访问应用
 
@@ -173,9 +196,9 @@ docker compose up -d
 ```
 
 **⚠️ 说明**：
-- 上述命令会自动生成安全的随机密钥
-- 单容器部署：前端静态文件由 Go 后端托管，仅需暴露 8521 端口
-- 如需手动配置其他选项，可编辑 `.env` 文件
+- 单容器部署：前端静态文件由 Go 后端托管，仅需暴露后端端口（示例 8521；若使用 `docker/docker-compose.yml`，容器内部端口为 8520，请以 Compose 为准）
+- 强烈建议为生产设置强随机密钥：`JWT_SECRET`（≥32 字符）与 `ENCRYPTION_KEY`（32 字节）
+- 按部署拓扑设置 Cookie 策略：同域 `SAMESITE=lax`；跨域且 HTTPS 用 `SAMESITE=none` + `COOKIE_SECURE=true`
 
 **支持的架构**：
 - `linux/amd64` (x86_64)
