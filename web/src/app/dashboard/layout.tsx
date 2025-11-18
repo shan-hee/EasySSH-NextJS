@@ -8,6 +8,7 @@ import { SidebarInset } from "@/components/ui/sidebar"
 import { ClientAuthProvider } from "@/components/client-auth-provider"
 import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
 import { authApi, type User } from "@/lib/api/auth"
+import { isApiError } from "@/lib/api-client"
 import { getErrorMessage } from "@/lib/error-utils"
 
 /**
@@ -33,8 +34,11 @@ export default function DashboardLayout({
         setUser(currentUser)
       } catch (error: unknown) {
         console.error("Authentication failed:", getErrorMessage(error))
-        // 静默跳转到登录页
-        router.push("/login")
+        // 401 会在 apiFetch 的全局处理里统一跳转到登录页
+        // 这里只处理非 401 的异常情况,作为兜底
+        if (!isApiError(error) || error.status !== 401) {
+          router.push("/login")
+        }
       } finally {
         setIsVerifying(false)
       }
@@ -61,4 +65,3 @@ export default function DashboardLayout({
     </ClientAuthProvider>
   )
 }
-

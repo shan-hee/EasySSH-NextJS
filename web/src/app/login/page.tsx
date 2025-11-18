@@ -4,42 +4,12 @@ import { LoginForm } from "@/components/login-form"
 import LightRays from "@/components/LightRays"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { authApi } from "@/lib/api/auth"
+import { useAuthStatusRedirect } from "@/hooks/use-auth-status-redirect"
 
 export default function LoginPage() {
-  const router = useRouter()
+  const { isChecking } = useAuthStatusRedirect("login")
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  const [isChecking, setIsChecking] = useState(true)
-
-  // 检查认证状态
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const status = await authApi.checkStatus()
-
-        // 需要初始化 → /setup
-        if (status.need_init) {
-          router.replace('/setup')
-        }
-        // 已认证 → /dashboard
-        else if (status.is_authenticated) {
-          router.replace('/dashboard')
-        }
-        // 未认证 → 显示登录页
-        else {
-          setIsChecking(false)
-        }
-      } catch (error) {
-        console.error('Failed to check status:', error)
-        // 出错时显示登录页
-        setIsChecking(false)
-      }
-    }
-
-    checkAuth()
-  }, [router])
 
   // 等待客户端挂载，避免 hydration 不匹配
   useEffect(() => {
