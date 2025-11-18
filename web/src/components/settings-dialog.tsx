@@ -542,22 +542,24 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     try {
       await sessionsApi.revoke(sessionId)
       toast.success("会话已撤销")
-      loadSessions() // 刷新列表
+      // 本地移除已撤销的会话，避免整列表重新加载
+      setSessions(prev => prev.filter(session => session.id !== sessionId))
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "撤销会话失败"))
     }
-  }, [loadSessions])
+  }, [])
 
   // 撤销所有其他会话
   const handleRevokeAllOtherSessions = React.useCallback(async () => {
     try {
       await sessionsApi.revokeAllOthers()
       toast.success("已撤销所有其他会话")
-      loadSessions() // 刷新列表
+      // 仅保留当前会话，其它会话本地移除
+      setSessions(prev => prev.filter(session => session.is_current))
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "撤销会话失败"))
     }
-  }, [loadSessions])
+  }, [])
 
   // 更新通知设置
   const handleUpdateNotification = React.useCallback(

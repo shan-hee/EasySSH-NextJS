@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/gin-gonic/gin"
@@ -887,18 +886,20 @@ func (h *AuthHandler) ListSessions(c *gin.Context) {
 		return
 	}
 
-    // 获取当前请求的 token（Cookie-only）
-    currentToken, _ := c.Cookie(AccessTokenCookieName)
+	// 从 Cookie 获取当前 refresh token（仅在服务端用于标记当前会话）
+	currentRefreshToken, _ := c.Cookie(RefreshTokenCookieName)
+	currentRefreshTokenHash := ""
+	if strings.TrimSpace(currentRefreshToken) != "" {
+		currentRefreshTokenHash = hashRefreshToken(currentRefreshToken)
+	}
 
 	// 转换为响应格式
 	var response []SessionResponse
 	for _, session := range sessions {
 		isCurrent := false
-		// 这里可以通过比较 token 或其他方式判断是否为当前会话
-		// 简化处理:根据最近活动时间判断(最活跃的会话)
-		if currentToken != "" {
-			// TODO: 更精确的判断方式是比较 refresh token
-			isCurrent = session.LastActivity.After(session.CreatedAt.Add(-1 * time.Minute))
+		// 通过比较 refresh token 哈希精确判断是否为当前会话
+		if currentRefreshTokenHash != "" && session.RefreshToken == currentRefreshTokenHash {
+			isCurrent = true
 		}
 
 		response = append(response, SessionResponse{
