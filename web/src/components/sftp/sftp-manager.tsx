@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { useDownloadExcludePatterns } from "@/hooks/use-system-config"
 import {
   Table,
   TableBody,
@@ -114,7 +115,7 @@ interface SftpManagerProps {
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
   onBatchDelete?: (fileNames: string[]) => Promise<{ success: string[]; failed: any[]; total: number }>
-  onBatchDownload?: (fileNames: string[]) => Promise<void>
+  onBatchDownload?: (fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) => Promise<void>
   onCreateFolder: (name: string) => void
   onCreateFile?: (name: string) => void
   onRename: (oldName: string, newName: string) => void
@@ -247,6 +248,10 @@ export function SftpManager(props: SftpManagerProps) {
   const sessionLabelInputRef = useRef<HTMLInputElement>(null)
   const filteredFilesRef = useRef<EnhancedFileItem[]>([])
   const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 从系统配置获取排除规则
+  const excludePatterns = useDownloadExcludePatterns()
+
   const enhancedFiles = useMemo<EnhancedFileItem[]>(() => {
     return files.map((file) => ({
       ...file,
@@ -827,42 +832,20 @@ export function SftpManager(props: SftpManagerProps) {
 
     if (paths.length === 0) return
 
-    // 根据模式调用对应的下载方法
-    if (mode === "fast") {
-      // TODO: 后端实现后调用快速下载 API
-      console.log("[SftpManager] 快速下载模式 (tar/zip):", paths)
-      // 暂时使用现有的批量下载接口
-      if (onBatchDownload) {
-        try {
-          await onBatchDownload(paths)
-          setSelectedFiles([])
-        } catch (error) {
-          console.error('[SftpManager] 批量下载失败:', error)
-          alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
-        }
-      } else {
-        // 降级到循环调用单个下载
-        paths.forEach(path => onDownload(path))
+    if (onBatchDownload) {
+      try {
+        await onBatchDownload(paths, mode, excludePatterns)
         setSelectedFiles([])
+      } catch (error) {
+        console.error('[SftpManager] 批量下载失败:', error)
+        alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
       }
     } else {
-      // 兼容模式（原有逻辑）
-      console.log("[SftpManager] 兼容下载模式 (SFTP):", paths)
-      if (onBatchDownload) {
-        try {
-          await onBatchDownload(paths)
-          setSelectedFiles([])
-        } catch (error) {
-          console.error('[SftpManager] 批量下载失败:', error)
-          alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
-        }
-      } else {
-        // 降级到循环调用单个下载
-        paths.forEach(path => onDownload(path))
-        setSelectedFiles([])
-      }
+      // 降级到循环调用单个下载
+      paths.forEach(path => onDownload(path))
+      setSelectedFiles([])
     }
-  }, [selectedFiles, contextMenu, onDownload, onBatchDownload])
+  }, [selectedFiles, contextMenu, onDownload, onBatchDownload, excludePatterns])
 
   // 批量删除
   const handleBatchDelete = useCallback(async () => {

@@ -66,6 +66,9 @@ const (
 	KeyDateFormat            = "system.date_format"
 	KeyDefaultPageSize       = "system.default_page_size"
 	KeyMaxFileUploadSize     = "system.max_file_upload_size"
+	KeyDownloadExcludePatterns = "system.download_exclude_patterns"
+	KeyDefaultDownloadMode   = "system.default_download_mode"
+	KeySkipExcludedOnUpload  = "system.skip_excluded_on_upload"
 )
 
 // 标签/会话配置相关的键名
@@ -141,9 +144,14 @@ type SystemConfig struct {
 	DefaultTimezone string `json:"default_timezone"`
 	DateFormat      string `json:"date_format"`
 
-	// 其他设置
+	// 性能设置
 	DefaultPageSize   int `json:"default_page_size"`
 	MaxFileUploadSize int `json:"max_file_upload_size"`
+
+	// 文件传输设置
+	DownloadExcludePatterns string `json:"download_exclude_patterns"` // 下载时排除的目录/文件，换行分隔
+	DefaultDownloadMode     string `json:"default_download_mode"`      // 默认下载模式：fast 或 compatible
+	SkipExcludedOnUpload    bool   `json:"skip_excluded_on_upload"`    // 上传时是否跳过排除的文件
 }
 
 // TabSessionConfig 标签/会话配置结构

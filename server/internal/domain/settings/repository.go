@@ -327,6 +327,22 @@ func (r *repository) GetSystemConfig(ctx context.Context) (*SystemConfig, error)
 		configMap[setting.Key] = setting.Value
 	}
 
+	// 默认排除规则
+	defaultExcludePatterns := `node_modules
+.git
+.svn
+.hg
+__pycache__
+.pytest_cache
+.next
+.nuxt
+dist
+build
+target
+vendor
+.DS_Store
+thumbs.db`
+
 	// 解析配置，设置默认值
 	config := &SystemConfig{
 		// 基本设置
@@ -339,9 +355,14 @@ func (r *repository) GetSystemConfig(ctx context.Context) (*SystemConfig, error)
 		DefaultTimezone: getOrDefault(configMap, KeyDefaultTimezone, "Asia/Shanghai"),
 		DateFormat:      getOrDefault(configMap, KeyDateFormat, "YYYY-MM-DD HH:mm:ss"),
 
-		// 其他设置
+		// 性能设置
 		DefaultPageSize:   getIntOrDefault(configMap, KeyDefaultPageSize, 20),
 		MaxFileUploadSize: getIntOrDefault(configMap, KeyMaxFileUploadSize, 100),
+
+		// 文件传输设置
+		DownloadExcludePatterns: getOrDefault(configMap, KeyDownloadExcludePatterns, defaultExcludePatterns),
+		DefaultDownloadMode:     getOrDefault(configMap, KeyDefaultDownloadMode, "fast"),
+		SkipExcludedOnUpload:    getBoolOrDefault(configMap, KeySkipExcludedOnUpload, true),
 	}
 
 	return config, nil
@@ -353,7 +374,7 @@ func (r *repository) SaveSystemConfig(ctx context.Context, config *SystemConfig)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		repo := &repository{db: tx}
 
-		// 保存各个配置项 - 只保留必要的系统设置
+		// 保存各个配置项
 		settings := map[string]string{
 			KeySystemName:      config.SystemName,
 			KeySystemLogo:      config.SystemLogo,
@@ -363,6 +384,9 @@ func (r *repository) SaveSystemConfig(ctx context.Context, config *SystemConfig)
 			KeyDateFormat:      config.DateFormat,
 			KeyDefaultPageSize: fmt.Sprintf("%d", config.DefaultPageSize),
 			KeyMaxFileUploadSize: fmt.Sprintf("%d", config.MaxFileUploadSize),
+			KeyDownloadExcludePatterns: config.DownloadExcludePatterns,
+			KeyDefaultDownloadMode:     config.DefaultDownloadMode,
+			KeySkipExcludedOnUpload:    fmt.Sprintf("%t", config.SkipExcludedOnUpload),
 		}
 
 		for key, value := range settings {

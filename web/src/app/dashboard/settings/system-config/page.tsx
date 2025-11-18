@@ -12,6 +12,7 @@ import {
   Save,
   Loader2,
   RotateCcw,
+  HardDrive,
 } from "lucide-react"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { systemConfigSchema } from "@/schemas/settings/system-config.schema"
@@ -19,6 +20,7 @@ import { settingsApi } from "@/lib/api/settings"
 import { BasicTab } from "./_tabs/basic-tab"
 import { I18nTab } from "./_tabs/i18n-tab"
 import { PerformanceTab } from "./_tabs/performance-tab"
+import { FileTransferTab } from "./_tabs/file-transfer-tab"
 import { SkeletonCard } from "@/components/ui/loading"
 
 export default function SystemConfigPage() {
@@ -120,7 +122,7 @@ export default function SystemConfigPage() {
 
         {/* 标签页 */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="basic">
               <Settings className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">基本信息</span>
@@ -132,6 +134,10 @@ export default function SystemConfigPage() {
             <TabsTrigger value="performance">
               <Zap className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">性能设置</span>
+            </TabsTrigger>
+            <TabsTrigger value="file-transfer">
+              <HardDrive className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">文件传输</span>
             </TabsTrigger>
           </TabsList>
 
@@ -145,6 +151,10 @@ export default function SystemConfigPage() {
 
           <TabsContent value="performance">
             <PerformanceTab form={form} />
+          </TabsContent>
+
+          <TabsContent value="file-transfer">
+            <FileTransferTab form={form} />
           </TabsContent>
         </Tabs>
       </div>

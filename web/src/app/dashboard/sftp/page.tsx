@@ -745,7 +745,12 @@ export default function SftpPage() {
  }
 
  // 批量下载文件
- const handleBatchDownload = async (sessionId: string, fileNames: string[]) => {
+ const handleBatchDownload = async (
+   sessionId: string,
+   fileNames: string[],
+   mode?: "fast" | "compatible",
+   excludePatterns?: string[]
+ ) => {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) {
  throw new Error("会话未连接")
@@ -757,8 +762,8 @@ export default function SftpPage() {
  )
 
  try {
- await sftpApi.batchDownload(session.serverId, filePaths)
- toast.success(`开始下载 ${fileNames.length} 个文件`)
+ await sftpApi.batchDownload(session.serverId, filePaths, mode, excludePatterns)
+ toast.success(`开始下载 ${fileNames.length} 个文件 (${mode === "fast" ? "快速模式" : "兼容模式"})`)
  } catch (error: unknown) {
  console.error("Failed to batch download:", error)
  toast.error(getErrorMessage(error, "批量下载失败"))

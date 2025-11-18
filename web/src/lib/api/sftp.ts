@@ -262,9 +262,14 @@ export const sftpApi = {
   },
 
   /**
-   * 批量下载文件（打包为 ZIP）
+   * 批量下载文件（打包为 ZIP 或 tar.gz）
    */
-  async batchDownload(serverId: string, paths: string[]): Promise<void> {
+  async batchDownload(
+    serverId: string,
+    paths: string[],
+    mode: "fast" | "compatible" = "compatible",
+    excludePatterns?: string[]
+  ): Promise<void> {
     const apiUrl = getApiUrl()
     const response = await fetch(`${apiUrl}/sftp/${serverId}/batch-download`, {
       method: "POST",
@@ -272,7 +277,11 @@ export const sftpApi = {
         "Content-Type": "application/json",
       },
       credentials: "include", // 凭 Cookie 认证
-      body: JSON.stringify({ paths }),
+      body: JSON.stringify({
+        paths,
+        mode,
+        excludePatterns,
+      }),
     })
 
     if (!response.ok) {
@@ -282,7 +291,7 @@ export const sftpApi = {
 
     // 获取文件名（从响应头）
     const contentDisposition = response.headers.get("Content-Disposition")
-    let filename = "files.zip"
+    let filename = mode === "fast" ? "files.tar.gz" : "files.zip"
     if (contentDisposition) {
       const matches = /filename=([^;]+)/.exec(contentDisposition)
       if (matches && matches[1]) {

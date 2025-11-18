@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { SystemConfigProvider } from "@/contexts/system-config-context";
 import { DynamicHeadUpdater } from "@/components/dynamic-head-updater";
+import { QueryProvider } from "@/providers/query-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -72,12 +73,14 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AuthProvider>
-            <SystemConfigProvider>
-              <DynamicHeadUpdater />
-              {children}
-            </SystemConfigProvider>
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <SystemConfigProvider>
+                <DynamicHeadUpdater />
+                {children}
+              </SystemConfigProvider>
+            </AuthProvider>
+          </QueryProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>

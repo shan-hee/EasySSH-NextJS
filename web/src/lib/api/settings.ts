@@ -83,9 +83,14 @@ export interface SystemConfig {
   default_timezone: string
   date_format: string
 
-  // 其他设置
+  // 性能设置
   default_page_size: number
   max_file_upload_size: number
+
+  // 文件传输设置
+  download_exclude_patterns: string
+  default_download_mode: "fast" | "compatible"
+  skip_excluded_on_upload: boolean
 }
 
 /**

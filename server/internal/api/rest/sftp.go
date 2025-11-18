@@ -2,10 +2,12 @@ package rest
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/easyssh/server/internal/api/ws"
@@ -717,7 +719,9 @@ func (h *SFTPHandler) BatchDelete(c *gin.Context) {
 
 // BatchDownloadRequest 批量下载请求
 type BatchDownloadRequest struct {
-	Paths []string `json:"paths" binding:"required,min=1,max=100"`
+	Paths           []string `json:"paths" binding:"required,min=1,max=100"`
+	Mode            string   `json:"mode"`             // "fast" 或 "compatible"，默认 "compatible"
+	ExcludePatterns []string `json:"excludePatterns"`  // 排除的目录名称列表
 }
 
 // BatchDownload 批量下载文件（打包为 ZIP）
@@ -737,14 +741,53 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
+	// 设置默认值
+	if req.Mode == "" {
+		req.Mode = "compatible"
+	}
+
+	// 设置默认排除规则（如果未提供）
+	if len(req.ExcludePatterns) == 0 {
+		req.ExcludePatterns = []string{
+			"node_modules",
+			".git",
+			".svn",
+			".hg",
+			"__pycache__",
+			".pytest_cache",
+			".next",
+			".nuxt",
+			"dist",
+			"build",
+			"target",
+			"vendor",
+			".DS_Store",
+			"thumbs.db",
+		}
+	}
+
 	// 记录批量下载操作开始
 	startTime := time.Now()
-	fmt.Printf("[SFTP BatchDownload] Starting batch download operation: server=%s, count=%d\n", serverID, len(req.Paths))
+	fmt.Printf("[SFTP BatchDownload] Starting batch download: server=%s, mode=%s, count=%d, excludes=%v\n",
+		serverID, req.Mode, len(req.Paths), req.ExcludePatterns)
 
+	// 根据模式选择下载方法
+	if req.Mode == "fast" {
+		h.fastDownload(c, serverID, req)
+	} else {
+		h.compatibleDownload(c, serverID, req)
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("[SFTP BatchDownload] Download completed in %v, mode=%s\n", elapsed, req.Mode)
+}
+
+// compatibleDownload 兼容下载模式（SFTP + ZIP，支持排除目录）
+func (h *SFTPHandler) compatibleDownload(c *gin.Context, serverID uuid.UUID, req BatchDownloadRequest) {
 	// 创建 SFTP 客户端
 	sftpClient, _, err := h.createSFTPClient(c, serverID)
 	if err != nil {
-		fmt.Printf("[SFTP BatchDownload] Failed to create SFTP client: %v\n", err)
+		fmt.Printf("[SFTP CompatibleDownload] Failed to create SFTP client: %v\n", err)
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
@@ -764,20 +807,23 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 	// 遍历文件列表
 	successCount := 0
 	failedCount := 0
+	excludedCount := 0
 
 	for _, path := range req.Paths {
 		// 获取文件信息
 		fileInfo, err := sftpClient.GetFileInfo(path)
 		if err != nil {
-			fmt.Printf("[SFTP BatchDownload] File not found: %s, error: %v\n", path, err)
+			fmt.Printf("[SFTP CompatibleDownload] File not found: %s, error: %v\n", path, err)
 			failedCount++
 			continue
 		}
 
 		if fileInfo.IsDir {
-			// 递归添加目录
-			if err := h.addDirToZip(sftpClient, zipWriter, path, filepath.Base(path)); err != nil {
-				fmt.Printf("[SFTP BatchDownload] Failed to add directory to ZIP: %s, error: %v\n", path, err)
+			// 递归添加目录（带排除逻辑）
+			excluded, err := h.addDirToZipWithExcludes(sftpClient, zipWriter, path, filepath.Base(path), req.ExcludePatterns)
+			excludedCount += excluded
+			if err != nil {
+				fmt.Printf("[SFTP CompatibleDownload] Failed to add directory: %s, error: %v\n", path, err)
 				failedCount++
 			} else {
 				successCount++
@@ -785,7 +831,7 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 		} else {
 			// 添加单个文件
 			if err := h.addFileToZip(sftpClient, zipWriter, path, filepath.Base(path)); err != nil {
-				fmt.Printf("[SFTP BatchDownload] Failed to add file to ZIP: %s, error: %v\n", path, err)
+				fmt.Printf("[SFTP CompatibleDownload] Failed to add file: %s, error: %v\n", path, err)
 				failedCount++
 			} else {
 				successCount++
@@ -793,8 +839,166 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 		}
 	}
 
-	elapsed := time.Since(startTime)
-	fmt.Printf("[SFTP BatchDownload] Batch download completed in %v: success=%d, failed=%d\n", elapsed, successCount, failedCount)
+	fmt.Printf("[SFTP CompatibleDownload] Completed: success=%d, failed=%d, excluded=%d\n",
+		successCount, failedCount, excludedCount)
+}
+
+// fastDownload 快速下载模式（使用远程 tar 压缩）
+func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req BatchDownloadRequest) {
+	// 从上下文获取用户 ID
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	// 获取服务器信息
+	srv, err := h.serverService.GetByID(c.Request.Context(), userID, serverID)
+	if err != nil {
+		fmt.Printf("[SFTP FastDownload] Failed to get server: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "server_error", err.Error())
+		return
+	}
+
+	// 创建 SSH 客户端
+	sshClient, err := sshDomain.NewClient(srv, h.encryptor, h.hostKeyCallback)
+	if err != nil {
+		fmt.Printf("[SFTP FastDownload] Failed to create SSH client: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
+		return
+	}
+	defer sshClient.Close()
+
+	// 连接到服务器
+	if err := sshClient.Connect(srv.Host, srv.Port); err != nil {
+		fmt.Printf("[SFTP FastDownload] Failed to connect: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "connection_error", err.Error())
+		return
+	}
+
+	// 构建 tar 命令的 --exclude 参数
+	excludeArgs := ""
+	for _, pattern := range req.ExcludePatterns {
+		excludeArgs += fmt.Sprintf(" --exclude='%s'", pattern)
+	}
+
+	// 构建文件路径列表（用引号包裹，防止空格问题）
+	paths := ""
+	for _, path := range req.Paths {
+		paths += fmt.Sprintf(" '%s'", path)
+	}
+
+	// 构建 tar 命令
+	// -c: 创建归档
+	// -z: gzip 压缩
+	// -f -: 输出到 stdout
+	tarCmd := fmt.Sprintf("tar -czf -%s%s", excludeArgs, paths)
+	fmt.Printf("[SFTP FastDownload] Executing tar command: %s\n", tarCmd)
+
+	// 创建 SSH 会话
+	session, err := sshClient.NewSession()
+	if err != nil {
+		fmt.Printf("[SFTP FastDownload] Failed to create session: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "ssh_error", fmt.Sprintf("Failed to create session: %v", err))
+		return
+	}
+	defer session.Close()
+
+	// 设置响应头
+	timestamp := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("files-%s.tar.gz", timestamp)
+	c.Header("Content-Type", "application/gzip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Transfer-Encoding", "chunked")
+
+	// 将 session 的 stdout 直接连接到响应
+	session.Stdout = c.Writer
+
+	// 捕获 stderr 用于错误日志
+	var stderrBuf bytes.Buffer
+	session.Stderr = &stderrBuf
+
+	// 执行命令
+	if err := session.Run(tarCmd); err != nil {
+		stderrOutput := stderrBuf.String()
+		fmt.Printf("[SFTP FastDownload] Tar command failed: %v, stderr: %s\n", err, stderrOutput)
+
+		// 如果 tar 不存在，提示用户
+		if strings.Contains(stderrOutput, "command not found") || strings.Contains(stderrOutput, "not found") {
+			RespondError(c, http.StatusBadRequest, "tar_not_found", "服务器未安装 tar 工具，请使用兼容下载模式")
+		} else {
+			RespondError(c, http.StatusInternalServerError, "tar_error", fmt.Sprintf("Tar command failed: %v", err))
+		}
+		return
+	}
+
+	fmt.Printf("[SFTP FastDownload] Tar completed successfully\n")
+}
+
+// shouldExcludeDir 检查目录是否应该被排除
+func (h *SFTPHandler) shouldExcludeDir(dirName string, excludePatterns []string) bool {
+	for _, pattern := range excludePatterns {
+		if dirName == pattern {
+			return true
+		}
+	}
+	return false
+}
+
+// addDirToZipWithExcludes 递归添加目录到 ZIP（支持排除规则）
+func (h *SFTPHandler) addDirToZipWithExcludes(sftpClient *sftp.Client, zipWriter *zip.Writer, remotePath, baseDir string, excludePatterns []string) (int, error) {
+	excludedCount := 0
+
+	// 列出目录内容
+	listing, err := sftpClient.ListDirectory(remotePath)
+	if err != nil {
+		return excludedCount, fmt.Errorf("failed to list directory: %w", err)
+	}
+
+	for _, file := range listing.Files {
+		// 跳过 . 和 ..
+		if file.Name == "." || file.Name == ".." {
+			continue
+		}
+
+		// 跳过符号链接
+		if file.Mode&os.ModeSymlink != 0 {
+			fmt.Printf("[SFTP CompatibleDownload] Skip symlink: %s\n", file.Path)
+			continue
+		}
+
+		// 检查是否应该排除此目录
+		if file.IsDir && h.shouldExcludeDir(file.Name, excludePatterns) {
+			fmt.Printf("[SFTP CompatibleDownload] Excluded directory: %s\n", file.Path)
+			excludedCount++
+
+			// 在 ZIP 中创建占位文件说明
+			placeholderPath := filepath.Join(baseDir, file.Name, ".excluded")
+			writer, err := zipWriter.Create(placeholderPath)
+			if err == nil {
+				fmt.Fprintf(writer, "此目录已被排除：%s\n原因：匹配排除规则\n", file.Name)
+			}
+			continue
+		}
+
+		zipPath := filepath.Join(baseDir, file.Name)
+
+		if file.IsDir {
+			// 递归处理子目录
+			subExcluded, err := h.addDirToZipWithExcludes(sftpClient, zipWriter, file.Path, zipPath, excludePatterns)
+			excludedCount += subExcluded
+			if err != nil {
+				fmt.Printf("[SFTP CompatibleDownload] Failed to add subdirectory: %s, error: %v\n", file.Path, err)
+			}
+		} else {
+			// 添加文件
+			if err := h.addFileToZip(sftpClient, zipWriter, file.Path, zipPath); err != nil {
+				fmt.Printf("[SFTP CompatibleDownload] Failed to add file: %s, error: %v\n", file.Path, err)
+			}
+		}
+	}
+
+	return excludedCount, nil
 }
 
 // addFileToZip 添加单个文件到 ZIP

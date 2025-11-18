@@ -28,13 +28,29 @@ export const performanceSchema = z.object({
     .max(1024, "文件上传大小不能超过1024MB"),
 })
 
+// 文件传输设置 Schema
+export const fileTransferSchema = z.object({
+  // 下载排除规则（每行一个）
+  download_exclude_patterns: z.string().default(
+    "node_modules\n.git\n.svn\n.hg\n__pycache__\n.pytest_cache\n.next\n.nuxt\ndist\nbuild\ntarget\nvendor\n.DS_Store\nthumbs.db"
+  ),
+  // 默认下载模式
+  default_download_mode: z.enum(["fast", "compatible"], {
+    message: "请选择有效的下载模式",
+  }).default("fast"),
+  // 上传时自动跳过排除的文件
+  skip_excluded_on_upload: z.boolean().default(true),
+})
+
 // 完整的系统配置 Schema (所有标签页合并)
 export const systemConfigSchema = basicInfoSchema
   .merge(i18nSchema)
   .merge(performanceSchema)
+  .merge(fileTransferSchema)
 
 // 导出类型
 export type BasicInfoFormData = z.infer<typeof basicInfoSchema>
 export type I18nFormData = z.infer<typeof i18nSchema>
 export type PerformanceFormData = z.infer<typeof performanceSchema>
+export type FileTransferFormData = z.infer<typeof fileTransferSchema>
 export type SystemConfigFormData = z.infer<typeof systemConfigSchema>

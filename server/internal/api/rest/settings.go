@@ -500,9 +500,14 @@ type SaveSystemConfigRequest struct {
 	DefaultTimezone string `json:"default_timezone"`
 	DateFormat      string `json:"date_format"`
 
-	// 其他设置
+	// 性能设置
 	DefaultPageSize   int `json:"default_page_size"`
 	MaxFileUploadSize int `json:"max_file_upload_size"`
+
+	// 文件传输设置
+	DownloadExcludePatterns string `json:"download_exclude_patterns"`
+	DefaultDownloadMode     string `json:"default_download_mode"`
+	SkipExcludedOnUpload    bool   `json:"skip_excluded_on_upload"`
 }
 
 // GetSystemConfig 获取系统配置
@@ -548,9 +553,14 @@ func (h *SettingsHandler) SaveSystemConfig(c *gin.Context) {
 		DefaultTimezone: req.DefaultTimezone,
 		DateFormat:      req.DateFormat,
 
-		// 其他设置
+		// 性能设置
 		DefaultPageSize:   req.DefaultPageSize,
 		MaxFileUploadSize: req.MaxFileUploadSize,
+
+		// 文件传输设置
+		DownloadExcludePatterns: req.DownloadExcludePatterns,
+		DefaultDownloadMode:     req.DefaultDownloadMode,
+		SkipExcludedOnUpload:    req.SkipExcludedOnUpload,
 	}
 
 	if err := h.settingsService.SaveSystemConfig(c.Request.Context(), config); err != nil {
