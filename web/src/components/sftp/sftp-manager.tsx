@@ -32,6 +32,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   FolderOpen,
   Upload,
   Download,
@@ -63,6 +69,7 @@ import {
   FileVideo,
   FileAudio,
   Database,
+  Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseFileSize } from "@/lib/format-utils"
@@ -811,26 +818,51 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 批量下载
-  const handleBatchDownload = useCallback(async () => {
-    if (selectedFiles.length === 0) return
+  const handleBatchDownload = useCallback(async (mode: "fast" | "compatible" = "fast") => {
+    const paths = selectedFiles.length > 0
+      ? selectedFiles
+      : contextMenu?.fileName
+      ? [contextMenu.fileName]
+      : []
 
-    // 如果提供了批量下载接口，使用批量下载
-    if (onBatchDownload) {
-      try {
-        await onBatchDownload(selectedFiles)
+    if (paths.length === 0) return
+
+    // 根据模式调用对应的下载方法
+    if (mode === "fast") {
+      // TODO: 后端实现后调用快速下载 API
+      console.log("[SftpManager] 快速下载模式 (tar/zip):", paths)
+      // 暂时使用现有的批量下载接口
+      if (onBatchDownload) {
+        try {
+          await onBatchDownload(paths)
+          setSelectedFiles([])
+        } catch (error) {
+          console.error('[SftpManager] 批量下载失败:', error)
+          alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
+        }
+      } else {
+        // 降级到循环调用单个下载
+        paths.forEach(path => onDownload(path))
         setSelectedFiles([])
-      } catch (error) {
-        console.error('[SftpManager] 批量下载失败:', error)
-        alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
       }
     } else {
-      // 降级到循环调用单个下载
-      selectedFiles.forEach(fileName => {
-        onDownload(fileName)
-      })
-      setSelectedFiles([])
+      // 兼容模式（原有逻辑）
+      console.log("[SftpManager] 兼容下载模式 (SFTP):", paths)
+      if (onBatchDownload) {
+        try {
+          await onBatchDownload(paths)
+          setSelectedFiles([])
+        } catch (error) {
+          console.error('[SftpManager] 批量下载失败:', error)
+          alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
+        }
+      } else {
+        // 降级到循环调用单个下载
+        paths.forEach(path => onDownload(path))
+        setSelectedFiles([])
+      }
     }
-  }, [selectedFiles, onDownload, onBatchDownload])
+  }, [selectedFiles, contextMenu, onDownload, onBatchDownload])
 
   // 批量删除
   const handleBatchDelete = useCallback(async () => {
@@ -1155,7 +1187,8 @@ export function SftpManager(props: SftpManagerProps) {
 
   // 主界面内容
   const managerContent = (
-    <SftpSessionProvider value={sessionContextValue}>
+    <TooltipProvider delayDuration={300}>
+      <SftpSessionProvider value={sessionContextValue}>
       <div
         className={cn(
           "flex flex-col h-full overflow-hidden transition-colors bg-background",
@@ -2231,31 +2264,91 @@ export function SftpManager(props: SftpManagerProps) {
                   </kbd>
                 </button>
 
-                {/* 下载 - 仅文件或多选 */}
-                {(contextMenu.fileType === "file" || selectedFiles.length > 1) && (
-                  <button
-                    className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
+                {/* 下载
+                    - 单文件: 直接下载该文件
+                    - 单目录: 使用批量下载逻辑,打包该目录
+                    - 多选(文件/目录混合): 批量下载
+                 */}
+                {contextMenu.fileName && (
+                  <>
+                    {/* 多选或目录时显示双下载选项 */}
+                    {(selectedFiles.length > 1 || contextMenu.fileType === "directory") ? (
+                      <>
+                        {/* 快速下载 - tar/zip 模式 */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              className={cn(
+                                "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
+                              )}
+                              onClick={() => {
+                                handleBatchDownload("fast")
+                                closeContextMenu()
+                              }}
+                            >
+                              <Zap className="h-4 w-4 text-yellow-500" />
+                              <span className="flex-1">快速下载</span>
+                              <span className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary",
+                              )}>
+                                推荐
+                              </span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" sideOffset={8} className="max-w-[280px]">
+                            远程 tar/zip 压缩，智能排除常见大目录，速度快 10-50 倍（需服务器支持 tar）
+                          </TooltipContent>
+                        </Tooltip>
+
+                        {/* 兼容下载 - SFTP 模式 */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              className={cn(
+                                "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
+                              )}
+                              onClick={() => {
+                                handleBatchDownload("compatible")
+                                closeContextMenu()
+                              }}
+                            >
+                              <Download className="h-4 w-4" />
+                              <span className="flex-1">兼容下载</span>
+                              <kbd className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                              )}>
+                                ⌘D
+                              </kbd>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" sideOffset={8} className="max-w-[280px]">
+                            SFTP 逐文件传输，兼容所有服务器，自动跳过排除目录
+                          </TooltipContent>
+                        </Tooltip>
+                      </>
+                    ) : (
+                      /* 单文件下载保持原样 */
+                      <button
+                        className={cn(
+                          "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
+                        )}
+                        onClick={() => {
+                          if (contextMenu.fileName) {
+                            onDownload(contextMenu.fileName)
+                          }
+                          closeContextMenu()
+                        }}
+                      >
+                        <Download className="h-4 w-4" />
+                        <span className="flex-1">下载</span>
+                        <kbd className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                        )}>
+                          ⌘D
+                        </kbd>
+                      </button>
                     )}
-                    onClick={() => {
-                      if (selectedFiles.length > 1) {
-                        handleBatchDownload()
-                      } else if (contextMenu.fileName) {
-                        onDownload(contextMenu.fileName)
-                      }
-                      closeContextMenu()
-                    }}
-                  >
-                    <Download className="h-4 w-4" />
-                    <span className="flex-1">
-                      {selectedFiles.length > 1 ? `下载 ${selectedFiles.length} 项` : "下载"}
-                    </span>
-                    <kbd className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                    )}>
-                      ⌘D
-                    </kbd>
-                  </button>
+                  </>
                 )}
 
                 <div className={cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")} />
@@ -2344,6 +2437,7 @@ export function SftpManager(props: SftpManagerProps) {
       )}
       </div>
     </SftpSessionProvider>
+    </TooltipProvider>
   )
 
   // 全屏模式 - 使用 Portal 渲染到 body

@@ -271,6 +271,8 @@ export function TabTerminalContent({
             onRename={sftpSession.renameFile}
             onCreateFolder={sftpSession.createFolder}
             onCreateFile={sftpSession.createFile}
+            onBatchDelete={sftpSession.batchDeleteFiles}
+            onBatchDownload={sftpSession.batchDownloadFiles}
             onReadFile={sftpSession.readFile}
             onSaveFile={sftpSession.saveFile}
             onDisconnect={() => setTabState(session.id, { isFileManagerOpen: false })}

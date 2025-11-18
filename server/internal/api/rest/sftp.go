@@ -828,6 +828,13 @@ func (h *SFTPHandler) addDirToZip(sftpClient *sftp.Client, zipWriter *zip.Writer
 			continue
 		}
 
+		// 跳过符号链接(尤其是 pnpm 等包管理器在 node_modules 中创建的大量目录/文件链接),
+		// 这些链接的目标可能是目录或不存在的路径,通过 SFTP 直接 DownloadFile 往往返回 SSH_FX_FAILURE。
+		if file.Mode&os.ModeSymlink != 0 {
+			fmt.Printf("[SFTP BatchDownload] Skip symlink: %s\n", file.Path)
+			continue
+		}
+
 		zipPath := filepath.Join(baseDir, file.Name)
 
 		if file.IsDir {
