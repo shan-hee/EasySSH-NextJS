@@ -761,6 +761,7 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 			"build",
 			"target",
 			"vendor",
+			".cache",
 			".DS_Store",
 			"thumbs.db",
 		}
@@ -882,17 +883,44 @@ func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req Batch
 		excludeArgs += fmt.Sprintf(" --exclude='%s'", pattern)
 	}
 
-	// 构建文件路径列表（用引号包裹，防止空格问题）
-	paths := ""
+	// 构建 tar 命令
+	// 策略: 对每个路径,切换到其父目录(-C),然后打包目录名(去掉路径前缀)
+	// 这样打包出来的文件不会包含完整路径,解压时直接是目录/文件名
+	//
+	// 例如:
+	// 输入: /root/EasySSH-vue
+	// 命令: tar -czf - -C /root --exclude='...' EasySSH-vue
+	// 输出: EasySSH-vue/... (而不是 root/EasySSH-vue/...)
+	var tarCmdParts []string
+	tarCmdParts = append(tarCmdParts, "tar -czf -")
+
+	// 添加排除规则
+	tarCmdParts = append(tarCmdParts, excludeArgs)
+
+	// 对每个路径,添加 -C parent_dir base_name
 	for _, path := range req.Paths {
-		paths += fmt.Sprintf(" '%s'", path)
+		// 分离父目录和文件/目录名
+		lastSlash := strings.LastIndex(path, "/")
+		var parentDir, baseName string
+
+		if lastSlash == -1 {
+			// 没有斜杠,相对路径
+			parentDir = "."
+			baseName = path
+		} else if lastSlash == 0 {
+			// 根目录下的文件/目录,如 /etc
+			parentDir = "/"
+			baseName = path[1:]
+		} else {
+			// 正常路径,如 /root/EasySSH-vue
+			parentDir = path[:lastSlash]
+			baseName = path[lastSlash+1:]
+		}
+
+		tarCmdParts = append(tarCmdParts, fmt.Sprintf(" -C '%s' '%s'", parentDir, baseName))
 	}
 
-	// 构建 tar 命令
-	// -c: 创建归档
-	// -z: gzip 压缩
-	// -f -: 输出到 stdout
-	tarCmd := fmt.Sprintf("tar -czf -%s%s", excludeArgs, paths)
+	tarCmd := strings.Join(tarCmdParts, "")
 	fmt.Printf("[SFTP FastDownload] Executing tar command: %s\n", tarCmd)
 
 	// 创建 SSH 会话

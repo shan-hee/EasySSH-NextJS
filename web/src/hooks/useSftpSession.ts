@@ -399,10 +399,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
   );
 
   /**
-   * 批量下载文件（打包为 ZIP）
+   * 批量下载文件(打包为 ZIP 或 tar.gz)
    */
   const batchDownloadFiles = useCallback(
-    async (fileNames: string[]) => {
+    async (fileNames: string[], mode: "fast" | "compatible" = "fast", excludePatterns?: string[]) => {
       try {
         // 构建完整路径
         const fullPaths = fileNames.map((fileName) =>
@@ -411,8 +411,8 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
             : `${currentPath}/${fileName}`
         );
 
-        // 调用批量下载 API
-        await sftpApi.batchDownload(serverId, fullPaths);
+        // 调用批量下载 API,传递 mode 和 excludePatterns
+        await sftpApi.batchDownload(serverId, fullPaths, mode, excludePatterns);
       } catch (error) {
         console.error('[useSftpSession] 批量下载失败:', error);
         throw error;

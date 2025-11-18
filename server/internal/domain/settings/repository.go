@@ -340,6 +340,7 @@ dist
 build
 target
 vendor
+.cache
 .DS_Store
 thumbs.db`
 

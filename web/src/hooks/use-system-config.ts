@@ -34,6 +34,7 @@ export function useDownloadExcludePatterns() {
       "build",
       "target",
       "vendor",
+      ".cache",
       ".DS_Store",
       "thumbs.db",
     ]

@@ -26,7 +26,7 @@ interface FileManagerPanelProps {
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
   onBatchDelete?: (fileNames: string[]) => Promise<{ success: string[]; failed: any[]; total: number }>
-  onBatchDownload?: (fileNames: string[]) => Promise<void>
+  onBatchDownload?: (fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) => Promise<void>
   onCreateFolder: (name: string) => void
   onCreateFile?: (name: string) => void
   onRename: (oldName: string, newName: string) => void
