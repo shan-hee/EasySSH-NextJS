@@ -712,7 +712,6 @@ export function SftpManager(props: SftpManagerProps) {
           // 回退方案:使用saveFile创建空文件
           try {
             await onSaveFile(editingFileName.trim(), "")
-            onRefresh()
           } catch (error) {
             console.error("创建文件失败:", error)
           }
@@ -805,8 +804,6 @@ export function SftpManager(props: SftpManagerProps) {
       await onSaveFile(editorState.fileName, content)
       // 更新编辑器状态中的内容
       setEditorState(prev => ({ ...prev, content }))
-      // 刷新文件列表
-      onRefresh()
     } catch (error) {
       console.error("保存文件失败:", error)
       throw error

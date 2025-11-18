@@ -75,8 +75,9 @@ export const sftpApi = {
   /**
    * 创建目录
    */
-  async createDirectory(serverId: string, path: string): Promise<void> {
-    return apiFetch<void>(`/sftp/${serverId}/mkdir`, {
+  async createDirectory(serverId: string, path: string): Promise<FileInfo> {
+    // 后端返回新建目录的 FileInfo,用于前端差异更新
+    return apiFetch<FileInfo>(`/sftp/${serverId}/mkdir`, {
       method: "POST",
       body: { path },
     })
@@ -85,8 +86,9 @@ export const sftpApi = {
   /**
    * 删除文件或目录
    */
-  async delete(serverId: string, path: string): Promise<void> {
-    return apiFetch<void>(`/sftp/${serverId}/delete`, {
+  async delete(serverId: string, path: string): Promise<FileInfo> {
+    // 后端返回被删除文件的 FileInfo(删除前快照)
+    return apiFetch<FileInfo>(`/sftp/${serverId}/delete`, {
       method: "DELETE",
       body: { path },
       timeout: 300000, // 5分钟超时（用于删除大目录如 node_modules）
@@ -97,8 +99,9 @@ export const sftpApi = {
   /**
    * 重命名文件或目录
    */
-  async rename(serverId: string, oldPath: string, newPath: string): Promise<void> {
-    return apiFetch<void>(`/sftp/${serverId}/rename`, {
+  async rename(serverId: string, oldPath: string, newPath: string): Promise<FileInfo> {
+    // 后端返回重命名后的 FileInfo
+    return apiFetch<FileInfo>(`/sftp/${serverId}/rename`, {
       method: "POST",
       body: { old_path: oldPath, new_path: newPath },
     })
@@ -138,8 +141,9 @@ export const sftpApi = {
   /**
    * 写入文件内容
    */
-  async writeFile(serverId: string, path: string, content: string): Promise<void> {
-    return apiFetch<void>(`/sftp/${serverId}/write`, {
+  async writeFile(serverId: string, path: string, content: string): Promise<FileInfo> {
+    // 后端返回最新的 FileInfo(包含大小/修改时间等)
+    return apiFetch<FileInfo>(`/sftp/${serverId}/write`, {
       method: "POST",
       body: { path, content },
     })
@@ -172,7 +176,7 @@ export const sftpApi = {
     file: File,
     onProgress?: (loaded: number, total: number) => void,
     wsTaskId?: string
-  ): Promise<void> {
+  ): Promise<FileInfo | null> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       const apiUrl = getApiUrl()
@@ -189,7 +193,23 @@ export const sftpApi = {
       // 监听完成事件
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          resolve()
+          // 尝试解析后端返回的 FileInfo(JSON 包装为 { data: FileInfo })
+          try {
+            const raw = xhr.responseText
+            if (!raw) {
+              resolve(null)
+              return
+            }
+            const parsed = JSON.parse(raw)
+            if (parsed && typeof parsed === "object" && "data" in parsed && (parsed as any).data) {
+              resolve((parsed as any).data as FileInfo)
+            } else {
+              resolve(null)
+            }
+          } catch {
+            // 解析失败时仍视为成功,但不返回文件信息
+            resolve(null)
+          }
         } else {
           try {
             const error = JSON.parse(xhr.responseText)

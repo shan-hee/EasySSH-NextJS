@@ -246,11 +246,14 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		}
 	}
 
-	RespondSuccess(c, gin.H{
-		"path":     remotePath,
-		"filename": header.Filename,
-		"size":     header.Size,
-	})
+	// 上传完成后,返回新文件的详细信息,便于前端进行差异更新
+	fileInfo, err := sftpClient.GetFileInfo(remotePath)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "stat_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, fileInfo)
 }
 
 // DownloadFile 下载文件
@@ -339,9 +342,14 @@ func (h *SFTPHandler) CreateDirectory(c *gin.Context) {
 		return
 	}
 
-	RespondSuccess(c, gin.H{
-		"path": req.Path,
-	})
+	// 返回新建目录的 FileInfo,用于前端差异更新
+	fileInfo, err := sftpClient.GetFileInfo(req.Path)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "stat_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, fileInfo)
 }
 
 // Delete 删除文件或目录
@@ -376,7 +384,7 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 	}
 	defer sftpClient.Close()
 
-	// 获取文件信息以判断类型
+	// 获取文件信息以判断类型,同时用于删除成功后的差异更新响应
 	fileInfo, err := sftpClient.GetFileInfo(req.Path)
 	if err != nil {
 		fmt.Printf("[SFTP Delete] File not found: %s, error: %v\n", req.Path, err)
@@ -402,7 +410,9 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 
 	elapsed := time.Since(startTime)
 	fmt.Printf("[SFTP Delete] Delete completed successfully in %v: %s\n", elapsed, req.Path)
-	RespondSuccessWithMessage(c, nil, "Deleted successfully")
+
+	// 返回被删除文件的信息,便于前端做差异更新
+	RespondSuccessWithMessage(c, fileInfo, "Deleted successfully")
 }
 
 // Rename 重命名文件或目录
@@ -439,10 +449,14 @@ func (h *SFTPHandler) Rename(c *gin.Context) {
 		return
 	}
 
-	RespondSuccess(c, gin.H{
-		"old_path": req.OldPath,
-		"new_path": req.NewPath,
-	})
+	// 返回重命名后的文件信息,用于前端差异更新
+	fileInfo, err := sftpClient.GetFileInfo(req.NewPath)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "stat_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, fileInfo)
 }
 
 // Chmod 修改文件或目录权限
@@ -562,7 +576,14 @@ func (h *SFTPHandler) WriteFile(c *gin.Context) {
 		return
 	}
 
-	RespondSuccessWithMessage(c, gin.H{"path": req.Path}, "File written successfully")
+	// 返回最新的文件信息,便于前端更新大小/修改时间等
+	fileInfo, err := sftpClient.GetFileInfo(req.Path)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "stat_failed", err.Error())
+		return
+	}
+
+	RespondSuccessWithMessage(c, fileInfo, "File written successfully")
 }
 
 // GetDiskUsage 获取磁盘使用情况

@@ -25,7 +25,7 @@ export const viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "EasySSH - 简单易用的 SSH 管理平台",
+    default: "EasySSH",
     template: "%s | EasySSH",
   },
   description: "EasySSH 是一个现代化的 SSH 服务器管理平台，提供便捷的服务器连接、文件传输、操作审计等功能",
@@ -39,13 +39,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "zh_CN",
-    title: "EasySSH - 简单易用的 SSH 管理平台",
+    title: "EasySSH",
     description: "现代化的 SSH 服务器管理平台，提供便捷的服务器连接、文件传输、操作审计等功能",
     siteName: "EasySSH",
   },
   twitter: {
     card: "summary_large_image",
-    title: "EasySSH - 简单易用的 SSH 管理平台",
+    title: "EasySSH",
     description: "现代化的 SSH 服务器管理平台",
   },
   robots: {

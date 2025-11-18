@@ -29,6 +29,21 @@ export interface FileItem {
 }
 
 /**
+ * 在当前文件列表中插入或更新单个文件项
+ * - 如果已存在同名项,则覆盖
+ * - 否则在末尾追加(具体排序由 UI 层再处理)
+ */
+const upsertFileItem = (items: FileItem[], item: FileItem): FileItem[] => {
+  const index = items.findIndex(f => f.name === item.name);
+  if (index === -1) {
+    return [...items, item];
+  }
+  const next = [...items];
+  next[index] = item;
+  return next;
+};
+
+/**
  * useSftpSession Hook
  * 管理SFTP会话的状态和操作
  */
@@ -144,7 +159,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const uploadFiles = useCallback(
     async (fileList: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => {
-      const uploadPromises: Promise<void>[] = [];
+      // 这里仍采用“上传完成后整目录刷新”的策略:
+      // - 上传往往会在目录中引入多个新文件,且用户可能在上传过程中切换目录
+      // - 为保证列表与服务器完全一致,这里保留一次性刷新,其他操作则采用差异更新
+      const uploadPromises: Promise<unknown>[] = [];
 
       for (const file of Array.from(fileList)) {
         const promise = fileTransfer.uploadFile(
@@ -159,7 +177,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
 
       try {
         await Promise.all(uploadPromises);
-        // 上传完成后刷新
+        // 上传完成后刷新当前目录
         refresh();
       } catch (error) {
         console.error('[useSftpSession] 上传失败:', error);
@@ -202,13 +220,15 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           : `${currentPath}/${fileName}`;
 
         await sftpApi.delete(serverId, fullPath);
-        refresh();
+
+        // 差异更新: 本地移除对应项
+        setFiles(prev => prev.filter(f => f.name !== fileName));
       } catch (error) {
         console.error('[useSftpSession] 删除失败:', error);
         throw error;
       }
     },
-    [serverId, currentPath, refresh]
+    [serverId, currentPath]
   );
 
   /**
@@ -221,14 +241,15 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           ? `${currentPath}${name}`
           : `${currentPath}/${name}`;
 
-        await sftpApi.createDirectory(serverId, fullPath);
-        refresh();
+        const info = await sftpApi.createDirectory(serverId, fullPath);
+        const item = convertFileInfo(info);
+        setFiles(prev => upsertFileItem(prev, item));
       } catch (error) {
         console.error('[useSftpSession] 创建文件夹失败:', error);
         throw error;
       }
     },
-    [serverId, currentPath, refresh]
+    [serverId, currentPath, refresh, convertFileInfo]
   );
 
   /**
@@ -241,15 +262,16 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           ? `${currentPath}${name}`
           : `${currentPath}/${name}`;
 
-        // 创建空文件
-        await sftpApi.writeFile(serverId, fullPath, '');
-        refresh();
+        // 创建空文件,后端返回 FileInfo
+        const info = await sftpApi.writeFile(serverId, fullPath, '');
+        const item = convertFileInfo(info);
+        setFiles(prev => upsertFileItem(prev, item));
       } catch (error) {
         console.error('[useSftpSession] 创建文件失败:', error);
         throw error;
       }
     },
-    [serverId, currentPath, refresh]
+    [serverId, currentPath, refresh, convertFileInfo]
   );
 
   /**
@@ -267,13 +289,21 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           : `${currentPath}/${newName}`;
 
         await sftpApi.rename(serverId, oldPath, newPath);
-        refresh();
+
+        // 差异更新: 本地仅更新名称(大小/时间通常保持不变)
+        setFiles(prev =>
+          prev.map(f =>
+            f.name === oldName
+              ? { ...f, name: newName }
+              : f
+          )
+        );
       } catch (error) {
         console.error('[useSftpSession] 重命名失败:', error);
         throw error;
       }
     },
-    [serverId, currentPath, refresh]
+    [serverId, currentPath]
   );
 
   /**
@@ -307,14 +337,29 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
           ? `${currentPath}${fileName}`
           : `${currentPath}/${fileName}`;
 
-        await sftpApi.writeFile(serverId, fullPath, content);
-        refresh();
+        const info = await sftpApi.writeFile(serverId, fullPath, content);
+        const updated = convertFileInfo(info);
+
+        // 差异更新: 仅更新对应文件的大小/时间/权限等字段
+        setFiles(prev =>
+          prev.map(f =>
+            f.name === fileName
+              ? {
+                  ...f,
+                  size: updated.size,
+                  sizeBytes: updated.sizeBytes,
+                  modified: updated.modified,
+                  permissions: updated.permissions,
+                }
+              : f
+          )
+        );
       } catch (error) {
         console.error('[useSftpSession] 保存文件失败:', error);
         throw error;
       }
     },
-    [serverId, currentPath, refresh]
+    [serverId, currentPath, refresh, convertFileInfo]
   );
 
   /**
@@ -333,8 +378,15 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         // 调用批量删除 API
         const result = await sftpApi.batchDelete(serverId, fullPaths);
 
-        // 刷新目录
-        refresh();
+        // 差异更新: 仅移除删除成功的条目
+        const successNames = new Set(
+          result.success.map(p => {
+            const parts = p.split('/');
+            return parts[parts.length - 1] || p;
+          })
+        );
+
+        setFiles(prev => prev.filter(f => !successNames.has(f.name)));
 
         // 返回结果供调用者处理
         return result;
@@ -343,7 +395,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         throw error;
       }
     },
-    [serverId, currentPath, refresh]
+    [serverId, currentPath]
   );
 
   /**
