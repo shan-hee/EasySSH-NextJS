@@ -1017,23 +1017,25 @@ export default function SftpPage() {
  sessionId={session.id}
  sessionLabel={session.label}
  sessionColor={session.color}
- isFullscreen={true}
- pageContext="sftp"
+                isFullscreen={true}
+                pageContext="sftp"
                 isLoading={session.isLoading}
- onNavigate={(path) => handleNavigate(session.id, path)}
- onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
- onDownload={(fileName) => handleDownload(session.id, fileName)}
- onDelete={(fileName) => handleDelete(session.id, fileName)}
- onBatchDelete={(fileNames) => handleBatchDelete(session.id, fileNames)}
- onBatchDownload={(fileNames) => handleBatchDownload(session.id, fileNames)}
- onCreateFolder={(name) => handleCreateFolder(session.id, name)}
- onRename={(oldName, newName) => handleRename(session.id, oldName, newName)}
- onDisconnect={() => handleDisconnect(session.id)}
- onRefresh={() => handleRefreshSession(session.id)}
- onReadFile={(fileName) => handleReadFile(session.id, fileName)}
- onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
- onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
- onToggleFullscreen={() => toggleFullscreen(session.id)}
+                onNavigate={(path) => handleNavigate(session.id, path)}
+                onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
+                onDownload={(fileName) => handleDownload(session.id, fileName)}
+                onDelete={(fileName) => handleDelete(session.id, fileName)}
+                onBatchDelete={(fileNames) => handleBatchDelete(session.id, fileNames)}
+                onBatchDownload={(fileNames, mode, excludePatterns) =>
+                  handleBatchDownload(session.id, fileNames, mode, excludePatterns)
+                }
+                onCreateFolder={(name) => handleCreateFolder(session.id, name)}
+                onRename={(oldName, newName) => handleRename(session.id, oldName, newName)}
+                onDisconnect={() => handleDisconnect(session.id)}
+                onRefresh={() => handleRefreshSession(session.id)}
+                onReadFile={(fileName) => handleReadFile(session.id, fileName)}
+                onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
+                onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
+                onToggleFullscreen={() => toggleFullscreen(session.id)}
  />
  ) : (
  renderWelcomePage()
@@ -1087,23 +1089,25 @@ export default function SftpPage() {
  sessionId={session.id}
  sessionLabel={session.label}
  sessionColor={session.color}
- isFullscreen={false}
- pageContext="sftp"
+                isFullscreen={false}
+                pageContext="sftp"
                 isLoading={session.isLoading}
- onNavigate={(path) => handleNavigate(session.id, path)}
- onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
- onDownload={(fileName) => handleDownload(session.id, fileName)}
- onDelete={(fileName) => handleDelete(session.id, fileName)}
- onBatchDelete={(fileNames) => handleBatchDelete(session.id, fileNames)}
- onBatchDownload={(fileNames) => handleBatchDownload(session.id, fileNames)}
- onCreateFolder={(name) => handleCreateFolder(session.id, name)}
- onRename={(oldName, newName) => handleRename(session.id, oldName, newName)}
- onDisconnect={() => handleDisconnect(session.id)}
- onRefresh={() => handleRefreshSession(session.id)}
- onReadFile={(fileName) => handleReadFile(session.id, fileName)}
- onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
- onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
- onToggleFullscreen={() => toggleFullscreen(session.id)}
+                onNavigate={(path) => handleNavigate(session.id, path)}
+                onUpload={(files, onProgress) => handleUpload(session.id, files, onProgress)}
+                onDownload={(fileName) => handleDownload(session.id, fileName)}
+                onDelete={(fileName) => handleDelete(session.id, fileName)}
+                onBatchDelete={(fileNames) => handleBatchDelete(session.id, fileNames)}
+                onBatchDownload={(fileNames, mode, excludePatterns) =>
+                  handleBatchDownload(session.id, fileNames, mode, excludePatterns)
+                }
+                onCreateFolder={(name) => handleCreateFolder(session.id, name)}
+                onRename={(oldName, newName) => handleRename(session.id, oldName, newName)}
+                onDisconnect={() => handleDisconnect(session.id)}
+                onRefresh={() => handleRefreshSession(session.id)}
+                onReadFile={(fileName) => handleReadFile(session.id, fileName)}
+                onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
+                onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
+                onToggleFullscreen={() => toggleFullscreen(session.id)}
  />
  ) : (
  renderWelcomePage()

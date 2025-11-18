@@ -877,12 +877,6 @@ func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req Batch
 		return
 	}
 
-	// 构建 tar 命令的 --exclude 参数
-	excludeArgs := ""
-	for _, pattern := range req.ExcludePatterns {
-		excludeArgs += fmt.Sprintf(" --exclude='%s'", pattern)
-	}
-
 	// 构建 tar 命令
 	// 策略: 对每个路径,切换到其父目录(-C),然后打包目录名(去掉路径前缀)
 	// 这样打包出来的文件不会包含完整路径,解压时直接是目录/文件名
@@ -894,8 +888,10 @@ func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req Batch
 	var tarCmdParts []string
 	tarCmdParts = append(tarCmdParts, "tar -czf -")
 
-	// 添加排除规则
-	tarCmdParts = append(tarCmdParts, excludeArgs)
+	// 添加排除规则(使用安全的单引号转义)
+	for _, pattern := range req.ExcludePatterns {
+		tarCmdParts = append(tarCmdParts, " --exclude="+shSingleQuote(pattern))
+	}
 
 	// 对每个路径,添加 -C parent_dir base_name
 	for _, path := range req.Paths {
@@ -917,7 +913,8 @@ func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req Batch
 			baseName = path[lastSlash+1:]
 		}
 
-		tarCmdParts = append(tarCmdParts, fmt.Sprintf(" -C '%s' '%s'", parentDir, baseName))
+		// 使用单引号转义,避免路径中包含空格/特殊字符导致命令被截断或注入
+		tarCmdParts = append(tarCmdParts, fmt.Sprintf(" -C %s %s", shSingleQuote(parentDir), shSingleQuote(baseName)))
 	}
 
 	tarCmd := strings.Join(tarCmdParts, "")
@@ -961,6 +958,12 @@ func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req Batch
 	}
 
 	fmt.Printf("[SFTP FastDownload] Tar completed successfully\n")
+}
+
+// shSingleQuote 将字符串按 POSIX 单引号安全包裹: ' -> '\''
+// 用于构造通过 shell 执行的命令参数,防止因为特殊字符导致命令注入或解析错误。
+func shSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // shouldExcludeDir 检查目录是否应该被排除

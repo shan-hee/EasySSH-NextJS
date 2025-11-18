@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { useDownloadExcludePatterns } from "@/hooks/use-system-config"
+import { useDownloadExcludePatterns, useDefaultDownloadMode } from "@/hooks/use-system-config"
 import {
   Table,
   TableBody,
@@ -251,6 +251,10 @@ export function SftpManager(props: SftpManagerProps) {
 
   // 从系统配置获取排除规则
   const excludePatterns = useDownloadExcludePatterns()
+  // 从系统配置获取默认下载模式（fast / compatible）
+  const defaultDownloadModeConfig = useDefaultDownloadMode()
+  const defaultDownloadMode: "fast" | "compatible" =
+    defaultDownloadModeConfig === "compatible" ? "compatible" : "fast"
 
   const enhancedFiles = useMemo<EnhancedFileItem[]>(() => {
     return files.map((file) => ({
@@ -823,7 +827,7 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 批量下载
-  const handleBatchDownload = useCallback(async (mode: "fast" | "compatible" = "fast") => {
+  const handleBatchDownload = useCallback(async (mode: "fast" | "compatible" = defaultDownloadMode) => {
     const paths = selectedFiles.length > 0
       ? selectedFiles
       : contextMenu?.fileName
@@ -845,7 +849,7 @@ export function SftpManager(props: SftpManagerProps) {
       paths.forEach(path => onDownload(path))
       setSelectedFiles([])
     }
-  }, [selectedFiles, contextMenu, onDownload, onBatchDownload, excludePatterns])
+  }, [selectedFiles, contextMenu, onDownload, onBatchDownload, excludePatterns, defaultDownloadMode])
 
   // 批量删除
   const handleBatchDelete = useCallback(async () => {
