@@ -4,15 +4,22 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { MessageSquare, Send } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
+import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
+type DingTalkFormValues = {
+  enabled?: boolean
+  webhook_url?: string
+  secret?: string
+  mention_all?: boolean
+}
+
 interface DingTalkNotificationTabProps {
-  form: UseFormReturn<any>
+  form: UseFormReturn<DingTalkFormValues>
 }
 
 export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) {

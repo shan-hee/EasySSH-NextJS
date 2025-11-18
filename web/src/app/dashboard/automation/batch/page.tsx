@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -61,8 +60,6 @@ import {
 import { batchTasksApi, scriptsApi, serversApi, type BatchTask, type Script, type Server } from "@/lib/api"
 
 export default function AutomationBatchPage() {
- const router = useRouter()
-
  // 数据状态
  const [tasks, setTasks] = useState<BatchTask[]>([])
  const [servers, setServers] = useState<Server[]>([])
@@ -147,8 +144,7 @@ export default function AutomationBatchPage() {
 
  // 初始加载
  useEffect(() => {
- loadData()
- // eslint-disable-next-line react-hooks/exhaustive-deps
+   loadData()
  }, [])
 
  // 过滤服务器

@@ -60,8 +60,7 @@ export default function MonitoringResourcesPage() {
  const [isRefreshing, setIsRefreshing] = useState(false)
 
  useEffect(() => {
- loadData()
- // eslint-disable-next-line react-hooks/exhaustive-deps
+   loadData()
  }, [])
 
  async function loadData() {

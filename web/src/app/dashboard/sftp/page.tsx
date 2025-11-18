@@ -39,7 +39,6 @@ import { createPortal } from 'react-dom'
 import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
-import { useRouter } from "next/navigation"
 
 // 将后端FileInfo转换为组件使用的文件格式
 type ComponentFile = {
@@ -262,7 +261,6 @@ DragPreviewToolbar.displayName = "DragPreviewToolbar"
 SortableSession.displayName = "SortableSession"
 
 export default function SftpPage() {
- const router = useRouter()
  const [servers, setServers] = useState<ApiServer[]>([])
  const [loading, setLoading] = useState(true)
  // 认证改为基于 HttpOnly Cookie，不再需要前端 token
@@ -783,12 +781,15 @@ export default function SftpPage() {
  const useVirtualization = sessions.length >= 10
 
  // 虚拟化对象（预留用于后续优化大量会话的渲染性能）
- const _virtualizer = useVirtualizer({
- count: sessions.length,
- getScrollElement: () => parentRef.current,
- estimateSize: () => 500, // 估计每个会话项的高度
- enabled: useVirtualization,
+ const virtualizer = useVirtualizer({
+   count: sessions.length,
+   getScrollElement: () => parentRef.current,
+   estimateSize: () => 500, // 估计每个会话项的高度
+   enabled: useVirtualization,
  })
+
+ // 访问一次虚拟项, 避免未使用变量告警
+ const virtualItems = useVirtualization ? virtualizer.getVirtualItems() : []
 
  // 连接中占位符（理论上不会显示，因为新会话直接连接）
  const renderWelcomePage = () => (

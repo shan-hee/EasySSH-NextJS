@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useForm, UseFormReturn, FieldValues } from "react-hook-form"
+import { useForm, type UseFormReturn, type FieldValues } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 
 interface UseSettingsFormOptions<T extends FieldValues> {
-  schema: z.ZodType<T, any, any>
+  schema: z.ZodType<T>
   loadFn: () => Promise<T>
   saveFn: (data: T) => Promise<void>
   onSuccess?: () => void
@@ -48,8 +48,8 @@ export function useSettingsForm<T extends FieldValues>({
   const [isSaving, setIsSaving] = useState(false)
 
   const form = useForm<T>({
-    resolver: zodResolver(schema) as any,
-    defaultValues: defaultValues as any,
+    resolver: zodResolver(schema),
+    defaultValues,
   })
 
   // 加载配置数据

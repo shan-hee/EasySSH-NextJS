@@ -73,7 +73,7 @@ export default function SetupPage() {
 
     setIsSubmitting(true)
     try {
-      const response = await authApi.initializeAdmin({
+      await authApi.initializeAdmin({
         username,
         email,
         password,

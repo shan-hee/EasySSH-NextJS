@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
-import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,7 +28,6 @@ import { scriptsApi, type Script } from "@/lib/api"
 import { createScriptColumns } from "./components/script-columns"
 
 export default function ScriptsPage() {
- const router = useRouter()
  const [scripts, setScripts] = useState<Script[]>([])
  const [loading, setLoading] = useState(true)
  const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -78,24 +76,24 @@ export default function ScriptsPage() {
  const editSuggestionRefs = useRef<(HTMLButtonElement | null)[]>([])
 
  // 加载脚本列表
- const loadScripts = async () => {
- try {
- const response = await scriptsApi.list({
-  page,
-  limit: pageSize,
-})
+ const loadScripts = useCallback(async () => {
+   try {
+     const response = await scriptsApi.list({
+       page,
+       limit: pageSize,
+     })
 
- setScripts(response.data || [])
- setTotalRows(response.total || (response.data || []).length)
- setTotalPages(response.total_pages || 1)
- } catch (error: unknown) {
- console.error("加载脚本列表失败:", error)
- toast.error(getErrorMessage(error, "加载脚本失败"))
- } finally {
- setLoading(false)
- setRefreshing(false)
- }
- }
+     setScripts(response.data || [])
+     setTotalRows(response.total || (response.data || []).length)
+     setTotalPages(response.total_pages || 1)
+   } catch (error: unknown) {
+     console.error("加载脚本列表失败:", error)
+     toast.error(getErrorMessage(error, "加载脚本失败"))
+   } finally {
+     setLoading(false)
+     setRefreshing(false)
+   }
+ }, [page, pageSize])
 
  // 刷新脚本列表
  const handleRefresh = async () => {
@@ -105,10 +103,9 @@ export default function ScriptsPage() {
 
 // 初始加载与分页变化
 useEffect(() => {
- setLoading(true)
- loadScripts()
- // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [page, pageSize])
+  setLoading(true)
+  loadScripts()
+}, [page, pageSize, loadScripts])
 
  // 自动滚动选中的建议项到可见区域
  useEffect(() => {

@@ -4,12 +4,19 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormSwitch, FormSelect } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Shield, Trash2 } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
+import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertTriangle, InfoIcon } from "lucide-react"
 
+type AIPrivacyFormValues = {
+  log_prompts?: boolean
+  log_responses?: boolean
+  mask_sensitive_data?: boolean
+  allow_training?: boolean
+}
+
 interface AIPrivacyTabProps {
-  form: UseFormReturn<any>
+  form: UseFormReturn<AIPrivacyFormValues>
 }
 
 const autoDeletOptions = [

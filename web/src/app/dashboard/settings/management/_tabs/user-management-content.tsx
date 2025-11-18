@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,7 +28,6 @@ import {
   Shield,
   Eye,
   Trash2,
-  RefreshCw,
 } from "lucide-react"
 import { usersApi, type UserDetail, type UserRole } from "@/lib/api"
 import { SkeletonCard } from "@/components/ui/loading"
@@ -40,12 +38,10 @@ import { createUserColumns } from "@/app/dashboard/users/components/user-columns
 // 提取自 /dashboard/users/page.tsx 的用户管理内容
 // 去掉了 PageHeader，作为 Tab 内容使用
 export function UserManagementContent() {
-  const router = useRouter()
-
   // 数据状态
   const [users, setUsers] = useState<UserDetail[]>([])
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const [, setRefreshing] = useState(false)
 
   // 统计状态
   const [statistics, setStatistics] = useState({
@@ -120,7 +116,6 @@ export function UserManagementContent() {
   // 初始加载
   useEffect(() => {
     loadUsers()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 创建用户
@@ -228,14 +223,6 @@ export function UserManagementContent() {
       toast.error(getErrorMessage(error, "批量删除失败"))
     }
   }
-
-  // 角色筛选
-  const roleFilters = [
-    { label: "全部角色", value: "" },
-    { label: "管理员", value: "admin" },
-    { label: "普通用户", value: "user" },
-    { label: "只读用户", value: "viewer" },
-  ]
 
   // 表格列定义
   const columns = createUserColumns({

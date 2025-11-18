@@ -3,13 +3,13 @@
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Clock } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
-import { SecurityConfigFormData } from "@/schemas/settings/security.schema"
+import { type UseFormReturn } from "react-hook-form"
+import { type SecurityConfigFormData } from "@/schemas/settings/security.schema"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 
 interface SessionManagementTabProps {
-  form: UseFormReturn<any>
+  form: UseFormReturn<SecurityConfigFormData>
 }
 
 export function SessionManagementTab({ form }: SessionManagementTabProps) {

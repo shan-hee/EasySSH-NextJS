@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useCallback, useTransition, useOptimistic } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, Activity, ArrowUpDown, ArrowDownUp } from "lucide-react"
 import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
@@ -38,7 +37,6 @@ interface SessionsClientProps {
  * 接收服务端传递的初始数据，处理客户端交互
  */
 export function SessionsClient({ initialData }: SessionsClientProps) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [sessions, setSessions] = useState<SSHSessionDetail[]>(initialData?.sessions || [])
   const [statistics, setStatistics] = useState<SSHSessionStatistics>(initialData?.statistics || {

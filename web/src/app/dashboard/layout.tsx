@@ -22,7 +22,6 @@ export default function DashboardLayout({
 }) {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
-  const [isVerifying, setIsVerifying] = useState(true)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -39,8 +38,6 @@ export default function DashboardLayout({
         if (!isApiError(error) || error.status !== 401) {
           router.push("/login")
         }
-      } finally {
-        setIsVerifying(false)
       }
     }
 

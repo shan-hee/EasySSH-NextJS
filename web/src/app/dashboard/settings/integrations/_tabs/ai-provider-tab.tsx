@@ -2,20 +2,32 @@
 
 import { useState } from "react"
 import { SettingsSection } from "@/components/settings/settings-section"
-import { FormInput, FormSelect, FormSwitch } from "@/components/settings/form-field"
+import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Bot, Eye, EyeOff, Zap } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
+import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
+type AIProviderFormValues = {
+  use_system_config?: boolean
+  system_enabled?: boolean
+  system_provider?: string
+  system_api_endpoint?: string
+  system_default_model?: string
+  system_rate_limit?: number
+  provider?: string
+  api_key?: string
+  api_endpoint?: string
+  default_model?: string
+}
+
 interface AIProviderTabProps {
-  form: UseFormReturn<any>
+  form: UseFormReturn<AIProviderFormValues>
   isAdmin?: boolean
 }
 

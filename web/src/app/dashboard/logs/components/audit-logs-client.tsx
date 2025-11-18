@@ -9,7 +9,6 @@ import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
-import { exportLogsToCSV, exportLogsToJSON, downloadFile } from "@/components/ui/batch-actions"
 import { auditLogColumns } from "./audit-log-columns"
 
 interface AuditLogsPageData {
@@ -100,31 +99,6 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   // 刷新数据
   const handleRefresh = () => {
     loadData(page, pageSize)
-  }
-
-  // 导出操作函数
-  const handleExportAll = (format: "csv" | "json") => {
-    try {
-      let content: string
-      let filename: string
-      let type: string
-
-      if (format === "csv") {
-        content = exportLogsToCSV(logs)
-        filename = `操作日志_${new Date().toISOString().split("T")[0]}.csv`
-        type = "text/csv;charset=utf-8"
-      } else {
-        content = exportLogsToJSON(logs)
-        filename = `操作日志_${new Date().toISOString().split("T")[0]}.json`
-        type = "application/json;charset=utf-8"
-      }
-
-      downloadFile(content, filename, type)
-      toast.success(`成功导出 ${logs.length} 条日志`)
-    } catch (error) {
-      console.error("导出失败:", error)
-      toast.error("导出失败")
-    }
   }
 
   // 筛选选项配置

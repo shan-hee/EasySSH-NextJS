@@ -12,7 +12,6 @@ function handleGlobalUnauthorized(error: unknown) {
   hasRedirectedFor401 = true
 
   // 打一条调试日志，方便排查
-  // eslint-disable-next-line no-console
   console.error("[apiFetch] Unauthorized, redirecting to /login", error)
 
   const currentPath = window.location.pathname + window.location.search + window.location.hash

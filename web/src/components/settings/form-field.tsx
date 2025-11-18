@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { UseFormReturn } from "react-hook-form"
+import type { FieldValues, Path, UseFormReturn } from "react-hook-form"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -15,16 +15,16 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
-interface BaseFormFieldProps {
+interface BaseFormFieldProps<TFieldValues extends FieldValues> {
+  form: UseFormReturn<TFieldValues>
+  name: Path<TFieldValues>
   label: string
   description?: string
   required?: boolean
   className?: string
 }
 
-interface FormInputProps extends BaseFormFieldProps {
-  form: UseFormReturn<any>
-  name: string
+interface FormInputProps<TFieldValues extends FieldValues> extends BaseFormFieldProps<TFieldValues> {
   type?: "text" | "number" | "email" | "url" | "password"
   placeholder?: string
   min?: number
@@ -32,21 +32,12 @@ interface FormInputProps extends BaseFormFieldProps {
   step?: number
 }
 
-interface FormSwitchProps extends BaseFormFieldProps {
-  form: UseFormReturn<any>
-  name: string
-}
-
-interface FormSelectProps extends BaseFormFieldProps {
-  form: UseFormReturn<any>
-  name: string
+interface FormSelectProps<TFieldValues extends FieldValues> extends BaseFormFieldProps<TFieldValues> {
   placeholder?: string
   options: Array<{ label: string; value: string }>
 }
 
-interface FormTextareaProps extends BaseFormFieldProps {
-  form: UseFormReturn<any>
-  name: string
+interface FormTextareaProps<TFieldValues extends FieldValues> extends BaseFormFieldProps<TFieldValues> {
   placeholder?: string
   rows?: number
 }
@@ -54,7 +45,7 @@ interface FormTextareaProps extends BaseFormFieldProps {
 /**
  * 表单输入字段
  */
-export function FormInput({
+export function FormInput<TFieldValues extends FieldValues>({
   form,
   name,
   label,
@@ -66,7 +57,7 @@ export function FormInput({
   max,
   step,
   className,
-}: FormInputProps) {
+}: FormInputProps<TFieldValues>) {
   const error = form.formState.errors[name]
 
   return (
@@ -102,13 +93,13 @@ export function FormInput({
 /**
  * 表单开关字段
  */
-export function FormSwitch({
+export function FormSwitch<TFieldValues extends FieldValues>({
   form,
   name,
   label,
   description,
   className,
-}: FormSwitchProps) {
+}: BaseFormFieldProps<TFieldValues>) {
   const value = form.watch(name)
 
   return (
@@ -133,7 +124,7 @@ export function FormSwitch({
 /**
  * 表单选择字段
  */
-export function FormSelect({
+export function FormSelect<TFieldValues extends FieldValues>({
   form,
   name,
   label,
@@ -142,7 +133,7 @@ export function FormSelect({
   placeholder,
   options,
   className,
-}: FormSelectProps) {
+}: FormSelectProps<TFieldValues>) {
   const error = form.formState.errors[name]
   const value = form.watch(name)
 
@@ -182,7 +173,7 @@ export function FormSelect({
 /**
  * 表单文本域字段
  */
-export function FormTextarea({
+export function FormTextarea<TFieldValues extends FieldValues>({
   form,
   name,
   label,
@@ -191,7 +182,7 @@ export function FormTextarea({
   placeholder,
   rows = 3,
   className,
-}: FormTextareaProps) {
+}: FormTextareaProps<TFieldValues>) {
   const error = form.formState.errors[name]
 
   return (

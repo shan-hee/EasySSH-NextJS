@@ -244,8 +244,7 @@ export default function MonitoringHealthPage() {
 
  // 初始加载
  useEffect(() => {
- loadData()
- // eslint-disable-next-line react-hooks/exhaustive-deps
+   loadData()
  }, [])
 
  // 计算总体统计

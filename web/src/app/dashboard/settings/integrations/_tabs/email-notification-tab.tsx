@@ -1,19 +1,27 @@
 "use client"
-
-import { useState } from "react"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Mail, Send } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
+import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
+type EmailFormValues = {
+  enabled?: boolean
+  smtp_host?: string
+  smtp_port?: number
+  smtp_username?: string
+  smtp_password?: string
+  from_address?: string
+  use_tls?: boolean
+}
+
 interface EmailNotificationTabProps {
-  form: UseFormReturn<any>
+  form: UseFormReturn<EmailFormValues>
 }
 
 export function EmailNotificationTab({ form }: EmailNotificationTabProps) {

@@ -31,7 +31,7 @@ interface UseSettingsAPIReturn<T> {
  *   await execute((token) => settingsApi.testSMTPConnection(token, config))
  * }
  */
-export function useSettingsAPI<T = any>(
+export function useSettingsAPI<T>(
   options: UseSettingsAPIOptions<T> = {}
 ): UseSettingsAPIReturn<T> {
   const [data, setData] = useState<T | null>(null)

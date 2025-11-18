@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useCallback, useTransition, useOptimistic } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown } from "lucide-react"
 import { fileTransfersApi, type FileTransfer, type FileTransferStatistics } from "@/lib/api/file-transfers"
@@ -39,7 +38,6 @@ interface TransfersClientProps {
  * 纯 CSR 模式：在客户端加载数据
  */
 export function TransfersClient({ initialData }: TransfersClientProps) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [transfers, setTransfers] = useState<FileTransfer[]>(initialData?.transfers || [])
   const [statistics, setStatistics] = useState<FileTransferStatistics>(initialData?.statistics || {

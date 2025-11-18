@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { Metadata } from "next"
 import { PageHeader } from "@/components/page-header"
 import { dashboardApi, type DashboardStats } from "@/lib/api/dashboard"
 import { QuickActions } from "./components/quick-actions"

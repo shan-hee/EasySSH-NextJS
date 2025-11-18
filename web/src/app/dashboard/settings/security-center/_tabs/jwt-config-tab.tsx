@@ -3,12 +3,18 @@
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput } from "@/components/settings/form-field"
 import { Key } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
+import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertTriangle } from "lucide-react"
 
+type JWTConfigFormValues = {
+  jwt_secret?: string
+  access_token_expire_minutes?: number
+  refresh_token_expire_days?: number
+}
+
 interface JWTConfigTabProps {
-  form: UseFormReturn<any>
+  form: UseFormReturn<JWTConfigFormValues>
 }
 
 export function JWTConfigTab({ form }: JWTConfigTabProps) {

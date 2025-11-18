@@ -1,10 +1,10 @@
 "use client"
 
 import { SettingsSection } from "@/components/settings/settings-section"
-import { FormSelect, FormInput } from "@/components/settings/form-field"
+import { FormSelect } from "@/components/settings/form-field"
 import { Globe } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
-import { SystemConfigFormData } from "@/schemas/settings/system-config.schema"
+import { type UseFormReturn } from "react-hook-form"
+import { type SystemConfigFormData } from "@/schemas/settings/system-config.schema"
 
 interface I18nTabProps {
   form: UseFormReturn<SystemConfigFormData>

@@ -82,7 +82,6 @@ export default function TerminalSessionsPage() {
   // 初始加载
   useEffect(() => {
     loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 客户端搜索过滤

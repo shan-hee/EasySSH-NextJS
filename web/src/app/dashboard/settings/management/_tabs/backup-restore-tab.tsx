@@ -89,7 +89,6 @@ const statusIcons = {
 export function BackupRestoreTab() {
   const [backups, setBackups] = useState<BackupRecord[]>(mockBackupData)
   const [loading, setLoading] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false)
   const [selectedBackup, setSelectedBackup] = useState<BackupRecord | null>(null)
 
@@ -117,7 +116,7 @@ export function BackupRestoreTab() {
 
       setBackups([newBackup, ...backups])
       toast.success("备份创建成功！")
-    } catch (error) {
+    } catch {
       toast.error("备份失败，请查看日志")
     } finally {
       setLoading(false)
@@ -144,7 +143,7 @@ export function BackupRestoreTab() {
       toast.success("备份恢复成功！系统将在5秒后重启...")
       setIsRestoreDialogOpen(false)
       setSelectedBackup(null)
-    } catch (error) {
+    } catch {
       toast.error("恢复失败，请查看日志")
     } finally {
       setLoading(false)
@@ -235,7 +234,7 @@ export function BackupRestoreTab() {
         ),
       },
     ],
-    []
+    [backups]
   )
 
   return (

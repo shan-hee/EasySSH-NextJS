@@ -4,15 +4,22 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch, FormSelect } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Webhook, Send } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
+import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
+type WebhookFormValues = {
+  enabled?: boolean
+  url?: string
+  secret?: string
+  send_full_payload?: boolean
+}
+
 interface WebhookNotificationTabProps {
-  form: UseFormReturn<any>
+  form: UseFormReturn<WebhookFormValues>
 }
 
 const methodOptions = [

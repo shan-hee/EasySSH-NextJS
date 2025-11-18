@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,8 +37,6 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createUserColumns } from "./components/user-columns"
 
 export default function UsersPage() {
-  const router = useRouter()
-
   // 数据状态
   const [users, setUsers] = useState<UserDetail[]>([])
   const [loading, setLoading] = useState(true)
@@ -121,7 +118,6 @@ export default function UsersPage() {
   // 初始加载
   useEffect(() => {
     loadUsers()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 创建用户

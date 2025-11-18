@@ -198,11 +198,10 @@ export default function ServersPage() {
  }, [])
 
  // 加载服务器列表
- useEffect(() => {
- loadServers()
- loadStatistics()
- // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [])
+useEffect(() => {
+  loadServers()
+  loadStatistics()
+}, [])
 
  // 根据搜索词和激活的标签过滤服务器
  useEffect(() => {

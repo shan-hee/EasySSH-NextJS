@@ -9,7 +9,7 @@ export interface TabConfig {
   value: string
   label: string
   icon?: LucideIcon
-  component: React.ComponentType<any>
+  component: React.ComponentType
 }
 
 interface SettingsTabsProps {
