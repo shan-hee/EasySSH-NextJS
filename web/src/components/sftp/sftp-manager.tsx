@@ -80,6 +80,7 @@ import { FileEditor } from "@/components/sftp/file-editor"
 import { ChmodDialog } from "@/components/sftp/chmod-dialog"
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner"
 import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransfer"
+import { FileActionMenu, type FileAction } from "@/components/sftp/file-action-menu"
 
 interface FileItem {
   name: string
@@ -2032,89 +2033,49 @@ export function SftpManager(props: SftpManagerProps) {
                           "min-w-[180px] rounded-lg backdrop-blur-xl bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
                         )}
                       >
-                        {/* 打开/进入 */}
-                        <DropdownMenuItem
-                          onClick={() => {
-                            if (file.type === "directory") {
-                              onNavigate(`${currentPath}/${file.name}`.replace(/\/+/g, "/"))
-                            } else {
-                              // 打开编辑器
-                              handleOpenEditor(file.name)
+                        <FileActionMenu
+                          file={file}
+                          mode="dropdown"
+                          selectedFilesCount={selectedFiles.length}
+                          onAction={(action: FileAction) => {
+                            switch (action) {
+                              case "open":
+                                if (file.type === "directory") {
+                                  onNavigate(`${currentPath}/${file.name}`.replace(/\/+/g, "/"))
+                                } else {
+                                  handleOpenEditor(file.name)
+                                }
+                                break
+                              case "download":
+                                onDownload(file.name)
+                                break
+                              case "download-fast":
+                                setSelectedFiles([file.name])
+                                handleBatchDownload("fast")
+                                break
+                              case "download-compatible":
+                                setSelectedFiles([file.name])
+                                handleBatchDownload("compatible")
+                                break
+                              case "rename":
+                                setTimeout(() => {
+                                  startRename(file.name)
+                                }, 50)
+                                break
+                              case "chmod":
+                                setChmodDialog({
+                                  isOpen: true,
+                                  fileName: file.name,
+                                  filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
+                                  permissions: file.permissions,
+                                })
+                                break
+                              case "delete":
+                                onDelete(file.name)
+                                break
                             }
                           }}
-                          className={cn(
-                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
-                          )}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          {file.type === "directory" ? "打开" : "编辑"}
-                        </DropdownMenuItem>
-
-                        {/* 下载 - 仅文件 */}
-                        {file.type === "file" && (
-                          <DropdownMenuItem
-                            onClick={() => onDownload(file.name)}
-                            className={cn(
-                              "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
-                            )}
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            下载
-                          </DropdownMenuItem>
-                        )}
-
-                        <DropdownMenuSeparator className={cn(
-                          "bg-zinc-200 dark:bg-zinc-700/50",
-                        )} />
-
-                        {/* 重命名 */}
-                        <DropdownMenuItem
-                          onClick={() => {
-                            // 延迟执行,等待 DropdownMenu 关闭动画完成
-                            setTimeout(() => {
-                              startRename(file.name)
-                            }, 50)
-                          }}
-                          className={cn(
-                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
-                          )}
-                        >
-                          <Edit className="h-4 w-4 mr-2" />
-                          重命名
-                        </DropdownMenuItem>
-
-                        {/* 修改权限 */}
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setChmodDialog({
-                              isOpen: true,
-                              fileName: file.name,
-                              filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
-                              permissions: file.permissions,
-                            })
-                          }}
-                          className={cn(
-                            "focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600",
-                          )}
-                        >
-                          <FileText className="h-4 w-4 mr-2" />
-                          修改权限
-                        </DropdownMenuItem>
-
-                        <DropdownMenuSeparator className={cn(
-                          "bg-zinc-200 dark:bg-zinc-700/50",
-                        )} />
-
-                        {/* 删除 */}
-                        <DropdownMenuItem
-                          onClick={() => onDelete(file.name)}
-                          className={cn(
-                            "focus:bg-red-500 focus:text-white text-red-600 dark:text-red-400",
-                          )}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          删除
-                        </DropdownMenuItem>
+                        />
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -2284,199 +2245,70 @@ export function SftpManager(props: SftpManagerProps) {
                   </kbd>
                 </button>
               </>
-            ) : (
+            ) : contextMenu.fileName && contextMenu.fileType ? (
               <>
-                {/* 打开/查看 */}
-                <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
-                  )}
-                  onClick={() => {
-                    if (contextMenu.fileType === "directory" && contextMenu.fileName) {
-                      onNavigate(`${currentPath}/${contextMenu.fileName}`.replace(/\/+/g, "/"))
-                    } else if (contextMenu.fileName) {
-                      // 打开编辑器
-                      handleOpenEditor(contextMenu.fileName)
+                {/* 使用统一的 FileActionMenu 组件 */}
+                <FileActionMenu
+                  file={{
+                    name: contextMenu.fileName,
+                    type: contextMenu.fileType,
+                    size: filteredFiles.find(f => f.name === contextMenu.fileName)?.size || "",
+                    modified: filteredFiles.find(f => f.name === contextMenu.fileName)?.modified || "",
+                    permissions: filteredFiles.find(f => f.name === contextMenu.fileName)?.permissions || "",
+                  }}
+                  mode="context"
+                  selectedFilesCount={selectedFiles.length}
+                  onAction={(action: FileAction) => {
+                    switch (action) {
+                      case "open":
+                        if (contextMenu.fileType === "directory" && contextMenu.fileName) {
+                          onNavigate(`${currentPath}/${contextMenu.fileName}`.replace(/\/+/g, "/"))
+                        } else if (contextMenu.fileName) {
+                          handleOpenEditor(contextMenu.fileName)
+                        }
+                        break
+                      case "download":
+                        if (contextMenu.fileName) {
+                          onDownload(contextMenu.fileName)
+                        }
+                        break
+                      case "download-fast":
+                        handleBatchDownload("fast")
+                        break
+                      case "download-compatible":
+                        handleBatchDownload("compatible")
+                        break
+                      case "rename":
+                        if (contextMenu.fileName) {
+                          setTimeout(() => {
+                            startRename(contextMenu.fileName!)
+                          }, 50)
+                        }
+                        break
+                      case "chmod":
+                        const file = filteredFiles.find(f => f.name === contextMenu.fileName)
+                        if (file) {
+                          setChmodDialog({
+                            isOpen: true,
+                            fileName: file.name,
+                            filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
+                            permissions: file.permissions,
+                          })
+                        }
+                        break
+                      case "delete":
+                        if (selectedFiles.length > 1) {
+                          handleBatchDelete()
+                        } else if (contextMenu.fileName) {
+                          onDelete(contextMenu.fileName)
+                        }
+                        break
                     }
                     closeContextMenu()
                   }}
-                >
-                  <Eye className="h-4 w-4" />
-                  <span className="flex-1">{contextMenu.fileType === "directory" ? "打开" : "编辑"}</span>
-                  <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                  )}>
-                    ⏎
-                  </kbd>
-                </button>
-
-                {/* 下载
-                    - 单文件: 直接下载该文件
-                    - 单目录: 使用批量下载逻辑,打包该目录
-                    - 多选(文件/目录混合): 批量下载
-                 */}
-                {contextMenu.fileName && (
-                  <>
-                    {/* 多选或目录时显示双下载选项 */}
-                    {(selectedFiles.length > 1 || contextMenu.fileType === "directory") ? (
-                      <>
-                        {/* 快速下载 - tar/zip 模式 */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              className={cn(
-                                "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
-                              )}
-                              onClick={() => {
-                                handleBatchDownload("fast")
-                                closeContextMenu()
-                              }}
-                            >
-                              <Zap className="h-4 w-4 text-yellow-500" />
-                              <span className="flex-1">快速下载</span>
-                              <span className={cn(
-                                "text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary",
-                              )}>
-                                推荐
-                              </span>
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" sideOffset={8} className="max-w-[280px]">
-                            远程 tar/zip 压缩，智能排除常见大目录，速度快 10-50 倍（需服务器支持 tar）
-                          </TooltipContent>
-                        </Tooltip>
-
-                        {/* 兼容下载 - SFTP 模式 */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              className={cn(
-                                "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
-                              )}
-                              onClick={() => {
-                                handleBatchDownload("compatible")
-                                closeContextMenu()
-                              }}
-                            >
-                              <Download className="h-4 w-4" />
-                              <span className="flex-1">兼容下载</span>
-                              <kbd className={cn(
-                                "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                              )}>
-                                ⌘D
-                              </kbd>
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" sideOffset={8} className="max-w-[280px]">
-                            SFTP 逐文件传输，兼容所有服务器，自动跳过排除目录
-                          </TooltipContent>
-                        </Tooltip>
-                      </>
-                    ) : (
-                      /* 单文件下载保持原样 */
-                      <button
-                        className={cn(
-                          "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm",
-                        )}
-                        onClick={() => {
-                          if (contextMenu.fileName) {
-                            onDownload(contextMenu.fileName)
-                          }
-                          closeContextMenu()
-                        }}
-                      >
-                        <Download className="h-4 w-4" />
-                        <span className="flex-1">下载</span>
-                        <kbd className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                        )}>
-                          ⌘D
-                        </kbd>
-                      </button>
-                    )}
-                  </>
-                )}
-
-                <div className={cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")} />
-
-                {/* 重命名 - 仅单选 */}
-                {selectedFiles.length === 1 && (
-                  <button
-                    className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
-                    )}
-                    onClick={() => {
-                      closeContextMenu()
-                      if (contextMenu.fileName) {
-                        // 延迟执行,等待右键菜单关闭动画完成
-                        setTimeout(() => {
-                          startRename(contextMenu.fileName!)
-                        }, 50)
-                      }
-                    }}
-                  >
-                    <Edit className="h-4 w-4" />
-                    <span className="flex-1">重命名</span>
-                    <kbd className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-                    )}>
-                      F2
-                    </kbd>
-                  </button>
-                )}
-
-                {/* 修改权限 - 仅单选 */}
-                {selectedFiles.length === 1 && contextMenu.fileName && (
-                  <button
-                    className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground",
-                    )}
-                    onClick={() => {
-                      const file = filteredFiles.find(f => f.name === contextMenu.fileName)
-                      if (file) {
-                        setChmodDialog({
-                          isOpen: true,
-                          fileName: file.name,
-                          filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
-                          permissions: file.permissions,
-                        })
-                      }
-                      closeContextMenu()
-                    }}
-                  >
-                    <FileText className="h-4 w-4" />
-                    <span className="flex-1">修改权限</span>
-                  </button>
-                )}
-
-                <div className={cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")} />
-
-                {/* 删除 */}
-                <button
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 hover:text-destructive rounded-sm",
-                  )}
-                  onClick={() => {
-                    if (selectedFiles.length > 1) {
-                      handleBatchDelete()
-                    } else if (contextMenu.fileName) {
-                      onDelete(contextMenu.fileName)
-                    }
-                    closeContextMenu()
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span className="flex-1">
-                    {selectedFiles.length > 1 ? `删除 ${selectedFiles.length} 项` : "删除"}
-                  </span>
-                  <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-400",
-                  )}>
-                    ⌫
-                  </kbd>
-                </button>
+                />
               </>
-            )}
+            ) : null}
           </div>
         </div>,
         document.body
