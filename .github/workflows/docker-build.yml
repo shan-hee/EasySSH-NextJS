@@ -128,8 +128,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**镜像标签:**" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${DOCKER_IMAGE}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "${DOCKER_IMAGE}:v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          # 硬编码镜像名称以避免 GitHub Actions 自动脱敏
+          echo "shanheee/easyssh:latest" >> $GITHUB_STEP_SUMMARY
+          echo "shanheee/easyssh:v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**支持架构:** ${{ github.event.inputs.platforms || env.PLATFORMS }}" >> $GITHUB_STEP_SUMMARY
@@ -139,7 +140,7 @@ jobs:
           echo "### 🚀 快速启动" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "# 拉取镜像" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${DOCKER_IMAGE}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull shanheee/easyssh:latest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# 使用 Docker Compose 启动" >> $GITHUB_STEP_SUMMARY
           echo "cd docker" >> $GITHUB_STEP_SUMMARY
