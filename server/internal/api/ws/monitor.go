@@ -68,29 +68,69 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
 	}
 	log.Printf("[Monitor] 使用采集间隔: %v", interval)
 
-	// 从连接池获取或创建 SSH 连接
-	log.Printf("[Monitor] 尝试获取连接: userID=%s, serverID=%s", userID, serverID)
-	pooledConn, err := h.connectionPool.GetOrCreate(userID, serverID)
-	if err != nil {
-		log.Printf("[Monitor] 获取连接失败: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get connection: %v", err)})
-		return
-	}
-	log.Printf("[Monitor] 成功获取连接: userID=%s, serverID=%s, refCount=%d", userID, serverID, pooledConn.GetRefCount())
-
-	// 确保在函数退出时释放连接
-	defer func() {
-		h.connectionPool.Release(userID, serverID)
-		log.Printf("[Monitor] 释放连接: userID=%s, serverID=%s", userID, serverID)
-	}()
-
-    // 升级到 WebSocket
+    // 立即升级到 WebSocket
     wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
     if err != nil {
         log.Printf("Failed to upgrade to WebSocket: %v", err)
         return
     }
     defer wsConn.Close()
+
+	// 发送握手完成消息
+	handshakeMsg := map[string]string{"type": "handshake_complete", "status": "connecting"}
+	if data, err := json.Marshal(handshakeMsg); err == nil {
+		_ = wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+		_ = wsConn.WriteMessage(websocket.TextMessage, data)
+	}
+
+	// 异步获取或创建 SSH 连接
+	log.Printf("[Monitor] 尝试获取连接: userID=%s, serverID=%s", userID, serverID)
+	connChan := make(chan *monitor.PooledConnection, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		pooledConn, err := h.connectionPool.GetOrCreate(userID, serverID)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		connChan <- pooledConn
+	}()
+
+	// 等待连接建立或超时
+	var pooledConn *monitor.PooledConnection
+	select {
+	case pooledConn = <-connChan:
+		log.Printf("[Monitor] 成功获取连接: userID=%s, serverID=%s, refCount=%d", userID, serverID, pooledConn.GetRefCount())
+		// 发送连接就绪消息
+		readyMsg := map[string]string{"type": "ready"}
+		if data, err := json.Marshal(readyMsg); err == nil {
+			_ = wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			_ = wsConn.WriteMessage(websocket.TextMessage, data)
+		}
+	case err := <-errChan:
+		log.Printf("[Monitor] 获取连接失败: %v", err)
+		errMsg := map[string]string{"type": "error", "message": err.Error()}
+		if data, err := json.Marshal(errMsg); err == nil {
+			_ = wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			_ = wsConn.WriteMessage(websocket.TextMessage, data)
+		}
+		return
+	case <-time.After(10 * time.Second):
+		log.Printf("[Monitor] 获取连接超时")
+		errMsg := map[string]string{"type": "error", "message": "connection timeout"}
+		if data, err := json.Marshal(errMsg); err == nil {
+			_ = wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			_ = wsConn.WriteMessage(websocket.TextMessage, data)
+		}
+		return
+	}
+
+	// 确保在函数退出时释放连接
+	defer func() {
+		h.connectionPool.Release(userID, serverID)
+		log.Printf("[Monitor] 释放连接: userID=%s, serverID=%s", userID, serverID)
+	}()
 
     log.Printf("Monitor WebSocket connected for server: %s, using pooled connection", serverID)
 

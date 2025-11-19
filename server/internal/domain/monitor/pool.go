@@ -118,21 +118,20 @@ func (p *ConnectionPool) GetOrCreate(userID, serverID string) (*PooledConnection
 		p.mu.RUnlock()
 	}
 
-	// 创建新连接（需要写锁）
+	// 双重检查（持有写锁）
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// 双重检查（可能在等待锁期间已被其他 goroutine 创建）
 	if conn, exists := p.connections[key]; exists {
 		if conn.IsHealthy() {
+			p.mu.Unlock()
 			conn.IncRef()
 			log.Printf("[ConnectionPool] 复用刚创建的连接: key=%s, refCount=%d", key, conn.GetRefCount())
 			return conn, nil
 		}
 		delete(p.connections, key)
 	}
+	p.mu.Unlock()
 
-	// 从数据库获取服务器配置
+	// 从数据库获取服务器配置（不持有锁）
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user id: %w", err)
@@ -148,8 +147,9 @@ func (p *ConnectionPool) GetOrCreate(userID, serverID string) (*PooledConnection
 		return nil, fmt.Errorf("failed to get server config: %w", err)
 	}
 
-	// 使用带超时的上下文创建连接
-	ctx, cancel := context.WithTimeout(context.Background(), p.connectionTimeout)
+	// 创建SSH连接（不持有锁）
+	// 使用更短的超时时间
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// 在 goroutine 中执行连接操作
@@ -187,19 +187,36 @@ func (p *ConnectionPool) GetOrCreate(userID, serverID string) (*PooledConnection
 	}()
 
 	// 等待连接完成或超时
+	var newConn *PooledConnection
 	select {
 	case <-ctx.Done():
-		log.Printf("[ConnectionPool] 连接超时: key=%s, timeout=%v", key, p.connectionTimeout)
-		return nil, fmt.Errorf("connection timeout after %v", p.connectionTimeout)
+		log.Printf("[ConnectionPool] 连接超时: key=%s, timeout=10s", key)
+		return nil, fmt.Errorf("connection timeout after 10s")
 	case res := <-resultChan:
 		if res.err != nil {
 			return nil, res.err
 		}
-
-		p.connections[key] = res.conn
-		log.Printf("[ConnectionPool] 创建新连接: key=%s, serverHost=%s:%d", key, srv.Host, srv.Port)
-		return res.conn, nil
+		newConn = res.conn
 	}
+
+	// 加入连接池（持有写锁，但时间很短）
+	p.mu.Lock()
+	// 再次检查是否已被其他goroutine创建
+	if conn, exists := p.connections[key]; exists && conn.IsHealthy() {
+		p.mu.Unlock()
+		// 关闭刚创建的连接
+		if newConn.Client != nil {
+			newConn.Client.Close()
+		}
+		conn.IncRef()
+		log.Printf("[ConnectionPool] 复用其他goroutine创建的连接: key=%s, refCount=%d", key, conn.GetRefCount())
+		return conn, nil
+	}
+	p.connections[key] = newConn
+	p.mu.Unlock()
+
+	log.Printf("[ConnectionPool] 创建新连接: key=%s, serverHost=%s:%d", key, srv.Host, srv.Port)
+	return newConn, nil
 }
 
 // Release 释放连接（减少引用计数，归零时立即关闭）

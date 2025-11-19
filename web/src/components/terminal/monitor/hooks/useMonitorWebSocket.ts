@@ -368,9 +368,35 @@ export function useMonitorWebSocket({
             // 通知所有订阅者（核心：让所有页签都收到数据）
             notifySubscribers(serverId, storeMetrics)
           } else if (typeof event.data === 'string') {
-            // 处理文本消息（pong）- 优化：批量更新延迟状态
+            // 处理文本消息（控制消息）
             try {
               const msg = JSON.parse(event.data);
+
+              // 处理握手完成消息
+              if (msg && msg.type === 'handshake_complete') {
+                // WebSocket握手完成，SSH连接正在建立
+                return;
+              }
+
+              // 处理连接就绪消息
+              if (msg && msg.type === 'ready') {
+                setStatus(WSStatus.CONNECTED);
+                onStatusChange?.(WSStatus.CONNECTED);
+                updateStatus(serverId, WSStatus.CONNECTED);
+                return;
+              }
+
+              // 处理错误消息
+              if (msg && msg.type === 'error') {
+                const error = new Error(msg.message || '监控连接失败');
+                onError?.(error);
+                setStatus(WSStatus.ERROR);
+                onStatusChange?.(WSStatus.ERROR);
+                updateStatus(serverId, WSStatus.ERROR);
+                return;
+              }
+
+              // 处理pong消息（延迟测量）
               if (msg && msg.type === 'pong' && typeof msg.ts === 'number') {
                 const t0 = Number(msg.ts);
                 const t3 = Date.now();

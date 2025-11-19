@@ -13,6 +13,8 @@ export interface TerminalWebSocketOptions {
   onConnected?: () => void
   onDisconnected?: () => void
   onError?: (error: Error) => void
+  onHandshakeComplete?: () => void // 握手完成回调
+  onConnecting?: () => void // 正在连接回调
 }
 
 export class TerminalWebSocket {
@@ -24,6 +26,8 @@ export class TerminalWebSocket {
   private onConnected?: () => void
   private onDisconnected?: () => void
   private onError?: (error: Error) => void
+  private onHandshakeComplete?: () => void
+  private onConnecting?: () => void
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
   private reconnectDelay = 2000
@@ -33,6 +37,9 @@ export class TerminalWebSocket {
   // 复用 TextDecoder/TextEncoder 实例以提升性能
   private decoder = new TextDecoder("utf-8")
   private encoder = new TextEncoder()
+  // 性能监控
+  private connectStartTime = 0
+  private handshakeTime = 0
 
   constructor(options: TerminalWebSocketOptions) {
     this.serverId = options.serverId
@@ -42,6 +49,8 @@ export class TerminalWebSocket {
     this.onConnected = options.onConnected
     this.onDisconnected = options.onDisconnected
     this.onError = options.onError
+    this.onHandshakeComplete = options.onHandshakeComplete
+    this.onConnecting = options.onConnecting
   }
 
   /**
@@ -55,6 +64,13 @@ export class TerminalWebSocket {
     }
 
     try {
+      // 性能监控：记录连接开始时间
+      this.connectStartTime = performance.now()
+      performance.mark('ws-terminal-connect-start')
+
+      // 触发正在连接回调
+      this.onConnecting?.()
+
       // 构建 WebSocket URL（凭 HttpOnly Cookie 认证，不再拼接 token）
       const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?cols=${this.cols}&rows=${this.rows}`)
 
@@ -63,8 +79,8 @@ export class TerminalWebSocket {
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0
-        this.onConnected?.()
-        this.startPing()
+        // 注意：onopen只表示WebSocket握手完成，SSH连接可能还在建立中
+        // 真正的连接成功由服务器的"connected"消息通知
       }
 
       this.ws.onmessage = (event) => {
@@ -195,10 +211,24 @@ export class TerminalWebSocket {
   /**
    * 处理控制消息
    */
-  private handleControlMessage(message: { type: string; data?: { message?: string } }): void {
+  private handleControlMessage(message: { type: string; data?: { message?: string; status?: string } }): void {
     switch (message.type) {
+      case "handshake_complete":
+        // WebSocket握手完成，SSH连接正在建立
+        this.handshakeTime = performance.now() - this.connectStartTime
+        performance.mark('ws-terminal-handshake-complete')
+        performance.measure('ws-terminal-handshake', 'ws-terminal-connect-start', 'ws-terminal-handshake-complete')
+
+        this.onHandshakeComplete?.()
+        break
       case "connected":
-        // 会话已建立
+        // SSH会话已建立，可以开始使用
+        performance.mark('ws-terminal-connected')
+        performance.measure('ws-terminal-total', 'ws-terminal-connect-start', 'ws-terminal-connected')
+        performance.measure('ws-terminal-ssh-init', 'ws-terminal-handshake-complete', 'ws-terminal-connected')
+
+        this.onConnected?.()
+        this.startPing()
         break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)

@@ -178,109 +178,175 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	}
 	defer wsConn.Close()
 
-	// 获取服务器信息
-	srv, err := h.serverService.GetByID(c.Request.Context(), uuid.MustParse(userID), uuid.MustParse(serverID))
-	if err != nil {
-		h.sendError(wsConn, "server_not_found", "Server not found")
-		return
-	}
+	// 立即发送握手完成消息
+	h.sendMessage(wsConn, Message{
+		Type: "handshake_complete",
+		Data: json.RawMessage(`{"status":"connecting"}`),
+	})
 
-	// 创建 SSH 客户端（使用主机密钥验证）
-	client, err := sshDomain.NewClient(srv, h.encryptor, h.hostKeyCallback)
-	if err != nil {
-		h.sendError(wsConn, "client_creation_failed", err.Error())
-		return
+	// 创建通道用于异步初始化结果
+	type initResult struct {
+		session   *sshDomain.Session
+		dbSession *sshsession.SSHSession
+		stdin     io.WriteCloser
+		stdout    io.Reader
+		stderr    io.Reader
+		err       error
 	}
+	resultChan := make(chan initResult, 1)
 
-	// 连接到服务器
-	if err := client.Connect(srv.Host, srv.Port); err != nil {
-		// 连接失败，更新服务器状态为离线
-		srv.UpdateStatus(server.StatusOffline)
-		if updateErr := h.serverRepo.UpdateStatus(c.Request.Context(), srv.ID, srv.Status, srv.LastConnected); updateErr != nil {
-			log.Printf("Failed to update server status to offline: %v", updateErr)
+	// 异步建立SSH连接和初始化
+	go func() {
+		// 获取服务器信息
+		srv, err := h.serverService.GetByID(context.Background(), uuid.MustParse(userID), uuid.MustParse(serverID))
+		if err != nil {
+			resultChan <- initResult{err: fmt.Errorf("server_not_found: %w", err)}
+			return
 		}
-		h.sendError(wsConn, "connection_failed", err.Error())
+
+		// 创建 SSH 客户端（使用主机密钥验证）
+		client, err := sshDomain.NewClient(srv, h.encryptor, h.hostKeyCallback)
+		if err != nil {
+			resultChan <- initResult{err: fmt.Errorf("client_creation_failed: %w", err)}
+			return
+		}
+
+		// 连接到服务器
+		if err := client.Connect(srv.Host, srv.Port); err != nil {
+			// 异步更新服务器状态为离线
+			go func() {
+				srv.UpdateStatus(server.StatusOffline)
+				if updateErr := h.serverRepo.UpdateStatus(context.Background(), srv.ID, srv.Status, srv.LastConnected); updateErr != nil {
+					log.Printf("Failed to update server status to offline: %v", updateErr)
+				}
+			}()
+			resultChan <- initResult{err: fmt.Errorf("connection_failed: %w", err)}
+			return
+		}
+
+		// 异步更新服务器状态为在线
+		go func() {
+			srv.UpdateStatus(server.StatusOnline)
+			if err := h.serverRepo.UpdateStatus(context.Background(), srv.ID, srv.Status, srv.LastConnected); err != nil {
+				log.Printf("Failed to update server status: %v", err)
+			}
+		}()
+
+		// 创建 SSH 会话
+		sshSession, err := client.NewSession()
+		if err != nil {
+			client.Close()
+			resultChan <- initResult{err: fmt.Errorf("session_creation_failed: %w", err)}
+			return
+		}
+
+		// 创建会话记录
+		session := sshDomain.NewSession(userID, serverID, client, cols, rows)
+		session.SSHSession = sshSession
+
+		// 获取客户端IP
+		clientIP := c.ClientIP()
+		clientPort := 0 // WebSocket无法获取客户端端口，使用0
+
+		// 异步创建数据库会话记录
+		var dbSession *sshsession.SSHSession
+		dbSessionChan := make(chan *sshsession.SSHSession, 1)
+		go func() {
+			createReq := &sshsession.CreateSSHSessionRequest{
+				UserID:       uuid.MustParse(userID),
+				ServerID:     uuid.MustParse(serverID),
+				SessionID:    session.ID,
+				ClientIP:     clientIP,
+				ClientPort:   clientPort,
+				TerminalType: "xterm-256color",
+			}
+			dbSess, err := h.sshSessionService.CreateSSHSession(createReq)
+			if err != nil {
+				log.Printf("Failed to create SSH session record: %v", err)
+				dbSessionChan <- nil
+			} else {
+				dbSessionChan <- dbSess
+			}
+		}()
+
+		// 设置终端模式
+		modes := ssh.TerminalModes{
+			ssh.ECHO:          1,     // 启用回显
+			ssh.TTY_OP_ISPEED: 14400, // 输入速度 = 14.4kbaud
+			ssh.TTY_OP_OSPEED: 14400, // 输出速度 = 14.4kbaud
+		}
+
+		// 请求伪终端
+		if err := sshSession.RequestPty("xterm-256color", rows, cols, modes); err != nil {
+			resultChan <- initResult{err: fmt.Errorf("pty_request_failed: %w", err)}
+			return
+		}
+
+		// 获取输入输出管道
+		stdin, err := sshSession.StdinPipe()
+		if err != nil {
+			resultChan <- initResult{err: fmt.Errorf("stdin_pipe_failed: %w", err)}
+			return
+		}
+
+		stdout, err := sshSession.StdoutPipe()
+		if err != nil {
+			resultChan <- initResult{err: fmt.Errorf("stdout_pipe_failed: %w", err)}
+			return
+		}
+
+		stderr, err := sshSession.StderrPipe()
+		if err != nil {
+			resultChan <- initResult{err: fmt.Errorf("stderr_pipe_failed: %w", err)}
+			return
+		}
+
+		// 启动 shell
+		if err := sshSession.Shell(); err != nil {
+			resultChan <- initResult{err: fmt.Errorf("shell_start_failed: %w", err)}
+			return
+		}
+
+		// 等待数据库会话创建完成（非阻塞）
+		select {
+		case dbSession = <-dbSessionChan:
+		case <-time.After(100 * time.Millisecond):
+			// 超时则继续，不阻塞连接建立
+			log.Printf("Database session creation timeout, continuing...")
+		}
+
+		resultChan <- initResult{
+			session:   session,
+			dbSession: dbSession,
+			stdin:     stdin,
+			stdout:    stdout,
+			stderr:    stderr,
+			err:       nil,
+		}
+	}()
+
+	// 等待初始化完成或超时
+	var result initResult
+	select {
+	case result = <-resultChan:
+		if result.err != nil {
+			h.sendError(wsConn, "initialization_failed", result.err.Error())
+			return
+		}
+	case <-time.After(10 * time.Second):
+		h.sendError(wsConn, "initialization_timeout", "SSH connection timeout")
 		return
 	}
 
-	// 性能优化：仅更新服务器状态和最后连接时间（避免慢查询）
-	srv.UpdateStatus(server.StatusOnline)
-	if err := h.serverRepo.UpdateStatus(c.Request.Context(), srv.ID, srv.Status, srv.LastConnected); err != nil {
-		log.Printf("Failed to update server status: %v", err)
-		// 不中断连接，只记录错误
-	}
+	// 初始化成功，注册会话
+	session := result.session
+	dbSession := result.dbSession
+	stdin := result.stdin
+	stdout := result.stdout
+	stderr := result.stderr
 
-	// 创建 SSH 会话
-	sshSession, err := client.NewSession()
-	if err != nil {
-		client.Close()
-		h.sendError(wsConn, "session_creation_failed", err.Error())
-		return
-	}
-
-	// 创建会话记录
-	session := sshDomain.NewSession(userID, serverID, client, cols, rows)
-	session.SSHSession = sshSession
 	h.sessionManager.Add(session)
 	defer h.sessionManager.Remove(session.ID)
-
-	// 获取客户端IP
-	clientIP := c.ClientIP()
-	clientPort := 0 // WebSocket无法获取客户端端口，使用0
-
-	// 创建数据库会话记录
-	createReq := &sshsession.CreateSSHSessionRequest{
-		UserID:       uuid.MustParse(userID),
-		ServerID:     uuid.MustParse(serverID),
-		SessionID:    session.ID,
-		ClientIP:     clientIP,
-		ClientPort:   clientPort,
-		TerminalType: "xterm-256color",
-	}
-
-	dbSession, err := h.sshSessionService.CreateSSHSession(createReq)
-	if err != nil {
-		log.Printf("Failed to create SSH session record: %v", err)
-		// 不中断连接，只记录错误
-	}
-
-	// 设置终端模式
-	modes := ssh.TerminalModes{
-		ssh.ECHO:          1,     // 启用回显
-		ssh.TTY_OP_ISPEED: 14400, // 输入速度 = 14.4kbaud
-		ssh.TTY_OP_OSPEED: 14400, // 输出速度 = 14.4kbaud
-	}
-
-	// 请求伪终端
-	if err := sshSession.RequestPty("xterm-256color", rows, cols, modes); err != nil {
-		h.sendError(wsConn, "pty_request_failed", err.Error())
-		return
-	}
-
-	// 获取输入输出管道
-	stdin, err := sshSession.StdinPipe()
-	if err != nil {
-		h.sendError(wsConn, "stdin_pipe_failed", err.Error())
-		return
-	}
-
-	stdout, err := sshSession.StdoutPipe()
-	if err != nil {
-		h.sendError(wsConn, "stdout_pipe_failed", err.Error())
-		return
-	}
-
-	stderr, err := sshSession.StderrPipe()
-	if err != nil {
-		h.sendError(wsConn, "stderr_pipe_failed", err.Error())
-		return
-	}
-
-	// 启动 shell
-	if err := sshSession.Shell(); err != nil {
-		h.sendError(wsConn, "shell_start_failed", err.Error())
-		return
-	}
 
 	// 发送连接成功消息
 	h.sendMessage(wsConn, Message{
