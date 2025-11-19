@@ -187,19 +187,6 @@ export function createTransferColumns(options?: TransferColumnsOptions): ColumnD
       },
     },
 
-    // 速度列
-    {
-      accessorKey: "speed",
-      header: "速度",
-      cell: ({ row }) => {
-        return (
-          <div className="font-mono text-sm">
-            {formatSpeed(row.getValue("speed"))}
-          </div>
-        )
-      },
-    },
-
     // 状态列
     {
       accessorKey: "status",

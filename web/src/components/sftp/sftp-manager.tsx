@@ -130,6 +130,7 @@ interface SftpManagerProps {
   // 传输任务管理(从外部传入)
   transferTasks?: TransferTask[]
   onClearCompletedTransfers?: () => void
+  onCancelTransfer?: (taskId: string) => void
 }
 
 export function SftpManager(props: SftpManagerProps) {
@@ -164,9 +165,11 @@ export function SftpManager(props: SftpManagerProps) {
     onToggleFullscreen,
     dragHandleListeners,
     dragHandleAttributes,
-    transferTasks = [],  // 从外部传入
+    transferTasks,  // 从外部传入; 未传入则不展示传输任务按钮
     onClearCompletedTransfers,
+    onCancelTransfer,
   } = props
+  const effectiveTransferTasks = transferTasks ?? []
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const deferredSearchTerm = useDeferredValue(searchTerm)
@@ -1099,6 +1102,8 @@ export function SftpManager(props: SftpManagerProps) {
         return <CheckCircle2 className="h-4 w-4 text-green-500" />
       case "failed":
         return <XCircle className="h-4 w-4 text-red-500" />
+      case "cancelled":
+        return <XCircle className="h-4 w-4 text-zinc-400" />
       case "pending":
         return <Clock className="h-4 w-4 text-yellow-500" />
       default:
@@ -1401,6 +1406,127 @@ export function SftpManager(props: SftpManagerProps) {
           >
             <List className="h-3.5 w-3.5" />
           </Button>
+
+          {/* 上传任务按钮（仅在传入 transferTasks 时展示） */}
+          {transferTasks && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-7 w-7 rounded-md transition-all duration-200 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400 relative",
+                  )}
+                  title="传输任务"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {effectiveTransferTasks.filter(t => t.status !== "completed" && t.status !== "failed" && t.status !== "cancelled").length > 0 && (
+                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-blue-500 text-white text-[10px] font-medium flex items-center justify-center">
+                      {effectiveTransferTasks.filter(t => t.status !== "completed" && t.status !== "failed" && t.status !== "cancelled").length}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[400px] max-h-[500px] overflow-hidden">
+                {/* 头部 */}
+                <div className="px-3 py-2 flex items-center justify-between border-b">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm font-medium">
+                      传输任务 ({effectiveTransferTasks.length})
+                    </span>
+                  </div>
+                  {effectiveTransferTasks.some(t => t.status === "completed" || t.status === "failed" || t.status === "cancelled") && onClearCompletedTransfers && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={handleClearCompleted}
+                    >
+                      清除已完成
+                    </Button>
+                  )}
+                </div>
+
+                {/* 任务列表 */}
+                {effectiveTransferTasks.length > 0 ? (
+                  <div className="max-h-[400px] overflow-y-auto">
+                    {effectiveTransferTasks.map(task => (
+                      <div
+                        key={task.id}
+                        className={cn(
+                          "px-3 py-2 border-b last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors",
+                        )}
+                      >
+                        {/* 文件名和状态 */}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          {getStatusIcon(task.status)}
+                          <span className="text-sm font-medium truncate flex-1">
+                            {task.fileName}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] h-4 px-1 shrink-0"
+                          >
+                            {task.type === "upload" ? "上传" : "下载"}
+                          </Badge>
+                        </div>
+
+                        {/* 进度条 */}
+                        {task.status !== "completed" && task.status !== "failed" && (
+                          <Progress value={task.progress} className="h-1 mb-1.5" />
+                        )}
+
+                        {/* 详细信息 + 取消操作 */}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          {task.status === "uploading" || task.status === "downloading" ? (
+                            <>
+                              {task.stage && (
+                                <>
+                                  <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                                    {task.stage === 'http' ? 'HTTP' : 'SFTP'}
+                                  </Badge>
+                                  <span>•</span>
+                                </>
+                              )}
+                              <span>{task.speed}</span>
+                              <span>•</span>
+                              <span>{task.timeRemaining}</span>
+                            </>
+                          ) : task.status === "completed" ? (
+                            <span className="text-green-600 dark:text-green-400">已完成</span>
+                          ) : task.status === "failed" ? (
+                            <span className="text-red-600 dark:text-red-400">失败</span>
+                          ) : task.status === "cancelled" ? (
+                            <span className="text-zinc-500 dark:text-zinc-400">已取消</span>
+                          ) : null}
+                        </div>
+                          <div className="flex items-center gap-2">
+                            <span>{task.progress}%</span>
+                            {onCancelTransfer && (task.status === "uploading" || task.status === "downloading") && (
+                              <button
+                                type="button"
+                                onClick={() => onCancelTransfer(task.id)}
+                                className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-500 transition-colors"
+                              >
+                                <XCircle className="h-3 w-3" />
+                                <span>取消</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                    暂无传输任务
+                  </div>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* 全屏/退出全屏按钮 */}
           {onToggleFullscreen && (
@@ -2021,73 +2147,6 @@ export function SftpManager(props: SftpManagerProps) {
         onConfirm={handleChmod}
       />
 
-      {/* 传输任务面板 */}
-      {transferTasks.length > 0 && (
-        <div className="border-t max-h-48 overflow-auto scrollbar-custom">
-          <div className="px-3 py-2 flex items-center justify-between border-b border-zinc-800/30">
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-blue-500" />
-              <span className="text-xs font-medium">
-                传输任务 ({transferTasks.filter(t => t.status !== "completed").length})
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={handleClearCompleted}
-            >
-              清除已完成
-            </Button>
-          </div>
-          <div className="p-2 space-y-2">
-            {transferTasks.map(task => (
-              <div
-                key={task.id}
-                className={cn(
-                  "p-2 rounded-lg border bg-white border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
-                )}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {getStatusIcon(task.status)}
-                    <span className="text-xs font-medium truncate">
-                      {task.fileName}
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] h-4 px-1"
-                    >
-                      {task.type === "upload" ? "上传" : "下载"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {task.status === "uploading" || task.status === "downloading" ? (
-                      <>
-                        {task.stage && (
-                          <>
-                            <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                              {task.stage === 'http' ? 'HTTP阶段' : 'SFTP阶段'}
-                            </Badge>
-                            <span>•</span>
-                          </>
-                        )}
-                        <span>{task.speed}</span>
-                        <span>•</span>
-                        <span>{task.timeRemaining}</span>
-                      </>
-                    ) : null}
-                    <span>{task.progress}%</span>
-                  </div>
-                </div>
-                {task.status !== "completed" && (
-                  <Progress value={task.progress} className="h-1" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 新建文件夹对话框 */}
       <Dialog open={showCreateFolder} onOpenChange={setShowCreateFolder}>

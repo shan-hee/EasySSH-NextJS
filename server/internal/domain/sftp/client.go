@@ -1,6 +1,8 @@
 package sftp
 
 import (
+    "context"
+    "errors"
     "fmt"
     "io"
     "os"
@@ -110,6 +112,11 @@ func (c *Client) UploadFile(localReader io.Reader, remotePath string) error {
 // UploadFileWithProgress 上传文件并报告进度
 // onProgress: 进度回调函数，参数为已传输字节数
 func (c *Client) UploadFileWithProgress(localReader io.Reader, remotePath string, onProgress func(loaded int64)) error {
+	return c.UploadFileWithProgressWithContext(context.Background(), localReader, remotePath, onProgress)
+}
+
+// UploadFileWithProgressWithContext 上传文件并报告进度，支持上下文取消
+func (c *Client) UploadFileWithProgressWithContext(ctx context.Context, localReader io.Reader, remotePath string, onProgress func(loaded int64)) error {
 	// 创建远程文件
 	remoteFile, err := c.sftpClient.Create(remotePath)
 	if err != nil {
@@ -119,8 +126,13 @@ func (c *Client) UploadFileWithProgress(localReader io.Reader, remotePath string
 
 	// 如果没有进度回调，直接复制
 	if onProgress == nil {
-		_, err = io.Copy(remoteFile, localReader)
+		_, err = io.Copy(remoteFile, &ctxReader{ctx: ctx, reader: localReader})
 		if err != nil {
+			// 取消或出错时删除已上传的部分文件
+			_ = c.sftpClient.Remove(remotePath)
+			if errors.Is(err, context.Canceled) {
+				return context.Canceled
+			}
 			return fmt.Errorf("failed to upload file: %w", err)
 		}
 		return nil
@@ -134,8 +146,13 @@ func (c *Client) UploadFileWithProgress(localReader io.Reader, remotePath string
 		reportEvery: 65536, // 每 64KB 报告一次进度
 	}
 
-	_, err = io.Copy(remoteFile, reader)
+	_, err = io.Copy(remoteFile, &ctxReader{ctx: ctx, reader: reader})
 	if err != nil {
+		// 取消或出错时删除已上传的部分文件
+		_ = c.sftpClient.Remove(remotePath)
+		if errors.Is(err, context.Canceled) {
+			return context.Canceled
+		}
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 
@@ -143,6 +160,21 @@ func (c *Client) UploadFileWithProgress(localReader io.Reader, remotePath string
 	onProgress(reader.loaded)
 
 	return nil
+}
+
+// ctxReader 在每次读取前检查上下文是否已取消
+type ctxReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *ctxReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+	}
+	return r.reader.Read(p)
 }
 
 // progressReader 包装 io.Reader 以跟踪读取进度

@@ -37,6 +37,7 @@ interface FileManagerPanelProps {
   // 传输任务管理
   transferTasks?: TransferTask[]
   onClearCompletedTransfers?: () => void
+  onCancelTransfer?: (taskId: string) => void
   // 将文件管理器渲染到指定容器(例如终端内部),而非整个页面
   mountContainer?: HTMLElement | null
   // 面板顶部锚点(用于位于工具栏下方)
@@ -50,6 +51,7 @@ export function FileManagerPanel({
   anchorTop,
   transferTasks,
   onClearCompletedTransfers,
+   onCancelTransfer,
   ...sftpProps
 }: FileManagerPanelProps) {
   const [width, setWidth] = useState(600) // 默认宽度
@@ -199,6 +201,7 @@ export function FileManagerPanel({
                 onDisconnect={onClose}
                 transferTasks={transferTasks}
                 onClearCompletedTransfers={onClearCompletedTransfers}
+                onCancelTransfer={onCancelTransfer}
               />
             ) : (
               <div className="flex items-center justify-center h-full">

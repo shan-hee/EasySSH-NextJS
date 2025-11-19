@@ -278,6 +278,7 @@ export function TabTerminalContent({
             onDisconnect={() => setTabState(session.id, { isFileManagerOpen: false })}
             transferTasks={sftpSession.transferTasks}
             onClearCompletedTransfers={sftpSession.clearCompletedTransfers}
+            onCancelTransfer={sftpSession.cancelTransfer}
           />
         )}
 

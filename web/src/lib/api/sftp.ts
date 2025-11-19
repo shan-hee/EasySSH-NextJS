@@ -175,11 +175,16 @@ export const sftpApi = {
     path: string,
     file: File,
     onProgress?: (loaded: number, total: number) => void,
-    wsTaskId?: string
+    wsTaskId?: string,
+    onXhr?: (xhr: XMLHttpRequest) => void
   ): Promise<FileInfo | null> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       const apiUrl = getApiUrl()
+
+      if (onXhr) {
+        onXhr(xhr)
+      }
 
       // 监听上传进度事件（HTTP 阶段）
       if (onProgress) {
@@ -223,6 +228,11 @@ export const sftpApi = {
       // 监听错误事件
       xhr.onerror = () => {
         reject(new Error("Network error during upload"))
+      }
+
+      // 监听中断事件（例如调用 xhr.abort）
+      xhr.onabort = () => {
+        reject(new Error("Upload aborted"))
       }
 
       // 监听超时事件

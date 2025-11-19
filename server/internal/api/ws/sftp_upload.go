@@ -29,6 +29,8 @@ type UploadProgressMessage struct {
 type SFTPUploadHandler struct {
 	// 存储活跃的 WebSocket 连接，key 是 taskID
 	connections map[string]*websocket.Conn
+	// 存储每个任务的取消函数（由 REST 上传逻辑注册）
+	cancelFuncs map[string]func()
 	mu          sync.RWMutex
 }
 
@@ -36,6 +38,7 @@ type SFTPUploadHandler struct {
 func NewSFTPUploadHandler() *SFTPUploadHandler {
 	return &SFTPUploadHandler{
 		connections: make(map[string]*websocket.Conn),
+		cancelFuncs: make(map[string]func()),
 	}
 }
 
@@ -84,9 +87,9 @@ func (h *SFTPUploadHandler) HandleUploadWebSocket(c *gin.Context) {
 	stopHeartbeat := make(chan struct{})
 	go h.heartbeat(wsConn, taskID, stopHeartbeat)
 
-	// 等待客户端关闭或读取错误（客户端只发送 pong）
+	// 等待客户端消息（目前用于心跳和取消指令）
 	for {
-		_, _, err := wsConn.ReadMessage()
+		msgType, data, err := wsConn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				log.Printf("[SFTPUploadWS] 客户端正常关闭: taskID=%s", taskID)
@@ -95,12 +98,37 @@ func (h *SFTPUploadHandler) HandleUploadWebSocket(c *gin.Context) {
 			}
 			break
 		}
+
+		// 仅处理文本消息中的控制指令（例如取消上传）
+		if msgType == websocket.TextMessage {
+			var ctrl struct {
+				Type   string `json:"type"`
+				TaskID string `json:"task_id"`
+			}
+			if err := json.Unmarshal(data, &ctrl); err != nil {
+				log.Printf("[SFTPUploadWS] 解析控制消息失败: taskID=%s, error=%v", taskID, err)
+				continue
+			}
+
+			if ctrl.Type == "cancel" {
+				log.Printf("[SFTPUploadWS] 收到取消指令: taskID=%s", taskID)
+				h.mu.RLock()
+				cancel := h.cancelFuncs[taskID]
+				h.mu.RUnlock()
+				if cancel != nil {
+					cancel()
+				} else {
+					log.Printf("[SFTPUploadWS] 未找到取消函数: taskID=%s", taskID)
+				}
+			}
+		}
 	}
 
 	// 清理
 	close(stopHeartbeat)
 	h.mu.Lock()
 	delete(h.connections, taskID)
+	delete(h.cancelFuncs, taskID)
 	h.mu.Unlock()
 	wsConn.Close()
 
@@ -164,4 +192,18 @@ func (h *SFTPUploadHandler) SendProgress(taskID string, msg UploadProgressMessag
 // GetHandler 获取处理器引用（用于在 REST API 中调用 SendProgress）
 func (h *SFTPUploadHandler) GetHandler() *SFTPUploadHandler {
 	return h
+}
+
+// RegisterCancelFunc 为指定任务注册取消函数
+func (h *SFTPUploadHandler) RegisterCancelFunc(taskID string, cancel func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cancelFuncs[taskID] = cancel
+}
+
+// UnregisterCancelFunc 移除指定任务的取消函数
+func (h *SFTPUploadHandler) UnregisterCancelFunc(taskID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.cancelFuncs, taskID)
 }

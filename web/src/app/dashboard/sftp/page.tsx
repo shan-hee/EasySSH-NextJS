@@ -39,6 +39,7 @@ import { createPortal } from 'react-dom'
 import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
+import { useFileTransfer } from "@/hooks/useFileTransfer"
 
 // 将后端FileInfo转换为组件使用的文件格式
 type ComponentFile = {
@@ -271,6 +272,9 @@ export default function SftpPage() {
  const [fullscreenSessionId, setFullscreenSessionId] = useState<string | null>(null)
  const [activeId, setActiveId] = useState<string | null>(null) // 当前拖拽的会话ID
  const parentRef = useRef<HTMLDivElement>(null)
+
+ // 文件传输管理（仅用于上传任务 UI）
+ const { tasks: transferTasks, uploadFile, clearCompleted, cancelTask } = useFileTransfer()
 
  // 会话标识颜色列表
  const sessionColors = [
@@ -547,47 +551,48 @@ export default function SftpPage() {
  }
  }
 
- // 上传文件
+ // 上传文件（接入统一上传任务 UI）
  const handleUpload = async (
    sessionId: string,
    uploadFiles: FileList,
    onProgress?: (fileName: string, loaded: number, total: number) => void
  ) => {
- const session = sessions.find(s => s.id === sessionId)
- if (!session || !session.isConnected) return
+   const session = sessions.find(s => s.id === sessionId)
+   if (!session || !session.isConnected) return
 
- const files = Array.from(uploadFiles)
- let successCount = 0
- let failCount = 0
+   const files = Array.from(uploadFiles)
+   let successCount = 0
+   let failCount = 0
 
- for (const file of files) {
- try {
- await sftpApi.uploadFile(
-   session.serverId,
-   session.currentPath,
-   file,
-   onProgress
-     ? (loaded, total) => {
-         onProgress(file.name, loaded, total)
-       }
-     : undefined
- )
- successCount++
- } catch (error: unknown) {
- console.error(`Failed to upload ${file.name}:`, error)
- failCount++
- }
- }
+   for (const file of files) {
+     try {
+       await uploadFile(
+         session.serverId,
+         session.currentPath,
+         file,
+         onProgress
+           ? (loaded, total) => {
+               onProgress(file.name, loaded, total)
+             }
+           : undefined,
+         true // 启用 WebSocket 进度（与终端文件管理器保持一致）
+       )
+       successCount++
+     } catch (error: unknown) {
+       console.error(`Failed to upload ${file.name}:`, error)
+       failCount++
+     }
+   }
 
- if (successCount > 0) {
- toast.success(`成功上传 ${successCount} 个文件`)
- // 刷新文件列表
- await handleRefreshSession(sessionId)
- }
+   if (successCount > 0) {
+     toast.success(`成功上传 ${successCount} 个文件`)
+     // 刷新文件列表
+     await handleRefreshSession(sessionId)
+   }
 
- if (failCount > 0) {
- toast.error(`${failCount} 个文件上传失败`)
- }
+   if (failCount > 0) {
+     toast.error(`${failCount} 个文件上传失败`)
+   }
  }
 
  // 下载文件
@@ -744,32 +749,34 @@ export default function SftpPage() {
  }
  }
 
- // 批量下载文件
- const handleBatchDownload = async (
+ // 批量下载文件（使用浏览器原生下载机制）
+ const handleBatchDownload = useCallback(async (
    sessionId: string,
    fileNames: string[],
-   mode?: "fast" | "compatible",
+   mode: "fast" | "compatible" = "fast",
    excludePatterns?: string[]
  ) => {
- const session = sessions.find(s => s.id === sessionId)
- if (!session || !session.isConnected) {
- throw new Error("会话未连接")
- }
+   const session = sessions.find(s => s.id === sessionId)
+   if (!session || !session.isConnected) {
+     throw new Error("会话未连接")
+   }
 
- // 构建完整路径
- const filePaths = fileNames.map(fileName =>
- `${session.currentPath}/${fileName}`.replace("//", "/")
- )
+   // 构建完整路径
+   const filePaths = fileNames.map(fileName =>
+     `${session.currentPath}/${fileName}`.replace("//", "/")
+   )
 
- try {
- await sftpApi.batchDownload(session.serverId, filePaths, mode, excludePatterns)
- toast.success(`开始下载 ${fileNames.length} 个文件 (${mode === "fast" ? "快速模式" : "兼容模式"})`)
- } catch (error: unknown) {
- console.error("Failed to batch download:", error)
- toast.error(getErrorMessage(error, "批量下载失败"))
- throw error
- }
- }
+   try {
+     console.log('[handleBatchDownload] 开始批量下载:', { serverId: session.serverId, filePaths, mode })
+     await sftpApi.batchDownload(session.serverId, filePaths, mode, excludePatterns)
+     console.log('[handleBatchDownload] 批量下载触发完成')
+     toast.success(`开始下载 ${fileNames.length} 个文件 (${mode === "fast" ? "快速模式" : "兼容模式"})`)
+   } catch (error: unknown) {
+     console.error("Failed to batch download:", error)
+     toast.error(getErrorMessage(error, "批量下载失败"))
+     throw error
+   }
+ }, [sessions])
 
  // 获取网格布局类名
  const getGridLayout = (count: number) => {
@@ -1036,6 +1043,9 @@ export default function SftpPage() {
                 onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
                 onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
                 onToggleFullscreen={() => toggleFullscreen(session.id)}
+                transferTasks={transferTasks}
+                onClearCompletedTransfers={clearCompleted}
+                onCancelTransfer={cancelTask}
  />
  ) : (
  renderWelcomePage()
@@ -1108,6 +1118,9 @@ export default function SftpPage() {
                 onSaveFile={(fileName, content) => handleSaveFile(session.id, fileName, content)}
                 onRenameSession={(newLabel) => handleRenameSession(session.id, newLabel)}
                 onToggleFullscreen={() => toggleFullscreen(session.id)}
+                transferTasks={transferTasks}
+                onClearCompletedTransfers={clearCompleted}
+                onCancelTransfer={cancelTask}
  />
  ) : (
  renderWelcomePage()

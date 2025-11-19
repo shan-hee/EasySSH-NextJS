@@ -3,6 +3,8 @@ package rest
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -188,6 +190,12 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 
 	// 如果提供了 WebSocket 任务 ID，使用带进度跟踪的上传
 	if wsTaskID != "" && h.uploadWSHandler != nil {
+		// 创建可取消的上下文，并注册到 WebSocket 处理器
+		ctx, cancel := context.WithCancel(c.Request.Context())
+		defer cancel()
+		h.uploadWSHandler.RegisterCancelFunc(wsTaskID, cancel)
+		defer h.uploadWSHandler.UnregisterCancelFunc(wsTaskID)
+
 		// 进度跟踪变量
 		var (
 			lastProgressTime = time.Now()
@@ -196,7 +204,7 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		)
 
 		// 上传文件并报告进度
-		err = sftpClient.UploadFileWithProgress(file, remotePath, func(loaded int64) {
+		err = sftpClient.UploadFileWithProgressWithContext(ctx, file, remotePath, func(loaded int64) {
 			now := time.Now()
 			elapsed := now.Sub(lastProgressTime).Seconds()
 
@@ -221,6 +229,17 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		})
 
 		if err != nil {
+			// 取消导致的错误单独处理
+			if errors.Is(err, context.Canceled) {
+				_ = h.uploadWSHandler.SendProgress(wsTaskID, ws.UploadProgressMessage{
+					Type:    "cancelled",
+					TaskID:  wsTaskID,
+					Message: "upload cancelled",
+				})
+				RespondError(c, http.StatusRequestTimeout, "upload_cancelled", "upload cancelled by client")
+				return
+			}
+
 			// 发送错误消息
 			_ = h.uploadWSHandler.SendProgress(wsTaskID, ws.UploadProgressMessage{
 				Type:    "error",

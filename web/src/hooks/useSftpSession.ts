@@ -188,7 +188,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
   );
 
   /**
-   * 下载文件
+   * 下载文件（使用浏览器原生下载）
    */
   const downloadFile = useCallback(
     async (fileName: string) => {
@@ -199,14 +199,16 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         ? `${currentPath}${fileName}`
         : `${currentPath}/${fileName}`;
 
-      await fileTransfer.downloadFile(
-        serverId,
-        fullPath,
-        fileName,
-        file.sizeBytes
-      );
+      const downloadUrl = sftpApi.getDownloadUrl(serverId, fullPath);
+
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     },
-    [serverId, currentPath, files, fileTransfer]
+    [serverId, currentPath, files]
   );
 
   /**
@@ -399,7 +401,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
   );
 
   /**
-   * 批量下载文件(打包为 ZIP 或 tar.gz)
+   * 批量下载文件(打包为 ZIP 或 tar.gz，使用浏览器原生下载)
    */
   const batchDownloadFiles = useCallback(
     async (fileNames: string[], mode: "fast" | "compatible" = "fast", excludePatterns?: string[]) => {
@@ -411,7 +413,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
             : `${currentPath}/${fileName}`
         );
 
-        // 调用批量下载 API,传递 mode 和 excludePatterns
+        // 直接调用 API 的批量下载，内部使用浏览器下载机制
         await sftpApi.batchDownload(serverId, fullPaths, mode, excludePatterns);
       } catch (error) {
         console.error('[useSftpSession] 批量下载失败:', error);

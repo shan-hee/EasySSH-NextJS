@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
 import { sftpApi, type FileInfo } from '@/lib/api/sftp';
-import { getWsUrl, getApiUrl } from '@/lib/config';
+import { getWsUrl } from '@/lib/config';
 
 /**
  * 传输任务接口
@@ -12,7 +12,7 @@ export interface TransferTask {
   fileSize: string;
   fileSizeBytes: number;
   progress: number;
-  status: 'pending' | 'uploading' | 'downloading' | 'completed' | 'failed';
+  status: 'pending' | 'uploading' | 'downloading' | 'completed' | 'failed' | 'cancelled';
   type: 'upload' | 'download';
   speed?: string;
   timeRemaining?: string;
@@ -29,6 +29,7 @@ export interface TransferTask {
 export function useFileTransfer() {
   const [tasks, setTasks] = useState<TransferTask[]>([]);
   const xhrRefs = useRef<Map<string, XMLHttpRequest>>(new Map());
+  const wsRefs = useRef<Map<string, WebSocket>>(new Map());
 
   /**
    * 创建上传任务
@@ -42,23 +43,6 @@ export function useFileTransfer() {
       progress: 0,
       status: 'pending',
       type: 'upload',
-      startTime: Date.now(),
-      bytesTransferred: 0,
-    };
-  }, []);
-
-  /**
-   * 创建下载任务
-   */
-  const createDownloadTask = useCallback((fileName: string, fileSize: number): TransferTask => {
-    return {
-      id: `download-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      fileName,
-      fileSize: formatBytesString(fileSize),
-      fileSizeBytes: fileSize,
-      progress: 0,
-      status: 'pending',
-      type: 'download',
       startTime: Date.now(),
       bytesTransferred: 0,
     };
@@ -119,6 +103,8 @@ export function useFileTransfer() {
           const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}`);
 
           wsConnection = new WebSocket(wsUrl);
+          // 记录 WebSocket 连接,以支持取消时发送控制消息
+          wsRefs.current.set(task.id, wsConnection);
 
           // WebSocket 消息处理
           wsConnection.onmessage = (event) => {
@@ -143,6 +129,13 @@ export function useFileTransfer() {
                   status: 'completed',
                   bytesTransferred: file.size,
                   stage: 'sftp',
+                });
+              } else if (msg.type === 'cancelled') {
+                // 服务器端 SFTP 阶段已取消
+                updateTaskProgress(task.id, {
+                  status: 'cancelled',
+                  stage: 'sftp',
+                  error: '已取消',
                 });
               } else if (msg.type === 'error') {
                 console.error('[useFileTransfer] SFTP error:', msg.message);
@@ -185,13 +178,16 @@ export function useFileTransfer() {
           onProgress?.(loaded, total);
         };
 
-        // 调用 API 上传（传递任务 ID 以便后端推送 SFTP 进度）
+        // 调用 API 上传（传递任务 ID 以便后端推送 SFTP 进度，并保存 xhr 以支持取消）
         const fileInfo = await sftpApi.uploadFile(
           serverId,
           remotePath,
           file,
           httpProgressCallback,
-          enableWebSocket && wsConnected ? task.id : undefined
+          enableWebSocket && wsConnected ? task.id : undefined,
+          (xhr) => {
+            xhrRefs.current.set(task.id, xhr);
+          }
         );
 
         // HTTP 上传完成，如果没有 WebSocket，直接标记完成
@@ -206,16 +202,30 @@ export function useFileTransfer() {
         return fileInfo ?? null
 
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : '上传失败';
+        const message = error instanceof Error ? error.message : String(error);
+        const isAborted =
+          message === 'Upload aborted' ||
+          message.toLowerCase().includes('upload cancelled');
+
         updateTaskProgress(task.id, {
-          status: 'failed',
-          error: errorMessage,
+          status: isAborted ? 'cancelled' : 'failed',
+          error: isAborted ? '已取消' : (message || '上传失败'),
         });
+
+        // 对于用户主动取消,不再向上传抛错,避免外层弹“失败”提示
+        if (isAborted) {
+          return null;
+        }
         throw error;
       } finally {
+        // 清理 xhr 引用
+        xhrRefs.current.delete(task.id);
         // 清理 WebSocket 连接
-        if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-          wsConnection.close();
+        if (wsConnection) {
+          if (wsConnection.readyState === WebSocket.OPEN) {
+            wsConnection.close();
+          }
+          wsRefs.current.delete(task.id);
         }
       }
     },
@@ -223,109 +233,33 @@ export function useFileTransfer() {
   );
 
   /**
-   * 下载文件
-   */
-  const downloadFile = useCallback(
-    async (
-      serverId: string,
-      remotePath: string,
-      fileName: string,
-      fileSize: number
-    ): Promise<void> => {
-      const task = createDownloadTask(fileName, fileSize);
-      setTasks(prev => [...prev, task]);
-
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhrRefs.current.set(task.id, xhr);
-
-        // 设置响应类型为blob
-        xhr.responseType = 'blob';
-
-        // 进度监听
-        xhr.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            const progress = Math.round((e.loaded / e.total) * 100);
-            updateTaskProgress(task.id, {
-              progress,
-              bytesTransferred: e.loaded,
-              status: 'downloading',
-            });
-          }
-        });
-
-        // 完成监听
-        xhr.addEventListener('load', () => {
-          xhrRefs.current.delete(task.id);
-          if (xhr.status >= 200 && xhr.status < 300) {
-            // 创建下载链接
-            const blob = xhr.response as Blob;
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
-            updateTaskProgress(task.id, {
-              progress: 100,
-              status: 'completed',
-              bytesTransferred: fileSize,
-            });
-            resolve();
-          } else {
-            const error = '下载失败';
-            updateTaskProgress(task.id, {
-              status: 'failed',
-              error,
-            });
-            reject(new Error(error));
-          }
-        });
-
-        // 错误监听
-        xhr.addEventListener('error', () => {
-          xhrRefs.current.delete(task.id);
-          const error = '网络错误';
-          updateTaskProgress(task.id, {
-            status: 'failed',
-            error,
-          });
-          reject(new Error(error));
-        });
-
-        // 取消监听
-        xhr.addEventListener('abort', () => {
-          xhrRefs.current.delete(task.id);
-          updateTaskProgress(task.id, {
-            status: 'failed',
-            error: '已取消',
-          });
-          reject(new Error('Download cancelled'));
-        });
-
-        // 发送请求
-        const apiUrl = getApiUrl();
-        const url = `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(remotePath)}`;
-        xhr.open('GET', url);
-        // 使用 Cookie 认证
-        xhr.withCredentials = true;
-        xhr.send();
-      });
-    },
-    [createDownloadTask, updateTaskProgress]
-  );
-
-  /**
    * 取消任务
    */
   const cancelTask = useCallback((taskId: string) => {
+    // 先通知后端取消 SFTP 阶段（通过 WebSocket 控制消息）
+    const ws = wsRefs.current.get(taskId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'cancel', task_id: taskId }));
+      } catch (err) {
+        console.error('[useFileTransfer] Failed to send cancel message via WebSocket:', err);
+      }
+    }
+
+    // 中断 HTTP 上传
     const xhr = xhrRefs.current.get(taskId);
     if (xhr) {
       xhr.abort();
       xhrRefs.current.delete(taskId);
+    } else {
+      // 没有 xhr（例如纯 SFTP 阶段或已完成），仅更新状态
+      setTasks(prev =>
+        prev.map(task =>
+          task.id === taskId
+            ? { ...task, status: 'cancelled', error: '已取消' }
+            : task
+        )
+      );
     }
   }, []);
 
@@ -341,26 +275,36 @@ export function useFileTransfer() {
    * 清除已完成/失败的任务
    */
   const clearCompleted = useCallback(() => {
-    setTasks(prev => prev.filter(t => t.status !== 'completed' && t.status !== 'failed'));
+    setTasks(prev =>
+      prev.filter(
+        t =>
+          t.status !== 'completed' &&
+          t.status !== 'failed' &&
+          t.status !== 'cancelled'
+      )
+    );
   }, []);
 
   /**
    * 清除所有任务
    */
   const clearAll = useCallback(() => {
-    // 取消所有进行中的任务
+    // 中断所有进行中的 HTTP 上传
     tasks.forEach(task => {
-      if (task.status === 'uploading' || task.status === 'downloading') {
-        cancelTask(task.id);
+      if (task.status === 'uploading') {
+        const xhr = xhrRefs.current.get(task.id);
+        if (xhr) {
+          xhr.abort();
+          xhrRefs.current.delete(task.id);
+        }
       }
     });
     setTasks([]);
-  }, [tasks, cancelTask]);
+  }, [tasks]);
 
   return {
     tasks,
     uploadFile,
-    downloadFile,
     cancelTask,
     removeTask,
     clearCompleted,
