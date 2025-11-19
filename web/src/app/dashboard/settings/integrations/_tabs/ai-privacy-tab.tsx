@@ -13,6 +13,8 @@ type AIPrivacyFormValues = {
   log_responses?: boolean
   mask_sensitive_data?: boolean
   allow_training?: boolean
+  save_history?: boolean
+  auto_delete_days?: string
 }
 
 interface AIPrivacyTabProps {
