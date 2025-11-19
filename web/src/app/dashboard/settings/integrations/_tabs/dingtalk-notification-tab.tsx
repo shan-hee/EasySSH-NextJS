@@ -11,15 +11,11 @@ import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-type DingTalkFormValues = {
-  enabled?: boolean
-  webhook_url?: string
-  secret?: string
-  mention_all?: boolean
-}
+
+import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface DingTalkNotificationTabProps {
-  form: UseFormReturn<DingTalkFormValues>
+  form: UseFormReturn<IntegrationsConfigFormData>
 }
 
 export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) {
@@ -29,9 +25,9 @@ export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) 
   const handleTestMessage = async () => {
     const data = form.getValues()
     const config = {
-      enabled: data.enabled,
-      webhook_url: data.webhook_url,
-      secret: data.secret || "",
+      enabled: data.enabled ?? false,
+      webhook_url: data.webhook_url ?? "",
+      secret: data.secret ?? "",
     }
 
     await testConnection(async () => {

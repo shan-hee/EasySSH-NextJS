@@ -5,6 +5,7 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput } from "@/components/settings/form-field"
 import { Globe, Shield, Plus, X } from "lucide-react"
 import { type UseFormReturn } from "react-hook-form"
+import { type SecurityConfigFormData } from "@/schemas/settings/security.schema"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,14 +14,9 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 
-type NetworkSecurityFormValues = {
-  allowlist_ips?: string
-  blocklist_ips?: string
-  allow_insecure_http?: boolean
-}
 
 interface NetworkSecurityTabProps {
-  form: UseFormReturn<NetworkSecurityFormValues>
+  form: UseFormReturn<SecurityConfigFormData>
 }
 
 export function NetworkSecurityTab({ form }: NetworkSecurityTabProps) {

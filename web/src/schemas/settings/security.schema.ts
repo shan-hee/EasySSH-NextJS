@@ -54,14 +54,38 @@ export const rateLimitSchema = z.object({
     .max(10000, "API速率限制不能超过10000次/分钟"),
 })
 
+// JWT 配置 Schema
+export const jwtConfigSchema = z.object({
+  jwt_secret: z.string().min(32, "JWT密钥长度不能小于32个字符"),
+  access_token_expire_minutes: z
+    .number()
+    .min(1, "访问令牌过期时间不能小于1小时")
+    .max(168, "访问令牌过期时间不能超过168小时"),
+  refresh_token_expire_days: z
+    .number()
+    .min(24, "刷新令牌过期时间不能小于24小时")
+    .max(720, "刷新令牌过期时间不能超过720小时"),
+})
+
+// 网络安全配置 Schema (包含 IP 白名单/黑名单)
+export const networkSecuritySchema = z.object({
+  allowlist_ips: z.string().optional(),
+  blocklist_ips: z.string().optional(),
+  allow_insecure_http: z.boolean().optional(),
+})
+
 // 完整的安全配置 Schema
 export const securityConfigSchema = sessionManagementSchema
   .merge(corsConfigSchema)
   .merge(rateLimitSchema)
+  .merge(jwtConfigSchema)
+  .merge(networkSecuritySchema)
 
 // 导出类型
 export type IPWhitelistFormData = z.infer<typeof ipWhitelistSchema>
 export type SessionManagementFormData = z.infer<typeof sessionManagementSchema>
 export type CORSConfigFormData = z.infer<typeof corsConfigSchema>
 export type RateLimitFormData = z.infer<typeof rateLimitSchema>
+export type JWTConfigFormData = z.infer<typeof jwtConfigSchema>
+export type NetworkSecurityFormData = z.infer<typeof networkSecuritySchema>
 export type SecurityConfigFormData = z.infer<typeof securityConfigSchema>

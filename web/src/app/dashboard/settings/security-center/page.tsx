@@ -39,6 +39,14 @@ export default function SecurityCenterPage() {
         ...sessionConfig,
         ...corsConfig,
         ...rateLimitConfig,
+        // JWT 配置默认值
+        jwt_secret: "",
+        access_token_expire_minutes: 24,
+        refresh_token_expire_days: 168,
+        // 网络安全配置默认值
+        allowlist_ips: "",
+        blocklist_ips: "",
+        allow_insecure_http: false,
       }
     },
     saveFn: async (data) => {

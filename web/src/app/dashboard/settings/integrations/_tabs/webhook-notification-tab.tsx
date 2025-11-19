@@ -11,15 +11,11 @@ import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-type WebhookFormValues = {
-  enabled?: boolean
-  url?: string
-  secret?: string
-  send_full_payload?: boolean
-}
+
+import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface WebhookNotificationTabProps {
-  form: UseFormReturn<WebhookFormValues>
+  form: UseFormReturn<IntegrationsConfigFormData>
 }
 
 const methodOptions = [
@@ -34,10 +30,10 @@ export function WebhookNotificationTab({ form }: WebhookNotificationTabProps) {
   const handleTestWebhook = async () => {
     const data = form.getValues()
     const config = {
-      enabled: data.enabled,
-      url: data.url,
-      method: data.method,
-      secret: data.secret || "",
+      enabled: data.enabled ?? false,
+      url: data.url ?? "",
+      method: data.method ?? "POST",
+      secret: data.secret ?? "",
     }
 
     await testConnection(async () => {

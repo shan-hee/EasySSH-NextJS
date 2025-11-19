@@ -48,9 +48,9 @@ export function useSettingsForm<T extends FieldValues>({
   const [isSaving, setIsSaving] = useState(false)
 
   const form = useForm<T>({
-    resolver: zodResolver(schema),
-    defaultValues,
-  })
+    resolver: zodResolver(schema) as any,
+    defaultValues: defaultValues as any,
+  }) as UseFormReturn<T>
 
   // 加载配置数据
   const loadData = async () => {

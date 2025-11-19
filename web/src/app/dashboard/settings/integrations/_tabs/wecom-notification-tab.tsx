@@ -11,15 +11,11 @@ import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-type WeComFormValues = {
-  enabled?: boolean
-  webhook_url?: string
-  secret?: string
-  mention_all?: boolean
-}
+
+import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface WeComNotificationTabProps {
-  form: UseFormReturn<WeComFormValues>
+  form: UseFormReturn<IntegrationsConfigFormData>
 }
 
 export function WeComNotificationTab({ form }: WeComNotificationTabProps) {
@@ -29,8 +25,8 @@ export function WeComNotificationTab({ form }: WeComNotificationTabProps) {
   const handleTestMessage = async () => {
     const data = form.getValues()
     const config = {
-      enabled: data.enabled,
-      webhook_url: data.webhook_url,
+      enabled: data.enabled ?? false,
+      webhook_url: data.webhook_url ?? "",
     }
 
     await testConnection(async () => {

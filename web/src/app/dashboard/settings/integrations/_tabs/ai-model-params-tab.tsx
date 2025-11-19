@@ -7,17 +7,10 @@ import { Sliders } from "lucide-react"
 import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
-
-type AIModelFormValues = {
-  temperature?: number
-  max_tokens?: number
-  top_p?: number
-  frequency_penalty?: number
-  presence_penalty?: number
-}
+import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface AIModelParamsTabProps {
-  form: UseFormReturn<AIModelFormValues>
+  form: UseFormReturn<IntegrationsConfigFormData>
 }
 
 export function AIModelParamsTab({ form }: AIModelParamsTabProps) {

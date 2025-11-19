@@ -89,6 +89,7 @@ const statusIcons = {
 export function BackupRestoreTab() {
   const [backups, setBackups] = useState<BackupRecord[]>(mockBackupData)
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false)
   const [selectedBackup, setSelectedBackup] = useState<BackupRecord | null>(null)
 

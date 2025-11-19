@@ -10,18 +10,11 @@ import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-type EmailFormValues = {
-  enabled?: boolean
-  smtp_host?: string
-  smtp_port?: number
-  smtp_username?: string
-  smtp_password?: string
-  from_address?: string
-  use_tls?: boolean
-}
+
+import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface EmailNotificationTabProps {
-  form: UseFormReturn<EmailFormValues>
+  form: UseFormReturn<IntegrationsConfigFormData>
 }
 
 export function EmailNotificationTab({ form }: EmailNotificationTabProps) {
@@ -31,14 +24,14 @@ export function EmailNotificationTab({ form }: EmailNotificationTabProps) {
   const handleTestEmail = async () => {
     const data = form.getValues()
     const config = {
-      enabled: data.enabled,
-      host: data.host,
-      port: data.port,
-      username: data.username,
-      password: data.password,
-      from_email: data.from_email,
-      from_name: data.from_name,
-      use_tls: data.use_tls,
+      enabled: data.enabled ?? false,
+      host: data.host ?? "",
+      port: data.port ?? 587,
+      username: data.username ?? "",
+      password: data.password ?? "",
+      from_email: data.from_email ?? "",
+      from_name: data.from_name ?? "",
+      use_tls: data.use_tls ?? true,
     }
 
     await testConnection(async () => {

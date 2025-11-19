@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import type { FieldValues, Path, UseFormReturn } from "react-hook-form"
+import type { FieldValues, Path, PathValue, UseFormReturn } from "react-hook-form"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -115,7 +115,7 @@ export function FormSwitch<TFieldValues extends FieldValues>({
       <Switch
         id={name}
         checked={value}
-        onCheckedChange={(checked) => form.setValue(name, checked)}
+        onCheckedChange={(checked) => form.setValue(name, checked as PathValue<TFieldValues, Path<TFieldValues>>)}
       />
     </div>
   )
@@ -148,7 +148,7 @@ export function FormSelect<TFieldValues extends FieldValues>({
       )}
       <Select
         value={value}
-        onValueChange={(val) => form.setValue(name, val)}
+        onValueChange={(val) => form.setValue(name, val as PathValue<TFieldValues, Path<TFieldValues>>)}
       >
         <SelectTrigger id={name} className={error ? "border-destructive" : ""}>
           <SelectValue placeholder={placeholder} />

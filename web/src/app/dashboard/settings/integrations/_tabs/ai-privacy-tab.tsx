@@ -7,18 +7,10 @@ import { Shield, Trash2 } from "lucide-react"
 import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertTriangle, InfoIcon } from "lucide-react"
-
-type AIPrivacyFormValues = {
-  log_prompts?: boolean
-  log_responses?: boolean
-  mask_sensitive_data?: boolean
-  allow_training?: boolean
-  save_history?: boolean
-  auto_delete_days?: string
-}
+import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface AIPrivacyTabProps {
-  form: UseFormReturn<AIPrivacyFormValues>
+  form: UseFormReturn<IntegrationsConfigFormData>
 }
 
 const autoDeletOptions = [

@@ -9,7 +9,7 @@ export function useSystemConfig() {
     queryKey: ["systemConfig"],
     queryFn: () => settingsApi.getSystemConfig(),
     staleTime: 5 * 60 * 1000, // 5 分钟内不重新请求
-    cacheTime: 10 * 60 * 1000, // 缓存 10 分钟
+    gcTime: 10 * 60 * 1000, // 缓存 10 分钟 (v5 使用 gcTime 替代 cacheTime)
   })
 }
 
@@ -43,8 +43,8 @@ export function useDownloadExcludePatterns() {
   // 从配置中解析排除规则
   return config.download_exclude_patterns
     .split("\n")
-    .map(p => p.trim())
-    .filter(p => p.length > 0)
+    .map((p: string) => p.trim())
+    .filter((p: string) => p.length > 0)
 }
 
 /**

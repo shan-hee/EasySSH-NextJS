@@ -6,20 +6,15 @@ import { Key } from "lucide-react"
 import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertTriangle } from "lucide-react"
-
-type JWTConfigFormValues = {
-  jwt_secret?: string
-  access_token_expire_minutes?: number
-  refresh_token_expire_days?: number
-}
+import { type SecurityConfigFormData } from "@/schemas/settings/security.schema"
 
 interface JWTConfigTabProps {
-  form: UseFormReturn<JWTConfigFormValues>
+  form: UseFormReturn<SecurityConfigFormData>
 }
 
 export function JWTConfigTab({ form }: JWTConfigTabProps) {
-  const accessExpire = form.watch("access_expire")
-  const refreshExpire = form.watch("refresh_expire")
+  const accessExpire = form.watch("access_token_expire_minutes")
+  const refreshExpire = form.watch("refresh_token_expire_days")
 
   return (
     <SettingsSection
@@ -36,7 +31,7 @@ export function JWTConfigTab({ form }: JWTConfigTabProps) {
 
       <FormInput
         form={form}
-        name="access_expire"
+        name="access_token_expire_minutes"
         label="访问令牌过期时间（小时）"
         description="用户访问令牌（Access Token）的有效期 (1-168小时，即1小时-7天)"
         type="number"
@@ -48,7 +43,7 @@ export function JWTConfigTab({ form }: JWTConfigTabProps) {
 
       <FormInput
         form={form}
-        name="refresh_expire"
+        name="refresh_token_expire_days"
         label="刷新令牌过期时间（小时）"
         description="刷新令牌（Refresh Token）的有效期 (24-720小时，即1天-30天)"
         type="number"
@@ -64,13 +59,13 @@ export function JWTConfigTab({ form }: JWTConfigTabProps) {
           <div>
             <p className="font-medium text-foreground">访问令牌（Access Token）：</p>
             <p>
-              当前设置为 <span className="font-semibold text-foreground">{accessExpire}</span>{" "}
+              当前设置为 <span className="font-semibold text-foreground">{accessExpire ?? 0}</span>{" "}
               小时，即{" "}
               <span className="font-semibold text-foreground">
-                {accessExpire < 24
-                  ? `${accessExpire} 小时`
-                  : `${Math.floor(accessExpire / 24)} 天${
-                      accessExpire % 24 > 0 ? ` ${accessExpire % 24} 小时` : ""
+                {(accessExpire ?? 0) < 24
+                  ? `${accessExpire ?? 0} 小时`
+                  : `${Math.floor((accessExpire ?? 0) / 24)} 天${
+                      (accessExpire ?? 0) % 24 > 0 ? ` ${(accessExpire ?? 0) % 24} 小时` : ""
                     }`}
               </span>
               。用于日常API请求的身份验证。
@@ -79,11 +74,11 @@ export function JWTConfigTab({ form }: JWTConfigTabProps) {
           <div>
             <p className="font-medium text-foreground">刷新令牌（Refresh Token）：</p>
             <p>
-              当前设置为 <span className="font-semibold text-foreground">{refreshExpire}</span>{" "}
+              当前设置为 <span className="font-semibold text-foreground">{refreshExpire ?? 0}</span>{" "}
               小时，即{" "}
               <span className="font-semibold text-foreground">
-                {Math.floor(refreshExpire / 24)} 天
-                {refreshExpire % 24 > 0 ? ` ${refreshExpire % 24} 小时` : ""}
+                {Math.floor((refreshExpire ?? 0) / 24)} 天
+                {(refreshExpire ?? 0) % 24 > 0 ? ` ${(refreshExpire ?? 0) % 24} 小时` : ""}
               </span>
               。用于获取新的访问令牌。
             </p>

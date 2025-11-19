@@ -51,6 +51,9 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
         date_format: "YYYY-MM-DD HH:mm:ss",
         default_page_size: 20,
         max_file_upload_size: 100,
+        download_exclude_patterns: "node_modules,.git,.cache",
+        default_download_mode: "fast",
+        skip_excluded_on_upload: true,
       })
     } finally {
       setIsLoading(false)

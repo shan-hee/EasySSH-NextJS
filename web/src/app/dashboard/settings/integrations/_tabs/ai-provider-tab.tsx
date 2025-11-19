@@ -12,22 +12,10 @@ import { type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
-
-type AIProviderFormValues = {
-  use_system_config?: boolean
-  system_enabled?: boolean
-  system_provider?: string
-  system_api_endpoint?: string
-  system_default_model?: string
-  system_rate_limit?: number
-  provider?: string
-  api_key?: string
-  api_endpoint?: string
-  default_model?: string
-}
+import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface AIProviderTabProps {
-  form: UseFormReturn<AIProviderFormValues>
+  form: UseFormReturn<IntegrationsConfigFormData>
   isAdmin?: boolean
 }
 
@@ -76,7 +64,7 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
                   <Label>AI服务提供商</Label>
                   <Select
                     value={form.watch("system_provider")}
-                    onValueChange={(val) => form.setValue("system_provider", val)}
+                    onValueChange={(val) => form.setValue("system_provider", val as "openai" | "anthropic" | "azure" | "custom")}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="选择提供商" />
@@ -144,7 +132,7 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
               <Label>AI服务提供商 *</Label>
               <Select
                 value={provider}
-                onValueChange={(val) => form.setValue("provider", val)}
+                onValueChange={(val) => form.setValue("provider", val as "openai" | "anthropic" | "azure" | "custom")}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="选择提供商" />
