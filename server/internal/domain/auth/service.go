@@ -257,11 +257,12 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	}
 
 	// 验证会话是否存在（安全检查：撤销的会话不能刷新 token）
-	// 注意：如果启用了 token 轮换，这里应该用新的 refresh token 的哈希
+	// 当前实现：始终使用“旧的” refresh token 哈希查找会话，
+	// 然后在生成了 newRefreshToken 时，再把会话记录中的哈希更新为新的。
 	tokenHashToFind := s.hashToken(refreshToken)
 	if newRefreshToken != "" {
-		// 如果生成了新 token，仍然用旧 token 的哈希查找会话
-		// 因为会话中存储的是旧 token 的哈希
+		// 即使生成了新 token，此处仍然用旧 token 的哈希查找会话，
+		// 因为数据库中当前存储的就是旧 token 的哈希值。
 		tokenHashToFind = s.hashToken(refreshToken)
 	}
 

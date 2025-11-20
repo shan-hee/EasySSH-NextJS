@@ -556,12 +556,13 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 	}
 
 	response := gin.H{
-		"need_init":         !hasAdmin,
-		"is_authenticated":  false,
+		"need_init":        !hasAdmin,
+		"is_authenticated": false,
 	}
 
 	// 如果已有管理员，检查当前用户是否已认证
 	if hasAdmin {
+		// 1. 优先使用 Access Token（由 OptionalAuth 中间件解析）
 		userIDStr, exists := c.Get("user_id")
 		if exists && userIDStr != "" {
 			// 解析 UUID
@@ -575,6 +576,73 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 						"id":       user.ID,
 						"username": user.Username,
 						"role":     user.Role,
+					}
+				}
+			}
+		}
+
+		// 2. 如果未通过 Access Token 认证，尝试使用 Refresh Token 自动续期
+		if !response["is_authenticated"].(bool) {
+			refreshToken, err := c.Cookie(RefreshTokenCookieName)
+			if err == nil {
+				refreshToken = strings.TrimSpace(refreshToken)
+			}
+
+			if refreshToken != "" {
+				newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), refreshToken)
+				if err != nil {
+					// 无效或过期的 refresh token：清理 Cookie，维持未认证状态
+					if errors.Is(err, auth.ErrInvalidToken) ||
+						errors.Is(err, auth.ErrExpiredToken) ||
+						errors.Is(err, auth.ErrSessionNotFound) ||
+						errors.Is(err, auth.ErrSessionExpired) {
+						clearAuthCookies(c, h.configManager)
+					}
+				} else {
+					// 刷新成功：更新 Cookie
+					secure, domain, sameSite := getCookieConfig(c, h.configManager)
+					http.SetCookie(c.Writer, &http.Cookie{
+						Name:     AccessTokenCookieName,
+						Value:    newAccessToken,
+						Path:     "/",
+						Domain:   domain,
+						MaxAge:   h.accessTokenTTLSeconds,
+						Secure:   secure,
+						HttpOnly: true,
+						SameSite: sameSite,
+					})
+
+					if newRefreshToken != "" {
+						http.SetCookie(c.Writer, &http.Cookie{
+							Name:     RefreshTokenCookieName,
+							Value:    newRefreshToken,
+							Path:     "/",
+							Domain:   domain,
+							MaxAge:   h.refreshTokenTTLSeconds,
+							Secure:   secure,
+							HttpOnly: true,
+							SameSite: sameSite,
+						})
+					}
+
+					// 解析新的 Access Token 获取用户信息
+					claims, err := h.jwtService.ValidateToken(newAccessToken)
+					if err == nil {
+						user, err := h.authService.GetUserByID(c.Request.Context(), claims.UserID)
+						if err == nil && user != nil {
+							// 更新上下文，便于审计日志等中间件使用
+							c.Set("user_id", user.ID.String())
+							c.Set("username", user.Username)
+							c.Set("email", user.Email)
+							c.Set("role", string(user.Role))
+
+							response["is_authenticated"] = true
+							response["user"] = gin.H{
+								"id":       user.ID,
+								"username": user.Username,
+								"role":     user.Role,
+							}
+						}
 					}
 				}
 			}
