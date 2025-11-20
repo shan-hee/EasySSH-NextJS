@@ -174,7 +174,13 @@ export function SessionTabBar(props: SessionTabBarProps) {
   const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
-    setIsMounted(true)
+    // 延迟到空闲时初始化 DnD，避免阻塞主线程
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      requestIdleCallback(() => setIsMounted(true))
+    } else {
+      // 降级方案：使用 setTimeout
+      setTimeout(() => setIsMounted(true), 0)
+    }
   }, [])
 
   // 溢出检测：判断页签是否超出容器
@@ -182,19 +188,50 @@ export function SessionTabBar(props: SessionTabBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const tabsContainerRef = useRef<HTMLDivElement>(null)
 
-  // 检测页签溢出
+  // 检测页签溢出 - 优化版本
+  const sessionCount = sessions.length
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null
+    let rafId: number | null = null
+
     const checkOverflow = () => {
-      if (scrollContainerRef.current && tabsContainerRef.current) {
-        const isOverflow = tabsContainerRef.current.scrollWidth > scrollContainerRef.current.clientWidth
-        setIsOverflowing(isOverflow)
-      }
+      // 使用 requestAnimationFrame 延迟 DOM 读取，避免强制重排
+      if (rafId) cancelAnimationFrame(rafId)
+
+      rafId = requestAnimationFrame(() => {
+        if (scrollContainerRef.current && tabsContainerRef.current) {
+          const isOverflow = tabsContainerRef.current.scrollWidth > scrollContainerRef.current.clientWidth
+          setIsOverflowing(isOverflow)
+        }
+      })
     }
 
-    checkOverflow()
-    window.addEventListener('resize', checkOverflow)
-    return () => window.removeEventListener('resize', checkOverflow)
-  }, [sessions])
+    // 节流函数：300ms 内最多执行一次
+    const throttledCheck = () => {
+      if (timeoutId) return // 如果已有待执行的检测，跳过
+
+      timeoutId = setTimeout(() => {
+        checkOverflow()
+        timeoutId = null
+      }, 300)
+    }
+
+    // 初始检测延迟到空闲时执行，避免阻塞主线程
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      requestIdleCallback(checkOverflow)
+    } else {
+      setTimeout(checkOverflow, 0)
+    }
+
+    // resize 事件使用节流
+    window.addEventListener('resize', throttledCheck)
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      if (rafId) cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', throttledCheck)
+    }
+  }, [sessionCount]) // 只依赖 session 数量，不依赖整个数组
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {

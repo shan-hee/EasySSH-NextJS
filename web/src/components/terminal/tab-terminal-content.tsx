@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef } from 'react'
 import { MonitorWebSocketProvider } from './monitor/contexts/MonitorWebSocketContext'
 import { Button } from '@/components/ui/button'
 import { Maximize2, Minimize2, Settings, FolderOpen, Activity, Bot } from 'lucide-react'
@@ -22,6 +22,9 @@ import { cn } from '@/lib/utils'
 import { useTabUIStore } from '@/stores/tab-ui-store'
 import type { TerminalSession } from './types'
 import type { TerminalSettings } from './terminal-settings-dialog'
+
+// 工具栏固定高度常量 (py-1.5 + h-7 按钮 + border-b)
+const TOOLBAR_HEIGHT = 44 // px
 
 interface TabTerminalContentProps {
   session: TerminalSession
@@ -56,10 +59,8 @@ export function TabTerminalContent({
   onToggleSettings,
   onStartConnectionFromQuick,
 }: TabTerminalContentProps) {
-  // 工具栏引用和浮动面板根容器
-  const toolbarRef = useRef<HTMLDivElement>(null)
+  // 浮动面板根容器
   const floatingPanelRootRef = useRef<HTMLDivElement>(null)
-  const [toolbarHeight, setToolbarHeight] = useState(0)
 
   // 从 Store 获取当前页签的 UI 状态
   const tabState = useTabUIStore((state) => state.getTabState(session.id))
@@ -74,21 +75,6 @@ export function TabTerminalContent({
     isFileManagerOpen && session.type !== 'quick' ? String(session.serverId) : '',
     '/root'
   )
-
-  // 监听工具栏高度变化
-  useEffect(() => {
-    const el = toolbarRef.current
-    if (!el) return
-    const update = () => setToolbarHeight(el.offsetHeight || 0)
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    window.addEventListener('resize', update)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [])
 
   // 计算监控参数
   const serverId = session.type !== 'quick' && session.isConnected
@@ -119,7 +105,6 @@ export function TabTerminalContent({
         {/* 工具栏 - 只在非快速连接且非加载时显示 */}
         {session.type !== 'quick' && !effectiveIsLoading && (
           <div
-            ref={toolbarRef}
             className={cn(
               'border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors',
               'bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30',
@@ -252,7 +237,7 @@ export function TabTerminalContent({
             isOpen={isFileManagerOpen}
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
             mountContainer={floatingPanelRootRef.current || undefined}
-            anchorTop={toolbarHeight}
+            anchorTop={TOOLBAR_HEIGHT}
             serverId={String(session.serverId)}
             serverName={session.serverName || ''}
             host={session.host || ''}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback, Suspense } from "react"
+import { useEffect, useRef, useState, useCallback, Suspense, startTransition } from "react"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
@@ -10,6 +10,9 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { serversApi, type Server } from "@/lib/api"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { useTabUIStore } from "@/stores/tab-ui-store"
+
+// 性能优化：将 lastActivity 从 sessions 状态中分离，避免每次命令触发整个组件树重渲染
+const lastActivityMap = new Map<string, number>()
 
 function TerminalPageContent() {
  const router = useRouter()
@@ -137,7 +140,7 @@ function TerminalPageContent() {
  }
  }, [loading, servers, searchParams, router])
 
- // 加载服务器列表
+ // 加载服务器列表 - 优化版本
  const loadServers = useCallback(async () => {
   try {
   setLoading(true)
@@ -165,11 +168,14 @@ function TerminalPageContent() {
  last_connected: server.last_connected, // 传递最后连接时间
  }))
 
+ // 使用 startTransition 批量更新状态，避免中间态闪烁
+ startTransition(() => {
  setServers(quickServers)
+ setLoading(false)
+ })
  } catch (error: unknown) {
  console.error("Failed to load servers:", error)
  toast.error(getErrorMessage(error, "加载服务器列表失败"))
- } finally {
  setLoading(false)
  }
  }, [])
@@ -178,14 +184,23 @@ function TerminalPageContent() {
  loadServers()
  }, [loadServers])
 
- // 读取通用设置（仅使用本地存储集成）
+ // 读取通用设置（仅使用本地存储集成）- 异步化避免阻塞初始渲染
  useEffect(() => {
+ // 延迟到空闲时读取 localStorage
+ const loadSettings = () => {
  try {
  const mt = Number(localStorage.getItem("tab.maxTabs") || "50")
  if (!isNaN(mt)) setMaxTabs(mt)
  const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
  if (!isNaN(im)) setInactiveMinutes(im)
  } catch {}
+ }
+
+ if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+ requestIdleCallback(loadSettings)
+ } else {
+ setTimeout(loadSettings, 0)
+ }
  }, [])
 
  // 创建"快速连接"页签
@@ -214,7 +229,7 @@ function TerminalPageContent() {
  return id
  }
 
- // 从"快速连接"页签内选择服务器，升级为终端会话
+ // 从"快速连接"页签内选择服务器，升级为终端会话 - 优化版本
  const handleStartConnectionFromQuick = (sessionId: string, server: QuickServer) => {
  const now = Date.now()
  const newSessionId = `auto-${server.id}-${now}`
@@ -223,6 +238,8 @@ function TerminalPageContent() {
  const terminalStore = useTerminalStore.getState()
  const tabUIStore = useTabUIStore.getState()
 
+ // 使用 startTransition 包裹非紧急的状态更新，降低优先级
+ startTransition(() => {
  // 迁移终端实例（如果存在）
  const terminalInstance = terminalStore.getTerminal(sessionId)
  if (terminalInstance) {
@@ -238,7 +255,7 @@ function TerminalPageContent() {
  tabUIStore.setTabState(newSessionId, tabState)
  tabUIStore.deleteTabState(sessionId)
 
- // 更新会话列表
+ // 批量更新会话列表和激活状态
  setSessions(prev => prev.map(s => s.id === sessionId ? {
  id: newSessionId, // 使用新的 auto- 格式 ID
  serverId: server.id,
@@ -260,10 +277,17 @@ function TerminalPageContent() {
  setActiveSessionId(newSessionId)
  }
 
+ // 初始化 lastActivityMap
+ lastActivityMap.set(newSessionId, now)
+
  // 连接建立后，稍后重新加载服务器列表以获取更新的 last_connected
+ // 使用 startTransition 标记为低优先级更新
  setTimeout(() => {
+ startTransition(() => {
  loadServers()
+ })
  }, 1000)
+ })
  }
 
  // 关闭会话
@@ -334,21 +358,29 @@ function TerminalPageContent() {
  }
  // 这里应该处理实际的命令发送逻辑
 
- // 更新最后活动时间
+ // 性能优化：将 lastActivity 更新到 Map 中，避免触发 sessions 状态更新
  const now = Date.now()
- setSessions(prev => prev.map(session => session.id === sessionId ? { ...session, lastActivity: now } : session))
+ lastActivityMap.set(sessionId, now)
+
  // 清除已提醒标记
  inactivityNotifiedRef.current.delete(sessionId)
  }
 
- // 未活动断开提醒
+ // 未活动断开提醒 - 优化版本
+ const sessionsRef = useRef(sessions)
+ useEffect(() => {
+ sessionsRef.current = sessions
+ }, [sessions])
+
  useEffect(() => {
  const t = setInterval(() => {
  const now = Date.now()
  const threshold = inactiveMinutes * 60 * 1000
- sessions.forEach(s => {
+ sessionsRef.current.forEach(s => {
  if (!s) return
- if (now - s.lastActivity >= threshold && !inactivityNotifiedRef.current.has(s.id)) {
+ // 从 lastActivityMap 获取最后活动时间，如果不存在则使用 session 的初始值
+ const lastActivity = lastActivityMap.get(s.id) ?? s.lastActivity
+ if (now - lastActivity >= threshold && !inactivityNotifiedRef.current.has(s.id)) {
  inactivityNotifiedRef.current.add(s.id)
  toast(`会话"${s.serverName}"长时间未活动`, {
  description: `已超过 ${inactiveMinutes} 分钟未活动，是否断开？`,
@@ -358,7 +390,7 @@ function TerminalPageContent() {
  })
  }, 60 * 1000)
  return () => clearInterval(t)
- }, [sessions, inactiveMinutes, handleCloseSession])
+ }, [inactiveMinutes, handleCloseSession]) // 移除 sessions 依赖，避免频繁重建定时器
 
  // 会话初始化中（等待 sessions 被设置）
  // 现在始终有初始会话，不需要这个检查了
