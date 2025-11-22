@@ -15,6 +15,21 @@ export interface TerminalWebSocketOptions {
   onError?: (error: Error) => void
   onHandshakeComplete?: () => void // 握手完成回调
   onConnecting?: () => void // 正在连接回调
+  onCompletionData?: (data: CompletionDataResponse) => void // 补全数据回调
+}
+
+// 补全数据响应接口
+export interface CompletionDataResponse {
+  history: string[]
+  scripts: ScriptItem[]
+  timestamp: number
+}
+
+export interface ScriptItem {
+  name: string
+  description: string
+  executions: number
+  tags: string[]
 }
 
 export class TerminalWebSocket {
@@ -28,6 +43,7 @@ export class TerminalWebSocket {
   private onError?: (error: Error) => void
   private onHandshakeComplete?: () => void
   private onConnecting?: () => void
+  private onCompletionData?: (data: CompletionDataResponse) => void
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
   private reconnectDelay = 2000
@@ -51,6 +67,7 @@ export class TerminalWebSocket {
     this.onError = options.onError
     this.onHandshakeComplete = options.onHandshakeComplete
     this.onConnecting = options.onConnecting
+    this.onCompletionData = options.onCompletionData
   }
 
   /**
@@ -174,6 +191,26 @@ export class TerminalWebSocket {
   }
 
   /**
+   * 请求补全数据
+   */
+  fetchCompletionData(historyLimit: number = 500): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn("[TerminalWS] WebSocket 未连接，无法请求补全数据")
+      return
+    }
+
+    try {
+      const message = {
+        type: "fetch_completion_data",
+        data: { historyLimit }
+      }
+      this.ws.send(JSON.stringify(message))
+    } catch (error) {
+      console.error("[TerminalWS] 发送补全数据请求失败:", error)
+    }
+  }
+
+  /**
    * 断开连接
    */
   disconnect(): void {
@@ -211,7 +248,7 @@ export class TerminalWebSocket {
   /**
    * 处理控制消息
    */
-  private handleControlMessage(message: { type: string; data?: { message?: string; status?: string } }): void {
+  private handleControlMessage(message: { type: string; data?: any }): void {
     switch (message.type) {
       case "handshake_complete":
         // WebSocket握手完成，SSH连接正在建立
@@ -229,6 +266,15 @@ export class TerminalWebSocket {
 
         this.onConnected?.()
         this.startPing()
+
+        // SSH连接建立后自动请求补全数据
+        this.fetchCompletionData(500)
+        break
+      case "completion_data":
+        // 补全数据响应
+        if (this.onCompletionData && message.data) {
+          this.onCompletionData(message.data as CompletionDataResponse)
+        }
         break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)

@@ -91,6 +91,29 @@ export interface SystemConfig {
   download_exclude_patterns: string
   default_download_mode: "fast" | "compatible"
   skip_excluded_on_upload: boolean
+
+  // 补全配置
+  completion_enabled?: boolean
+  completion_providers?: {
+    local: boolean
+    remote_history: boolean
+    script: boolean
+    session: boolean
+  }
+  completion_quotas?: {
+    local_min: number
+    local_max: number
+    script_min: number
+    script_max: number
+    session_min: number
+    session_max: number
+    remote_history_unlimited: boolean
+    remote_history_soft_max: number
+  }
+  completion_cache?: {
+    ttl_minutes: number
+    max_entries: number
+  }
 }
 
 /**

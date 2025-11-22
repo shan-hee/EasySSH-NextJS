@@ -54,6 +54,27 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
         download_exclude_patterns: "node_modules,.git,.cache",
         default_download_mode: "fast",
         skip_excluded_on_upload: true,
+        completion_enabled: true,
+        completion_providers: {
+          local: true,
+          remote_history: true,
+          script: true,
+          session: true,
+        },
+        completion_quotas: {
+          local_min: 1,
+          local_max: 3,
+          script_min: 0,
+          script_max: 2,
+          session_min: 0,
+          session_max: 2,
+          remote_history_unlimited: true,
+          remote_history_soft_max: 7,
+        },
+        completion_cache: {
+          ttl_minutes: 5,
+          max_entries: 100,
+        },
       })
     } finally {
       setIsLoading(false)

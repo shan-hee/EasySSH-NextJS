@@ -133,3 +133,37 @@ func (m *ConfigManager) GetCookieConfig(ctx context.Context) (*CookieConfig, err
 	m.setToCache(cacheKey, config)
 	return config, nil
 }
+
+// GetCompletionCacheConfig 获取补全缓存配置（带缓存）
+func (m *ConfigManager) GetCompletionCacheConfig(ctx context.Context) (*CompletionCacheConfig, error) {
+	const cacheKey = "completion_cache_config"
+
+	if cached, found := m.getFromCache(cacheKey); found {
+		return cached.(*CompletionCacheConfig), nil
+	}
+
+	// 从系统配置中读取补全缓存配置
+	systemConfig, err := m.service.GetSystemConfig(ctx)
+	if err != nil {
+		// 返回默认配置
+		return &CompletionCacheConfig{
+			TTLMinutes: 5,
+			MaxEntries: 100,
+		}, nil
+	}
+
+	// 从系统配置中提取补全缓存配置
+	var config *CompletionCacheConfig
+	if systemConfig.CompletionCache != nil {
+		config = systemConfig.CompletionCache
+	} else {
+		// 使用默认值
+		config = &CompletionCacheConfig{
+			TTLMinutes: 5,
+			MaxEntries: 100,
+		}
+	}
+
+	m.setToCache(cacheKey, config)
+	return config, nil
+}

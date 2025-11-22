@@ -359,5 +359,15 @@ func (s *service) SaveSystemConfig(ctx context.Context, config *SystemConfig) er
 		return fmt.Errorf("max file upload size must be between 1 and 1024 MB")
 	}
 
-	return s.repo.SaveSystemConfig(ctx, config)
+	err := s.repo.SaveSystemConfig(ctx, config)
+	if err != nil {
+		return err
+	}
+
+	// 清除相关缓存，确保配置立即生效
+	if s.configManager != nil {
+		s.configManager.InvalidateCache("completion_cache_config")
+	}
+
+	return nil
 }

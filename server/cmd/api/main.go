@@ -19,6 +19,7 @@ import (
 	"github.com/easyssh/server/internal/domain/auditlog"
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/batchtask"
+	"github.com/easyssh/server/internal/domain/completion"
 	"github.com/easyssh/server/internal/domain/filetransfer"
 	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/monitoring"
@@ -198,6 +199,18 @@ func main() {
 	scriptRepo := script.NewRepository(database)
 	scriptService := script.NewService(scriptRepo)
 
+	// 补全服务
+	// 从配置管理器读取补全缓存配置
+	completionCacheConfig, err := configManager.GetCompletionCacheConfig(context.Background())
+	if err != nil {
+		log.Printf("Failed to get completion cache config, using defaults: %v", err)
+		completionCacheConfig = &settings.CompletionCacheConfig{
+			TTLMinutes: 5,
+			MaxEntries: 100,
+		}
+	}
+	completionService := completion.NewService(scriptRepo, completionCacheConfig.TTLMinutes, completionCacheConfig.MaxEntries)
+
 	// 批量任务服务
 	batchTaskRepo := batchtask.NewRepository(database)
 	batchTaskService := batchtask.NewService(batchTaskRepo)
@@ -234,7 +247,7 @@ func main() {
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
-	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), *configManager)
+	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), *configManager, completionService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)

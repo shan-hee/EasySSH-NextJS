@@ -42,15 +42,66 @@ export const fileTransferSchema = z.object({
   skip_excluded_on_upload: z.boolean().default(true),
 })
 
+// 补全配置 Schema
+export const completionSchema = z.object({
+  // 全局开关
+  completion_enabled: z.boolean().default(true),
+
+  // 提供者启用状态
+  completion_providers: z.object({
+    local: z.boolean().default(true),
+    remote_history: z.boolean().default(true),
+    script: z.boolean().default(true),
+    session: z.boolean().default(true),
+  }).default({
+    local: true,
+    remote_history: true,
+    script: true,
+    session: true,
+  }),
+
+  // 配额分配配置
+  completion_quotas: z.object({
+    local_min: z.number().min(0).max(10).default(1),
+    local_max: z.number().min(1).max(10).default(3),
+    script_min: z.number().min(0).max(10).default(0),
+    script_max: z.number().min(0).max(10).default(2),
+    session_min: z.number().min(0).max(10).default(0),
+    session_max: z.number().min(0).max(10).default(2),
+    remote_history_unlimited: z.boolean().default(true),
+    remote_history_soft_max: z.number().min(1).max(20).default(7),
+  }).default({
+    local_min: 1,
+    local_max: 3,
+    script_min: 0,
+    script_max: 2,
+    session_min: 0,
+    session_max: 2,
+    remote_history_unlimited: true,
+    remote_history_soft_max: 7,
+  }),
+
+  // 缓存设置
+  completion_cache: z.object({
+    ttl_minutes: z.number().min(1).max(60).default(5),
+    max_entries: z.number().min(10).max(1000).default(100),
+  }).default({
+    ttl_minutes: 5,
+    max_entries: 100,
+  }),
+})
+
 // 完整的系统配置 Schema (所有标签页合并)
 export const systemConfigSchema = basicInfoSchema
   .merge(i18nSchema)
   .merge(performanceSchema)
   .merge(fileTransferSchema)
+  .merge(completionSchema)
 
 // 导出类型
 export type BasicInfoFormData = z.infer<typeof basicInfoSchema>
 export type I18nFormData = z.infer<typeof i18nSchema>
 export type PerformanceFormData = z.infer<typeof performanceSchema>
 export type FileTransferFormData = z.infer<typeof fileTransferSchema>
+export type CompletionFormData = z.infer<typeof completionSchema>
 export type SystemConfigFormData = z.infer<typeof systemConfigSchema>

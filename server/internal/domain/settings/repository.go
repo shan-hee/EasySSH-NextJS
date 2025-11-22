@@ -2,6 +2,7 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"gorm.io/gorm"
@@ -364,6 +365,29 @@ thumbs.db`
 		DownloadExcludePatterns: getOrDefault(configMap, KeyDownloadExcludePatterns, defaultExcludePatterns),
 		DefaultDownloadMode:     getOrDefault(configMap, KeyDefaultDownloadMode, "fast"),
 		SkipExcludedOnUpload:    getBoolOrDefault(configMap, KeySkipExcludedOnUpload, true),
+
+		// 补全设置 - 默认启用
+		CompletionEnabled: getBoolOrDefault(configMap, KeyCompletionEnabled, true),
+		CompletionProviders: getJSONOrDefault(configMap, KeyCompletionProviders, &CompletionProvidersConfig{
+			Local:         true,
+			RemoteHistory: true,
+			Script:        true,
+			Session:       true,
+		}),
+		CompletionQuotas: getJSONOrDefault(configMap, KeyCompletionQuotas, &CompletionQuotasConfig{
+			LocalMin:                 1,
+			LocalMax:                 3,
+			ScriptMin:                0,
+			ScriptMax:                2,
+			SessionMin:               0,
+			SessionMax:               2,
+			RemoteHistoryUnlimited:   true,
+			RemoteHistorySoftMax:     7,
+		}),
+		CompletionCache: getJSONOrDefault(configMap, KeyCompletionCache, &CompletionCacheConfig{
+			TTLMinutes: 5,
+			MaxEntries: 100,
+		}),
 	}
 
 	return config, nil
@@ -388,6 +412,24 @@ func (r *repository) SaveSystemConfig(ctx context.Context, config *SystemConfig)
 			KeyDownloadExcludePatterns: config.DownloadExcludePatterns,
 			KeyDefaultDownloadMode:     config.DefaultDownloadMode,
 			KeySkipExcludedOnUpload:    fmt.Sprintf("%t", config.SkipExcludedOnUpload),
+			KeyCompletionEnabled:       fmt.Sprintf("%t", config.CompletionEnabled),
+		}
+
+		// 保存 JSON 配置
+		if config.CompletionProviders != nil {
+			if providersJSON, err := json.Marshal(config.CompletionProviders); err == nil {
+				settings[KeyCompletionProviders] = string(providersJSON)
+			}
+		}
+		if config.CompletionQuotas != nil {
+			if quotasJSON, err := json.Marshal(config.CompletionQuotas); err == nil {
+				settings[KeyCompletionQuotas] = string(quotasJSON)
+			}
+		}
+		if config.CompletionCache != nil {
+			if cacheJSON, err := json.Marshal(config.CompletionCache); err == nil {
+				settings[KeyCompletionCache] = string(cacheJSON)
+			}
 		}
 
 		for key, value := range settings {
@@ -420,6 +462,16 @@ func getIntOrDefault(configMap map[string]string, key string, defaultValue int) 
 		var intValue int
 		if _, err := fmt.Sscanf(value, "%d", &intValue); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getJSONOrDefault[T any](configMap map[string]string, key string, defaultValue T) T {
+	if value, ok := configMap[key]; ok && value != "" {
+		var result T
+		if err := json.Unmarshal([]byte(value), &result); err == nil {
+			return result
 		}
 	}
 	return defaultValue

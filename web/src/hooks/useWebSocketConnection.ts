@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { TerminalWebSocket } from '@/lib/websocket-terminal'
+import { TerminalWebSocket, type CompletionDataResponse } from '@/lib/websocket-terminal'
 import { useTerminalStore } from '@/stores/terminal-store'
 import type { Terminal } from '@xterm/xterm'
 
@@ -19,6 +19,7 @@ export interface WebSocketConnectionConfig {
   cols: number
   rows: number
   onLoadingChange?: (isLoading: boolean) => void
+  onCompletionData?: (data: CompletionDataResponse) => void
 }
 
 /**
@@ -130,7 +131,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           if (inst?.terminal) {
             inst.terminal.writeln(`\r\n\x1b[1;31m✗ Error: ${error.message}\x1b[0m`)
           }
-        }
+        },
+        onCompletionData: config.onCompletionData
       })
 
       ws.connect()

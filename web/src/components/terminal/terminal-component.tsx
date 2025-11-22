@@ -116,6 +116,12 @@ export function TerminalComponent({
       copyShortcut: 'Ctrl+Shift+C',
       pasteShortcut: 'Ctrl+Shift+V',
       clearShortcut: 'Ctrl+L',
+      completionEnabled: true,
+      completionTrigger: 'auto',
+      completionAutoDelay: 300,
+      completionMaxItems: 10,
+      completionShowIcon: true,
+      completionShowDescription: true,
     }
   })
 

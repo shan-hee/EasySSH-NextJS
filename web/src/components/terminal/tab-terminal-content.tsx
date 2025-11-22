@@ -226,6 +226,12 @@ export function TabTerminalContent({
                 copyShortcut={settings.copyShortcut}
                 pasteShortcut={settings.pasteShortcut}
                 clearShortcut={settings.clearShortcut}
+                completionEnabled={settings.completionEnabled}
+                completionTrigger={settings.completionTrigger}
+                completionAutoDelay={settings.completionAutoDelay}
+                completionMaxItems={settings.completionMaxItems}
+                completionShowIcon={settings.completionShowIcon}
+                completionShowDescription={settings.completionShowDescription}
               />
             )}
           </div>

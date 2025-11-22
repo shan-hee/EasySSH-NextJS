@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { ClientAuthProvider } from "@/components/client-auth-provider"
 import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
+import { CompletionConfigProvider } from "@/contexts/completion-config-context"
 import { authApi, type User } from "@/lib/api/auth"
 import { isApiError } from "@/lib/api-client"
 import { getErrorMessage } from "@/lib/error-utils"
@@ -48,17 +49,19 @@ export default function DashboardLayout({
   // 如果验证失败，会自动跳转到登录页
   return (
     <ClientAuthProvider initialUser={user}>
-      <BreadcrumbProvider>
-        <SidebarProviderServer>
-          <AppSidebar />
-          <SidebarInset>
-            {/* 添加淡入动画，使界面显示更平滑 */}
-            <div className="animate-in fade-in duration-300 flex flex-1 flex-col min-h-0">
-              {children}
-            </div>
-          </SidebarInset>
-        </SidebarProviderServer>
-      </BreadcrumbProvider>
+      <CompletionConfigProvider>
+        <BreadcrumbProvider>
+          <SidebarProviderServer>
+            <AppSidebar />
+            <SidebarInset>
+              {/* 添加淡入动画，使界面显示更平滑 */}
+              <div className="animate-in fade-in duration-300 flex flex-1 flex-col min-h-0">
+                {children}
+              </div>
+            </SidebarInset>
+          </SidebarProviderServer>
+        </BreadcrumbProvider>
+      </CompletionConfigProvider>
     </ClientAuthProvider>
   )
 }

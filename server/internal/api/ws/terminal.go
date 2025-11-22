@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/easyssh/server/internal/domain/completion"
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/settings"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
@@ -89,12 +90,13 @@ type TerminalHandler struct {
 	sessionManager    *sshDomain.SessionManager
 	encryptor         *crypto.Encryptor
 	sshSessionService sshsession.Service
-	hostKeyCallback   ssh.HostKeyCallback // SSH主机密钥验证回调
+	hostKeyCallback   ssh.HostKeyCallback   // SSH主机密钥验证回调
 	configManager     settings.ConfigManager // CORS 配置管理器
+	completionService completion.Service     // 补全服务
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, configManager settings.ConfigManager) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, configManager settings.ConfigManager, completionService completion.Service) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
@@ -103,6 +105,7 @@ func NewTerminalHandler(serverService server.Service, serverRepo server.Reposito
 		sshSessionService: sshSessionService,
 		hostKeyCallback:   hostKeyCallback,
 		configManager:     configManager,
+		completionService: completionService,
 	}
 }
 
@@ -139,6 +142,23 @@ type OutputMessage struct {
 type ErrorMessage struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
+}
+
+// FetchCompletionDataMessage 获取补全数据请求
+type FetchCompletionDataMessage struct {
+	HistoryLimit int `json:"historyLimit"` // 历史命令数量限制，默认500
+}
+
+// CompletionDataResponse 补全数据响应
+type CompletionDataResponse struct {
+	History   []string                  `json:"history"`
+	Scripts   []completion.ScriptItem   `json:"scripts"`
+	Timestamp int64                     `json:"timestamp"`
+}
+
+// CompletionUpdateMessage 补全更新消息（增量更新）
+type CompletionUpdateMessage struct {
+	NewCommand string `json:"newCommand"`
 }
 
 // HandleSSH 处理 SSH WebSocket 连接
@@ -363,6 +383,19 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		})
 	}
 
+	// WebSocket写锁保护（防止并发写入）
+	var wsMutex sync.Mutex
+	safeWriteMessage := func(messageType int, data []byte) error {
+		wsMutex.Lock()
+		defer wsMutex.Unlock()
+		return wsConn.WriteMessage(messageType, data)
+	}
+	safeWriteJSON := func(v interface{}) error {
+		wsMutex.Lock()
+		defer wsMutex.Unlock()
+		return wsConn.WriteJSON(v)
+	}
+
 	// 从 SSH 读取并发送到 WebSocket（stdout）- 使用二进制传输
 	go func() {
 		buf := make([]byte, 32768) // 增大缓冲区以提高性能
@@ -378,7 +411,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 			if n > 0 {
 				// 直接发送二进制数据，不使用 JSON 包装
-				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+				if err := safeWriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
 					log.Printf("Error sending output: %v", err)
 					closeChannel()
 					return
@@ -401,7 +434,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 			if n > 0 {
 				// stderr 也直接发送二进制数据
-				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+				if err := safeWriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
 					log.Printf("Error sending stderr: %v", err)
 					return
 				}
@@ -454,7 +487,79 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 					}
 
 				case "ping":
-					h.sendMessage(wsConn, Message{Type: "pong"})
+					// 使用安全写入
+					if err := safeWriteJSON(Message{Type: "pong"}); err != nil {
+						log.Printf("Error sending pong: %v", err)
+					}
+
+				case "fetch_completion_data":
+					// 处理补全数据请求
+					var fetchReq FetchCompletionDataMessage
+					if err := json.Unmarshal(msg.Data, &fetchReq); err != nil {
+						log.Printf("Error parsing fetch_completion_data: %v", err)
+						continue
+					}
+
+					// 设置默认值
+					if fetchReq.HistoryLimit <= 0 {
+						fetchReq.HistoryLimit = 500
+					}
+
+					// 异步获取补全数据
+					go func() {
+						// 获取SSH客户端
+						sshClient := session.Client.GetRawConnection()
+						if sshClient == nil {
+							log.Printf("SSH client not available for completion data")
+							return
+						}
+
+						// 获取补全数据（传递 serverID 以区分不同服务器）
+						completionData, err := h.completionService.FetchCompletionData(
+							sshClient,
+							uuid.MustParse(userID),
+							uuid.MustParse(serverID),
+							fetchReq.HistoryLimit,
+						)
+						if err != nil {
+							log.Printf("Failed to fetch completion data: %v", err)
+							// 使用安全写入发送错误
+							errMsg := ErrorMessage{
+								Error:   "completion_fetch_failed",
+								Message: err.Error(),
+							}
+							errData, _ := json.Marshal(errMsg)
+							if writeErr := safeWriteJSON(Message{
+								Type: "error",
+								Data: errData,
+							}); writeErr != nil {
+								log.Printf("Error sending error message: %v", writeErr)
+							}
+							return
+						}
+
+						// 设置时间戳
+						completionData.Timestamp = time.Now().Unix()
+
+						// 发送补全数据
+						responseData, _ := json.Marshal(CompletionDataResponse{
+							History:   completionData.History,
+							Scripts:   completionData.Scripts,
+							Timestamp: completionData.Timestamp,
+						})
+
+						// 使用安全写入
+						if err := safeWriteJSON(Message{
+							Type: "completion_data",
+							Data: responseData,
+						}); err != nil {
+							log.Printf("Error sending completion data: %v", err)
+							return
+						}
+
+						log.Printf("Sent completion data: %d history, %d scripts",
+							len(completionData.History), len(completionData.Scripts))
+					}()
 				}
 
 			case websocket.BinaryMessage:
@@ -484,7 +589,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 	// 尝试发送关闭消息（如果连接已关闭则静默忽略）
 	wsConn.SetWriteDeadline(time.Now().Add(time.Second))
-	_ = wsConn.WriteJSON(Message{Type: "closed"})
+	_ = safeWriteJSON(Message{Type: "closed"})
 }
 
 // sendMessage 发送消息

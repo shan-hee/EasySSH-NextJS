@@ -69,6 +69,12 @@ const (
 	KeyDownloadExcludePatterns = "system.download_exclude_patterns"
 	KeyDefaultDownloadMode   = "system.default_download_mode"
 	KeySkipExcludedOnUpload  = "system.skip_excluded_on_upload"
+
+	// 补全配置键
+	KeyCompletionEnabled              = "system.completion_enabled"
+	KeyCompletionProviders            = "system.completion_providers"
+	KeyCompletionQuotas               = "system.completion_quotas"
+	KeyCompletionCache                = "system.completion_cache"
 )
 
 // 标签/会话配置相关的键名
@@ -152,6 +158,32 @@ type SystemConfig struct {
 	DownloadExcludePatterns string `json:"download_exclude_patterns"` // 下载时排除的目录/文件，换行分隔
 	DefaultDownloadMode     string `json:"default_download_mode"`      // 默认下载模式：fast 或 compatible
 	SkipExcludedOnUpload    bool   `json:"skip_excluded_on_upload"`    // 上传时是否跳过排除的文件
+
+	// 补全设置
+	CompletionEnabled   bool                       `json:"completion_enabled"`    // 是否启用补全
+	CompletionProviders *CompletionProvidersConfig `json:"completion_providers"`  // 补全提供者配置
+	CompletionQuotas    *CompletionQuotasConfig    `json:"completion_quotas"`     // 补全配额配置
+	CompletionCache     *CompletionCacheConfig     `json:"completion_cache"`      // 补全缓存配置
+}
+
+// CompletionProvidersConfig 补全提供者配置
+type CompletionProvidersConfig struct {
+	Local         bool `json:"local"`          // 本地命令库
+	RemoteHistory bool `json:"remote_history"` // 远端历史命令
+	Script        bool `json:"script"`         // 脚本库
+	Session       bool `json:"session"`        // 会话历史
+}
+
+// CompletionQuotasConfig 补全配额配置
+type CompletionQuotasConfig struct {
+	LocalMin                 int  `json:"local_min"`                   // 本地命令库最少数量
+	LocalMax                 int  `json:"local_max"`                   // 本地命令库最多数量
+	ScriptMin                int  `json:"script_min"`                  // 脚本库最少数量
+	ScriptMax                int  `json:"script_max"`                  // 脚本库最多数量
+	SessionMin               int  `json:"session_min"`                 // 会话历史最少数量
+	SessionMax               int  `json:"session_max"`                 // 会话历史最多数量
+	RemoteHistoryUnlimited   bool `json:"remote_history_unlimited"`    // 远端历史是否无限制
+	RemoteHistorySoftMax     int  `json:"remote_history_soft_max"`     // 远端历史软上限
 }
 
 // TabSessionConfig 标签/会话配置结构
@@ -180,4 +212,10 @@ type RateLimitConfig struct {
 type CookieConfig struct {
 	Secure bool   `json:"secure"` // Cookie Secure 标志
 	Domain string `json:"domain"` // Cookie 域名
+}
+
+// CompletionCacheConfig 补全缓存配置
+type CompletionCacheConfig struct {
+	TTLMinutes int `json:"ttl_minutes"`  // 缓存TTL（分钟）
+	MaxEntries int `json:"max_entries"`  // 最大缓存条目数
 }

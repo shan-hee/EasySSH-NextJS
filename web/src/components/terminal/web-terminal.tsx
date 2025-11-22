@@ -1,12 +1,32 @@
 "use client"
 
-import { useEffect, useRef, useCallback, useLayoutEffect } from "react"
+import { useEffect, useRef, useCallback, useLayoutEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import { ConnectionLoader } from "./connection-loader"
 import { getTerminalTheme } from "./terminal-themes"
+import { CompletionPopup } from "./completion-popup"
 import type { Terminal } from "@xterm/xterm"
 import { useTerminalInstance } from "@/hooks/useTerminalInstance"
 import { useWebSocketConnection } from "@/hooks/useWebSocketConnection"
+import { CompletionEngine } from "@/lib/completion/completion-engine"
+import { LocalCommandProvider } from "@/lib/completion/providers/local-command-provider"
+import { RemoteHistoryProvider } from "@/lib/completion/providers/remote-history-provider"
+import { ScriptProvider } from "@/lib/completion/providers/script-provider"
+import { SessionProvider } from "@/lib/completion/providers/session-provider"
+import type { ScriptItem } from "@/lib/completion/providers/script-provider"
+import {
+  parseCompletionContext,
+  getCursorScreenPosition,
+  applyCompletion,
+  isTabKey,
+  isEscapeKey,
+  isUpArrow,
+  isDownArrow,
+  isEnterKey,
+} from "@/lib/completion/utils"
+import type { CompletionItem, CompletionResult } from "@/lib/completion/types"
+import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
+import { useCompletionConfig } from "@/contexts/completion-config-context"
 
 interface WebTerminalProps {
   sessionId: string
@@ -32,6 +52,13 @@ interface WebTerminalProps {
   copyShortcut?: string
   pasteShortcut?: string
   clearShortcut?: string
+  // 补全设置
+  completionEnabled?: boolean
+  completionTrigger?: 'tab' | 'auto'
+  completionAutoDelay?: number
+  completionMaxItems?: number
+  completionShowIcon?: boolean
+  completionShowDescription?: boolean
 }
 
 export function WebTerminal({
@@ -58,9 +85,18 @@ export function WebTerminal({
   copyShortcut = 'Ctrl+Shift+C',
   pasteShortcut = 'Ctrl+Shift+V',
   clearShortcut = 'Ctrl+L',
+  completionEnabled = true,
+  completionTrigger = 'auto',
+  completionAutoDelay = 300,
+  completionMaxItems = 10,
+  completionShowIcon = true,
+  completionShowDescription = true,
 }: WebTerminalProps) {
   // 使用 next-themes 获取应用主题
   const { theme: appTheme, resolvedTheme } = useTheme()
+
+  // 使用补全配置 Context
+  const { completionConfig } = useCompletionConfig()
 
   // 获取实际的主题（light 或 dark）
   const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
@@ -88,7 +124,7 @@ export function WebTerminal({
   )
 
   // ==================== WebSocket 连接管理 ====================
-  const { sendInput, resize } = useWebSocketConnection({
+  const { sendInput, resize, ws } = useWebSocketConnection({
     sessionId,
     serverId,
     serverName,
@@ -99,7 +135,24 @@ export function WebTerminal({
     cols: terminal?.cols || 80,
     rows: terminal?.rows || 24,
     onLoadingChange,
+    onCompletionData: (data) => {
+      // 加载远端历史到 RemoteHistoryProvider
+      remoteHistoryProviderRef.current?.loadHistory(data.history, data.timestamp)
+
+      // 加载脚本库到 ScriptProvider
+      scriptProviderRef.current?.loadScripts(data.scripts)
+    }
   })
+
+  // ==================== 补全数据同步生命周期管理 ====================
+  useEffect(() => {
+    // 连接断开时清空所有provider缓存
+    if (!ws || !isConnected || !serverId) {
+      remoteHistoryProviderRef.current?.clear()
+      scriptProviderRef.current?.clear()
+      sessionProviderRef.current?.clear()
+    }
+  }, [ws, isConnected, serverId])
 
   // ==================== 监听应用主题/终端主题变化 ====================
   useLayoutEffect(() => {
@@ -149,6 +202,157 @@ export function WebTerminal({
     }
   }, [scrollback, terminalReady, terminal])
 
+  // ==================== 补全功能状态 ====================
+  const [completionState, setCompletionState] = useState<{
+    visible: boolean
+    items: CompletionItem[]
+    selectedIndex: number
+    position: { x: number; y: number }
+    matchedPrefix: string
+  }>({
+    visible: false,
+    items: [],
+    selectedIndex: 0,
+    position: { x: 0, y: 0 },
+    matchedPrefix: "",
+  })
+
+  // 使用 ref 跟踪最新的 completionState
+  const completionStateRef = useRef(completionState)
+  useEffect(() => {
+    completionStateRef.current = completionState
+  }, [completionState])
+
+  // 补全引擎实例
+  const completionEngineRef = useRef<CompletionEngine | null>(null)
+  const remoteHistoryProviderRef = useRef<RemoteHistoryProvider | null>(null)
+  const scriptProviderRef = useRef<ScriptProvider | null>(null)
+  const sessionProviderRef = useRef<SessionProvider | null>(null)
+
+  // 自动补全定时器
+  const autoCompleteTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const AUTO_COMPLETE_DELAY = 200 // 毫秒
+
+  // 使用 ref 保存最新的 handleCompletionRequest 函数
+  const handleCompletionRequestRef = useRef<(() => Promise<void>) | undefined>(undefined)
+
+  // 初始化补全引擎
+  useEffect(() => {
+    if (!completionEngineRef.current) {
+      // 合并全局配置和终端级配置
+      const mergedConfig = {
+        ...completionConfig,
+        trigger: completionTrigger,
+        autoTriggerDelay: completionAutoDelay,
+        maxItems: completionMaxItems,
+        showIcon: completionShowIcon,
+        showDescription: completionShowDescription,
+      }
+
+      // 传递 sessionId 以区分不同服务器的补全缓存
+      const engine = new CompletionEngine(sessionId, mergedConfig)
+
+      // 本地命令提供者 (priority: 20)
+      engine.registerProvider(new LocalCommandProvider())
+
+      // 会话提供者 (priority: 25)
+      const sessionProvider = new SessionProvider()
+      sessionProviderRef.current = sessionProvider
+      engine.registerProvider(sessionProvider)
+
+      // 脚本库提供者 (priority: 35-40)
+      const scriptProvider = new ScriptProvider()
+      scriptProviderRef.current = scriptProvider
+      engine.registerProvider(scriptProvider)
+
+      // 远端历史提供者 (priority: 35-45)
+      const remoteHistoryProvider = new RemoteHistoryProvider()
+      remoteHistoryProviderRef.current = remoteHistoryProvider
+      engine.registerProvider(remoteHistoryProvider)
+
+      completionEngineRef.current = engine
+    }
+  }, [sessionId, completionConfig, completionTrigger, completionAutoDelay, completionMaxItems, completionShowIcon, completionShowDescription])
+
+  // 动态更新补全配置
+  useEffect(() => {
+    if (completionEngineRef.current) {
+      const mergedConfig = {
+        ...completionConfig,
+        trigger: completionTrigger,
+        autoTriggerDelay: completionAutoDelay,
+        maxItems: completionMaxItems,
+        showIcon: completionShowIcon,
+        showDescription: completionShowDescription,
+      }
+      completionEngineRef.current.updateConfig(mergedConfig)
+    }
+  }, [completionConfig, completionTrigger, completionAutoDelay, completionMaxItems, completionShowIcon, completionShowDescription])
+
+  // 关闭补全弹窗
+  const closeCompletion = useCallback(() => {
+    setCompletionState({
+      visible: false,
+      items: [],
+      selectedIndex: 0,
+      position: { x: 0, y: 0 },
+      matchedPrefix: "",
+    })
+  }, [])
+
+  // 应用补全
+  const applyCompletionItem = useCallback(
+    (item: CompletionItem) => {
+      if (!terminal) return
+
+      const context = parseCompletionContext(terminal)
+      applyCompletion(terminal, item.text, context.currentWord, sendInput)
+      closeCompletion()
+    },
+    [terminal, closeCompletion, sendInput]
+  )
+
+  // 处理补全请求
+  const handleCompletionRequest = useCallback(async () => {
+    // 如果补全功能被禁用，直接返回
+    if (!completionEnabled || !terminal || !completionEngineRef.current) {
+      return
+    }
+
+    const context = parseCompletionContext(terminal)
+
+    // 获取补全结果
+    const result = await completionEngineRef.current.getCompletions(context)
+
+    if (!result || result.items.length === 0) {
+      closeCompletion()
+      return
+    }
+
+    // 计算弹窗位置
+    const position = getCursorScreenPosition(terminal)
+
+    // 获取终端容器的位置偏移
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      position.x += rect.left
+      position.y += rect.top
+    }
+
+    setCompletionState({
+      visible: true,
+      items: result.items,
+      selectedIndex: 0,
+      position,
+      matchedPrefix: context.currentWord,
+    })
+  }, [completionEnabled, terminal, closeCompletion, containerRef])
+
+  // 更新 ref 以保持最新的函数引用
+  useEffect(() => {
+    handleCompletionRequestRef.current = handleCompletionRequest
+  }, [handleCompletionRequest])
+
   // ==================== Write prompt function ====================
   const writePrompt = useCallback((term: Terminal) => {
     const hostShort = host.split('.')[0] || host
@@ -162,17 +366,111 @@ export function WebTerminal({
     const disposable = terminal.onData((data: string) => {
       if (!isConnected) return
 
+      // 检测 Tab 键 - 手动触发补全
+      if (isTabKey(data)) {
+        handleCompletionRequestRef.current?.()
+        return
+      }
+
+      // 如果补全弹窗可见,处理导航键
+      if (completionStateRef.current.visible) {
+        // Escape 键 - 关闭补全
+        if (isEscapeKey(data)) {
+          closeCompletion()
+          return
+        }
+
+        // 上箭头 - 向上导航
+        if (isUpArrow(data)) {
+          setCompletionState((prev) => ({
+            ...prev,
+            selectedIndex: Math.max(0, prev.selectedIndex - 1),
+          }))
+          return
+        }
+
+        // 下箭头 - 向下导航
+        if (isDownArrow(data)) {
+          setCompletionState((prev) => ({
+            ...prev,
+            selectedIndex: Math.min(prev.items.length - 1, prev.selectedIndex + 1),
+          }))
+          return
+        }
+
+        // 回车键 - 应用选中的补全
+        if (isEnterKey(data)) {
+          const selectedItem = completionStateRef.current.items[completionStateRef.current.selectedIndex]
+          if (selectedItem) {
+            applyCompletionItem(selectedItem)
+          }
+          return
+        }
+
+        // 其他输入（非导航键）- 关闭补全但继续处理输入和自动触发
+        closeCompletion()
+      }
+
       // 发送用户输入到 WebSocket
       sendInput(data)
 
       // 通知父组件（用于日志记录等）
       onCommand(data)
+
+      // 检测回车键 - 追踪执行的命令（在自动触发之前）
+      if (isEnterKey(data)) {
+        const context = parseCompletionContext(terminal)
+        const command = context.fullLine.trim()
+
+        // 添加到会话历史
+        if (command && sessionProviderRef.current) {
+          sessionProviderRef.current.addCommand(command)
+        }
+
+        // 回车键不触发补全
+        return
+      }
+
+      // 自动触发补全（节流）
+      // 清除旧定时器
+      if (autoCompleteTimerRef.current) {
+        clearTimeout(autoCompleteTimerRef.current)
+        autoCompleteTimerRef.current = null
+      }
+
+      // 设置新定时器
+      autoCompleteTimerRef.current = setTimeout(() => {
+        const context = parseCompletionContext(terminal)
+
+        // 只在输入命令时触发（至少2个字符）
+        if (context.currentWord && context.currentWord.length >= 2) {
+          // 使用 ref 保证调用最新的函数
+          handleCompletionRequestRef.current?.()
+        }
+        // 定时器执行完毕后清空引用
+        autoCompleteTimerRef.current = null
+      }, AUTO_COMPLETE_DELAY)
     })
 
     return () => {
       disposable.dispose()
+      // 清理定时器
+      if (autoCompleteTimerRef.current) {
+        clearTimeout(autoCompleteTimerRef.current)
+        autoCompleteTimerRef.current = null
+      }
     }
-  }, [terminal, terminalReady, isConnected, sendInput, onCommand])
+  }, [
+    terminal,
+    terminalReady,
+    isConnected,
+    sendInput,
+    onCommand,
+    closeCompletion,
+    applyCompletionItem,
+    // 移除 completionState 的单个字段依赖,使用 state setter 函数形式
+    // 移除 handleCompletionRequest,使用 ref 替代
+  ])
 
   // ==================== 容器尺寸变化时重新适配 ====================
   useEffect(() => {
@@ -464,6 +762,21 @@ export function WebTerminal({
         className="h-full w-full terminal-container"
         style={backgroundStyle}
       />
+
+      {/* 补全弹窗 */}
+      {completionState.visible && terminal && terminal.options.theme && (
+        <TerminalThemeProvider theme={terminal.options.theme}>
+          <CompletionPopup
+            items={completionState.items}
+            selectedIndex={completionState.selectedIndex}
+            position={completionState.position}
+            matchedPrefix={completionState.matchedPrefix}
+            onSelect={applyCompletionItem}
+            onClose={closeCompletion}
+          />
+        </TerminalThemeProvider>
+      )}
+
       <style jsx global>{`
         .terminal-container .xterm {
           padding: 16px;

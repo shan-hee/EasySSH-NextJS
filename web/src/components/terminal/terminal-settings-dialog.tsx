@@ -29,6 +29,7 @@ import {
   Clock,
   Layers,
   Activity,
+  Command,
 } from "lucide-react"
 import { KeyboardShortcutInput } from "./keyboard-shortcut-input"
 
@@ -60,6 +61,14 @@ export interface TerminalSettings {
   copyShortcut: string
   pasteShortcut: string
   clearShortcut: string
+
+  // 补全设置
+  completionEnabled: boolean
+  completionTrigger: 'tab' | 'auto'
+  completionAutoDelay: number
+  completionMaxItems: number
+  completionShowIcon: boolean
+  completionShowDescription: boolean
 }
 
 interface TerminalSettingsDialogProps {
@@ -90,6 +99,12 @@ const defaultSettings: TerminalSettings = {
   copyShortcut: 'Ctrl+Shift+C',
   pasteShortcut: 'Ctrl+Shift+V',
   clearShortcut: 'Ctrl+L',
+  completionEnabled: true,
+  completionTrigger: 'auto',
+  completionAutoDelay: 300,
+  completionMaxItems: 10,
+  completionShowIcon: true,
+  completionShowDescription: true,
 }
 
 export function TerminalSettingsDialog({
@@ -165,7 +180,7 @@ export function TerminalSettingsDialog({
         </div>
 
         <Tabs defaultValue="terminal" className="w-full flex-1 flex flex-col overflow-hidden px-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="terminal" className="flex items-center gap-2">
               <Terminal className="h-4 w-4" />
               终端
@@ -181,6 +196,10 @@ export function TerminalSettingsDialog({
             <TabsTrigger value="shortcuts" className="flex items-center gap-2">
               <Keyboard className="h-4 w-4" />
               快捷键
+            </TabsTrigger>
+            <TabsTrigger value="completion" className="flex items-center gap-2">
+              <Command className="h-4 w-4" />
+              补全
             </TabsTrigger>
           </TabsList>
 
@@ -552,6 +571,124 @@ export function TerminalSettingsDialog({
                 <li>• 点击输入框右侧的 × 图标可清除快捷键</li>
               </ul>
             </div>
+          </TabsContent>
+
+          {/* 补全设置 */}
+          <TabsContent value="completion" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="completionEnabled">启用补全</Label>
+                <p className="text-sm text-muted-foreground">
+                  在当前终端中启用命令补全功能
+                </p>
+              </div>
+              <Switch
+                id="completionEnabled"
+                checked={localSettings.completionEnabled}
+                onCheckedChange={(checked) => updateSetting('completionEnabled', checked)}
+              />
+            </div>
+
+            {localSettings.completionEnabled && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="completionTrigger">触发方式</Label>
+                  <Select
+                    value={localSettings.completionTrigger}
+                    onValueChange={(value: 'tab' | 'auto') =>
+                      updateSetting('completionTrigger', value)
+                    }
+                  >
+                    <SelectTrigger id="completionTrigger">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tab">Tab 键触发</SelectItem>
+                      <SelectItem value="auto">自动触发</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {localSettings.completionTrigger === 'tab'
+                      ? '按 Tab 键手动触发补全'
+                      : '输入时自动显示补全建议'}
+                  </p>
+                </div>
+
+                {localSettings.completionTrigger === 'auto' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="completionAutoDelay">自动触发延迟</Label>
+                    <div className="flex items-center gap-4">
+                      <Slider
+                        id="completionAutoDelay"
+                        min={100}
+                        max={1000}
+                        step={50}
+                        value={[localSettings.completionAutoDelay]}
+                        onValueChange={(value) => updateSetting('completionAutoDelay', value[0])}
+                        className="flex-1"
+                      />
+                      <span className="w-16 text-sm text-muted-foreground">
+                        {localSettings.completionAutoDelay}ms
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      停止输入后等待多久显示补全建议
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="completionMaxItems">最大显示数量</Label>
+                  <div className="flex items-center gap-4">
+                    <Slider
+                      id="completionMaxItems"
+                      min={5}
+                      max={20}
+                      step={1}
+                      value={[localSettings.completionMaxItems]}
+                      onValueChange={(value) => updateSetting('completionMaxItems', value[0])}
+                      className="flex-1"
+                    />
+                    <span className="w-12 text-sm text-muted-foreground">
+                      {localSettings.completionMaxItems} 项
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    补全弹窗中最多显示的补全项数量
+                  </p>
+                </div>
+
+                <div className="border-t pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="completionShowIcon">显示图标</Label>
+                      <p className="text-sm text-muted-foreground">
+                        在补全项中显示类型图标
+                      </p>
+                    </div>
+                    <Switch
+                      id="completionShowIcon"
+                      checked={localSettings.completionShowIcon}
+                      onCheckedChange={(checked) => updateSetting('completionShowIcon', checked)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="completionShowDescription">显示描述</Label>
+                      <p className="text-sm text-muted-foreground">
+                        在补全项中显示详细描述信息
+                      </p>
+                    </div>
+                    <Switch
+                      id="completionShowDescription"
+                      checked={localSettings.completionShowDescription}
+                      onCheckedChange={(checked) => updateSetting('completionShowDescription', checked)}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </TabsContent>
         </Tabs>
 
