@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useLayoutEffect, DragEvent, useMemo, useCallback, useDeferredValue } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, DragEvent, useMemo, useCallback, useDeferredValue, startTransition } from "react"
 import { createPortal } from "react-dom"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
@@ -81,6 +81,7 @@ import { ChmodDialog } from "@/components/sftp/chmod-dialog"
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner"
 import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransfer"
 import { FileActionMenu, type FileAction } from "@/components/sftp/file-action-menu"
+import { useFileListVirtualizer } from "@/hooks/use-file-list-virtualizer"
 
 interface FileItem {
   name: string
@@ -252,6 +253,8 @@ export function SftpManager(props: SftpManagerProps) {
   const sessionLabelInputRef = useRef<HTMLInputElement>(null)
   const filteredFilesRef = useRef<EnhancedFileItem[]>([])
   const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  const gridScrollRef = useRef<HTMLDivElement>(null)
 
   // 从系统配置获取排除规则
   const excludePatterns = useDownloadExcludePatterns()
@@ -301,6 +304,33 @@ export function SftpManager(props: SftpManagerProps) {
     filteredFilesRef.current = result
     return result
   }, [enhancedFiles, showHidden, deferredSearchTerm, sortBy, sortOrder])
+
+  // 计算网格视图的列数（响应式）
+  const gridColumns = useMemo(() => {
+    // 根据容器宽度动态计算，这里使用默认值
+    // 实际会通过 CSS grid 自动调整
+    return 6
+  }, [])
+
+  // 虚拟滚动配置 - 文件数超过 100 时启用
+  const shouldVirtualize = filteredFiles.length > 100
+
+  // 列表视图虚拟滚动
+  const listVirtualizer = useFileListVirtualizer({
+    scrollElementRef: listScrollRef,
+    count: filteredFiles.length,
+    viewMode: 'list',
+    enabled: shouldVirtualize && viewMode === 'list',
+  })
+
+  // 网格视图虚拟滚动
+  const gridVirtualizer = useFileListVirtualizer({
+    scrollElementRef: gridScrollRef,
+    count: filteredFiles.length,
+    viewMode: 'grid',
+    gridColumns,
+    enabled: shouldVirtualize && viewMode === 'grid',
+  })
 
   // 文件选择处理 - 使用 useCallback 优化
   const handleFileSelect = useCallback((fileName: string, event: React.MouseEvent) => {
@@ -366,7 +396,11 @@ export function SftpManager(props: SftpManagerProps) {
   const handleFileDoubleClick = useCallback((fileName: string, fileType: "file" | "directory") => {
     if (fileType === "directory") {
       const next = (currentPath.endsWith("/") ? currentPath : currentPath + "/") + fileName
-      onNavigate(next)
+      // 使用 startTransition 包装导航操作,避免阻塞 UI
+      // 注意: onNavigate 是异步的,但 startTransition 会降低后续状态更新的优先级
+      startTransition(() => {
+        onNavigate(next)
+      })
     } else {
       handleOpenEditor(fileName)
     }
@@ -970,8 +1004,8 @@ export function SftpManager(props: SftpManagerProps) {
     handleSelectAll,
   ])
 
-  // 获取文件类型信息（用于 3D File 组件）
-  const getFileTypeInfo = (fileName: string) => {
+  // 获取文件类型信息（用于 3D File 组件）- 使用 useCallback 优化
+  const getFileTypeInfo = useCallback((fileName: string) => {
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
 
     // 代码文件
@@ -1004,10 +1038,10 @@ export function SftpManager(props: SftpManagerProps) {
     }
     // 默认文件
     return { color: '#95A5A6', label: ext.toUpperCase() || 'FILE', icon: <FileText className="h-4 w-4" /> }
-  }
+  }, [])
 
-  // 文件图标 - Mac 风格（用于列表视图）
-  const getFileIcon = (file: FileItem) => {
+  // 文件图标 - Mac 风格（用于列表视图）- 使用 useCallback 优化
+  const getFileIcon = useCallback((file: FileItem) => {
     if (file.type === "directory") {
       return <FolderOpen className="h-4 w-4 text-blue-500" />
     }
@@ -1051,7 +1085,7 @@ export function SftpManager(props: SftpManagerProps) {
 
     // 默认文件
     return <FileText className="h-4 w-4 text-muted-foreground" />
-  }
+  }, [])
 
   // 文件大小格式化（预留功能）
   const _formatFileSize = (bytes: number): string => {
@@ -1251,7 +1285,12 @@ export function SftpManager(props: SftpManagerProps) {
                 <>
                   {/* Home图标按钮 - 编辑模式 */}
                   <button
-                    onClick={() => onNavigate("/")}
+                    onClick={() => {
+                      // 使用 startTransition 避免阻塞 UI
+                      startTransition(() => {
+                        onNavigate("/")
+                      })
+                    }}
                     className={cn(
                       "absolute left-2 top-1/2 -translate-y-1/2 z-10 p-0.5 rounded-md",
                       "text-zinc-600 dark:text-zinc-400",
@@ -1313,7 +1352,10 @@ export function SftpManager(props: SftpManagerProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      onNavigate("/")
+                      // 使用 startTransition 避免阻塞 UI
+                      startTransition(() => {
+                        onNavigate("/")
+                      })
                     }}
                     className={cn(
                       "absolute left-2 top-1/2 -translate-y-1/2 p-0.5 rounded-md",
@@ -1330,7 +1372,10 @@ export function SftpManager(props: SftpManagerProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      onNavigate("/")
+                      // 使用 startTransition 避免阻塞 UI
+                      startTransition(() => {
+                        onNavigate("/")
+                      })
                     }}
                     className={cn(
                       "px-1.5 py-0.5 rounded-md whitespace-nowrap",
@@ -1355,7 +1400,10 @@ export function SftpManager(props: SftpManagerProps) {
                               // 点击文件名时不做任何操作（文件已打开）
                               return
                             }
-                            onNavigate(segmentPath)
+                            // 使用 startTransition 避免阻塞 UI
+                            startTransition(() => {
+                              onNavigate(segmentPath)
+                            })
                           }}
                           className={cn(
                             "px-1.5 py-0.5 rounded-md whitespace-nowrap transition-all duration-200",
@@ -1388,7 +1436,12 @@ export function SftpManager(props: SftpManagerProps) {
                 ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
                 : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
-            onClick={() => setViewMode("grid")}
+            onClick={() => {
+              // 使用 startTransition 避免阻塞 UI
+              startTransition(() => {
+                setViewMode("grid")
+              })
+            }}
             title="图标视图"
           >
             <LayoutGrid className="h-3.5 w-3.5" />
@@ -1402,7 +1455,12 @@ export function SftpManager(props: SftpManagerProps) {
                 ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
                 : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
-            onClick={() => setViewMode("list")}
+            onClick={() => {
+              // 使用 startTransition 避免阻塞 UI
+              startTransition(() => {
+                setViewMode("list")
+              })
+            }}
             title="列表视图"
           >
             <List className="h-3.5 w-3.5" />
@@ -1587,7 +1645,10 @@ export function SftpManager(props: SftpManagerProps) {
                 )}
                 onClick={() => {
                   const parentPath = pathSegments.slice(0, -1).join("/")
-                  onNavigate(parentPath ? `/${parentPath}` : "/")
+                  // 使用 startTransition 避免阻塞 UI
+                  startTransition(() => {
+                    onNavigate(parentPath ? `/${parentPath}` : "/")
+                  })
                 }}
                 title="返回上级目录"
               >
@@ -1619,7 +1680,12 @@ export function SftpManager(props: SftpManagerProps) {
                   ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
                   : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
               )}
-              onClick={() => setShowHidden(!showHidden)}
+              onClick={() => {
+                // 使用 startTransition 避免阻塞 UI
+                startTransition(() => {
+                  setShowHidden(!showHidden)
+                })
+              }}
               title={showHidden ? "隐藏隐藏文件" : "显示隐藏文件"}
             >
               {showHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
@@ -1695,396 +1761,696 @@ export function SftpManager(props: SftpManagerProps) {
             </div>
           </div>
         ) : viewMode === "grid" ? (
-          <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {/* 新建项 */}
-                {creatingNew && (
-              <div
-                className={cn(
-                  "group relative rounded-lg p-3 cursor-pointer select-none transition-all bg-zinc-200/60 dark:bg-zinc-800/60",
-                )}
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex items-center justify-center h-16 w-16">
-                    {creatingNew === "folder" ? (
-                      <Folder color="#5BA4FC" size={0.6} isFocused={true} />
-                    ) : (
-                      <FileIcon
-                        color="#4D96FF"
-                        size={0.6}
-                        fileType="TXT"
-                        isFocused={true}
-                      />
+          <div ref={gridScrollRef} className="overflow-auto h-full scrollbar-custom">
+            <div className="p-3" style={{
+              height: shouldVirtualize ? `${gridVirtualizer.virtualizer.getTotalSize()}px` : 'auto',
+              position: 'relative'
+            }}>
+              {/* 新建项 */}
+              {creatingNew && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-3">
+                  <div
+                    className={cn(
+                      "group relative rounded-lg p-3 cursor-pointer select-none transition-all bg-zinc-200/60 dark:bg-zinc-800/60",
                     )}
-                  </div>
-                  <div className="text-center w-full">
-                    <Input
-                      ref={editInputRef}
-                      value={editingFileName}
-                      onChange={(e) => setEditingFileName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          finishCreate()
-                        } else if (e.key === "Escape") {
-                          cancelCreate()
-                        }
-                      }}
-                      onBlur={handleCreateBlur}
-                      className={cn(
-                        "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
-                      )}
-                    />
-                    <div className="text-[10px] text-muted-foreground truncate mt-1">
-                      {creatingNew === "folder" ? "目录" : "0 B"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {filteredFiles.map((file) => {
-              const isSelected = selectedFiles.includes(file.name)
-              const isEditing = editingFile === file.name
-              const isDraggedOver = dragOverFolder === file.name
-
-              return (
-                <div
-                  key={file.name}
-                  draggable={!isEditing}
-                  onDragStart={(e) => handleNativeDragStart(e, file.name)}
-                  onDragEnd={handleNativeDragEnd}
-                  onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
-                  onDragLeave={(e) => {
-                    e.preventDefault()
-                    setDragOverFolder(null)
-                  }}
-                  onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
-                  onClick={(e) => {
-                    if (!isEditing) {
-                      handleFileClick(file.name, e)
-                    }
-                  }}
-                  onDoubleClick={() => {
-                    if (!isEditing) {
-                      handleFileDoubleClick(file.name, file.type)
-                    }
-                  }}
-                  onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
-                  className={cn(
-                    "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
-                    (isSelected || (isDraggedOver && file.type === "directory")) && "bg-zinc-200/60 dark:bg-zinc-800/60",
-                    draggedFileName === file.name && "opacity-50"
-                  )}
-                  title={file.name}
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="flex items-center justify-center h-16 w-16">
-                      {file.type === "directory" ? (
-                        <Folder color="#5BA4FC" size={0.6} isFocused={isSelected} />
-                      ) : (() => {
-                        const fileTypeInfo = getFileTypeInfo(file.name)
-                        return (
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex items-center justify-center h-16 w-16">
+                        {creatingNew === "folder" ? (
+                          <Folder color="#5BA4FC" size={0.6} isFocused={true} />
+                        ) : (
                           <FileIcon
-                            color={fileTypeInfo.color}
+                            color="#4D96FF"
                             size={0.6}
-                            fileType={fileTypeInfo.label}
-                            isFocused={isSelected}
+                            fileType="TXT"
+                            isFocused={true}
                           />
-                        )
-                      })()}
-                    </div>
-                    <div className="text-center w-full">
-                      {isEditing ? (
+                        )}
+                      </div>
+                      <div className="text-center w-full">
                         <Input
                           ref={editInputRef}
                           value={editingFileName}
                           onChange={(e) => setEditingFileName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
-                              finishRename()
+                              finishCreate()
                             } else if (e.key === "Escape") {
-                              cancelRename()
+                              cancelCreate()
                             }
                           }}
-                          onBlur={handleRenameBlur}
+                          onBlur={handleCreateBlur}
                           className={cn(
                             "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                           )}
                         />
-                      ) : (
-                        <div className={cn(
-                          "text-xs font-medium truncate text-zinc-800 dark:text-zinc-200",
-                        )}>
-                          {file.name}
+                        <div className="text-[10px] text-muted-foreground truncate mt-1">
+                          {creatingNew === "folder" ? "目录" : "0 B"}
                         </div>
-                      )}
-                      <div className="text-[10px] text-muted-foreground truncate">
-                        {file.type === "directory" ? "目录" : file.size}
                       </div>
                     </div>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        ) : (
-          <Table
-            wrapperClassName="overflow-auto h-full scrollbar-custom"
-            className="sftp-table text-xs [&_th]:h-9 [&_th]:px-3 [&_th]:text-xs [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle"
-          >
-            <TableHeader className="sticky top-0 z-20 bg-background supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
-              <TableRow className={cn(
-                "border-b border-zinc-200 dark:border-zinc-800/50 text-xs",
-              )}>
-                <TableHead
-                  className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
-                  onClick={() => {
-                    setSortBy("name")
-                    setSortOrder(prev => prev === "asc" ? "desc" : "asc")
-                  }}
-                >
-                  名称 {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
-                </TableHead>
-                <TableHead
-                  className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
-                  onClick={() => {
-                    setSortBy("size")
-                    setSortOrder(prev => prev === "asc" ? "desc" : "asc")
-                  }}
-                >
-                  大小 {sortBy === "size" && (sortOrder === "asc" ? "↑" : "↓")}
-                </TableHead>
-                <TableHead
-                  className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
-                  onClick={() => {
-                    setSortBy("modified")
-                    setSortOrder(prev => prev === "asc" ? "desc" : "asc")
-                  }}
-                >
-                  修改时间 {sortBy === "modified" && (sortOrder === "asc" ? "↑" : "↓")}
-                </TableHead>
-                <TableHead className={cn(stickyHeaderCellClass)}>
-                  权限
-                </TableHead>
-                <TableHead className={cn(stickyHeaderCellClass, "text-right")}>
-                  操作
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {/* 新建项 */}
-              {creatingNew && (
-                <TableRow
-                  className={cn(
-                    "cursor-pointer transition-colors bg-zinc-100 dark:bg-zinc-800/50 border-b-0",
-                  )}
-                >
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={false}
-                      disabled
-                      className="rounded"
-                    />
-                  </TableCell>
-
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {creatingNew === "folder" ? (
-                        <FolderOpen className="h-4 w-4 text-blue-500" />
-                      ) : (
-                        <FileText className="h-4 w-4 text-blue-400" />
-                      )}
-                      <Input
-                        ref={editInputRef}
-                        value={editingFileName}
-                        onChange={(e) => setEditingFileName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            finishCreate()
-                          } else if (e.key === "Escape") {
-                            cancelCreate()
-                          }
-                          e.stopPropagation()
-                        }}
-                        onBlur={handleCreateBlur}
-                        onClick={(e) => e.stopPropagation()}
-                        className={cn(
-                          "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
-                        )}
-                      />
-                    </div>
-                  </TableCell>
-
-                  <TableCell>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {creatingNew === "folder" ? "-" : "0 B"}
-                    </span>
-                  </TableCell>
-
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground">刚刚</span>
-                  </TableCell>
-
-                  <TableCell>
-                    <span className="font-mono text-xs text-muted-foreground">-</span>
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    <div className="h-7 w-7" />
-                  </TableCell>
-                </TableRow>
               )}
 
-              {filteredFiles.map((file) => {
-                const isDraggedOver = dragOverFolder === file.name
-                return (
-                  <TableRow
-                    key={file.name}
-                    draggable={editingFile !== file.name}
-                    onDragStart={(e) => handleNativeDragStart(e, file.name)}
-                    onDragEnd={handleNativeDragEnd}
-                    onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
-                    onDragLeave={(e) => {
-                      e.preventDefault()
-                      setDragOverFolder(null)
+              {/* 虚拟滚动渲染 */}
+              {shouldVirtualize ? (
+                gridVirtualizer.virtualizer.getVirtualItems().map((virtualRow) => {
+                  const { start, end } = gridVirtualizer.getFileIndicesForRow(virtualRow.index)
+                  const rowFiles = filteredFiles.slice(start, end)
+
+                  return (
+                    <div
+                      key={virtualRow.index}
+                      data-index={virtualRow.index}
+                      ref={gridVirtualizer.virtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`
+                      }}
+                    >
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {rowFiles.map((file) => {
+                          const isSelected = selectedFiles.includes(file.name)
+                          const isEditing = editingFile === file.name
+                          const isDraggedOver = dragOverFolder === file.name
+
+                          return (
+                            <div
+                              key={file.name}
+                              draggable={!isEditing}
+                              onDragStart={(e) => handleNativeDragStart(e, file.name)}
+                              onDragEnd={handleNativeDragEnd}
+                              onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
+                              onDragLeave={(e) => {
+                                e.preventDefault()
+                                setDragOverFolder(null)
+                              }}
+                              onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
+                              onClick={(e) => {
+                                if (!isEditing) {
+                                  handleFileClick(file.name, e)
+                                }
+                              }}
+                              onDoubleClick={() => {
+                                if (!isEditing) {
+                                  handleFileDoubleClick(file.name, file.type)
+                                }
+                              }}
+                              onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
+                              className={cn(
+                                "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
+                                (isSelected || (isDraggedOver && file.type === "directory")) && "bg-zinc-200/60 dark:bg-zinc-800/60",
+                                draggedFileName === file.name && "opacity-50"
+                              )}
+                              title={file.name}
+                            >
+                              <div className="flex flex-col items-center gap-2">
+                                <div className="flex items-center justify-center h-16 w-16">
+                                  {file.type === "directory" ? (
+                                    <Folder color="#5BA4FC" size={0.6} isFocused={isSelected} />
+                                  ) : (() => {
+                                    const fileTypeInfo = getFileTypeInfo(file.name)
+                                    return (
+                                      <FileIcon
+                                        color={fileTypeInfo.color}
+                                        size={0.6}
+                                        fileType={fileTypeInfo.label}
+                                        isFocused={isSelected}
+                                      />
+                                    )
+                                  })()}
+                                </div>
+                                <div className="text-center w-full">
+                                  {isEditing ? (
+                                    <Input
+                                      ref={editInputRef}
+                                      value={editingFileName}
+                                      onChange={(e) => setEditingFileName(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          finishRename()
+                                        } else if (e.key === "Escape") {
+                                          cancelRename()
+                                        }
+                                      }}
+                                      onBlur={handleRenameBlur}
+                                      className={cn(
+                                        "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                      )}
+                                    />
+                                  ) : (
+                                    <div className={cn(
+                                      "text-xs font-medium truncate text-zinc-800 dark:text-zinc-200",
+                                    )}>
+                                      {file.name}
+                                    </div>
+                                  )}
+                                  <div className="text-[10px] text-muted-foreground truncate">
+                                    {file.type === "directory" ? "目录" : file.size}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {filteredFiles.map((file) => {
+                    const isSelected = selectedFiles.includes(file.name)
+                    const isEditing = editingFile === file.name
+                    const isDraggedOver = dragOverFolder === file.name
+
+                    return (
+                      <div
+                        key={file.name}
+                        draggable={!isEditing}
+                        onDragStart={(e) => handleNativeDragStart(e, file.name)}
+                        onDragEnd={handleNativeDragEnd}
+                        onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
+                        onDragLeave={(e) => {
+                          e.preventDefault()
+                          setDragOverFolder(null)
+                        }}
+                        onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
+                        onClick={(e) => {
+                          if (!isEditing) {
+                            handleFileClick(file.name, e)
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (!isEditing) {
+                            handleFileDoubleClick(file.name, file.type)
+                          }
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
+                        className={cn(
+                          "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
+                          (isSelected || (isDraggedOver && file.type === "directory")) && "bg-zinc-200/60 dark:bg-zinc-800/60",
+                          draggedFileName === file.name && "opacity-50"
+                        )}
+                        title={file.name}
+                      >
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex items-center justify-center h-16 w-16">
+                            {file.type === "directory" ? (
+                              <Folder color="#5BA4FC" size={0.6} isFocused={isSelected} />
+                            ) : (() => {
+                              const fileTypeInfo = getFileTypeInfo(file.name)
+                              return (
+                                <FileIcon
+                                  color={fileTypeInfo.color}
+                                  size={0.6}
+                                  fileType={fileTypeInfo.label}
+                                  isFocused={isSelected}
+                                />
+                              )
+                            })()}
+                          </div>
+                          <div className="text-center w-full">
+                            {isEditing ? (
+                              <Input
+                                ref={editInputRef}
+                                value={editingFileName}
+                                onChange={(e) => setEditingFileName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    finishRename()
+                                  } else if (e.key === "Escape") {
+                                    cancelRename()
+                                  }
+                                }}
+                                onBlur={handleRenameBlur}
+                                className={cn(
+                                  "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                )}
+                              />
+                            ) : (
+                              <div className={cn(
+                                "text-xs font-medium truncate text-zinc-800 dark:text-zinc-200",
+                              )}>
+                                {file.name}
+                              </div>
+                            )}
+                            <div className="text-[10px] text-muted-foreground truncate">
+                              {file.type === "directory" ? "目录" : file.size}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div ref={listScrollRef} className="overflow-auto h-full scrollbar-custom">
+            <Table
+              className="sftp-table text-xs [&_th]:h-9 [&_th]:px-3 [&_th]:text-xs [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle"
+            >
+              <TableHeader className="sticky top-0 z-20 bg-background supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
+                <TableRow className={cn(
+                  "border-b border-zinc-200 dark:border-zinc-800/50 text-xs",
+                )}>
+                  <TableHead
+                    className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
+                    onClick={() => {
+                      // 使用 startTransition 避免阻塞 UI
+                      startTransition(() => {
+                        setSortBy("name")
+                        setSortOrder(prev => prev === "asc" ? "desc" : "asc")
+                      })
                     }}
-                    onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
-                    className={cn(
-                      "cursor-pointer transition-colors border-b-0",
-                      (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-zinc-100 dark:bg-zinc-800/50",
-                      "hover:bg-zinc-50 dark:hover:bg-zinc-800/30",
-                      draggedFileName === file.name && "opacity-50"
-                    )}
-                    onClick={e => {
-                      handleFileClick(file.name, e)
-                    }}
-                    onDoubleClick={() => {
-                      handleFileDoubleClick(file.name, file.type)
-                    }}
-                    onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
                   >
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getFileIcon(file)}
-                      {editingFile === file.name ? (
+                    名称 {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+                  </TableHead>
+                  <TableHead
+                    className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
+                    onClick={() => {
+                      // 使用 startTransition 避免阻塞 UI
+                      startTransition(() => {
+                        setSortBy("size")
+                        setSortOrder(prev => prev === "asc" ? "desc" : "asc")
+                      })
+                    }}
+                  >
+                    大小 {sortBy === "size" && (sortOrder === "asc" ? "↑" : "↓")}
+                  </TableHead>
+                  <TableHead
+                    className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
+                    onClick={() => {
+                      // 使用 startTransition 避免阻塞 UI
+                      startTransition(() => {
+                        setSortBy("modified")
+                        setSortOrder(prev => prev === "asc" ? "desc" : "asc")
+                      })
+                    }}
+                  >
+                    修改时间 {sortBy === "modified" && (sortOrder === "asc" ? "↑" : "↓")}
+                  </TableHead>
+                  <TableHead className={cn(stickyHeaderCellClass)}>
+                    权限
+                  </TableHead>
+                  <TableHead className={cn(stickyHeaderCellClass, "text-right")}>
+                    操作
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* 新建项 */}
+                {creatingNew && (
+                  <TableRow
+                    className={cn(
+                      "cursor-pointer transition-colors bg-zinc-100 dark:bg-zinc-800/50 border-b-0",
+                    )}
+                  >
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        disabled
+                        className="rounded"
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {creatingNew === "folder" ? (
+                          <FolderOpen className="h-4 w-4 text-blue-500" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-blue-400" />
+                        )}
                         <Input
                           ref={editInputRef}
                           value={editingFileName}
                           onChange={(e) => setEditingFileName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
-                              finishRename()
+                              finishCreate()
                             } else if (e.key === "Escape") {
-                              cancelRename()
+                              cancelCreate()
                             }
                             e.stopPropagation()
                           }}
-                          onBlur={handleRenameBlur}
+                          onBlur={handleCreateBlur}
                           onClick={(e) => e.stopPropagation()}
                           className={cn(
                             "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
                           )}
                         />
-                      ) : (
-                        <>
-                          <span className="font-medium text-sm">{file.name}</span>
-                          {file.type === "directory" && (
-                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
+                      </div>
+                    </TableCell>
 
-                  <TableCell>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {file.type === "directory" ? "-" : file.size}
-                    </span>
-                  </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {creatingNew === "folder" ? "-" : "0 B"}
+                      </span>
+                    </TableCell>
 
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground">
-                      {file.modified}
-                    </span>
-                  </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">刚刚</span>
+                    </TableCell>
 
-                  <TableCell>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {file.permissions}
-                    </span>
-                  </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs text-muted-foreground">-</span>
+                    </TableCell>
 
-                  <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={cn(
-                            "h-7 w-7 p-0 transition-all hover:bg-zinc-200 dark:hover:bg-zinc-800/60 dark:hover:text-white",
-                          )}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        className={cn(
-                          "min-w-[180px] rounded-lg backdrop-blur-xl bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
-                        )}
-                      >
-                        <FileActionMenu
-                          file={file}
-                          mode="dropdown"
-                          selectedFilesCount={selectedFiles.length}
-                          onAction={(action: FileAction) => {
-                            switch (action) {
-                              case "open":
-                                if (file.type === "directory") {
-                                  onNavigate(`${currentPath}/${file.name}`.replace(/\/+/g, "/"))
-                                } else {
-                                  handleOpenEditor(file.name)
-                                }
-                                break
-                              case "download":
-                                onDownload(file.name)
-                                break
-                              case "download-fast":
-                                setSelectedFiles([file.name])
-                                handleBatchDownload("fast")
-                                break
-                              case "download-compatible":
-                                setSelectedFiles([file.name])
-                                handleBatchDownload("compatible")
-                                break
-                              case "rename":
-                                setTimeout(() => {
-                                  startRename(file.name)
-                                }, 50)
-                                break
-                              case "chmod":
-                                setChmodDialog({
-                                  isOpen: true,
-                                  fileName: file.name,
-                                  filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
-                                  permissions: file.permissions,
-                                })
-                                break
-                              case "delete":
-                                onDelete(file.name)
-                                break
-                            }
+                    <TableCell className="text-right">
+                      <div className="h-7 w-7" />
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {/* 虚拟滚动：顶部占位 */}
+                {shouldVirtualize && listVirtualizer.virtualizer.getVirtualItems().length > 0 && (
+                  <tr style={{ height: `${listVirtualizer.virtualizer.getVirtualItems()[0]?.start ?? 0}px` }} />
+                )}
+
+                {/* 渲染可见的文件行 */}
+                {shouldVirtualize ? (
+                  <>
+                    {listVirtualizer.virtualizer.getVirtualItems().map((virtualRow) => {
+                      const file = filteredFiles[virtualRow.index]
+                      if (!file) return null
+                      const isDraggedOver = dragOverFolder === file.name
+                      return (
+                        <TableRow
+                          key={file.name}
+                          data-index={virtualRow.index}
+                          ref={listVirtualizer.virtualizer.measureElement}
+                          draggable={editingFile !== file.name}
+                          onDragStart={(e) => handleNativeDragStart(e, file.name)}
+                          onDragEnd={handleNativeDragEnd}
+                          onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
+                          onDragLeave={(e) => {
+                            e.preventDefault()
+                            setDragOverFolder(null)
                           }}
-                        />
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-            )}
+                          onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
+                          className={cn(
+                            "cursor-pointer transition-colors border-b-0",
+                            (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-zinc-100 dark:bg-zinc-800/50",
+                            "hover:bg-zinc-50 dark:hover:bg-zinc-800/30",
+                            draggedFileName === file.name && "opacity-50"
+                          )}
+                          onClick={e => {
+                            handleFileClick(file.name, e)
+                          }}
+                          onDoubleClick={() => {
+                            handleFileDoubleClick(file.name, file.type)
+                          }}
+                          onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getFileIcon(file)}
+                              {editingFile === file.name ? (
+                                <Input
+                                  ref={editInputRef}
+                                  value={editingFileName}
+                                  onChange={(e) => setEditingFileName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      finishRename()
+                                    } else if (e.key === "Escape") {
+                                      cancelRename()
+                                    }
+                                    e.stopPropagation()
+                                  }}
+                                  onBlur={handleRenameBlur}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={cn(
+                                    "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                  )}
+                                />
+                              ) : (
+                                <>
+                                  <span className="font-medium text-sm">{file.name}</span>
+                                  {file.type === "directory" && (
+                                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          <TableCell>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {file.type === "directory" ? "-" : file.size}
+                            </span>
+                          </TableCell>
+
+                          <TableCell>
+                            <span className="text-xs text-muted-foreground">
+                              {file.modified}
+                            </span>
+                          </TableCell>
+
+                          <TableCell>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {file.permissions}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn(
+                                    "h-7 w-7 p-0 transition-all hover:bg-zinc-200 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                                  )}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                className={cn(
+                                  "min-w-[180px] rounded-lg backdrop-blur-xl bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
+                                )}
+                              >
+                                <FileActionMenu
+                                  file={file}
+                                  mode="dropdown"
+                                  selectedFilesCount={selectedFiles.length}
+                                  onAction={(action: FileAction) => {
+                                    switch (action) {
+                                      case "open":
+                                        if (file.type === "directory") {
+                                          onNavigate(`${currentPath}/${file.name}`.replace(/\/+/g, "/"))
+                                        } else {
+                                          handleOpenEditor(file.name)
+                                        }
+                                        break
+                                      case "download":
+                                        onDownload(file.name)
+                                        break
+                                      case "download-fast":
+                                        setSelectedFiles([file.name])
+                                        handleBatchDownload("fast")
+                                        break
+                                      case "download-compatible":
+                                        setSelectedFiles([file.name])
+                                        handleBatchDownload("compatible")
+                                        break
+                                      case "rename":
+                                        setTimeout(() => {
+                                          startRename(file.name)
+                                        }, 50)
+                                        break
+                                      case "chmod":
+                                        setChmodDialog({
+                                          isOpen: true,
+                                          fileName: file.name,
+                                          filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
+                                          permissions: file.permissions,
+                                        })
+                                        break
+                                      case "delete":
+                                        onDelete(file.name)
+                                        break
+                                    }
+                                  }}
+                                />
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {/* 虚拟滚动：底部占位 */}
+                    {listVirtualizer.virtualizer.getVirtualItems().length > 0 && (
+                      <tr style={{
+                        height: `${
+                          listVirtualizer.virtualizer.getTotalSize() -
+                          (listVirtualizer.virtualizer.getVirtualItems()[listVirtualizer.virtualizer.getVirtualItems().length - 1]?.end ?? 0)
+                        }px`
+                      }} />
+                    )}
+                  </>
+                ) : (
+                  filteredFiles.map((file) => {
+                    const isDraggedOver = dragOverFolder === file.name
+                    return (
+                      <TableRow
+                        key={file.name}
+                        draggable={editingFile !== file.name}
+                        onDragStart={(e) => handleNativeDragStart(e, file.name)}
+                        onDragEnd={handleNativeDragEnd}
+                        onDragOver={(e) => handleNativeDragOver(e, file.name, file.type)}
+                        onDragLeave={(e) => {
+                          e.preventDefault()
+                          setDragOverFolder(null)
+                        }}
+                        onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
+                        className={cn(
+                          "cursor-pointer transition-colors border-b-0",
+                          (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-zinc-100 dark:bg-zinc-800/50",
+                          "hover:bg-zinc-50 dark:hover:bg-zinc-800/30",
+                          draggedFileName === file.name && "opacity-50"
+                        )}
+                        onClick={e => {
+                          handleFileClick(file.name, e)
+                        }}
+                        onDoubleClick={() => {
+                          handleFileDoubleClick(file.name, file.type)
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getFileIcon(file)}
+                            {editingFile === file.name ? (
+                              <Input
+                                ref={editInputRef}
+                                value={editingFileName}
+                                onChange={(e) => setEditingFileName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    finishRename()
+                                  } else if (e.key === "Escape") {
+                                    cancelRename()
+                                  }
+                                  e.stopPropagation()
+                                }}
+                                onBlur={handleRenameBlur}
+                                onClick={(e) => e.stopPropagation()}
+                                className={cn(
+                                  "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                )}
+                              />
+                            ) : (
+                              <>
+                                <span className="font-medium text-sm">{file.name}</span>
+                                {file.type === "directory" && (
+                                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {file.type === "directory" ? "-" : file.size}
+                          </span>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="text-xs text-muted-foreground">
+                            {file.modified}
+                          </span>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {file.permissions}
+                          </span>
+                        </TableCell>
+
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={cn(
+                                  "h-7 w-7 p-0 transition-all hover:bg-zinc-200 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                                )}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className={cn(
+                                "min-w-[180px] rounded-lg backdrop-blur-xl bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
+                              )}
+                            >
+                              <FileActionMenu
+                                file={file}
+                                mode="dropdown"
+                                selectedFilesCount={selectedFiles.length}
+                                onAction={(action: FileAction) => {
+                                  switch (action) {
+                                    case "open":
+                                      if (file.type === "directory") {
+                                        onNavigate(`${currentPath}/${file.name}`.replace(/\/+/g, "/"))
+                                      } else {
+                                        handleOpenEditor(file.name)
+                                      }
+                                      break
+                                    case "download":
+                                      onDownload(file.name)
+                                      break
+                                    case "download-fast":
+                                      setSelectedFiles([file.name])
+                                      handleBatchDownload("fast")
+                                      break
+                                    case "download-compatible":
+                                      setSelectedFiles([file.name])
+                                      handleBatchDownload("compatible")
+                                      break
+                                    case "rename":
+                                      setTimeout(() => {
+                                        startRename(file.name)
+                                      }, 50)
+                                      break
+                                    case "chmod":
+                                      setChmodDialog({
+                                        isOpen: true,
+                                        fileName: file.name,
+                                        filePath: `${currentPath}/${file.name}`.replace(/\/+/g, '/'),
+                                        permissions: file.permissions,
+                                      })
+                                      break
+                                    case "delete":
+                                      onDelete(file.name)
+                                      break
+                                  }
+                                }}
+                              />
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
             {/* 隐藏的文件输入 */}
             <input

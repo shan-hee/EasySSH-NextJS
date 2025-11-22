@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef, useCallback, startTransition } from "react"
 import { PageHeader } from "@/components/page-header"
 import { SftpManager } from "@/components/sftp/sftp-manager"
 import { FolderOpen, Server, Plus, ChevronDown, GripVertical } from "lucide-react"
@@ -58,55 +58,68 @@ function formatFileSize(bytes: number): string {
  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }
 
+// 权限转换缓存(避免重复计算)
+const permissionCache = new Map<string, string>()
+
+// 优化的权限格式化函数
+function formatMode(mode: number, isDir: boolean): string {
+  const cacheKey = `${mode}-${isDir}`
+  if (permissionCache.has(cacheKey)) {
+    return permissionCache.get(cacheKey)!
+  }
+
+  if (!mode && mode !== 0) {
+    return '---------'
+  }
+
+  // 使用位运算直接构建字符串(比数组 join 更快)
+  const perms =
+    (mode & 0o400 ? 'r' : '-') +
+    (mode & 0o200 ? 'w' : '-') +
+    (mode & 0o100 ? 'x' : '-') +
+    (mode & 0o040 ? 'r' : '-') +
+    (mode & 0o020 ? 'w' : '-') +
+    (mode & 0o010 ? 'x' : '-') +
+    (mode & 0o004 ? 'r' : '-') +
+    (mode & 0o002 ? 'w' : '-') +
+    (mode & 0o001 ? 'x' : '-')
+
+  const result = (isDir ? 'd' : '-') + perms
+  permissionCache.set(cacheKey, result)
+  return result
+}
+
+// 优化的日期格式化函数(使用 toLocaleString 更快)
+function formatModTime(modTime: string): string {
+  if (!modTime) return '-'
+  try {
+    const date = new Date(modTime)
+    if (isNaN(date.getTime())) return '-'
+
+    // 使用 toLocaleString 比手动拼接更快
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(/\//g, '-')
+  } catch {
+    return '-'
+  }
+}
+
 function convertFileInfo(file: FileInfo): ComponentFile {
- // 将数字模式转换为权限字符串（如果需要）
- const formatMode = (mode: number, isDir: boolean): string => {
- if (!mode && mode !== 0) {
- return '---------'
- }
- const perms = [
- mode & 0o400 ? 'r' : '-',
- mode & 0o200 ? 'w' : '-',
- mode & 0o100 ? 'x' : '-',
- mode & 0o040 ? 'r' : '-',
- mode & 0o020 ? 'w' : '-',
- mode & 0o010 ? 'x' : '-',
- mode & 0o004 ? 'r' : '-',
- mode & 0o002 ? 'w' : '-',
- mode & 0o001 ? 'x' : '-',
- ]
- return (isDir ? 'd' : '-') + perms.join('')
- }
+  // 优先使用 permission 字段，否则从 mode 数字转换
+  const permissions = file.permission || formatMode(file.mode, file.is_dir)
 
- // 优先使用 permission 字段，否则从 mode 数字转换
- const permissions = file.permission || formatMode(file.mode, file.is_dir)
-
- // 格式化修改时间
- const formatModTime = (modTime: string): string => {
- if (!modTime) return '-'
- try {
- const date = new Date(modTime)
- if (isNaN(date.getTime())) {
- return '-'
- }
- // 格式化为 YYYY-MM-DD HH:mm:ss
- const year = date.getFullYear()
- const month = String(date.getMonth() + 1).padStart(2, '0')
- const day = String(date.getDate()).padStart(2, '0')
- const hours = String(date.getHours()).padStart(2, '0')
- const minutes = String(date.getMinutes()).padStart(2, '0')
- const seconds = String(date.getSeconds()).padStart(2, '0')
- return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
- } catch {
- return '-'
- }
- }
-
- return {
- name: file.name,
- type: file.is_dir ? "directory" : "file",
- size: file.is_dir ? "-" : formatFileSize(file.size),
- modified: formatModTime(file.mod_time),
+  return {
+    name: file.name,
+    type: file.is_dir ? "directory" : "file",
+    size: file.is_dir ? "-" : formatFileSize(file.size),
+    modified: formatModTime(file.mod_time),
  permissions,
  }
 }
@@ -480,9 +493,12 @@ export default function SftpPage() {
  ]
  : convertedFiles
 
- setSessions(prev =>
- prev.map(s => (s.id === sessionId ? { ...s, isLoading: false, files: filesWithParent } : s))
- )
+ // 使用 startTransition 降低状态更新优先级
+ startTransition(() => {
+   setSessions(prev =>
+     prev.map(s => (s.id === sessionId ? { ...s, isLoading: false, files: filesWithParent } : s))
+   )
+ })
 
  toast.success("刷新成功")
  } catch (error: unknown) {
@@ -535,13 +551,16 @@ export default function SftpPage() {
  ]
  : convertedFiles
 
- setSessions(prev =>
- prev.map(s =>
- s.id === sessionId
- ? { ...s, currentPath: path, isLoading: false, files: filesWithParent }
- : s
- )
- )
+ // 使用 startTransition 降低状态更新优先级,避免阻塞 UI
+ startTransition(() => {
+   setSessions(prev =>
+     prev.map(s =>
+       s.id === sessionId
+         ? { ...s, currentPath: path, isLoading: false, files: filesWithParent }
+         : s
+     )
+   )
+ })
  } catch (error: unknown) {
  console.error("Failed to navigate:", error)
  setSessions(prev =>
