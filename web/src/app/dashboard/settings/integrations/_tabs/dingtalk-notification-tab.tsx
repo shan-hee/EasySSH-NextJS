@@ -16,18 +16,19 @@ import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations
 
 interface DingTalkNotificationTabProps {
   form: UseFormReturn<IntegrationsConfigFormData>
+  enabledFieldName?: keyof IntegrationsConfigFormData
 }
 
-export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) {
+export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_enabled" }: DingTalkNotificationTabProps) {
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
-  const enabled = form.watch("enabled")
+  const enabled = form.watch(enabledFieldName)
 
   const handleTestMessage = async () => {
     const data = form.getValues()
     const config = {
-      enabled: data.enabled ?? false,
-      webhook_url: data.webhook_url ?? "",
-      secret: data.secret ?? "",
+      enabled: data.dingtalk_enabled ?? false,
+      webhook_url: data.dingtalk_webhook_url ?? "",
+      secret: data.dingtalk_secret ?? "",
     }
 
     await testConnection(async () => {
@@ -44,7 +45,7 @@ export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) 
     >
       <FormSwitch
         form={form}
-        name="enabled"
+        name={enabledFieldName}
         label="启用钉钉通知"
         description="开启后系统将通过钉钉机器人发送通知"
       />
@@ -53,7 +54,7 @@ export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) 
         <>
           <FormInput
             form={form}
-            name="webhook_url"
+            name="dingtalk_webhook_url"
             label="Webhook URL"
             description="钉钉自定义机器人的Webhook地址"
             type="url"
@@ -63,7 +64,7 @@ export function DingTalkNotificationTab({ form }: DingTalkNotificationTabProps) 
 
           <FormInput
             form={form}
-            name="secret"
+            name="dingtalk_secret"
             label="签名密钥（可选）"
             description="钉钉机器人的加签密钥，用于验证消息来源"
             type="password"

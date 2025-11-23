@@ -42,7 +42,7 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 系统配置（仅管理员可见） */}
       {isAdmin && (
         <>

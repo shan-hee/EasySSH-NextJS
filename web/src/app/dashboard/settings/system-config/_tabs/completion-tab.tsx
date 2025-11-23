@@ -1,28 +1,50 @@
 "use client"
 
 import { SettingsSection } from "@/components/settings/settings-section"
-import { FormInput, FormSelect } from "@/components/settings/form-field"
-import { Command, Package, BarChart3, Database } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
-import { SystemConfigFormData } from "@/schemas/settings/system-config.schema"
+import { Command, Package, Database, Save, Loader2, RotateCcw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
+import { Button } from "@/components/ui/button"
+import { useSettingsForm } from "@/hooks/settings/use-settings-form"
+import { completionSchema } from "@/schemas/settings/system-config.schema"
+import { settingsApi } from "@/lib/api/settings"
+import { SettingsLoading } from "@/components/settings/settings-loading"
 
-interface CompletionTabProps {
-  form: UseFormReturn<SystemConfigFormData>
-}
+export function CompletionTab() {
+  const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
+    schema: completionSchema,
+    loadFn: async () => {
+      const data = await settingsApi.getSystemConfig()
+      return {
+        completion_enabled: data.completion_enabled,
+        completion_providers: data.completion_providers,
+        completion_quotas: data.completion_quotas,
+        completion_cache: data.completion_cache,
+      }
+    },
+    saveFn: async (data) => {
+      const fullConfig = await settingsApi.getSystemConfig()
+      const updatedConfig = {
+        ...fullConfig,
+        ...data,
+      }
+      await settingsApi.saveSystemConfig(updatedConfig)
+    },
+  })
 
-export function CompletionTab({ form }: CompletionTabProps) {
+  if (isLoading) {
+    return <SettingsLoading />
+  }
   const completionEnabled = form.watch("completion_enabled")
   const providers = form.watch("completion_providers")
   const quotas = form.watch("completion_quotas")
   const cache = form.watch("completion_cache")
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 补全功能总开关 */}
       <SettingsSection
         title="补全功能"
@@ -60,7 +82,7 @@ export function CompletionTab({ form }: CompletionTabProps) {
           description="配置补全数据来源及其在结果中的数量限制"
           icon={<Package className="h-5 w-5" />}
         >
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* 本地命令库 */}
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -355,6 +377,27 @@ export function CompletionTab({ form }: CompletionTabProps) {
           这些是全局补全配置。用户可以在终端设置中进一步自定义触发方式、显示数量等个性化选项。
         </AlertDescription>
       </Alert>
+
+      {/* 保存按钮区域 */}
+      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+        <Button variant="outline" onClick={reload} disabled={isSaving}>
+          <RotateCcw className="mr-2 h-4 w-4" />
+          重置
+        </Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              保存
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   )
 }

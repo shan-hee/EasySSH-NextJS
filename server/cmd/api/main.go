@@ -16,6 +16,7 @@ import (
 	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/api/rest"
 	"github.com/easyssh/server/internal/api/ws"
+	"github.com/easyssh/server/internal/domain/aiconfig"
 	"github.com/easyssh/server/internal/domain/auditlog"
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/batchtask"
@@ -24,15 +25,16 @@ import (
 	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/monitoring"
 	"github.com/easyssh/server/internal/domain/notification"
+	"github.com/easyssh/server/internal/domain/notificationconfig"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
 	"github.com/easyssh/server/internal/domain/script"
+	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
-	"github.com/easyssh/server/internal/domain/settings"
 	"github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshhostkey"
 	"github.com/easyssh/server/internal/domain/sshkey"
 	"github.com/easyssh/server/internal/domain/sshsession"
-	"github.com/easyssh/server/internal/domain/tabsession"
+	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/domain/user"
 	"github.com/easyssh/server/internal/infra/cache"
 	"github.com/easyssh/server/internal/infra/config"
@@ -79,16 +81,19 @@ func main() {
 		&auth.Session{}, // 用户会话表
 		&server.Server{},
 		&auditlog.AuditLog{},
-		&script.Script{},                 // 脚本表
-		&batchtask.BatchTask{},           // 批量任务表
-		&scheduledtask.ScheduledTask{},   // 定时任务表
-		&sshsession.SSHSession{},         // SSH会话表
-		&filetransfer.FileTransfer{},     // 文件传输表
-		&settings.Settings{},             // 系统设置表
-		&settings.IPWhitelist{},          // IP白名单表
-		&sshkey.SSHKey{},                 // SSH密钥表
-		&sshhostkey.SSHHostKey{},         // SSH主机密钥表（TOFU安全验证）
-		&tabsession.TabSessionSettings{}, // 标签/会话设置表
+		&script.Script{},               // 脚本表
+		&batchtask.BatchTask{},         // 批量任务表
+		&scheduledtask.ScheduledTask{}, // 定时任务表
+		&sshsession.SSHSession{},       // SSH会话表
+		&filetransfer.FileTransfer{},   // 文件传输表
+		// 新的配置表
+		&systemconfig.SystemConfig{},             // 系统配置表
+		&security.SecurityConfig{},               // 安全配置表
+		&notificationconfig.NotificationConfig{}, // 通知配置表
+		&aiconfig.AIConfig{},                     // AI配置表
+		// 其他表
+		&sshkey.SSHKey{},         // SSH密钥表
+		&sshhostkey.SSHHostKey{}, // SSH主机密钥表（TOFU安全验证）
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -113,31 +118,29 @@ func main() {
 	authRepo := auth.NewRepository(database)
 	authService := auth.NewService(authRepo, jwtService, refreshIdleDuration)
 
-	// 系统设置服务（需要在邮件服务之前初始化）
-	settingsRepo := settings.NewRepository(database)
-	settingsService := settings.NewService(settingsRepo)
+	// 新的配置服务
+	// 系统配置服务
+	systemConfigRepo := systemconfig.NewRepository(database)
+	systemConfigService := systemconfig.NewService(systemConfigRepo)
 
-	// 创建配置管理器（缓存 TTL 为 5 分钟）
-	configManager := settings.NewConfigManager(settingsService, 5*time.Minute)
+	// 安全配置服务
+	securityRepo := security.NewRepository(database)
+	securityService := security.NewService(securityRepo)
 
-	// 设置双向引用（解决循环依赖）
-	if svc, ok := settingsService.(interface{ SetConfigManager(*settings.ConfigManager) }); ok {
-		svc.SetConfigManager(configManager)
-	}
-	log.Println("✅ Configuration manager initialized with 5-minute cache")
+	// 通知配置服务
+	notificationConfigRepo := notificationconfig.NewRepository(database)
+	notificationConfigService := notificationconfig.NewService(notificationConfigRepo)
 
-	// IP 白名单服务
-	ipWhitelistRepo := settings.NewIPWhitelistRepository(database)
-	ipWhitelistService := settings.NewIPWhitelistService(ipWhitelistRepo)
+	// AI配置服务
+	aiConfigRepo := aiconfig.NewRepository(database)
+	aiConfigService := aiconfig.NewService(aiConfigRepo)
 
-	// 标签/会话配置服务
-	tabSessionRepo := tabsession.NewRepository(database)
-	tabSessionService := tabsession.NewService(tabSessionRepo)
+	log.Println("✅ New configuration services initialized")
 
 	// 邮件服务(支持动态配置)
-	// 从数据库加载 SMTP 配置
+	// 从新的通知配置服务加载 SMTP 配置
 	var emailService notification.EmailService
-	smtpConfig, err := settingsService.GetSMTPConfig(context.Background())
+	smtpConfig, err := notificationConfigService.GetSMTPConfig(context.Background())
 	if err == nil && smtpConfig != nil && smtpConfig.Enabled {
 		// 从数据库加载成功且启用了邮件服务
 		emailService, err = notification.NewEmailService(&notification.EmailConfig{
@@ -200,14 +203,11 @@ func main() {
 	scriptService := script.NewService(scriptRepo)
 
 	// 补全服务
-	// 从配置管理器读取补全缓存配置
-	completionCacheConfig, err := configManager.GetCompletionCacheConfig(context.Background())
+	// 从新的系统配置服务读取补全缓存配置
+	completionCacheConfig, err := systemConfigService.GetCompletionCache(context.Background())
 	if err != nil {
 		log.Printf("Failed to get completion cache config, using defaults: %v", err)
-		completionCacheConfig = &settings.CompletionCacheConfig{
-			TTLMinutes: 5,
-			MaxEntries: 100,
-		}
+		completionCacheConfig = systemconfig.DefaultCompletionCache()
 	}
 	completionService := completion.NewService(scriptRepo, completionCacheConfig.TTLMinutes, completionCacheConfig.MaxEntries)
 
@@ -243,11 +243,11 @@ func main() {
 	refreshTokenTTLSeconds := int(refreshIdleDuration.Seconds())
 
 	// 初始化处理器
-	authHandler := rest.NewAuthHandler(authService, jwtService, configManager, accessTokenTTLSeconds, refreshTokenTTLSeconds)
+	authHandler := rest.NewAuthHandler(authService, jwtService, securityService, accessTokenTTLSeconds, refreshTokenTTLSeconds)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
-	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), *configManager, completionService)
+	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), securityService, completionService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
@@ -257,21 +257,44 @@ func main() {
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	userHandler := rest.NewUserHandler(userService)
-	settingsHandler := rest.NewSettingsHandler(settingsService, ipWhitelistService, tabSessionService)
+	// 新的配置处理器
+	securityHandler := rest.NewSecurityHandler(securityService)
+	systemConfigHandler := rest.NewSystemConfigHandler(systemConfigService)
+	notificationConfigHandler := rest.NewNotificationConfigHandler(notificationConfigService)
+	aiConfigHandler := rest.NewAIConfigHandler(aiConfigService)
+	// 其他处理器
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 	avatarHandler := rest.NewAvatarHandler()
+	backupHandler := rest.NewBackupHandler(
+		database,
+		cfg.Database.Host,
+		fmt.Sprintf("%d", cfg.Database.Port),
+		cfg.Database.DBName,
+		cfg.Database.User,
+		cfg.Database.Password,
+	)
 
 	// 创建 Gin 路由
 	r := gin.New()
 
+	// 从系统配置加载最大上传大小
+	systemConfig, err := systemConfigService.Get(context.Background())
+	if err == nil {
+		// 设置 Gin 的最大上传内存（转换为字节：MB -> Bytes）
+		r.MaxMultipartMemory = int64(systemConfig.MaxFileUploadSize) << 20
+		log.Printf("✅ Max file upload size set to %d MB", systemConfig.MaxFileUploadSize)
+	} else {
+		log.Printf("⚠️  Failed to load max file upload size, using default (32 MB): %v", err)
+	}
+
 	// 全局中间件
-	r.Use(middleware.Recovery())                                        // 错误恢复
-	r.Use(middleware.Logger())                                          // 日志记录
-	r.Use(middleware.RequestID())                                       // 请求 ID
-	r.Use(middleware.SecurityHeaders())                                 // 安全响应头
-	r.Use(middleware.CORS(cfg, configManager))                          // 跨域（支持动态配置）
-	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))          // 审计日志（使用默认配置）
-	r.Use(middleware.OptionalIPWhitelistMiddleware(ipWhitelistService)) // IP 白名单验证（可选）
+	r.Use(middleware.Recovery())                                     // 错误恢复
+	r.Use(middleware.Logger())                                       // 日志记录
+	r.Use(middleware.RequestID())                                    // 请求 ID
+	r.Use(middleware.SecurityHeaders())                              // 安全响应头
+	r.Use(middleware.CORS(cfg, securityService))                     // 跨域（支持动态配置）
+	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
+	r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）
 
 	// API v1 路由组
 	v1 := r.Group("/api/v1")
@@ -316,13 +339,13 @@ func main() {
 		{
 			authRoutes.POST("/register", authHandler.Register)
 			// 登录接口应用速率限制（支持动态配置）
-			authRoutes.POST("/login", middleware.LoginRateLimitMiddleware(configManager), authHandler.Login)
+			authRoutes.POST("/login", middleware.LoginRateLimitMiddleware(securityService), authHandler.Login)
 			authRoutes.POST("/logout", authHandler.Logout)
 			authRoutes.POST("/refresh", authHandler.RefreshToken)
 			// 使用可选认证中间件，支持未登录和已登录状态
 			authRoutes.GET("/status", middleware.OptionalAuth(jwtService), authHandler.CheckStatus) // 检查系统和认证状态
 			// 初始化管理员接口应用速率限制（支持动态配置）
-			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(configManager), authHandler.InitializeAdmin)
+			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(securityService), authHandler.InitializeAdmin)
 			authRoutes.POST("/2fa/verify", authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
 		}
 
@@ -517,7 +540,78 @@ func main() {
 		}
 
 		// 系统设置路由（需要认证）
-		settingsHandler.RegisterRoutes(v1)
+		settingsGroup := v1.Group("/settings")
+		settingsGroup.Use(middleware.AuthMiddleware(jwtService))
+		{
+			// 系统配置
+			settingsGroup.GET("/system", systemConfigHandler.GetSystemConfig)
+			settingsGroup.POST("/system", systemConfigHandler.SaveSystemConfig)
+
+			// 安全配置
+			settingsGroup.GET("/security", securityHandler.GetSecurityConfig)
+			settingsGroup.POST("/security", securityHandler.SaveSecurityConfig)
+
+			// 标签/会话配置
+			settingsGroup.GET("/tabsession", securityHandler.GetTabSessionConfig)
+			settingsGroup.POST("/tabsession", securityHandler.SaveTabSessionConfig)
+
+			// IP访问控制配置
+			settingsGroup.GET("/access-control", securityHandler.GetAccessControlConfig)
+			settingsGroup.POST("/access-control", securityHandler.SaveAccessControlConfig)
+
+			// 通知配置 - SMTP
+			settingsGroup.GET("/smtp", notificationConfigHandler.GetSMTPConfig)
+			settingsGroup.POST("/smtp", notificationConfigHandler.SaveSMTPConfig)
+			settingsGroup.POST("/smtp/test", notificationConfigHandler.TestSMTPConnection)
+
+			// 通知配置 - Webhook
+			settingsGroup.GET("/webhook", notificationConfigHandler.GetWebhookConfig)
+			settingsGroup.POST("/webhook", notificationConfigHandler.SaveWebhookConfig)
+			settingsGroup.POST("/webhook/test", notificationConfigHandler.TestWebhookConnection)
+
+			// 通知配置 - 钉钉
+			settingsGroup.GET("/dingtalk", notificationConfigHandler.GetDingTalkConfig)
+			settingsGroup.POST("/dingtalk", notificationConfigHandler.SaveDingTalkConfig)
+			settingsGroup.POST("/dingtalk/test", notificationConfigHandler.TestDingTalkConnection)
+
+			// 通知配置 - 企业微信
+			settingsGroup.GET("/wecom", notificationConfigHandler.GetWeComConfig)
+			settingsGroup.POST("/wecom", notificationConfigHandler.SaveWeComConfig)
+			settingsGroup.POST("/wecom/test", notificationConfigHandler.TestWeComConnection)
+
+			// 高级配置路由组
+			advancedGroup := settingsGroup.Group("/advanced")
+			{
+				// CORS 配置
+				advancedGroup.GET("/cors", securityHandler.GetCORSConfig)
+				advancedGroup.POST("/cors", securityHandler.SaveCORSConfig)
+
+				// 速率限制配置
+				advancedGroup.GET("/ratelimit", securityHandler.GetRateLimitConfig)
+				advancedGroup.POST("/ratelimit", securityHandler.SaveRateLimitConfig)
+
+				// Cookie 配置
+				advancedGroup.GET("/cookie", securityHandler.GetCookieConfig)
+				advancedGroup.POST("/cookie", securityHandler.SaveCookieConfig)
+			}
+
+			// AI配置
+			aiGroup := settingsGroup.Group("/ai")
+			{
+				aiGroup.GET("/system", aiConfigHandler.GetSystemAIConfig)
+				aiGroup.POST("/system", aiConfigHandler.SaveSystemAIConfig)
+			}
+		}
+
+		// 备份恢复路由（需要认证）
+		backupRoutes := v1.Group("/backup")
+		backupRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			backupRoutes.GET("/export-config", backupHandler.ExportConfig)       // 导出配置
+			backupRoutes.POST("/import-config", backupHandler.ImportConfig)      // 导入配置
+			backupRoutes.GET("/export-database", backupHandler.ExportDatabase)   // 导出数据库
+			backupRoutes.POST("/import-database", backupHandler.ImportDatabase)  // 导入数据库
+		}
 
 		// SSH密钥路由（需要认证）
 		sshKeyRoutes := v1.Group("/ssh-keys")

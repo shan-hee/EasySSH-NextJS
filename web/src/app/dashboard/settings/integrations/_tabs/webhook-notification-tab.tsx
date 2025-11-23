@@ -16,6 +16,7 @@ import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations
 
 interface WebhookNotificationTabProps {
   form: UseFormReturn<IntegrationsConfigFormData>
+  enabledFieldName?: keyof IntegrationsConfigFormData
 }
 
 const methodOptions = [
@@ -23,17 +24,17 @@ const methodOptions = [
   { label: "GET", value: "GET" },
 ]
 
-export function WebhookNotificationTab({ form }: WebhookNotificationTabProps) {
+export function WebhookNotificationTab({ form, enabledFieldName = "webhook_enabled" }: WebhookNotificationTabProps) {
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
-  const enabled = form.watch("enabled")
+  const enabled = form.watch(enabledFieldName)
 
   const handleTestWebhook = async () => {
     const data = form.getValues()
     const config = {
-      enabled: data.enabled ?? false,
-      url: data.url ?? "",
-      method: data.method ?? "POST",
-      secret: data.secret ?? "",
+      enabled: data.webhook_enabled ?? false,
+      url: data.webhook_url ?? "",
+      method: data.webhook_method ?? "POST",
+      secret: data.webhook_secret ?? "",
     }
 
     await testConnection(async () => {
@@ -50,7 +51,7 @@ export function WebhookNotificationTab({ form }: WebhookNotificationTabProps) {
     >
       <FormSwitch
         form={form}
-        name="enabled"
+        name={enabledFieldName}
         label="启用Webhook通知"
         description="开启后系统将向配置的URL发送HTTP请求通知"
       />
@@ -59,7 +60,7 @@ export function WebhookNotificationTab({ form }: WebhookNotificationTabProps) {
         <>
           <FormInput
             form={form}
-            name="url"
+            name="webhook_url"
             label="Webhook URL"
             description="接收通知的HTTP端点地址"
             type="url"
@@ -69,7 +70,7 @@ export function WebhookNotificationTab({ form }: WebhookNotificationTabProps) {
 
           <FormSelect
             form={form}
-            name="method"
+            name="webhook_method"
             label="请求方法"
             description="发送Webhook请求使用的HTTP方法"
             options={methodOptions}
@@ -78,7 +79,7 @@ export function WebhookNotificationTab({ form }: WebhookNotificationTabProps) {
 
           <FormInput
             form={form}
-            name="secret"
+            name="webhook_secret"
             label="签名密钥（可选）"
             description="用于验证请求来源的密钥，将包含在请求头 X-Webhook-Signature 中"
             type="password"

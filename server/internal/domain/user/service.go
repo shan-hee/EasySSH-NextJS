@@ -102,11 +102,15 @@ func (s *service) CreateUser(ctx context.Context, username, email, password stri
 		role = auth.RoleUser // 默认为普通用户
 	}
 
+	// 生成默认头像
+	avatar := generateDefaultAvatar(username, email)
+
 	// 创建用户
 	user := &auth.User{
 		Username: username,
 		Email:    email,
 		Role:     role,
+		Avatar:   avatar,
 	}
 
 	// 设置密码
@@ -255,4 +259,35 @@ func (s *service) GetStatistics(ctx context.Context) (map[string]interface{}, er
 	}
 
 	return stats, nil
+}
+
+// generateDefaultAvatar 生成默认头像
+// 基于用户名和邮箱生成确定性的DiceBear头像URL
+func generateDefaultAvatar(username, email string) string {
+	// 使用用户名和邮箱生成确定性种子
+	seedInput := username
+	if email != "" {
+		seedInput += email
+	}
+
+	// 简单的哈希函数生成确定性种子
+	hash := 0
+	for i := 0; i < len(seedInput); i++ {
+		hash = ((hash << 5) - hash) + int(seedInput[i])
+		hash = hash & hash // 转换为32位整数
+	}
+
+	// 转换为正数并转为16进制字符串
+	seed := fmt.Sprintf("%x", abs(hash))
+
+	// 生成DiceBear头像URL（使用notionists-neutral风格）
+	return fmt.Sprintf("https://api.dicebear.com/7.x/notionists-neutral/svg?seed=%s", seed)
+}
+
+// abs 返回整数的绝对值
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

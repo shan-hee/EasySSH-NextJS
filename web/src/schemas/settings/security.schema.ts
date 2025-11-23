@@ -71,8 +71,10 @@ export const jwtConfigSchema = z.object({
 export const networkSecuritySchema = z.object({
   allowlist_ips: z.string().optional(),
   blocklist_ips: z.string().optional(),
-  allow_insecure_http: z.boolean().optional(),
 })
+
+// 网络安全完整配置 Schema (CORS + 速率限制)
+export const networkSecurityFullSchema = corsConfigSchema.merge(rateLimitSchema)
 
 // 完整的安全配置 Schema
 export const securityConfigSchema = sessionManagementSchema
@@ -88,4 +90,5 @@ export type CORSConfigFormData = z.infer<typeof corsConfigSchema>
 export type RateLimitFormData = z.infer<typeof rateLimitSchema>
 export type JWTConfigFormData = z.infer<typeof jwtConfigSchema>
 export type NetworkSecurityFormData = z.infer<typeof networkSecuritySchema>
+export type NetworkSecurityFullFormData = z.infer<typeof networkSecurityFullSchema>
 export type SecurityConfigFormData = z.infer<typeof securityConfigSchema>

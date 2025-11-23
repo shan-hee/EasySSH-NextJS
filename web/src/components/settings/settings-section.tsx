@@ -30,15 +30,15 @@ export function SettingsSection({
   className,
 }: SettingsSectionProps) {
   return (
-    <Card className={cn("", className)}>
-      <CardHeader>
+    <Card className={cn("border-none shadow-none bg-transparent py-0 gap-0", className)}>
+      <CardHeader className="p-0 pb-6">
         <div className="flex items-center gap-2">
           {icon}
           <CardTitle>{title}</CardTitle>
         </div>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="p-0 space-y-4">
         {children}
       </CardContent>
     </Card>

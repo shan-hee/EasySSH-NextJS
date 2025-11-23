@@ -1,225 +1,105 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { SettingsSection } from "@/components/settings/settings-section"
+import { Shield, Save, Loader2, RotateCcw } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { InfoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { useSettingsForm } from "@/hooks/settings/use-settings-form"
+import { networkSecuritySchema } from "@/schemas/settings/security.schema"
+import { settingsApi } from "@/lib/api/settings"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { Shield, Trash2, Plus } from "lucide-react"
-import { settingsApi, type IPWhitelist } from "@/lib/api/settings"
-import { toast } from "sonner"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
+import { SettingsLoading } from "@/components/settings/settings-loading"
 
 export function AccessControlTab() {
-  const [ipWhitelists, setIpWhitelists] = useState<IPWhitelist[]>([])
-  const [newIPAddress, setNewIPAddress] = useState("")
-  const [newIPDescription, setNewIPDescription] = useState("")
-  const [isAddingIP, setIsAddingIP] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-
-  // 加载 IP 白名单配置
-  useEffect(() => {
-    loadIPWhitelistConfig()
-  }, [])
-
-  const loadIPWhitelistConfig = async () => {
-    try {
-      setIsLoading(true)
-      const whitelists = await settingsApi.getIPWhitelistList()
-      setIpWhitelists(whitelists)
-    } catch (error) {
-      console.error("Failed to load IP whitelist config:", error)
-      toast.error("加载 IP 白名单配置失败")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleAddIP = async () => {
-    if (!newIPAddress.trim()) {
-      toast.error("请输入 IP 地址")
-      return
-    }
-
-    // 简单验证IP格式
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/
-    if (!ipRegex.test(newIPAddress.trim())) {
-      toast.error("请输入有效的IP地址或CIDR格式")
-      return
-    }
-
-    setIsAddingIP(true)
-    try {
-      const newIP = await settingsApi.createIPWhitelist({
-        ip_address: newIPAddress.trim(),
-        description: newIPDescription.trim(),
+  const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
+    schema: networkSecuritySchema,
+    loadFn: async () => {
+      const config = await settingsApi.getIPWhitelistConfig()
+      return {
+        allowlist_ips: config.allowlist_ips || "",
+        blocklist_ips: config.blocklist_ips || "",
+      }
+    },
+    saveFn: async (data) => {
+      await settingsApi.saveIPWhitelistConfig({
+        allowlist_ips: data.allowlist_ips,
+        blocklist_ips: data.blocklist_ips,
       })
+    },
+  })
 
-      setIpWhitelists((prev) => [newIP, ...prev])
-      setNewIPAddress("")
-      setNewIPDescription("")
-      toast.success("IP 地址添加成功")
-    } catch (error) {
-      console.error("Failed to add IP:", error)
-      toast.error("添加 IP 地址失败")
-    } finally {
-      setIsAddingIP(false)
-    }
-  }
-
-  const handleToggleIP = async (id: number) => {
-    try {
-      await settingsApi.toggleIPWhitelist(id)
-
-      setIpWhitelists((prev) =>
-        prev.map((ip) => (ip.id === id ? { ...ip, enabled: !ip.enabled } : ip))
-      )
-      toast.success("IP 状态切换成功")
-    } catch (error) {
-      console.error("Failed to toggle IP:", error)
-      toast.error("切换 IP 状态失败")
-    }
-  }
-
-  const handleDeleteIP = async (id: number) => {
-    if (!confirm("确定要删除这个 IP 地址吗？")) {
-      return
-    }
-
-    try {
-      await settingsApi.deleteIPWhitelist(id)
-
-      setIpWhitelists((prev) => prev.filter((ip) => ip.id !== id))
-      toast.success("IP 地址删除成功")
-    } catch (error) {
-      console.error("Failed to delete IP:", error)
-      toast.error("删除 IP 地址失败")
-    }
+  if (isLoading) {
+    return <SettingsLoading />
   }
 
   return (
-    <SettingsSection
-      title="IP 白名单管理"
-      description="配置允许访问系统的IP地址"
-      icon={<Shield className="h-5 w-5" />}
-    >
-      {/* 添加IP表单 */}
-      <div className="rounded-lg border p-4 space-y-4">
-        <h4 className="text-sm font-medium">添加新 IP 地址</h4>
-        <div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-4">
+      {/* IP白名单/黑名单配置 */}
+      <SettingsSection
+        title="IP访问控制"
+        description="配置允许或禁止访问的IP地址范围"
+        icon={<Shield className="h-5 w-5" />}
+      >
+        <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="ip-address">IP 地址 / CIDR</Label>
-            <Input
-              id="ip-address"
-              placeholder="192.168.1.1 或 192.168.1.0/24"
-              value={newIPAddress}
-              onChange={(e) => setNewIPAddress(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleAddIP()
-                }
-              }}
+            <Label htmlFor="allowlist_ips">IP白名单 (允许访问)</Label>
+            <Textarea
+              id="allowlist_ips"
+              placeholder="输入允许访问的IP地址,每行一个,支持CIDR格式&#10;例如: 192.168.1.0/24"
+              value={form.watch("allowlist_ips") || ""}
+              onChange={(e) => form.setValue("allowlist_ips", e.target.value)}
+              rows={4}
             />
+            <p className="text-xs text-muted-foreground">
+              留空表示允许所有IP访问。支持单个IP或CIDR格式,每行一个。
+            </p>
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="ip-description">描述（可选）</Label>
-            <Input
-              id="ip-description"
-              placeholder="办公室网络"
-              value={newIPDescription}
-              onChange={(e) => setNewIPDescription(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleAddIP()
-                }
-              }}
+            <Label htmlFor="blocklist_ips">IP黑名单 (禁止访问)</Label>
+            <Textarea
+              id="blocklist_ips"
+              placeholder="输入禁止访问的IP地址,每行一个,支持CIDR格式&#10;例如: 10.0.0.0/8"
+              value={form.watch("blocklist_ips") || ""}
+              onChange={(e) => form.setValue("blocklist_ips", e.target.value)}
+              rows={4}
             />
+            <p className="text-xs text-muted-foreground">
+              黑名单优先级高于白名单。支持单个IP或CIDR格式,每行一个。
+            </p>
           </div>
         </div>
-        <Button onClick={handleAddIP} disabled={isAddingIP} className="w-full md:w-auto">
-          <Plus className="mr-2 h-4 w-4" />
-          添加 IP 地址
+
+        <Alert>
+          <InfoIcon className="h-4 w-4" />
+          <AlertDescription>
+            IP访问控制会影响所有用户的访问权限。建议仅在必要时启用,并定期审查配置。
+          </AlertDescription>
+        </Alert>
+      </SettingsSection>
+
+      {/* 保存按钮区域 */}
+      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+        <Button variant="outline" onClick={reload} disabled={isSaving}>
+          <RotateCcw className="mr-2 h-4 w-4" />
+          重置
+        </Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              保存
+            </>
+          )}
         </Button>
       </div>
-
-      {/* IP白名单列表 */}
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>IP 地址</TableHead>
-              <TableHead>描述</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>创建时间</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center">
-                  加载中...
-                </TableCell>
-              </TableRow>
-            ) : ipWhitelists.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  暂无 IP 白名单配置
-                </TableCell>
-              </TableRow>
-            ) : (
-              ipWhitelists.map((ip) => (
-                <TableRow key={ip.id}>
-                  <TableCell className="font-mono">{ip.ip_address}</TableCell>
-                  <TableCell>{ip.description || "-"}</TableCell>
-                  <TableCell>
-                    <Badge variant={ip.enabled ? "default" : "secondary"}>
-                      {ip.enabled ? "已启用" : "已禁用"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(ip.created_at).toLocaleString("zh-CN")}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Switch
-                        checked={ip.enabled}
-                        onCheckedChange={() => handleToggleIP(ip.id)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteIP(ip.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="rounded-lg border p-4 bg-muted/50">
-        <p className="text-sm font-medium mb-2">IP 白名单说明：</p>
-        <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-          <li>支持单个IP地址（如 192.168.1.1）或CIDR格式（如 192.168.1.0/24）</li>
-          <li>只有白名单中启用的IP地址才能访问系统</li>
-          <li>如果未配置任何IP白名单，则允许所有IP访问</li>
-          <li>建议根据实际业务需求配置白名单，提高系统安全性</li>
-        </ul>
-      </div>
-    </SettingsSection>
+    </div>
   )
 }

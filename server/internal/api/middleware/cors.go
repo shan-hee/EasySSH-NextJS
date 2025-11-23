@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/easyssh/server/internal/domain/settings"
+	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/gin-gonic/gin"
 )
@@ -14,7 +14,7 @@ import (
 // 策略：
 // - 默认始终允许 localhost + 前端端口（开发和生产环境通用）
 // - Web UI 配置的源追加到默认值后面（开发和生产环境统一策略）
-func CORS(cfg *config.Config, configManager *settings.ConfigManager) gin.HandlerFunc {
+func CORS(cfg *config.Config, securityService security.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var allowedOrigins []string
 		var allowedMethods []string
@@ -29,8 +29,8 @@ func CORS(cfg *config.Config, configManager *settings.ConfigManager) gin.Handler
     // Cookie-only 认证，不默认暴露 Authorization 头
     allowedHeaders = []string{"Content-Type"}
 
-		// 尝试从数据库读取 CORS 配置（带缓存），追加到默认值后面
-		corsConfig, err := configManager.GetCORSConfig(context.Background())
+		// 尝试从数据库读取 CORS 配置，追加到默认值后面
+		corsConfig, err := securityService.GetCORSConfig(context.Background())
 		if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
 			// 将 Web UI 配置的源追加到默认值后面（开发和生产环境统一策略）
 			allowedOrigins = append(allowedOrigins, corsConfig.AllowedOrigins...)

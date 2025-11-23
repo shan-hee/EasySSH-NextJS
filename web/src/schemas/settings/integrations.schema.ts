@@ -47,23 +47,23 @@ export const smtpConfigSchema = z.object({
 
 // 钉钉配置 Schema
 export const dingTalkConfigSchema = z.object({
-  enabled: z.boolean(),
-  webhook_url: z.string().url("请输入有效的Webhook URL").or(z.literal("")),
-  secret: z.string().optional(),
+  dingtalk_enabled: z.boolean(),
+  dingtalk_webhook_url: z.string().url("请输入有效的Webhook URL").or(z.literal("")),
+  dingtalk_secret: z.string().optional(),
 })
 
 // 企业微信配置 Schema
 export const weComConfigSchema = z.object({
-  enabled: z.boolean(),
-  webhook_url: z.string().url("请输入有效的Webhook URL").or(z.literal("")),
+  wecom_enabled: z.boolean(),
+  wecom_webhook_url: z.string().url("请输入有效的Webhook URL").or(z.literal("")),
 })
 
 // Webhook配置 Schema
 export const webhookConfigSchema = z.object({
-  enabled: z.boolean(),
-  url: z.string().url("请输入有效的URL").or(z.literal("")),
-  method: z.enum(["POST", "GET"]),
-  secret: z.string().optional(),
+  webhook_enabled: z.boolean(),
+  webhook_url: z.string().url("请输入有效的URL").or(z.literal("")),
+  webhook_method: z.enum(["POST", "GET"]),
+  webhook_secret: z.string().optional(),
 })
 
 // 完整的集成配置 Schema

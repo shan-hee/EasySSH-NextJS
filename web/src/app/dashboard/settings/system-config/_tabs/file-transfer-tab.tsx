@@ -1,24 +1,48 @@
 "use client"
 
 import { SettingsSection } from "@/components/settings/settings-section"
-import { FormTextarea, FormSelect, FormSwitch } from "@/components/settings/form-field"
-import { Download, Upload, Filter } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
-import { SystemConfigFormData } from "@/schemas/settings/system-config.schema"
+import { FormTextarea, FormSelect, FormSwitch, FormInput } from "@/components/settings/form-field"
+import { Download, Upload, Filter, Save, Loader2, RotateCcw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useSettingsForm } from "@/hooks/settings/use-settings-form"
+import { fileTransferSchema } from "@/schemas/settings/system-config.schema"
+import { settingsApi } from "@/lib/api/settings"
+import { SettingsLoading } from "@/components/settings/settings-loading"
 
-interface FileTransferTabProps {
-  form: UseFormReturn<SystemConfigFormData>
-}
+export function FileTransferTab() {
+  const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
+    schema: fileTransferSchema,
+    loadFn: async () => {
+      const data = await settingsApi.getSystemConfig()
+      return {
+        default_download_mode: data.default_download_mode,
+        download_exclude_patterns: data.download_exclude_patterns,
+        skip_excluded_on_upload: data.skip_excluded_on_upload,
+        max_file_upload_size: data.max_file_upload_size,
+      }
+    },
+    saveFn: async (data) => {
+      const fullConfig = await settingsApi.getSystemConfig()
+      const updatedConfig = {
+        ...fullConfig,
+        ...data,
+      }
+      await settingsApi.saveSystemConfig(updatedConfig)
+    },
+  })
 
-export function FileTransferTab({ form }: FileTransferTabProps) {
+  if (isLoading) {
+    return <SettingsLoading />
+  }
+
   // 计算排除规则数量
   const excludePatterns = form.watch("download_exclude_patterns") || ""
   const patternCount = excludePatterns.split("\n").filter(p => p.trim()).length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 下载设置 */}
       <SettingsSection
         title="下载设置"
@@ -69,9 +93,21 @@ export function FileTransferTab({ form }: FileTransferTabProps) {
       {/* 上传设置 */}
       <SettingsSection
         title="上传设置"
-        description="配置文件上传时的过滤行为"
+        description="配置文件上传时的过滤行为和大小限制"
         icon={<Upload className="h-5 w-5" />}
       >
+        <FormInput
+          form={form}
+          name="max_file_upload_size"
+          label="最大文件上传大小 (MB)"
+          description="允许上传的单个文件最大大小 (1-1024 MB)"
+          type="number"
+          min={1}
+          max={1024}
+          step={1}
+          required
+        />
+
         <FormSwitch
           form={form}
           name="skip_excluded_on_upload"
@@ -94,6 +130,27 @@ export function FileTransferTab({ form }: FileTransferTabProps) {
           </div>
         </AlertDescription>
       </Alert>
+
+      {/* 保存按钮区域 */}
+      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+        <Button variant="outline" onClick={reload} disabled={isSaving}>
+          <RotateCcw className="mr-2 h-4 w-4" />
+          重置
+        </Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              保存
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   )
 }

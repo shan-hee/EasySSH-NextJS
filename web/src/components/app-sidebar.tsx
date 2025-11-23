@@ -89,15 +89,10 @@ const navMainData = [
     ],
   },
   {
-    title: "系统与组织",
-    url: "#",
+    title: "系统设置",
+    url: "/dashboard/settings",
     icon: Settings2,
-    items: [
-      { title: "系统配置", url: "/dashboard/settings/system-config" },
-      { title: "安全中心", url: "/dashboard/settings/security-center" },
-      { title: "集成服务", url: "/dashboard/settings/integrations" },
-      { title: "管理运维", url: "/dashboard/settings/management" },
-    ],
+    // 无子级,直接进入统一的系统设置页面
   },
 ]
 
@@ -124,7 +119,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
     () => all.filter((i) => ["监控告警", "日志审计"].includes(i.title)),
     [all]
   )
-  const groupSettings = React.useMemo(() => all.filter((i) => i.title === "系统与组织"), [all])
+  const groupSettings = React.useMemo(() => all.filter((i) => i.title === "系统设置"), [all])
 
   // 构建真实用户数据
   const userData = React.useMemo(() => {
@@ -148,7 +143,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
         {groupWorkbench.length > 0 && <NavMain label="工作台" items={groupWorkbench} />}
         {groupCore.length > 0 && <NavMain label="服务器管理" items={groupCore} />}
         {groupObserveAudit.length > 0 && <NavMain label="监控与审计" items={groupObserveAudit} />}
-        {groupSettings.length > 0 && <NavMain label="系统与组织" items={groupSettings} />}
+        {groupSettings.length > 0 && <NavMain label="系统设置" items={groupSettings} />}
       </SidebarContent>
       <SidebarFooter>
         <NavExtra />

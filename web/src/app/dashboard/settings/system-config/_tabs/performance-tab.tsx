@@ -2,17 +2,39 @@
 
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput } from "@/components/settings/form-field"
-import { Zap } from "lucide-react"
-import { UseFormReturn } from "react-hook-form"
-import { SystemConfigFormData } from "@/schemas/settings/system-config.schema"
+import { Zap, Save, Loader2, RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useSettingsForm } from "@/hooks/settings/use-settings-form"
+import { performanceSchema } from "@/schemas/settings/system-config.schema"
+import { settingsApi } from "@/lib/api/settings"
+import { SettingsLoading } from "@/components/settings/settings-loading"
 
-interface PerformanceTabProps {
-  form: UseFormReturn<SystemConfigFormData>
-}
+export function PerformanceTab() {
+  const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
+    schema: performanceSchema,
+    loadFn: async () => {
+      const data = await settingsApi.getSystemConfig()
+      return {
+        default_page_size: data.default_page_size,
+        max_file_upload_size: data.max_file_upload_size,
+      }
+    },
+    saveFn: async (data) => {
+      const fullConfig = await settingsApi.getSystemConfig()
+      const updatedConfig = {
+        ...fullConfig,
+        ...data,
+      }
+      await settingsApi.saveSystemConfig(updatedConfig)
+    },
+  })
 
-export function PerformanceTab({ form }: PerformanceTabProps) {
+  if (isLoading) {
+    return <SettingsLoading />
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 基本性能设置 */}
       <SettingsSection
         title="基本性能设置"
@@ -43,6 +65,27 @@ export function PerformanceTab({ form }: PerformanceTabProps) {
           required
         />
       </SettingsSection>
+
+      {/* 保存按钮区域 */}
+      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+        <Button variant="outline" onClick={reload} disabled={isSaving}>
+          <RotateCcw className="mr-2 h-4 w-4" />
+          重置
+        </Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              保存
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   )
 }

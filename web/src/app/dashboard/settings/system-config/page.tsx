@@ -2,54 +2,43 @@
 
 import { useState } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card } from "@/components/ui/card"
 import {
   Settings,
   Globe,
   Zap,
-  Save,
-  Loader2,
-  RotateCcw,
   HardDrive,
   Command,
 } from "lucide-react"
-import { useSettingsForm } from "@/hooks/settings/use-settings-form"
-import { systemConfigSchema } from "@/schemas/settings/system-config.schema"
-import { settingsApi } from "@/lib/api/settings"
 import { BasicTab } from "./_tabs/basic-tab"
 import { I18nTab } from "./_tabs/i18n-tab"
 import { PerformanceTab } from "./_tabs/performance-tab"
 import { FileTransferTab } from "./_tabs/file-transfer-tab"
 import { CompletionTab } from "./_tabs/completion-tab"
 import { SkeletonCard } from "@/components/ui/loading"
+import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function SystemConfigPage() {
-  const [activeTab, setActiveTab] = useState("basic")
+  const [activeSection, setActiveSection] = useState("基本信息")
+  const [isLoading] = useState(false)
 
-  const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
-    schema: systemConfigSchema,
-    loadFn: async () => {
-      return await settingsApi.getSystemConfig()
-    },
-    saveFn: async (data) => {
-      await settingsApi.saveSystemConfig(data)
-    },
-  })
+  const navItems = [
+    { name: "基本信息", icon: Settings },
+    { name: "国际化", icon: Globe },
+    { name: "性能设置", icon: Zap },
+    { name: "文件传输", icon: HardDrive },
+    { name: "补全设置", icon: Command },
+  ]
+
+  const handleSectionChange = (section: string) => {
+    setActiveSection(section)
+  }
 
   if (isLoading) {
     return (
       <>
         <PageHeader title="系统配置" />
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
-          {/* 统计卡片骨架屏 */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <SkeletonCard showHeader={false} lines={2} />
-            <SkeletonCard showHeader={false} lines={2} />
-            <SkeletonCard showHeader={false} lines={2} />
-          </div>
-          {/* 表单内容骨架屏 */}
           <SkeletonCard showHeader lines={8} className="flex-1" />
         </div>
       </>
@@ -58,115 +47,69 @@ export default function SystemConfigPage() {
 
   return (
     <>
-      <PageHeader title="系统配置">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={reload}
-            disabled={isLoading || isSaving}
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            重置
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={isLoading || isSaving}
-          >
-            {isSaving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            保存设置
-          </Button>
-        </div>
-      </PageHeader>
+      <PageHeader title="系统配置" />
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
-        {/* 统计卡片 */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-              <div className="text-sm font-medium">系统名称</div>
+      <div className="flex flex-1 overflow-hidden">
+        <SidebarProvider>
+          {/* 左侧导航栏 - 桌面端 */}
+          <Sidebar collapsible="none" className="hidden md:flex md:w-44 lg:w-48 border-r shrink-0">
+            <SidebarContent className="py-4">
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {navItems.map((item) => (
+                      <SidebarMenuItem key={item.name}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={item.name === activeSection}
+                          onClick={() => handleSectionChange(item.name)}
+                        >
+                          <button>
+                            <item.icon />
+                            <span>{item.name}</span>
+                          </button>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
+
+          {/* 右侧内容区 */}
+          <main className="flex min-h-[400px] flex-1 flex-col overflow-hidden">
+            {/* 移动端下拉选择器 */}
+            <div className="md:hidden border-b px-4 py-3">
+              <Select value={activeSection} onValueChange={handleSectionChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择设置" />
+                </SelectTrigger>
+                <SelectContent>
+                  {navItems.map((item) => (
+                    <SelectItem key={item.name} value={item.name}>
+                      <div className="flex items-center gap-2">
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="mt-2 text-2xl font-bold">
-              {form.watch("system_name") || "未设置"}
+
+            {/* 内容滚动区域 */}
+            <div className="flex-1 overflow-y-auto scrollbar-custom">
+              <div className="space-y-4 p-4">
+                {activeSection === "基本信息" && <BasicTab />}
+                {activeSection === "国际化" && <I18nTab />}
+                {activeSection === "性能设置" && <PerformanceTab />}
+                {activeSection === "文件传输" && <FileTransferTab />}
+                {activeSection === "补全设置" && <CompletionTab />}
+              </div>
             </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <div className="text-sm font-medium">默认语言</div>
-            </div>
-            <div className="mt-2 text-2xl font-bold">
-              {form.watch("default_language") === "zh-CN"
-                ? "简体中文"
-                : form.watch("default_language") === "en-US"
-                ? "English"
-                : "日本語"}
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-muted-foreground" />
-              <div className="text-sm font-medium">分页大小</div>
-            </div>
-            <div className="mt-2 text-2xl font-bold">
-              {form.watch("default_page_size")} 条/页
-            </div>
-          </Card>
-        </div>
-
-        {/* 标签页 */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="basic">
-              <Settings className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">基本信息</span>
-            </TabsTrigger>
-            <TabsTrigger value="i18n">
-              <Globe className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">国际化</span>
-            </TabsTrigger>
-            <TabsTrigger value="performance">
-              <Zap className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">性能设置</span>
-            </TabsTrigger>
-            <TabsTrigger value="file-transfer">
-              <HardDrive className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">文件传输</span>
-            </TabsTrigger>
-            <TabsTrigger value="completion">
-              <Command className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">补全设置</span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="basic">
-            <BasicTab form={form} />
-          </TabsContent>
-
-          <TabsContent value="i18n">
-            <I18nTab form={form} />
-          </TabsContent>
-
-          <TabsContent value="performance">
-            <PerformanceTab form={form} />
-          </TabsContent>
-
-          <TabsContent value="file-transfer">
-            <FileTransferTab form={form} />
-          </TabsContent>
-
-          <TabsContent value="completion">
-            <CompletionTab form={form} />
-          </TabsContent>
-        </Tabs>
+          </main>
+        </SidebarProvider>
       </div>
     </>
   )

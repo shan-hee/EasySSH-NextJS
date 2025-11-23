@@ -2,13 +2,12 @@
 
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormSelect } from "@/components/settings/form-field"
-import { Globe } from "lucide-react"
-import { type UseFormReturn } from "react-hook-form"
-import { type SystemConfigFormData } from "@/schemas/settings/system-config.schema"
-
-interface I18nTabProps {
-  form: UseFormReturn<SystemConfigFormData>
-}
+import { Globe, Save, Loader2, RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useSettingsForm } from "@/hooks/settings/use-settings-form"
+import { i18nSchema } from "@/schemas/settings/system-config.schema"
+import { settingsApi } from "@/lib/api/settings"
+import { SettingsLoading } from "@/components/settings/settings-loading"
 
 const timezoneOptions = [
   { label: "Asia/Shanghai (东八区)", value: "Asia/Shanghai" },
@@ -30,7 +29,30 @@ const dateFormatOptions = [
   { label: "DD-MM-YYYY", value: "DD-MM-YYYY" },
 ]
 
-export function I18nTab({ form }: I18nTabProps) {
+export function I18nTab() {
+  const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
+    schema: i18nSchema,
+    loadFn: async () => {
+      const data = await settingsApi.getSystemConfig()
+      return {
+        default_timezone: data.default_timezone,
+        date_format: data.date_format,
+      }
+    },
+    saveFn: async (data) => {
+      const fullConfig = await settingsApi.getSystemConfig()
+      const updatedConfig = {
+        ...fullConfig,
+        ...data,
+      }
+      await settingsApi.saveSystemConfig(updatedConfig)
+    },
+  })
+
+  if (isLoading) {
+    return <SettingsLoading />
+  }
+
   const selectedFormat = form.watch("date_format")
   const currentDate = new Date()
 
@@ -53,37 +75,60 @@ export function I18nTab({ form }: I18nTabProps) {
   }
 
   return (
-    <SettingsSection
-      title="国际化设置"
-      description="配置时区和日期时间格式"
-      icon={<Globe className="h-5 w-5" />}
-    >
-      <FormSelect
-        form={form}
-        name="default_timezone"
-        label="默认时区"
-        description="系统使用的默认时区"
-        required
-        options={timezoneOptions}
-        placeholder="选择时区"
-      />
+    <div className="space-y-4">
+      <SettingsSection
+        title="国际化设置"
+        description="配置时区和日期时间格式"
+        icon={<Globe className="h-5 w-5" />}
+      >
+        <FormSelect
+          form={form}
+          name="default_timezone"
+          label="默认时区"
+          description="系统使用的默认时区"
+          required
+          options={timezoneOptions}
+          placeholder="选择时区"
+        />
 
-      <FormSelect
-        form={form}
-        name="date_format"
-        label="日期格式"
-        description="系统中日期时间的显示格式"
-        required
-        options={dateFormatOptions}
-        placeholder="选择日期格式"
-      />
+        <FormSelect
+          form={form}
+          name="date_format"
+          label="日期格式"
+          description="系统中日期时间的显示格式"
+          required
+          options={dateFormatOptions}
+          placeholder="选择日期格式"
+        />
 
-      {selectedFormat && (
-        <div className="rounded-lg border p-4 bg-muted/50">
-          <p className="text-sm font-medium mb-1">格式预览：</p>
-          <p className="text-lg font-mono">{formatPreview(selectedFormat)}</p>
-        </div>
-      )}
-    </SettingsSection>
+        {selectedFormat && (
+          <div className="rounded-lg border p-4 bg-muted/50">
+            <p className="text-sm font-medium mb-1">格式预览：</p>
+            <p className="text-lg font-mono">{formatPreview(selectedFormat)}</p>
+          </div>
+        )}
+      </SettingsSection>
+
+      {/* 保存按钮区域 */}
+      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+        <Button variant="outline" onClick={reload} disabled={isSaving}>
+          <RotateCcw className="mr-2 h-4 w-4" />
+          重置
+        </Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              保存
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
   )
 }

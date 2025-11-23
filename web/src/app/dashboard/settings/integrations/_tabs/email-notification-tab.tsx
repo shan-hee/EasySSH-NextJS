@@ -15,11 +15,12 @@ import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations
 
 interface EmailNotificationTabProps {
   form: UseFormReturn<IntegrationsConfigFormData>
+  enabledFieldName?: keyof IntegrationsConfigFormData
 }
 
-export function EmailNotificationTab({ form }: EmailNotificationTabProps) {
+export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: EmailNotificationTabProps) {
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
-  const enabled = form.watch("enabled")
+  const enabled = form.watch(enabledFieldName)
 
   const handleTestEmail = async () => {
     const data = form.getValues()
@@ -48,7 +49,7 @@ export function EmailNotificationTab({ form }: EmailNotificationTabProps) {
     >
       <FormSwitch
         form={form}
-        name="enabled"
+        name={enabledFieldName}
         label="启用邮件通知"
         description="开启后系统将通过邮件发送重要通知"
       />

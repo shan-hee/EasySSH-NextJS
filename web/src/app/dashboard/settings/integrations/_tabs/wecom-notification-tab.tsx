@@ -16,17 +16,18 @@ import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations
 
 interface WeComNotificationTabProps {
   form: UseFormReturn<IntegrationsConfigFormData>
+  enabledFieldName?: keyof IntegrationsConfigFormData
 }
 
-export function WeComNotificationTab({ form }: WeComNotificationTabProps) {
+export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" }: WeComNotificationTabProps) {
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
-  const enabled = form.watch("enabled")
+  const enabled = form.watch(enabledFieldName)
 
   const handleTestMessage = async () => {
     const data = form.getValues()
     const config = {
-      enabled: data.enabled ?? false,
-      webhook_url: data.webhook_url ?? "",
+      enabled: data.wecom_enabled ?? false,
+      webhook_url: data.wecom_webhook_url ?? "",
     }
 
     await testConnection(async () => {
@@ -43,7 +44,7 @@ export function WeComNotificationTab({ form }: WeComNotificationTabProps) {
     >
       <FormSwitch
         form={form}
-        name="enabled"
+        name={enabledFieldName}
         label="启用企业微信通知"
         description="开启后系统将通过企业微信群机器人发送通知"
       />
@@ -52,7 +53,7 @@ export function WeComNotificationTab({ form }: WeComNotificationTabProps) {
         <>
           <FormInput
             form={form}
-            name="webhook_url"
+            name="wecom_webhook_url"
             label="Webhook URL"
             description="企业微信群机器人的Webhook地址"
             type="url"

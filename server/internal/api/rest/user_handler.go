@@ -193,9 +193,16 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	currentID, ok := currentUserID.(uuid.UUID)
+	// user_id 在认证中间件中被设置为字符串类型
+	currentIDStr, ok := currentUserID.(string)
 	if !ok {
 		RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Invalid user ID type")
+		return
+	}
+
+	currentID, err := uuid.Parse(currentIDStr)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Invalid user ID format")
 		return
 	}
 

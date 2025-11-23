@@ -34,7 +34,7 @@ func Recovery() gin.HandlerFunc {
 				// 获取请求 ID
 				requestID, _ := c.Get("RequestID")
 
-				// 记录错误
+				// 返回错误响应
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"error":      "internal_server_error",
 					"message":    "Internal server error occurred",

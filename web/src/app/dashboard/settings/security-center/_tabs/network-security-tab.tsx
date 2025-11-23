@@ -3,245 +3,242 @@
 import { useState } from "react"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput } from "@/components/settings/form-field"
-import { Globe, Shield, Plus, X } from "lucide-react"
-import { type UseFormReturn } from "react-hook-form"
-import { type SecurityConfigFormData } from "@/schemas/settings/security.schema"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import { Globe, Shield, Zap, Save, Loader2, RotateCcw, Plus, X } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useSettingsForm } from "@/hooks/settings/use-settings-form"
+import { networkSecurityFullSchema } from "@/schemas/settings/security.schema"
+import { settingsApi } from "@/lib/api/settings"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { SettingsLoading } from "@/components/settings/settings-loading"
 
+export function NetworkSecurityTab() {
+  // 统一的表单管理
+  const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
+    schema: networkSecurityFullSchema,
+    loadFn: async () => {
+      // 加载 CORS 和速率限制配置
+      const [corsData, rateLimitData] = await Promise.all([
+        settingsApi.getCORSConfig(),
+        settingsApi.getRateLimitConfig(),
+      ])
 
-interface NetworkSecurityTabProps {
-  form: UseFormReturn<SecurityConfigFormData>
-}
+      return {
+        // CORS 配置
+        allowed_origins: corsData.allowed_origins || ["*"],
+        allowed_methods: corsData.allowed_methods || ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowed_headers: corsData.allowed_headers || ["*"],
+        // 速率限制配置
+        login_limit: rateLimitData.login_limit || 5,
+        api_limit: rateLimitData.api_limit || 100,
+      }
+    },
+    saveFn: async (data) => {
+      // 分别保存 CORS 和速率限制配置
+      await Promise.all([
+        settingsApi.saveCORSConfig({
+          allowed_origins: data.allowed_origins,
+          allowed_methods: data.allowed_methods,
+          allowed_headers: data.allowed_headers,
+        }),
+        settingsApi.saveRateLimitConfig({
+          login_limit: data.login_limit,
+          api_limit: data.api_limit,
+        }),
+      ])
+    },
+  })
 
-export function NetworkSecurityTab({ form }: NetworkSecurityTabProps) {
-  const [newOrigin, setNewOrigin] = useState("")
-  const [newMethod, setNewMethod] = useState("")
-  const [newHeader, setNewHeader] = useState("")
+  // CORS 输入状态
+  const [originInput, setOriginInput] = useState("")
+  const [methodInput, setMethodInput] = useState("")
+  const [headerInput, setHeaderInput] = useState("")
 
-  const allowedOrigins = form.watch("allowed_origins") || []
-  const allowedMethods = form.watch("allowed_methods") || []
-  const allowedHeaders = form.watch("allowed_headers") || []
-
-  const handleAddOrigin = () => {
-    if (!newOrigin.trim()) return
-    const current = form.getValues("allowed_origins") || []
-    if (!current.includes(newOrigin.trim())) {
-      form.setValue("allowed_origins", [...current, newOrigin.trim()])
-      setNewOrigin("")
+  // 添加CORS项
+  const addOrigin = () => {
+    if (!originInput.trim()) return
+    const current = form.watch("allowed_origins") || []
+    if (!current.includes(originInput.trim())) {
+      form.setValue("allowed_origins", [...current, originInput.trim()])
     }
+    setOriginInput("")
   }
 
-  const handleRemoveOrigin = (origin: string) => {
-    const current = form.getValues("allowed_origins") || []
+  const addMethod = () => {
+    if (!methodInput.trim()) return
+    const current = form.watch("allowed_methods") || []
+    if (!current.includes(methodInput.trim().toUpperCase())) {
+      form.setValue("allowed_methods", [...current, methodInput.trim().toUpperCase()])
+    }
+    setMethodInput("")
+  }
+
+  const addHeader = () => {
+    if (!headerInput.trim()) return
+    const current = form.watch("allowed_headers") || []
+    if (!current.includes(headerInput.trim())) {
+      form.setValue("allowed_headers", [...current, headerInput.trim()])
+    }
+    setHeaderInput("")
+  }
+
+  // 删除CORS项
+  const removeOrigin = (origin: string) => {
+    const current = form.watch("allowed_origins") || []
     form.setValue(
       "allowed_origins",
-      current.filter((o: string) => o !== origin)
+      current.filter((o) => o !== origin)
     )
   }
 
-  const handleAddMethod = () => {
-    if (!newMethod.trim()) return
-    const current = form.getValues("allowed_methods") || []
-    const method = newMethod.trim().toUpperCase()
-    if (!current.includes(method)) {
-      form.setValue("allowed_methods", [...current, method])
-      setNewMethod("")
-    }
-  }
-
-  const handleRemoveMethod = (method: string) => {
-    const current = form.getValues("allowed_methods") || []
+  const removeMethod = (method: string) => {
+    const current = form.watch("allowed_methods") || []
     form.setValue(
       "allowed_methods",
-      current.filter((m: string) => m !== method)
+      current.filter((m) => m !== method)
     )
   }
 
-  const handleAddHeader = () => {
-    if (!newHeader.trim()) return
-    const current = form.getValues("allowed_headers") || []
-    if (!current.includes(newHeader.trim())) {
-      form.setValue("allowed_headers", [...current, newHeader.trim()])
-      setNewHeader("")
-    }
-  }
-
-  const handleRemoveHeader = (header: string) => {
-    const current = form.getValues("allowed_headers") || []
+  const removeHeader = (header: string) => {
+    const current = form.watch("allowed_headers") || []
     form.setValue(
       "allowed_headers",
-      current.filter((h: string) => h !== header)
+      current.filter((h) => h !== header)
     )
   }
 
-  const addCommonMethods = () => {
-    const commonMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
-    form.setValue("allowed_methods", commonMethods)
-  }
-
-  const addCommonHeaders = () => {
-    const commonHeaders = [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-      "Origin",
-    ]
-    form.setValue("allowed_headers", commonHeaders)
+  if (isLoading) {
+    return <SettingsLoading />
   }
 
   return (
-    <div className="space-y-6">
-      {/* CORS 配置 */}
+    <div className="space-y-4">
+      {/* CORS配置 */}
       <SettingsSection
-        title="CORS 跨域配置"
-        description="配置跨域资源共享（CORS）策略"
+        title="CORS跨域配置"
+        description="配置跨域资源共享(CORS)策略"
         icon={<Globe className="h-5 w-5" />}
       >
-        {/* 允许的域名 */}
-        <div className="space-y-2">
-          <Label>允许的域名</Label>
-          <p className="text-sm text-muted-foreground">
-            配置允许跨域访问的域名列表（支持通配符 *）
-          </p>
-          <div className="flex gap-2">
-            <Input
-              placeholder="https://example.com"
-              value={newOrigin}
-              onChange={(e) => setNewOrigin(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  handleAddOrigin()
-                }
-              }}
-            />
-            <Button onClick={handleAddOrigin} size="sm">
-              <Plus className="h-4 w-4" />
-            </Button>
+        <div className="space-y-4">
+          {/* 允许的源 */}
+          <div className="space-y-3">
+            <Label>允许的源 (Origins)</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="输入域名,例如: https://example.com"
+                value={originInput}
+                onChange={(e) => setOriginInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addOrigin()}
+              />
+              <Button onClick={addOrigin} size="sm">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(form.watch("allowed_origins") || []).map((origin) => (
+                <Badge key={origin} variant="secondary" className="gap-1">
+                  {origin}
+                  <button
+                    onClick={() => removeOrigin(origin)}
+                    className="ml-1 hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              使用 * 表示允许所有源(不推荐用于生产环境)
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {allowedOrigins.map((origin: string) => (
-              <Badge key={origin} variant="secondary" className="gap-1">
-                {origin}
-                <button
-                  onClick={() => handleRemoveOrigin(origin)}
-                  className="ml-1 hover:bg-destructive/20 rounded-full"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        </div>
 
-        {/* 允许的 HTTP 方法 */}
-        <div className="space-y-2">
-          <Label>允许的 HTTP 方法</Label>
-          <p className="text-sm text-muted-foreground">
-            配置允许的 HTTP 请求方法
-          </p>
-          <div className="flex gap-2">
-            <Input
-              placeholder="GET, POST, PUT..."
-              value={newMethod}
-              onChange={(e) => setNewMethod(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  handleAddMethod()
-                }
-              }}
-            />
-            <Button onClick={handleAddMethod} size="sm">
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button onClick={addCommonMethods} variant="outline" size="sm">
-              常用方法
-            </Button>
+          {/* 允许的方法 */}
+          <div className="space-y-3">
+            <Label>允许的HTTP方法 (Methods)</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="输入HTTP方法,例如: GET, POST"
+                value={methodInput}
+                onChange={(e) => setMethodInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addMethod()}
+              />
+              <Button onClick={addMethod} size="sm">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(form.watch("allowed_methods") || []).map((method) => (
+                <Badge key={method} variant="secondary" className="gap-1">
+                  {method}
+                  <button
+                    onClick={() => removeMethod(method)}
+                    className="ml-1 hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              常用方法: GET, POST, PUT, DELETE, PATCH, OPTIONS
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {allowedMethods.map((method: string) => (
-              <Badge key={method} variant="secondary" className="gap-1">
-                {method}
-                <button
-                  onClick={() => handleRemoveMethod(method)}
-                  className="ml-1 hover:bg-destructive/20 rounded-full"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        </div>
 
-        {/* 允许的请求头 */}
-        <div className="space-y-2">
-          <Label>允许的请求头</Label>
-          <p className="text-sm text-muted-foreground">
-            配置允许的 HTTP 请求头
-          </p>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Content-Type, Authorization..."
-              value={newHeader}
-              onChange={(e) => setNewHeader(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  handleAddHeader()
-                }
-              }}
-            />
-            <Button onClick={handleAddHeader} size="sm">
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button onClick={addCommonHeaders} variant="outline" size="sm">
-              常用请求头
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {allowedHeaders.map((header: string) => (
-              <Badge key={header} variant="secondary" className="gap-1">
-                {header}
-                <button
-                  onClick={() => handleRemoveHeader(header)}
-                  className="ml-1 hover:bg-destructive/20 rounded-full"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            ))}
+          {/* 允许的请求头 */}
+          <div className="space-y-3">
+            <Label>允许的请求头 (Headers)</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="输入请求头,例如: Content-Type"
+                value={headerInput}
+                onChange={(e) => setHeaderInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addHeader()}
+              />
+              <Button onClick={addHeader} size="sm">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(form.watch("allowed_headers") || []).map((header) => (
+                <Badge key={header} variant="secondary" className="gap-1">
+                  {header}
+                  <button
+                    onClick={() => removeHeader(header)}
+                    className="ml-1 hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              使用 * 表示允许所有请求头。常用: Content-Type, Authorization, X-Requested-With
+            </p>
           </div>
         </div>
 
         <Alert>
           <InfoIcon className="h-4 w-4" />
           <AlertDescription>
-            CORS 配置不当可能导致前端无法正常访问 API。建议在开发环境使用宽松配置，生产环境严格限制域名。
+            CORS配置会影响前端应用的跨域请求。请根据实际需求配置,避免过于宽松的设置。
           </AlertDescription>
         </Alert>
       </SettingsSection>
 
-      <Separator />
-
       {/* 速率限制配置 */}
       <SettingsSection
         title="速率限制"
-        description="配置 API 请求速率限制，防止恶意攻击"
-        icon={<Shield className="h-5 w-5" />}
+        description="配置API和登录请求的速率限制"
+        icon={<Zap className="h-5 w-5" />}
       >
         <FormInput
           form={form}
           name="login_limit"
-          label="登录速率限制（次/分钟）"
-          description="同一 IP 地址每分钟允许的最大登录尝试次数 (1-100)"
+          label="登录速率限制 (次/分钟)"
+          description="每个IP地址每分钟允许的登录尝试次数 (1-100)"
           type="number"
           min={1}
           max={100}
@@ -252,8 +249,8 @@ export function NetworkSecurityTab({ form }: NetworkSecurityTabProps) {
         <FormInput
           form={form}
           name="api_limit"
-          label="API 速率限制（次/分钟）"
-          description="同一用户每分钟允许的最大 API 请求次数 (10-10000)"
+          label="API速率限制 (次/分钟)"
+          description="每个用户每分钟允许的API请求次数 (10-10000)"
           type="number"
           min={10}
           max={10000}
@@ -262,14 +259,53 @@ export function NetworkSecurityTab({ form }: NetworkSecurityTabProps) {
         />
 
         <div className="rounded-lg border p-4 bg-muted/50">
-          <p className="text-sm font-medium mb-2">推荐配置：</p>
-          <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-            <li>登录速率限制：3-10 次/分钟（防止暴力破解）</li>
-            <li>API 速率限制：100-1000 次/分钟（根据实际业务调整）</li>
-            <li>超出限制后，系统将返回 429 Too Many Requests 错误</li>
-          </ul>
+          <p className="text-sm font-medium mb-2">当前配置预览:</p>
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>
+              • 每个IP每分钟最多尝试登录{" "}
+              <span className="font-semibold text-foreground">
+                {form.watch("login_limit")}
+              </span>{" "}
+              次
+            </p>
+            <p>
+              • 每个用户每分钟最多发起{" "}
+              <span className="font-semibold text-foreground">
+                {form.watch("api_limit")}
+              </span>{" "}
+              次API请求
+            </p>
+          </div>
         </div>
+
+        <Alert>
+          <InfoIcon className="h-4 w-4" />
+          <AlertDescription>
+            速率限制可以有效防止暴力破解和API滥用。建议根据实际使用情况合理设置限制值。
+          </AlertDescription>
+        </Alert>
       </SettingsSection>
+
+      {/* 统一的保存按钮区域 */}
+      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+        <Button variant="outline" onClick={reload} disabled={isSaving}>
+          <RotateCcw className="mr-2 h-4 w-4" />
+          重置
+        </Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              保存
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   )
 }

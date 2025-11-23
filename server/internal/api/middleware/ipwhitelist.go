@@ -6,54 +6,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/easyssh/server/internal/domain/settings"
+	"github.com/easyssh/server/internal/domain/security"
 )
-
-// IPWhitelistMiddleware IP 白名单验证中间件
-func IPWhitelistMiddleware(ipWhitelistService settings.IPWhitelistService) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 获取客户端真实 IP
-		clientIP := getClientIP(c)
-
-		// 如果无法获取 IP，则拒绝访问
-		if clientIP == "" {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":   "forbidden",
-				"message": "Unable to determine client IP address",
-			})
-			c.Abort()
-			return
-		}
-
-		// 检查 IP 是否被允许
-		allowed, err := ipWhitelistService.IsIPAllowed(clientIP)
-		if err != nil {
-			// 如果检查过程出错，记录错误但允许访问（避免因服务错误导致正常用户无法访问）
-			// 在生产环境中，可以根据需要调整这个策略
-			c.Error(err) // 记录错误但不中断请求
-			c.Next()
-			return
-		}
-
-		if !allowed {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":   "forbidden",
-				"message": "IP address not allowed",
-				"ip":      clientIP,
-			})
-			c.Abort()
-			return
-		}
-
-		// 将客户端 IP 存入上下文，供其他中间件或处理器使用
-		c.Set("client_ip", clientIP)
-		c.Next()
-	}
-}
 
 // OptionalIPWhitelistMiddleware 可选的 IP 白名单验证中间件
 // 只有在配置了 IP 白名单时才进行验证
-func OptionalIPWhitelistMiddleware(ipWhitelistService settings.IPWhitelistService) gin.HandlerFunc {
+func OptionalIPWhitelistMiddleware(securityService security.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 获取客户端真实 IP
 		clientIP := getClientIP(c)
@@ -61,30 +19,16 @@ func OptionalIPWhitelistMiddleware(ipWhitelistService settings.IPWhitelistServic
 		// 将客户端 IP 存入上下文
 		c.Set("client_ip", clientIP)
 
-		// 获取启用的白名单项
-		whitelists, err := ipWhitelistService.GetEnabledIPWhitelists()
+		// 调用服务层的统一检查方法
+		allowed, err := securityService.CheckIPAllowed(c.Request.Context(), clientIP)
 		if err != nil {
-			// 记录错误但继续处理
+			// 记录错误但继续处理（避免配置错误导致服务不可用）
 			c.Error(err)
 			c.Next()
 			return
 		}
 
-		// 如果没有启用任何白名单项，则跳过验证
-		if len(whitelists) == 0 {
-			c.Next()
-			return
-		}
-
-		// 检查 IP 是否被允许
-		allowed, err := ipWhitelistService.IsIPAllowed(clientIP)
-		if err != nil {
-			// 记录错误但允许访问
-			c.Error(err)
-			c.Next()
-			return
-		}
-
+		// 如果不允许，返回 403
 		if !allowed {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":   "forbidden",

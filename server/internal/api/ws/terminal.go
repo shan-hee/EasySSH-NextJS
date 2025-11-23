@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/easyssh/server/internal/domain/completion"
+	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
-	"github.com/easyssh/server/internal/domain/settings"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/pkg/crypto"
@@ -37,7 +37,7 @@ func (h *TerminalHandler) getUpgrader() websocket.Upgrader {
 			}
 
 			// 1. 优先检查 Web UI 配置的 CORS 白名单
-			corsConfig, err := h.configManager.GetCORSConfig(context.Background())
+			corsConfig, err := h.securityService.GetCORSConfig(context.Background())
 			if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
 				for _, allowedOrigin := range corsConfig.AllowedOrigins {
 					if origin == allowedOrigin {
@@ -90,13 +90,13 @@ type TerminalHandler struct {
 	sessionManager    *sshDomain.SessionManager
 	encryptor         *crypto.Encryptor
 	sshSessionService sshsession.Service
-	hostKeyCallback   ssh.HostKeyCallback   // SSH主机密钥验证回调
-	configManager     settings.ConfigManager // CORS 配置管理器
-	completionService completion.Service     // 补全服务
+	hostKeyCallback   ssh.HostKeyCallback // SSH主机密钥验证回调
+	securityService   security.Service    // 安全配置服务（用于 CORS）
+	completionService completion.Service  // 补全服务
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, configManager settings.ConfigManager, completionService completion.Service) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, securityService security.Service, completionService completion.Service) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
@@ -104,7 +104,7 @@ func NewTerminalHandler(serverService server.Service, serverRepo server.Reposito
 		encryptor:         encryptor,
 		sshSessionService: sshSessionService,
 		hostKeyCallback:   hostKeyCallback,
-		configManager:     configManager,
+		securityService:   securityService,
 		completionService: completionService,
 	}
 }
