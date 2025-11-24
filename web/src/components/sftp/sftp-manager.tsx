@@ -1343,7 +1343,7 @@ export function SftpManager(props: SftpManagerProps) {
                   onClick={() => setIsEditingPath(true)}
                   className={cn(
                     "h-7 flex items-center gap-1 pl-8 pr-3 py-1 border-0 bg-zinc-100 dark:bg-zinc-900/50",
-                    "text-xs font-mono cursor-text rounded-md overflow-x-auto scrollbar-thin",
+                    "text-xs font-mono cursor-text rounded-md overflow-x-auto scrollbar-custom",
                     "hover:bg-zinc-200 dark:hover:bg-zinc-800/60 transition-colors"
                   )}
                   title="点击编辑路径"
