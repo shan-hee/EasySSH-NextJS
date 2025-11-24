@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/easyssh/server/internal/domain/security"
@@ -23,7 +24,6 @@ func CORS(cfg *config.Config, securityService security.Service) gin.HandlerFunc 
 
 		// 默认始终允许 localhost + 前端端口（开发和生产环境通用）
 		allowedOrigins = []string{
-			"http://localhost:3000",
 			fmt.Sprintf("http://localhost:%d", cfg.Server.WebDevPort),
 		}
     allowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
@@ -32,17 +32,30 @@ func CORS(cfg *config.Config, securityService security.Service) gin.HandlerFunc 
 
 		// 尝试从请求上下文缓存读取配置，避免重复查询数据库
 		var corsConfig *security.CORSConfig
+		var configLoadFailed bool
 		if secConfig, ok := GetSecurityConfigFromContext(c); ok {
 			// 从缓存的配置中解析CORS配置
 			if secConfig.CORSConfig != "" {
 				var cors security.CORSConfig
-				if err := json.Unmarshal([]byte(secConfig.CORSConfig), &cors); err == nil {
+				if err := json.Unmarshal([]byte(secConfig.CORSConfig), &cors); err != nil {
+					log.Printf("[CORS] 警告: 解析缓存的CORS配置失败: %v", err)
+					configLoadFailed = true
+				} else {
 					corsConfig = &cors
 				}
 			}
 		} else {
 			// 缓存未命中,从数据库读取
-			corsConfig, _ = securityService.GetCORSConfig(context.Background())
+			var err error
+			corsConfig, err = securityService.GetCORSConfig(context.Background())
+			if err != nil {
+				log.Printf("[CORS] 警告: 从数据库加载CORS配置失败: %v，使用默认配置", err)
+				configLoadFailed = true
+			}
+		}
+
+		if configLoadFailed {
+			log.Printf("[CORS] 使用默认CORS配置: origins=%v", allowedOrigins)
 		}
 
 		if corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
@@ -92,6 +105,9 @@ func CORS(cfg *config.Config, securityService security.Service) gin.HandlerFunc 
 			c.Writer.Header().Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
 			c.Writer.Header().Set("Access-Control-Allow-Methods", strings.Join(allowedMethods, ", "))
 			c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		} else if origin != "" {
+			// 记录被拒绝的跨域请求（仅当有Origin头时）
+			log.Printf("[CORS] 拒绝跨域请求: origin=%s, path=%s, allowedOrigins=%v", origin, c.Request.URL.Path, allowedOrigins)
 		}
 
 		// OPTIONS 预检请求直接返回 204

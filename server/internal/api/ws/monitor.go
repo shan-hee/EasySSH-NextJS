@@ -1,14 +1,18 @@
 package ws
 
 import (
+    "context"
     "encoding/json"
     "fmt"
     "log"
     "net/http"
+    "net/url"
+    "strings"
     "sync"
     "time"
 
     "github.com/easyssh/server/internal/domain/monitor"
+    "github.com/easyssh/server/internal/domain/security"
     pb "github.com/easyssh/server/internal/proto"
     "github.com/gin-gonic/gin"
     "github.com/gorilla/websocket"
@@ -22,22 +26,76 @@ const (
     wsWriteWait = 10 * time.Second
 )
 
-// upgrader WebSocket 升级器
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // 允许所有来源（生产环境应该限制）
-	},
-}
-
 // MonitorHandler WebSocket 监控处理器
 type MonitorHandler struct {
-	connectionPool *monitor.ConnectionPool
+	connectionPool  *monitor.ConnectionPool
+	securityService security.Service // 安全配置服务（用于 CORS）
 }
 
 // NewMonitorHandler 创建监控处理器
-func NewMonitorHandler(connectionPool *monitor.ConnectionPool) *MonitorHandler {
+func NewMonitorHandler(connectionPool *monitor.ConnectionPool, securityService security.Service) *MonitorHandler {
 	return &MonitorHandler{
-		connectionPool: connectionPool,
+		connectionPool:  connectionPool,
+		securityService: securityService,
+	}
+}
+
+// getUpgrader 创建 WebSocket upgrader，集成 CORS 配置
+func (h *MonitorHandler) getUpgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				// 无 Origin 头：通常为同源升级，允许
+				return true
+			}
+
+			// 1. 优先检查 Web UI 配置的 CORS 白名单
+			corsConfig, err := h.securityService.GetCORSConfig(context.Background())
+			if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
+				for _, allowedOrigin := range corsConfig.AllowedOrigins {
+					if origin == allowedOrigin {
+						log.Printf("[Monitor] WebSocket allowed by CORS config: %s", origin)
+						return true
+					}
+				}
+			}
+
+			// 2. 兜底机制：动态允许同主机名的连接
+			// 当 Origin 的主机名与当前请求的 Host 或 X-Forwarded-Host 一致时放行
+			var originHost string
+			if u, err := url.Parse(origin); err == nil {
+				originHost = u.Hostname()
+			}
+			if originHost == "" {
+				log.Printf("[Monitor] WebSocket origin parse failed: %s", origin)
+				return false
+			}
+
+			// 候选主机：请求的 Host
+			candidates := []string{strings.Split(r.Host, ":")[0]}
+			// 以及 X-Forwarded-Host（可能为逗号分隔）
+			if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
+				for _, h := range strings.Split(xfh, ",") {
+					h = strings.TrimSpace(h)
+					if h != "" {
+						candidates = append(candidates, strings.Split(h, ":")[0])
+					}
+				}
+			}
+
+			for _, h := range candidates {
+				if h != "" && strings.EqualFold(h, originHost) {
+					log.Printf("[Monitor] WebSocket allowed by hostname match: %s", origin)
+					return true
+				}
+			}
+
+			log.Printf("[Monitor] WebSocket connection rejected: origin %s not allowed (host=%s, x-forwarded-host=%s)", origin, r.Host, r.Header.Get("X-Forwarded-Host"))
+			return false
+		},
 	}
 }
 
@@ -69,9 +127,10 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
 	log.Printf("[Monitor] 使用采集间隔: %v", interval)
 
     // 立即升级到 WebSocket
+    upgrader := h.getUpgrader()
     wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
     if err != nil {
-        log.Printf("Failed to upgrade to WebSocket: %v", err)
+        log.Printf("[Monitor] Failed to upgrade to WebSocket: %v", err)
         return
     }
     defer wsConn.Close()

@@ -236,7 +236,7 @@ func main() {
 	sshKeyService := sshkey.NewService(sshKeyRepo, cfg.Server.EncryptionKey)
 
 	// SFTP 上传 WebSocket 处理器
-	sftpUploadWSHandler := ws.NewSFTPUploadHandler()
+	sftpUploadWSHandler := ws.NewSFTPUploadHandler(securityService)
 
 	// 令牌有效期（秒），用于 Cookie 和 API 响应
 	accessTokenTTLSeconds := int(accessTokenDuration.Seconds())
@@ -255,7 +255,7 @@ func main() {
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
 	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), securityService, completionService)
-	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool)
+	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
 	scriptHandler := rest.NewScriptHandler(scriptService)
