@@ -4,7 +4,8 @@ import type { CompletionProvider, CompletionContext, CompletionItem } from "../t
  * 脚本项接口（来自服务器）
  */
 export interface ScriptItem {
-  name: string
+  name: string        // 脚本名称（用于显示）
+  content: string     // 脚本内容（实际命令，用于补全匹配）
   description: string
   executions: number
   tags: string[]
@@ -55,8 +56,8 @@ export class ScriptProvider implements CompletionProvider {
 
     return this.scriptsCache
       .filter(script => {
-        // 前缀匹配脚本名称
-        return script.name.toLowerCase().startsWith(currentWord.toLowerCase())
+        // 前缀匹配脚本内容（实际命令）
+        return script.content.toLowerCase().startsWith(currentWord.toLowerCase())
       })
       .map(script => {
         // 动态优先级：基于执行次数
@@ -64,15 +65,12 @@ export class ScriptProvider implements CompletionProvider {
         const executionBonus = Math.min(Math.floor(script.executions / 10), 5)
         const dynamicPriority = this.priority + executionBonus
 
-        // 构建描述
-        const description = this.buildDescription(script)
-
         return {
-          text: script.name,
-          displayText: `${script.name} (${script.executions}次)`,
+          text: script.content,  // 补全文本使用 content（实际命令）
+          displayText: script.content,  // 主文本显示命令内容
           type: "command" as const,
-          source: "local" as const, // 来自数据库，标记为本地
-          description,
+          source: "script" as const, // 来自脚本库
+          description: script.name,  // 描述显示脚本名称
           priority: dynamicPriority,
           score: this.calculateScore(script, currentWord),
           providerName: "script",
@@ -81,41 +79,23 @@ export class ScriptProvider implements CompletionProvider {
   }
 
   /**
-   * 构建脚本描述
-   */
-  private buildDescription(script: ScriptItem): string {
-    const parts: string[] = []
-
-    if (script.description) {
-      parts.push(script.description)
-    }
-
-    if (script.tags && script.tags.length > 0) {
-      const tagsStr = script.tags.map(tag => `#${tag}`).join(" ")
-      parts.push(tagsStr)
-    }
-
-    return parts.join(" | ") || "脚本库"
-  }
-
-  /**
    * 计算匹配分数
    */
   private calculateScore(script: ScriptItem, prefix: string): number {
-    const nameLower = script.name.toLowerCase()
+    const contentLower = script.content.toLowerCase()
     const prefixLower = prefix.toLowerCase()
 
     // 精确匹配
-    if (script.name === prefix) return 100
+    if (script.content === prefix) return 100
 
     // 前缀匹配
-    if (nameLower.startsWith(prefixLower)) {
+    if (contentLower.startsWith(prefixLower)) {
       // 执行次数多的得分更高
       return 80 + Math.min(script.executions, 20)
     }
 
     // 包含匹配
-    if (nameLower.includes(prefixLower)) {
+    if (contentLower.includes(prefixLower)) {
       return 60 + Math.min(script.executions / 2, 10)
     }
 

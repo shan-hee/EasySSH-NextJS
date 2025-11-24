@@ -12,7 +12,8 @@ import (
 
 // ScriptItem 脚本项（用于补全）
 type ScriptItem struct {
-	Name        string   `json:"name"`
+	Name        string   `json:"name"`        // 脚本名称（用于显示）
+	Content     string   `json:"content"`     // 脚本内容（实际命令，用于补全匹配）
 	Description string   `json:"description"`
 	Executions  int      `json:"executions"`
 	Tags        []string `json:"tags"`
@@ -152,6 +153,7 @@ func (s *service) FetchCompletionData(client *ssh.Client, userID uuid.UUID, serv
 		for _, sc := range scriptList {
 			scripts = append(scripts, ScriptItem{
 				Name:        sc.Name,
+				Content:     sc.Content, // 使用 content 字段作为补全匹配文本
 				Description: sc.Description,
 				Executions:  sc.Executions,
 				Tags:        sc.Tags,

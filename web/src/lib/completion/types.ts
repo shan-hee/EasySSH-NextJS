@@ -17,7 +17,7 @@ export type CompletionItemType =
 /**
  * 补全项来源
  */
-export type CompletionSource = "local" | "remote" | "history" | "ai"
+export type CompletionSource = "local" | "remote" | "history" | "script" | "ai"
 
 /**
  * 补全项

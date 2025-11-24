@@ -50,6 +50,8 @@ function getSourceLabel(source: CompletionItem["source"]): string {
       return "远端"
     case "history":
       return "历史"
+    case "script":
+      return "脚本库"
     case "ai":
       return "AI"
     default:
@@ -117,7 +119,7 @@ export function CompletionItemComponent({
         />
       </div>
 
-      {/* 描述 */}
+      {/* 描述（脚本名称） */}
       {showDescription && item.description && (
         <div className="flex-shrink-0 text-xs max-w-[200px] truncate text-zinc-500 dark:text-zinc-400">
           {item.description}
