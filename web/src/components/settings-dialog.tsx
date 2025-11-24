@@ -1413,11 +1413,31 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between py-2 border-b border-border/50">
                           <span className="text-muted-foreground">版本</span>
-                          <span className="font-medium">1.0.0</span>
+                          <span className="font-medium">{process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-border/50">
                           <span className="text-muted-foreground">构建日期</span>
-                          <span className="font-medium">2025-01-04</span>
+                          <span className="font-medium">
+                            {(() => {
+                              const buildDateISO = process.env.NEXT_PUBLIC_BUILD_DATE;
+                              if (!buildDateISO) return "未知";
+
+                              try {
+                                const date = new Date(buildDateISO);
+                                const timezone = config?.default_timezone || "Asia/Shanghai";
+
+                                // 使用系统配置的时区格式化日期
+                                return date.toLocaleDateString("zh-CN", {
+                                  timeZone: timezone,
+                                  year: "numeric",
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                }).replace(/\//g, "-");
+                              } catch {
+                                return "未知";
+                              }
+                            })()}
+                          </span>
                         </div>
                         <div className="flex justify-between py-2">
                           <span className="text-muted-foreground">技术栈</span>
