@@ -25,6 +25,7 @@ interface DataTableToolbarProps<TData> {
   showColumnVisibility?: boolean
   showExport?: boolean
   showRefresh?: boolean
+  isRefreshing?: boolean
   children?: React.ReactNode
 }
 
@@ -37,6 +38,7 @@ export function DataTableToolbar<TData>({
   onExport,
   showExport = false,
   showRefresh = true,
+  isRefreshing = false,
   children,
 }: DataTableToolbarProps<TData>) {
   const isFiltered = table.getState().columnFilters.length > 0
@@ -93,9 +95,10 @@ export function DataTableToolbar<TData>({
             variant="outline"
             size="sm"
             onClick={onRefresh}
+            disabled={isRefreshing}
             className="h-8"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             刷新
           </Button>
         )}

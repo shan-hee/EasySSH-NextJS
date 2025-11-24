@@ -149,13 +149,48 @@ useEffect(() => {
  )
  : availableEditTags
 
+// 事件处理函数 - 使用 useCallback 避免闭包陷阱
+ const handleExecute = useCallback((scriptId: string) => {
+ console.log("执行脚本:", scriptId)
+ toast.info("脚本执行功能即将推出")
+ // TODO: 实现脚本执行对话框和逻辑
+ }, [])
+
+ const handleEdit = useCallback((scriptId: string) => {
+ const script = scripts.find(s => s.id === scriptId)
+ if (script) {
+ setEditingScriptId(scriptId)
+ setEditScript({
+ name: script.name,
+ description: script.description || "",
+ content: script.content,
+ tags: [...script.tags],
+ })
+ setIsEditDialogOpen(true)
+ }
+ }, [scripts])
+
+ const handleDelete = useCallback(async (scriptId: string) => {
+ if (!confirm("确定要删除这个脚本吗？")) {
+ return
+ }
+
+ try {
+ await scriptsApi.delete(scriptId)
+ toast.success("脚本删除成功")
+ await loadScripts()
+ } catch (error: unknown) {
+ console.error("删除脚本失败:", error)
+ toast.error(getErrorMessage(error, "删除脚本失败"))
+ }
+ }, [loadScripts])
+
 // DataTable 列定义与可见列
 const columns = useMemo(() => createScriptColumns({
-  onExecute: (id) => handleExecute(id),
-  onEdit: (id) => handleEdit(id),
-  onDelete: (id) => handleDelete(id),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}), [])
+  onExecute: handleExecute,
+  onEdit: handleEdit,
+  onDelete: handleDelete,
+}), [handleExecute, handleEdit, handleDelete])
 
 const visibleColumns = useMemo(
   () => columns.filter((col) =>
@@ -173,41 +208,6 @@ const filterOptions = useMemo(() => {
     authors: authors.map(a => ({ label: a, value: a })),
   }
 }, [scripts])
-
- const handleExecute = (scriptId: string) => {
- console.log("执行脚本:", scriptId)
- toast.info("脚本执行功能即将推出")
- // TODO: 实现脚本执行对话框和逻辑
- }
-
- const handleEdit = (scriptId: string) => {
- const script = scripts.find(s => s.id === scriptId)
- if (script) {
- setEditingScriptId(scriptId)
- setEditScript({
- name: script.name,
- description: script.description || "",
- content: script.content,
- tags: [...script.tags],
- })
- setIsEditDialogOpen(true)
- }
- }
-
- const handleDelete = async (scriptId: string) => {
- if (!confirm("确定要删除这个脚本吗？")) {
- return
- }
-
- try {
- await scriptsApi.delete(scriptId)
- toast.success("脚本删除成功")
- await loadScripts()
- } catch (error: unknown) {
- console.error("删除脚本失败:", error)
- toast.error(getErrorMessage(error, "删除脚本失败"))
- }
- }
 
  const handleAddTag = (tag?: string) => {
  const tagToAdd = tag || tagInput.trim()
@@ -431,21 +431,10 @@ const filterOptions = useMemo(() => {
  return (
  <>
  <PageHeader title="脚本管理">
- <div className="flex items-center gap-2">
- <Button
- variant="outline"
- size="sm"
- onClick={handleRefresh}
- disabled={refreshing}
- >
- <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
- 刷新
- </Button>
  <Button onClick={handleOpenDialog}>
  <Plus className="mr-2 h-4 w-4" />
  新建脚本
  </Button>
- </div>
 </PageHeader>
 
 <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
@@ -483,7 +472,7 @@ const filterOptions = useMemo(() => {
       <DataTable
         data={scripts}
         columns={visibleColumns}
-        loading={loading}
+        loading={loading || refreshing}
         pageCount={totalPages}
         pageSize={pageSize}
         totalRows={totalRows}
@@ -502,6 +491,7 @@ const filterOptions = useMemo(() => {
             ]}
             onRefresh={handleRefresh}
             showRefresh={true}
+            isRefreshing={refreshing}
           >
             {/* 可添加额外操作按钮 */}
           </DataTableToolbar>
