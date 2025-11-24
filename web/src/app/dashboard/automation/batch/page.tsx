@@ -100,16 +100,10 @@ export default function AutomationBatchPage() {
  batchTasksApi.getStatistics(),
  ])
 
- // 防御性检查：处理apiFetch自动解包，确保始终返回数组
- const tasksList = Array.isArray(tasksRes)
- ? tasksRes
- : (Array.isArray(tasksRes?.data) ? tasksRes.data : [])
- const serversList = Array.isArray(serversRes)
- ? serversRes
- : (Array.isArray(serversRes?.data) ? serversRes.data : [])
- const scriptsList = Array.isArray(scriptsRes)
- ? scriptsRes
- : (Array.isArray(scriptsRes?.data) ? scriptsRes.data : [])
+ // 现在 apiFetch 不会解包包含分页元数据的响应，直接访问 data 字段
+ const tasksList = Array.isArray(tasksRes?.data) ? tasksRes.data : []
+ const serversList = Array.isArray(serversRes?.data) ? serversRes.data : []
+ const scriptsList = Array.isArray(scriptsRes?.data) ? scriptsRes.data : []
  const statsData = statsRes?.data || statsRes || {}
 
  setTasks(Array.isArray(tasksList) ? tasksList : [])

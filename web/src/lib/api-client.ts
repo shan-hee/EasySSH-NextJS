@@ -278,7 +278,12 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     if (contentType.includes("application/json")) {
       const json = await res.json()
       // 如果响应包含data字段,自动解包
+      // 但如果响应包含分页元数据(total/page/total_pages),则不解包以保留完整的分页信息
       if (json && typeof json === "object" && "data" in json) {
+        const hasPaginationMetadata = "total" in json || "page" in json || "total_pages" in json
+        if (hasPaginationMetadata) {
+          return json as T
+        }
         return json.data as T
       }
       return json as T

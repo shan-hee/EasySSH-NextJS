@@ -83,10 +83,8 @@ export default function UsersPage() {
         usersApi.getStatistics(),
       ])
 
-      // 防御性检查：处理apiFetch自动解包
-      const usersList = Array.isArray(usersRes)
-        ? usersRes
-        : (Array.isArray(usersRes?.data) ? usersRes.data : [])
+      // 现在 apiFetch 不会解包包含分页元数据的响应，直接访问 data 字段
+      const usersList = Array.isArray(usersRes?.data) ? usersRes.data : []
       const statsData = statsRes?.data || statsRes || {}
 
       setUsers(usersList)
