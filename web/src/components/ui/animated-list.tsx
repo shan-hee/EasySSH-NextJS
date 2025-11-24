@@ -20,7 +20,6 @@ const AnimatedItem: React.FC<AnimatedItemProps> = ({ children, delay = 0, index 
       initial={{ scale: 0.95, opacity: 0, y: 10 }}
       animate={inView ? { scale: 1, opacity: 1, y: 0 } : { scale: 0.95, opacity: 0, y: 10 }}
       transition={{ duration: 0.3, delay, ease: "easeOut" }}
-      layout
       className="w-full"
     >
       {children}
