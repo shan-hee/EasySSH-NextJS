@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -182,16 +183,24 @@ type AuthHandler struct {
 	securityService        interface{} // 安全配置服务（用于动态配置）
 	accessTokenTTLSeconds  int         // Access Token 有效期（秒）
 	refreshTokenTTLSeconds int         // Refresh Token Cookie 有效期（秒）
+	systemConfigService    systemconfig.Service // 系统配置服务（用于在 /auth/status 中返回公共配置）
 }
 
 // NewAuthHandler 创建认证处理器
-func NewAuthHandler(authService auth.Service, jwtService auth.JWTService, securityService interface{}, accessTokenTTLSeconds, refreshTokenTTLSeconds int) *AuthHandler {
+func NewAuthHandler(
+	authService auth.Service,
+	jwtService auth.JWTService,
+	securityService interface{},
+	accessTokenTTLSeconds, refreshTokenTTLSeconds int,
+	systemConfigService systemconfig.Service,
+) *AuthHandler {
 	return &AuthHandler{
 		authService:            authService,
 		jwtService:             jwtService,
 		securityService:        securityService,
 		accessTokenTTLSeconds:  accessTokenTTLSeconds,
 		refreshTokenTTLSeconds: refreshTokenTTLSeconds,
+		systemConfigService:    systemConfigService,
 	}
 }
 
@@ -572,11 +581,8 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 				user, err := h.authService.GetUserByID(c.Request.Context(), userID)
 				if err == nil && user != nil {
 					response["is_authenticated"] = true
-					response["user"] = gin.H{
-						"id":       user.ID,
-						"username": user.Username,
-						"role":     user.Role,
-					}
+					// 与 /users/me 保持一致，返回公开用户信息
+					response["user"] = user.ToPublic()
 				}
 			}
 		}
@@ -637,14 +643,30 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 							c.Set("role", string(user.Role))
 
 							response["is_authenticated"] = true
-							response["user"] = gin.H{
-								"id":       user.ID,
-								"username": user.Username,
-								"role":     user.Role,
-							}
+							// 与 /users/me 保持一致，返回公开用户信息
+							response["user"] = user.ToPublic()
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// 附带公共系统配置（未登录场景下也可使用）
+	if h.systemConfigService != nil {
+		if cfg, err := h.systemConfigService.Get(c.Request.Context()); err == nil && cfg != nil {
+			response["system_config"] = gin.H{
+				"system_name":              cfg.SystemName,
+				"system_logo":              cfg.SystemLogo,
+				"system_favicon":           cfg.SystemFavicon,
+				"default_language":         cfg.DefaultLanguage,
+				"default_timezone":         cfg.DefaultTimezone,
+				"date_format":              cfg.DateFormat,
+				"download_exclude_patterns": cfg.DownloadExcludePatterns,
+				"default_download_mode":     cfg.DefaultDownloadMode,
+				"skip_excluded_on_upload":   cfg.SkipExcludedOnUpload,
+				"max_file_upload_size":      cfg.MaxFileUploadSize,
+				"completion_enabled":        cfg.CompletionEnabled,
 			}
 		}
 	}

@@ -65,7 +65,8 @@ export interface RefreshTokenResponse {
 export interface AuthStatusResponse {
   need_init: boolean        // 是否需要初始化（无管理员）
   is_authenticated: boolean // 是否已登录
-  user?: User              // 已登录时返回用户信息
+  user?: User               // 已登录时返回用户信息
+  system_config?: import("@/lib/api/settings").SystemConfig // 系统公共配置（可选）
 }
 
 /**

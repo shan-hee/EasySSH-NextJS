@@ -243,7 +243,14 @@ func main() {
 	refreshTokenTTLSeconds := int(refreshIdleDuration.Seconds())
 
 	// 初始化处理器
-	authHandler := rest.NewAuthHandler(authService, jwtService, securityService, accessTokenTTLSeconds, refreshTokenTTLSeconds)
+	authHandler := rest.NewAuthHandler(
+		authService,
+		jwtService,
+		securityService,
+		accessTokenTTLSeconds,
+		refreshTokenTTLSeconds,
+		systemConfigService,
+	)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
