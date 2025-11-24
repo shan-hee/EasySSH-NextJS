@@ -2072,15 +2072,6 @@ export function SftpManager(props: SftpManagerProps) {
                       "cursor-pointer transition-colors bg-zinc-100 dark:bg-zinc-800/50 border-b-0",
                     )}
                   >
-                    <TableCell onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        disabled
-                        className="rounded"
-                      />
-                    </TableCell>
-
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {creatingNew === "folder" ? (

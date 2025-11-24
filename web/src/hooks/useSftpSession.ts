@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { sftpApi, type FileInfo, type DirectoryListResponse } from '@/lib/api/sftp';
 import { formatBytesString } from '@/lib/format-utils';
 import { useFileTransfer } from './useFileTransfer';
+import { toast } from "@/components/ui/sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 /**
  * SFTP会话状态
@@ -179,8 +181,13 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         await Promise.all(uploadPromises);
         // 上传完成后刷新当前目录
         refresh();
+        // 上传成功提示（与 SFTP 页面保持一致风格）
+        if (fileList.length > 0) {
+          toast.success(`成功上传 ${fileList.length} 个文件`);
+        }
       } catch (error) {
         console.error('[useSftpSession] 上传失败:', error);
+        toast.error(getErrorMessage(error, "上传失败"));
         throw error;
       }
     },
@@ -207,6 +214,8 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      // 下载开始提示
+      toast.success(`开始下载: ${fileName}`);
     },
     [serverId, currentPath, files]
   );
@@ -225,8 +234,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
 
         // 差异更新: 本地移除对应项
         setFiles(prev => prev.filter(f => f.name !== fileName));
+        toast.success(`删除成功: ${fileName}`);
       } catch (error) {
         console.error('[useSftpSession] 删除失败:', error);
+        toast.error(getErrorMessage(error, "删除失败"));
         throw error;
       }
     },
@@ -246,8 +257,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         const info = await sftpApi.createDirectory(serverId, fullPath);
         const item = convertFileInfo(info);
         setFiles(prev => upsertFileItem(prev, item));
+        toast.success(`创建文件夹成功: ${name}`);
       } catch (error) {
         console.error('[useSftpSession] 创建文件夹失败:', error);
+        toast.error(getErrorMessage(error, "创建文件夹失败"));
         throw error;
       }
     },
@@ -268,8 +281,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         const info = await sftpApi.writeFile(serverId, fullPath, '');
         const item = convertFileInfo(info);
         setFiles(prev => upsertFileItem(prev, item));
+        toast.success(`创建文件成功: ${name}`);
       } catch (error) {
         console.error('[useSftpSession] 创建文件失败:', error);
+        toast.error(getErrorMessage(error, "创建文件失败"));
         throw error;
       }
     },
@@ -300,8 +315,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
               : f
           )
         );
+        toast.success(`重命名成功: ${oldName} → ${newName}`);
       } catch (error) {
         console.error('[useSftpSession] 重命名失败:', error);
+        toast.error(getErrorMessage(error, "重命名失败"));
         throw error;
       }
     },
@@ -323,6 +340,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         return content;
       } catch (error) {
         console.error('[useSftpSession] 读取文件失败:', error);
+        toast.error(getErrorMessage(error, "读取文件失败"));
         throw error;
       }
     },
@@ -356,8 +374,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
               : f
           )
         );
+        toast.success(`保存成功: ${fileName}`);
       } catch (error) {
         console.error('[useSftpSession] 保存文件失败:', error);
+        toast.error(getErrorMessage(error, "保存文件失败"));
         throw error;
       }
     },
@@ -390,10 +410,24 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
 
         setFiles(prev => prev.filter(f => !successNames.has(f.name)));
 
+        // 显示结果
+        if (result.success.length > 0) {
+          toast.success(`成功删除 ${result.success.length} 个文件`);
+        }
+
+        if (result.failed.length > 0) {
+          const failedNames = result.failed.map(f => {
+            const parts = f.path.split('/');
+            return parts[parts.length - 1] || f.path;
+          }).join(', ');
+          toast.error(`${result.failed.length} 个文件删除失败: ${failedNames}`);
+        }
+
         // 返回结果供调用者处理
         return result;
       } catch (error) {
         console.error('[useSftpSession] 批量删除失败:', error);
+        toast.error(getErrorMessage(error, "批量删除失败"));
         throw error;
       }
     },
@@ -415,8 +449,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
 
         // 直接调用 API 的批量下载，内部使用浏览器下载机制
         await sftpApi.batchDownload(serverId, fullPaths, mode, excludePatterns);
+        toast.success(`开始下载 ${fileNames.length} 个文件 (${mode === "fast" ? "快速模式" : "兼容模式"})`);
       } catch (error) {
         console.error('[useSftpSession] 批量下载失败:', error);
+        toast.error(getErrorMessage(error, "批量下载失败"));
         throw error;
       }
     },
