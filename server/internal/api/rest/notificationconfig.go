@@ -277,3 +277,54 @@ func (h *NotificationConfigHandler) TestWeComConnection(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "WeCom connection test successful"})
 }
+
+// GetAllNotificationConfig 获取所有通知配置
+// @Summary 获取所有通知配置
+// @Tags 通知设置
+// @Accept json
+// @Produce json
+// @Success 200 {object} notificationconfig.AllNotificationConfig
+// @Router /api/v1/settings/notifications [get]
+func (h *NotificationConfigHandler) GetAllNotificationConfig(c *gin.Context) {
+	config, err := h.service.GetAllConfig(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 清空敏感字段
+	if config.SMTP != nil {
+		config.SMTP.Password = ""
+	}
+	if config.Webhook != nil {
+		config.Webhook.Secret = ""
+	}
+	if config.DingTalk != nil {
+		config.DingTalk.Secret = ""
+	}
+
+	c.JSON(http.StatusOK, gin.H{"config": config})
+}
+
+// SaveAllNotificationConfig 保存所有通知配置
+// @Summary 保存所有通知配置
+// @Tags 通知设置
+// @Accept json
+// @Produce json
+// @Param request body notificationconfig.AllNotificationConfig true "所有通知配置"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/notifications [post]
+func (h *NotificationConfigHandler) SaveAllNotificationConfig(c *gin.Context) {
+	var config notificationconfig.AllNotificationConfig
+	if err := c.ShouldBindJSON(&config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if err := h.service.SaveAllConfig(c.Request.Context(), &config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Notification configuration saved successfully"})
+}

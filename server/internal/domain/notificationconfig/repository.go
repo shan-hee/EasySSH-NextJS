@@ -59,7 +59,18 @@ func (r *repository) Get(ctx context.Context) (*NotificationConfig, error) {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 如果不存在，创建默认配置（所有通知都禁用）
-			config = NotificationConfig{}
+			// 初始化为有效的JSON对象，而不是空字符串
+			defaultSMTP, _ := json.Marshal(&SMTPConfig{Enabled: false})
+			defaultWebhook, _ := json.Marshal(&WebhookConfig{Enabled: false, Method: "POST"})
+			defaultDingTalk, _ := json.Marshal(&DingTalkConfig{Enabled: false})
+			defaultWeCom, _ := json.Marshal(&WeComConfig{Enabled: false})
+
+			config = NotificationConfig{
+				SMTPConfig:     string(defaultSMTP),
+				WebhookConfig:  string(defaultWebhook),
+				DingTalkConfig: string(defaultDingTalk),
+				WeComConfig:    string(defaultWeCom),
+			}
 
 			// 创建默认配置
 			if err := r.db.WithContext(ctx).Create(&config).Error; err != nil {

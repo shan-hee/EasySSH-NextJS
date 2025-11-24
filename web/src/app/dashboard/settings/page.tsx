@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import {
   Settings,
@@ -90,7 +91,13 @@ const navGroups: NavGroup[] = [
 ]
 
 export default function SettingsPage() {
-  const [activeSection, setActiveSection] = useState("basic")
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // 从 URL 查询参数恢复当前激活的分组, 默认 basic
+  const initialSection = searchParams.get("section") || "basic"
+  const [activeSection, setActiveSection] = useState(initialSection)
 
   // 查找当前激活的组件
   const ActiveComponent = navGroups
@@ -104,6 +111,16 @@ export default function SettingsPage() {
 
   const handleSectionChange = (section: string) => {
     setActiveSection(section)
+
+    // 将当前分组写入 URL 查询参数, 这样刷新或复制链接时能保持当前选项
+    if (!pathname) return
+    const nextSearchParams = new URLSearchParams(searchParams.toString())
+    nextSearchParams.set("section", section)
+    const queryString = nextSearchParams.toString()
+    const nextUrl = queryString ? `${pathname}?${queryString}` : pathname
+
+    // 使用 replace 避免污染浏览器历史记录
+    router.replace(nextUrl, { scroll: false })
   }
 
   return (

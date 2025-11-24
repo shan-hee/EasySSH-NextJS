@@ -64,3 +64,11 @@ type WeComConfig struct {
 	Enabled    bool   `json:"enabled"`
 	WebhookURL string `json:"webhook_url"`
 }
+
+// AllNotificationConfig 所有通知配置的统一结构
+type AllNotificationConfig struct {
+	SMTP     *SMTPConfig     `json:"smtp"`
+	Webhook  *WebhookConfig  `json:"webhook"`
+	DingTalk *DingTalkConfig `json:"dingtalk"`
+	WeCom    *WeComConfig    `json:"wecom"`
+}

@@ -566,6 +566,10 @@ func main() {
 			settingsGroup.GET("/access-control", securityHandler.GetAccessControlConfig)
 			settingsGroup.POST("/access-control", securityHandler.SaveAccessControlConfig)
 
+			// 通知配置 - 统一接口
+			settingsGroup.GET("/notifications", notificationConfigHandler.GetAllNotificationConfig)
+			settingsGroup.POST("/notifications", notificationConfigHandler.SaveAllNotificationConfig)
+
 			// 通知配置 - SMTP
 			settingsGroup.GET("/smtp", notificationConfigHandler.GetSMTPConfig)
 			settingsGroup.POST("/smtp", notificationConfigHandler.SaveSMTPConfig)

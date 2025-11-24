@@ -39,6 +39,10 @@ type Service interface {
 	GetWeComConfig(ctx context.Context) (*WeComConfig, error)
 	SaveWeComConfig(ctx context.Context, config *WeComConfig) error
 	TestWeComConnection(ctx context.Context, config *WeComConfig) error
+
+	// 统一配置接口
+	GetAllConfig(ctx context.Context) (*AllNotificationConfig, error)
+	SaveAllConfig(ctx context.Context, config *AllNotificationConfig) error
 }
 
 type service struct {
@@ -392,6 +396,67 @@ func (s *service) validateWeComConfig(config *WeComConfig) error {
 	// 验证URL格式
 	if _, err := url.Parse(config.WebhookURL); err != nil {
 		return fmt.Errorf("invalid wecom webhook URL: %w", err)
+	}
+
+	return nil
+}
+
+// GetAllConfig 获取所有通知配置
+func (s *service) GetAllConfig(ctx context.Context) (*AllNotificationConfig, error) {
+	// 分别获取各个配置，复用现有的逻辑
+	smtp, err := s.GetSMTPConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SMTP config: %w", err)
+	}
+
+	webhook, err := s.GetWebhookConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Webhook config: %w", err)
+	}
+
+	dingtalk, err := s.GetDingTalkConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get DingTalk config: %w", err)
+	}
+
+	wecom, err := s.GetWeComConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get WeCom config: %w", err)
+	}
+
+	return &AllNotificationConfig{
+		SMTP:     smtp,
+		Webhook:  webhook,
+		DingTalk: dingtalk,
+		WeCom:    wecom,
+	}, nil
+}
+
+// SaveAllConfig 保存所有通知配置
+func (s *service) SaveAllConfig(ctx context.Context, config *AllNotificationConfig) error {
+	// 分别保存各个配置，复用现有的验证和密码保留逻辑
+	if config.SMTP != nil {
+		if err := s.SaveSMTPConfig(ctx, config.SMTP); err != nil {
+			return fmt.Errorf("failed to save SMTP config: %w", err)
+		}
+	}
+
+	if config.Webhook != nil {
+		if err := s.SaveWebhookConfig(ctx, config.Webhook); err != nil {
+			return fmt.Errorf("failed to save Webhook config: %w", err)
+		}
+	}
+
+	if config.DingTalk != nil {
+		if err := s.SaveDingTalkConfig(ctx, config.DingTalk); err != nil {
+			return fmt.Errorf("failed to save DingTalk config: %w", err)
+		}
+	}
+
+	if config.WeCom != nil {
+		if err := s.SaveWeComConfig(ctx, config.WeCom); err != nil {
+			return fmt.Errorf("failed to save WeCom config: %w", err)
+		}
 	}
 
 	return nil
