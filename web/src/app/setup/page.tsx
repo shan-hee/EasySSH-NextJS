@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { authApi } from "@/lib/api/auth"
+import { useSystemConfig } from "@/contexts/system-config-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -14,6 +15,7 @@ type RunMode = "demo" | "development" | "production"
 
 export default function SetupPage() {
   const router = useRouter()
+  const { authStatus, isLoading } = useSystemConfig()
   const [step, setStep] = useState<"checking" | "welcome" | "mode-selection" | "create-admin" | "completed">("checking")
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
@@ -24,23 +26,23 @@ export default function SetupPage() {
   const [error, setError] = useState("")
 
   useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const status = await authApi.checkStatus()
-        if (!status.need_init) {
-          // 无需初始化（已有管理员），重定向到登录页
-          router.replace("/login")
-        } else {
-          // 需要初始化，显示欢迎页面
-          setStep("welcome")
-        }
-      } catch (error) {
-        console.error("Failed to check status:", error)
-        setError("无法连接到服务器,请检查后端服务是否运行")
-      }
+    // 等待全局认证状态加载完成
+    if (isLoading) return
+
+    if (!authStatus) {
+      console.error("Auth status is unavailable during setup check")
+      setError("无法连接到服务器,请检查后端服务是否运行")
+      return
     }
-    checkStatus()
-  }, [router])
+
+    if (!authStatus.need_init) {
+      // 无需初始化（已有管理员），重定向到登录页
+      router.replace("/login")
+    } else {
+      // 需要初始化，显示欢迎页面
+      setStep("welcome")
+    }
+  }, [authStatus, isLoading, router])
 
   const handleStartSetup = () => {
     setStep("mode-selection")

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authApi } from "@/lib/api/auth"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 type EntryPage = "home" | "login"
 
@@ -18,65 +18,47 @@ interface UseAuthStatusRedirectResult {
  */
 export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectResult {
   const router = useRouter()
+  const { authStatus, isLoading } = useSystemConfig()
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
-    let cancelled = false
+    // 等待系统配置 / 认证状态加载完成
+    if (isLoading) {
+      setIsChecking(true)
+      return
+    }
 
-    const checkStatusAndRedirect = async () => {
-      try {
-        const status = await authApi.checkStatus()
-        if (cancelled) return
-
-        // 需要初始化 → 统一跳转到 /setup
-        if (status.need_init) {
-          if (page !== "home" || typeof window === "undefined") {
-            router.replace("/setup")
-          } else {
-            router.replace("/setup")
-          }
-          return
-        }
-
-        // 已认证 → 统一跳转到 /dashboard
-        if (status.is_authenticated) {
-          router.replace("/dashboard")
-          return
-        }
-
-        // 未认证
-        if (page === "home") {
-          // 首页: 未登录则跳到登录页
-          router.replace("/login")
-        } else {
-          // 登录页: 未登录且已完成初始化,停留在本页展示登录表单
-          setIsChecking(false)
-        }
-      } catch (error) {
-        console.error("Failed to check auth status:", error)
-
-        // 出错时:
-        // - 首页: 默认跳到登录页
-        // - 登录页: 停留并展示登录表单,让用户可以尝试登录
-        if (page === "home") {
-          router.replace("/login")
-        } else {
-          setIsChecking(false)
-        }
-      } finally {
-        if (!cancelled && page === "home") {
-          setIsChecking(false)
-        }
+    // 如果加载失败（authStatus 为空），按“未认证且已初始化失败未知”处理
+    if (!authStatus) {
+      if (page === "home") {
+        router.replace("/login")
+      } else {
+        setIsChecking(false)
       }
+      return
     }
 
-    checkStatusAndRedirect()
+    const status = authStatus
 
-    return () => {
-      cancelled = true
+    // 需要初始化 → 统一跳转到 /setup
+    if (status.need_init) {
+      router.replace("/setup")
+      return
     }
-  }, [page, router])
+
+    // 已认证 → 统一跳转到 /dashboard
+    if (status.is_authenticated) {
+      router.replace("/dashboard")
+      return
+    }
+
+    // 未认证
+    if (page === "home") {
+      router.replace("/login")
+    } else {
+      setIsChecking(false)
+    }
+  }, [authStatus, isLoading, page, router])
 
   return { isChecking }
 }
-

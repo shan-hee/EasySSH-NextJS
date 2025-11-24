@@ -143,8 +143,8 @@ jobs:
           echo "docker pull shanheee/easyssh:latest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# 使用 Docker Compose 启动" >> $GITHUB_STEP_SUMMARY
-          echo "cd docker" >> $GITHUB_STEP_SUMMARY
-          echo "docker-compose up -d" >> $GITHUB_STEP_SUMMARY
+          echo "cd EasySSH" >> $GITHUB_STEP_SUMMARY
+          echo "docker compose up -d" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 镜像信息" >> $GITHUB_STEP_SUMMARY

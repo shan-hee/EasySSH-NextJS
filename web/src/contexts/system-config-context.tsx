@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import type { SystemConfig } from "@/lib/api/settings"
-import { authApi } from "@/lib/api/auth"
+import { authApi, type AuthStatusResponse } from "@/lib/api/auth"
 
 /**
  * 系统配置 Context
@@ -14,6 +14,7 @@ interface SystemConfigContextType {
   isLoading: boolean
   error: Error | null
   refreshConfig: () => Promise<void>
+  authStatus: AuthStatusResponse | null
 }
 
 const SystemConfigContext = createContext<SystemConfigContextType | undefined>(undefined)
@@ -66,14 +67,16 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
   const [config, setConfig] = useState<SystemConfig | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null)
 
   const loadConfig = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      // 仅通过 /auth/status 获取系统配置（开发版约定始终返回 system_config）
+      // 仅通过 /auth/status 获取系统配置和认证状态（开发版约定始终返回 system_config）
       const status = await authApi.checkStatus()
+      setAuthStatus(status)
 
       if (!status.system_config) {
         // 按当前开发版约定，system_config 应始终存在
@@ -101,7 +104,7 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
   }, [])
 
   return (
-    <SystemConfigContext.Provider value={{ config, isLoading, error, refreshConfig }}>
+    <SystemConfigContext.Provider value={{ config, isLoading, error, refreshConfig, authStatus }}>
       {children}
     </SystemConfigContext.Provider>
   )
