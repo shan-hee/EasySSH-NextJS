@@ -56,11 +56,12 @@ type UpdateScriptRequest struct {
 
 // ListScriptsRequest 脚本列表查询请求
 type ListScriptsRequest struct {
-	Page     int      `form:"page" json:"page"`
-	Limit    int      `form:"limit" json:"limit"`
-	Search   string   `form:"search" json:"search"`     // 搜索关键词
-	Tags     []string `form:"tags" json:"tags"`         // 标签筛选
-	Language string   `form:"language" json:"language"` // 语言筛选
+	Page      int      `form:"page" json:"page"`
+	Limit     int      `form:"limit" json:"limit"`
+	Search    string   `form:"search" json:"search"`     // 搜索关键词
+	Tags      []string `form:"tags" json:"tags"`         // 标签筛选
+	Language  string   `form:"language" json:"language"` // 语言筛选
+	SkipCount bool     `form:"-" json:"-"`               // 跳过统计查询(用于补全场景)
 }
 
 // ListScriptsResponse 脚本列表响应

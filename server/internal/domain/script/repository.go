@@ -74,9 +74,11 @@ func (r *repository) List(userID uuid.UUID, req *ListScriptsRequest) ([]Script, 
 		}
 	}
 
-	// 统计总数
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
+	// 统计总数(如果需要)
+	if !req.SkipCount {
+		if err := query.Count(&total).Error; err != nil {
+			return nil, 0, err
+		}
 	}
 
 	// 分页

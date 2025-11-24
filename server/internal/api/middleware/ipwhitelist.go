@@ -19,13 +19,21 @@ func OptionalIPWhitelistMiddleware(securityService security.Service) gin.Handler
 		// 将客户端 IP 存入上下文
 		c.Set("client_ip", clientIP)
 
-		// 调用服务层的统一检查方法
-		allowed, err := securityService.CheckIPAllowed(c.Request.Context(), clientIP)
-		if err != nil {
-			// 记录错误但继续处理（避免配置错误导致服务不可用）
-			c.Error(err)
-			c.Next()
-			return
+		// 优先从上下文缓存获取配置
+		var allowed bool
+		var err error
+		if secConfig, ok := GetSecurityConfigFromContext(c); ok {
+			// 使用缓存的配置进行检查,避免重复查询数据库
+			allowed = securityService.CheckIPAllowedWithConfig(secConfig, clientIP)
+		} else {
+			// 缓存未命中,调用服务层的统一检查方法
+			allowed, err = securityService.CheckIPAllowed(c.Request.Context(), clientIP)
+			if err != nil {
+				// 记录错误但继续处理（避免配置错误导致服务不可用）
+				c.Error(err)
+				c.Next()
+				return
+			}
 		}
 
 		// 如果不允许，返回 403

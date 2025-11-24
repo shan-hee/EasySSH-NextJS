@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -29,9 +30,22 @@ func CORS(cfg *config.Config, securityService security.Service) gin.HandlerFunc 
     // Cookie-only 认证，不默认暴露 Authorization 头
     allowedHeaders = []string{"Content-Type"}
 
-		// 尝试从数据库读取 CORS 配置，追加到默认值后面
-		corsConfig, err := securityService.GetCORSConfig(context.Background())
-		if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
+		// 尝试从请求上下文缓存读取配置，避免重复查询数据库
+		var corsConfig *security.CORSConfig
+		if secConfig, ok := GetSecurityConfigFromContext(c); ok {
+			// 从缓存的配置中解析CORS配置
+			if secConfig.CORSConfig != "" {
+				var cors security.CORSConfig
+				if err := json.Unmarshal([]byte(secConfig.CORSConfig), &cors); err == nil {
+					corsConfig = &cors
+				}
+			}
+		} else {
+			// 缓存未命中,从数据库读取
+			corsConfig, _ = securityService.GetCORSConfig(context.Background())
+		}
+
+		if corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
 			// 将 Web UI 配置的源追加到默认值后面（开发和生产环境统一策略）
 			allowedOrigins = append(allowedOrigins, corsConfig.AllowedOrigins...)
 

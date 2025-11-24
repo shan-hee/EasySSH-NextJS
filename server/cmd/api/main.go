@@ -299,6 +299,7 @@ func main() {
 	r.Use(middleware.Logger())                                       // 日志记录
 	r.Use(middleware.RequestID())                                    // 请求 ID
 	r.Use(middleware.SecurityHeaders())                              // 安全响应头
+	r.Use(middleware.SecurityConfigCache(securityService))           // 安全配置缓存(避免重复查询)
 	r.Use(middleware.CORS(cfg, securityService))                     // 跨域（支持动态配置）
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）

@@ -24,11 +24,17 @@ type Service interface {
 	// GetCookieConfig 获取Cookie配置
 	GetCookieConfig(ctx context.Context) (*CookieConfig, error)
 
+	// GetAllConfigs 一次性获取所有配置（CORS + Cookie）
+	GetAllConfigs(ctx context.Context) (*CORSConfig, *CookieConfig, error)
+
 	// GetRateLimitConfig 获取速率限制配置
 	GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
 
 	// CheckIPAllowed 检查IP是否允许访问
 	CheckIPAllowed(ctx context.Context, ip string) (bool, error)
+
+	// CheckIPAllowedWithConfig 使用已有配置检查IP是否允许访问(避免重复查询)
+	CheckIPAllowedWithConfig(config *SecurityConfig, ip string) bool
 }
 
 type service struct {
@@ -65,6 +71,11 @@ func (s *service) GetCookieConfig(ctx context.Context) (*CookieConfig, error) {
 	return s.repo.GetCookieConfig(ctx)
 }
 
+// GetAllConfigs 一次性获取所有配置（CORS + Cookie）
+func (s *service) GetAllConfigs(ctx context.Context) (*CORSConfig, *CookieConfig, error) {
+	return s.repo.GetAllConfigs(ctx)
+}
+
 // GetRateLimitConfig 获取速率限制配置
 func (s *service) GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error) {
 	config, err := s.Get(ctx)
@@ -85,6 +96,11 @@ func (s *service) CheckIPAllowed(ctx context.Context, ip string) (bool, error) {
 		return false, err
 	}
 
+	return s.CheckIPAllowedWithConfig(config, ip), nil
+}
+
+// CheckIPAllowedWithConfig 使用已有配置检查IP是否允许访问(避免重复查询)
+func (s *service) CheckIPAllowedWithConfig(config *SecurityConfig, ip string) bool {
 	// 1. 先检查黑名单（优先级最高）
 	if config.BlocklistIPs != "" {
 		blocklist := strings.Split(config.BlocklistIPs, "\n")
@@ -94,7 +110,7 @@ func (s *service) CheckIPAllowed(ctx context.Context, ip string) (bool, error) {
 				continue
 			}
 			if s.matchIP(ip, blocked) {
-				return false, nil
+				return false
 			}
 		}
 	}
@@ -108,15 +124,15 @@ func (s *service) CheckIPAllowed(ctx context.Context, ip string) (bool, error) {
 				continue
 			}
 			if s.matchIP(ip, allowed) {
-				return true, nil
+				return true
 			}
 		}
 		// 如果配置了白名单但不在列表中，则拒绝
-		return false, nil
+		return false
 	}
 
 	// 3. 如果没有配置任何白名单，则允许所有IP
-	return true, nil
+	return true
 }
 
 // matchIP 检查IP是否匹配规则（支持单个IP和CIDR）

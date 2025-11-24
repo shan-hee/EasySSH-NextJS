@@ -140,15 +140,20 @@ func RateLimitMiddleware(limiter *RateLimiter) gin.HandlerFunc {
 func LoginRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
 	// 使用动态速率限制器
 	return func(c *gin.Context) {
-		// 每次请求时从安全配置服务读取最新配置（带缓存）
-		limit := 5 // 默认值
+		// 默认值
+		limit := 5
 
-		// 尝试从安全配置服务获取配置
-		if ss, ok := securityService.(interface {
-			GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
-		}); ok {
-			if config, err := ss.GetRateLimitConfig(c.Request.Context()); err == nil {
-				limit = config.LoginLimit
+		// 优先从请求上下文缓存获取配置(避免重复查询数据库)
+		if secConfig, ok := GetSecurityConfigFromContext(c); ok {
+			limit = secConfig.LoginLimit
+		} else {
+			// 缓存未命中,降级为查询数据库
+			if ss, ok := securityService.(interface {
+				GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
+			}); ok {
+				if config, err := ss.GetRateLimitConfig(c.Request.Context()); err == nil {
+					limit = config.LoginLimit
+				}
 			}
 		}
 
@@ -173,15 +178,20 @@ func LoginRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
 // 默认: 100次/分钟/IP
 func APIRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 每次请求时从安全配置服务读取最新配置（带缓存）
-		limit := 100 // 默认值
+		// 默认值
+		limit := 100
 
-		// 尝试从安全配置服务获取配置
-		if ss, ok := securityService.(interface {
-			GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
-		}); ok {
-			if config, err := ss.GetRateLimitConfig(c.Request.Context()); err == nil {
-				limit = config.APILimit
+		// 优先从请求上下文缓存获取配置(避免重复查询数据库)
+		if secConfig, ok := GetSecurityConfigFromContext(c); ok {
+			limit = secConfig.APILimit
+		} else {
+			// 缓存未命中,降级为查询数据库
+			if ss, ok := securityService.(interface {
+				GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
+			}); ok {
+				if config, err := ss.GetRateLimitConfig(c.Request.Context()); err == nil {
+					limit = config.APILimit
+				}
 			}
 		}
 

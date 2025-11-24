@@ -144,8 +144,9 @@ func (s *service) FetchCompletionData(client *ssh.Client, userID uuid.UUID, serv
 	// 4. 获取脚本库
 	scripts := []ScriptItem{}
 	scriptList, _, err := s.scriptRepo.List(userID, &script.ListScriptsRequest{
-		Page:  1,
-		Limit: 100, // 最多获取100个脚本
+		Page:      1,
+		Limit:     100, // 最多获取100个脚本
+		SkipCount: true, // 补全场景不需要统计总数
 	})
 	if err != nil {
 		log.Printf("Failed to fetch scripts: %v", err)

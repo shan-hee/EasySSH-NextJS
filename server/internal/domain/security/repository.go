@@ -21,6 +21,9 @@ type Repository interface {
 
 	// GetCookieConfig 获取Cookie配置
 	GetCookieConfig(ctx context.Context) (*CookieConfig, error)
+
+	// GetAllConfigs 一次性获取所有配置（CORS + Cookie）
+	GetAllConfigs(ctx context.Context) (*CORSConfig, *CookieConfig, error)
 }
 
 type repository struct {
@@ -127,4 +130,34 @@ func (r *repository) GetCookieConfig(ctx context.Context) (*CookieConfig, error)
 	}
 
 	return &cookie, nil
+}
+
+// GetAllConfigs 一次性获取所有配置（CORS + Cookie）
+func (r *repository) GetAllConfigs(ctx context.Context) (*CORSConfig, *CookieConfig, error) {
+	config, err := r.Get(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 解析CORS配置
+	var cors CORSConfig
+	if config.CORSConfig == "" {
+		cors = *DefaultCORSConfig()
+	} else {
+		if err := json.Unmarshal([]byte(config.CORSConfig), &cors); err != nil {
+			cors = *DefaultCORSConfig()
+		}
+	}
+
+	// 解析Cookie配置
+	var cookie CookieConfig
+	if config.CookieConfig == "" {
+		cookie = *DefaultCookieConfig()
+	} else {
+		if err := json.Unmarshal([]byte(config.CookieConfig), &cookie); err != nil {
+			cookie = *DefaultCookieConfig()
+		}
+	}
+
+	return &cors, &cookie, nil
 }
