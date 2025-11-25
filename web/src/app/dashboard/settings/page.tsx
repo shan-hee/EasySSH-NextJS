@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import {
@@ -90,7 +90,8 @@ const navGroups: NavGroup[] = [
   },
 ]
 
-export default function SettingsPage() {
+// 内部组件，使用 useSearchParams
+function SettingsContent() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -188,5 +189,14 @@ export default function SettingsPage() {
         </SidebarProvider>
       </div>
     </>
+  )
+}
+
+// 外层组件，用 Suspense 包裹
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full">加载中...</div>}>
+      <SettingsContent />
+    </Suspense>
   )
 }
