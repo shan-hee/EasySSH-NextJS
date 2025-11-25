@@ -65,7 +65,8 @@ export function LoginForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isLoading || authLoading) return
+    // 避免重复提交
+    if (isLoading) return
 
     setIsLoading(true)
 
@@ -88,7 +89,7 @@ export function LoginForm({
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
       })
-      // 刷新全局 authStatus/system_config,避免 AuthGate 使用旧的未认证状态
+      // 刷新全局 authStatus/system_config
       await refreshConfig()
       router.replace(getRedirectTarget())
     } catch (error: unknown) {

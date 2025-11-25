@@ -8,15 +8,21 @@ let hasRedirectedFor401 = false
 
 function handleGlobalUnauthorized(error: unknown) {
   if (typeof window === 'undefined') return
+  const currentPath = window.location.pathname + window.location.search + window.location.hash
+  // 已在登录页时收到 401，多数来自后台请求，忽略即可，避免重复刷新
+  if (currentPath.startsWith("/login")) {
+    console.error("[apiFetch] Unauthorized while already on /login, ignoring redirect", error)
+    return
+  }
+
   if (hasRedirectedFor401) return
   hasRedirectedFor401 = true
 
   // 打一条调试日志，方便排查
   console.error("[apiFetch] Unauthorized, redirecting to /login", error)
 
-  const currentPath = window.location.pathname + window.location.search + window.location.hash
   // 避免在登录页上再次重定向自己
-  if (!currentPath.startsWith("/login")) {
+  if (true) {
     try {
       const params = new URLSearchParams()
       if (currentPath && currentPath !== "/") {
@@ -27,8 +33,6 @@ function handleGlobalUnauthorized(error: unknown) {
     } catch {
       window.location.href = "/login"
     }
-  } else {
-    window.location.reload()
   }
 }
 

@@ -53,10 +53,10 @@ export interface RegisterResponse {
   user: User
 }
 
-// 刷新令牌响应（兼容返回体，但前端不使用返回的 token 值）
+// 刷新令牌响应
+// 当前仅使用 expires_in 字段,用于基于后端返回的有效期安排下一次刷新
 export interface RefreshTokenResponse {
-  access_token: string
-  refresh_token: string
+  expires_in?: number
 }
 
 /**
@@ -67,7 +67,8 @@ export interface AuthStatusResponse {
   is_authenticated: boolean // 是否已登录
   user?: User               // 已登录时返回用户信息
   system_config?: import("@/lib/api/settings").SystemConfig // 系统公共配置（可选）
-  access_token_ttl_seconds?: number // Access Token 统一配置的有效期(秒),用于前端定时刷新
+  access_token_ttl_seconds?: number // Access Token 统一配置的有效期(秒)
+  access_token_expires_in?: number  // 当前 Access Token 剩余有效期(秒),用于前端定时刷新
 }
 
 /**

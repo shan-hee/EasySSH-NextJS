@@ -4,7 +4,6 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { SystemConfigProvider } from "@/contexts/system-config-context";
-import { AuthGate } from "@/components/auth-gate";
 import { DynamicHeadUpdater } from "@/components/dynamic-head-updater";
 import { QueryProvider } from "@/providers/query-provider";
 import { SessionRefreshProvider } from "@/providers/session-refresh-provider";
@@ -78,9 +77,7 @@ export default function RootLayout({
             <SystemConfigProvider>
               <SessionRefreshProvider>
                 <DynamicHeadUpdater />
-                <AuthGate>
-                  {children}
-                </AuthGate>
+                {children}
               </SessionRefreshProvider>
             </SystemConfigProvider>
           </QueryProvider>

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/systemconfig"
@@ -440,18 +441,22 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	}
 
 	// 构造响应数据
-	response := gin.H{
-		"access_token": newAccessToken,
-		"token_type":   "Bearer",
-		"expires_in":   h.accessTokenTTLSeconds,
-	}
+	// 为了兼容非浏览器客户端,原本会在 JSON 里返回新的 access_token/refresh_token:
+	// response := gin.H{
+	// 	"access_token": newAccessToken,
+	// 	"token_type":   "Bearer",
+	// 	"expires_in":   h.accessTokenTTLSeconds,
+	// }
+	// if newRefreshToken != "" {
+	// 	response["refresh_token"] = newRefreshToken
+	// }
+	//
+	// 但浏览器前端只依赖 HttpOnly Cookie,不会使用这些字段。
+	// 为减少在响应体中暴露敏感令牌,改为仅返回剩余有效期信息。
 
-	// 如果有新的刷新令牌，也返回给客户端
-	if newRefreshToken != "" {
-		response["refresh_token"] = newRefreshToken
-	}
-
-	RespondSuccess(c, response)
+	RespondSuccess(c, gin.H{
+		"expires_in": h.accessTokenTTLSeconds,
+	})
 }
 
 // GetCurrentUser 获取当前用户信息
@@ -567,7 +572,7 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 	response := gin.H{
 		"need_init":                !hasAdmin,
 		"is_authenticated":         false,
-		"access_token_ttl_seconds": h.accessTokenTTLSeconds,
+		"access_token_ttl_seconds": h.accessTokenTTLSeconds, // 统一配置的TTL
 	}
 
 	// 如果已有管理员，检查当前用户是否已认证
@@ -584,6 +589,19 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 					response["is_authenticated"] = true
 					// 与 /users/me 保持一致，返回公开用户信息
 					response["user"] = user.ToPublic()
+
+					// 动态计算当前 Access Token 剩余有效期:
+					// 从 Cookie 读取 token 再次验证,获取 exp 与当前时间差值
+					if tokenString, err := c.Cookie(AccessTokenCookieName); err == nil && strings.TrimSpace(tokenString) != "" {
+						if claims, err := h.jwtService.ValidateToken(tokenString); err == nil && claims.ExpiresAt != nil {
+							now := time.Now()
+							remaining := claims.ExpiresAt.Time.Sub(now).Seconds()
+							if remaining < 0 {
+								remaining = 0
+							}
+							response["access_token_expires_in"] = int(remaining)
+						}
+					}
 				}
 			}
 		}
@@ -646,6 +664,10 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 							response["is_authenticated"] = true
 							// 与 /users/me 保持一致，返回公开用户信息
 							response["user"] = user.ToPublic()
+
+							// 刷新场景下,新 Access Token 从现在起的剩余时间近似等于统一TTL
+							// (签发时间与当前时间差值可以忽略)
+							response["access_token_expires_in"] = h.accessTokenTTLSeconds
 						}
 					}
 				}

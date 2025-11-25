@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { authApi, type User, type LoginRequest } from "@/lib/api/auth"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 interface ClientAuthContextType {
   user: User | null
@@ -30,6 +31,7 @@ interface ClientAuthProviderProps {
 export function ClientAuthProvider({ children, initialUser }: ClientAuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser)
   const router = useRouter()
+  const { refreshConfig } = useSystemConfig()
 
   // 同步 initialUser 的变化（用于乐观渲染场景）
   useEffect(() => {
@@ -80,8 +82,14 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
       console.error("Logout API call failed:", error)
     }
     setUser(null)
+    // 刷新全局认证状态,确保 SessionRefreshProvider 等及时停止工作
+    try {
+      await refreshConfig()
+    } catch (error) {
+      console.error("Failed to refresh system config after logout:", error)
+    }
     router.replace("/login")
-  }, [router])
+  }, [refreshConfig, router])
 
   return (
     <ClientAuthContext.Provider

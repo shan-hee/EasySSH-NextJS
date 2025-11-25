@@ -23,42 +23,71 @@ export function SessionRefreshProvider({ children }: SessionRefreshProviderProps
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    // 清理旧定时器
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current)
-      timerRef.current = null
+    let cancelled = false
+
+    const clearTimer = () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
     }
+
+    // 先清理旧定时器
+    clearTimer()
 
     if (!authStatus || !authStatus.is_authenticated) {
       return
     }
 
-    const ttlSeconds = authStatus.access_token_ttl_seconds
-    if (!ttlSeconds || ttlSeconds <= 0) {
+    // 优先使用后端动态返回的当前 Access Token 剩余时间
+    let baseTtlSeconds = authStatus.access_token_expires_in
+    if (!baseTtlSeconds || baseTtlSeconds <= 0) {
+      // 兜底: 若后端未提供动态剩余时间,退回到统一配置 TTL
+      baseTtlSeconds = authStatus.access_token_ttl_seconds
+    }
+
+    if (!baseTtlSeconds || baseTtlSeconds <= 0) {
       return
     }
 
-    // 安全提前量: 80% 的有效期,且至少 60 秒
     const SAFE_RATIO = 0.8
     const MIN_DELAY_MS = 60 * 1000
-    const delayMs = Math.max(ttlSeconds * SAFE_RATIO * 1000, MIN_DELAY_MS)
 
-    timerRef.current = window.setTimeout(async () => {
-      try {
-        await authApi.refreshToken()
-      } catch (error) {
-        // 刷新失败的具体处理交给 apiFetch 全局 401 逻辑
-        console.error("[SessionRefreshProvider] Scheduled refresh failed", error)
-      }
-    }, delayMs)
+    const scheduleRefresh = (ttlSeconds: number) => {
+      if (cancelled) return
+
+      const delayMs = Math.max(ttlSeconds * SAFE_RATIO * 1000, MIN_DELAY_MS)
+
+      timerRef.current = window.setTimeout(async () => {
+        try {
+          const res = await authApi.refreshToken()
+          let nextTtlSeconds = ttlSeconds
+
+          // 若后端返回新的 expires_in,优先使用它作为下一轮基准
+          if (res && typeof res === "object" && "expires_in" in res) {
+            const value = (res as { expires_in?: number }).expires_in
+            if (typeof value === "number" && value > 0) {
+              nextTtlSeconds = value
+            }
+          }
+
+          // 基于后端返回的有效期继续安排下一次刷新(倒计时链式调用)
+          scheduleRefresh(nextTtlSeconds)
+        } catch (error) {
+          // 刷新失败的具体处理交给 apiFetch 全局 401 逻辑
+          console.error("[SessionRefreshProvider] Scheduled refresh failed", error)
+        }
+      }, delayMs)
+    }
+
+    // 使用 /auth/status 返回的 TTL 作为首次倒计时基准
+    scheduleRefresh(baseTtlSeconds)
 
     return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current)
-      }
+      cancelled = true
+      clearTimer()
     }
   }, [authStatus])
 
   return <>{children}</>
 }
-
