@@ -307,7 +307,7 @@ export function CompletionTab() {
             <Alert>
               <InfoIcon className="h-4 w-4" />
               <AlertDescription>
-                配额分配确保不同来源的补全结果均衡显示。"最少"保证该来源至少显示的数量,"最多"限制该来源最多显示的数量。
+                配额分配确保不同来源的补全结果均衡显示。“最少”保证该来源至少显示的数量，“最多”限制该来源最多显示的数量。
               </AlertDescription>
             </Alert>
           </div>

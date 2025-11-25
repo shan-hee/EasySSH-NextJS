@@ -565,8 +565,9 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 	}
 
 	response := gin.H{
-		"need_init":        !hasAdmin,
-		"is_authenticated": false,
+		"need_init":                !hasAdmin,
+		"is_authenticated":         false,
+		"access_token_ttl_seconds": h.accessTokenTTLSeconds,
 	}
 
 	// 如果已有管理员，检查当前用户是否已认证

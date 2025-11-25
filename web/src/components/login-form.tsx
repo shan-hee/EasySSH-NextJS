@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Eye, EyeOff, Lock, User } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
-import { useAuth } from "@/contexts/auth-context"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
 import { twoFactorApi } from "@/lib/api/2fa"
@@ -34,8 +33,8 @@ export function LoginForm({
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
-  const { isLoading: authLoading } = useAuth()
-  const { config } = useSystemConfig()
+  const searchParams = useSearchParams()
+  const { config, refreshConfig } = useSystemConfig()
 
   // 为避免预取到“未登录”的缓存结果，删除预取 dashboard 的逻辑
 
@@ -49,6 +48,20 @@ export function LoginForm({
   const [requires2FA, setRequires2FA] = useState(false)
   const [tempToken, setTempToken] = useState("")
   const [twoFactorCode, setTwoFactorCode] = useState("")
+
+  // 登录成功后的回跳路径,优先使用 /login?next=xxx 中的 next
+  const getRedirectTarget = useCallback(() => {
+    const rawNext = searchParams.get("next")
+    if (
+      rawNext &&
+      rawNext.startsWith("/") &&
+      !rawNext.startsWith("//") &&
+      !rawNext.startsWith("/login")
+    ) {
+      return rawNext
+    }
+    return "/dashboard"
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,7 +88,9 @@ export function LoginForm({
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
       })
-      router.replace("/dashboard")
+      // 刷新全局 authStatus/system_config,避免 AuthGate 使用旧的未认证状态
+      await refreshConfig()
+      router.replace(getRedirectTarget())
     } catch (error: unknown) {
       console.error("Login error:", error)
       toast.error("登录失败", {
@@ -103,8 +118,9 @@ export function LoginForm({
         description: "正在跳转到控制台...",
       })
 
-      // 跳转到控制台
-      router.replace("/dashboard")
+      // 更新全局认证状态后再跳转
+      await refreshConfig()
+      router.replace(getRedirectTarget())
     } catch (error: unknown) {
       console.error("2FA verification error:", error)
       toast.error("验证失败", {
@@ -113,7 +129,7 @@ export function LoginForm({
     } finally {
       setIsLoading(false)
     }
-  }, [isLoading, twoFactorCode, tempToken, router])
+  }, [getRedirectTarget, isLoading, twoFactorCode, tempToken, refreshConfig, router])
 
   // 处理 2FA 表单提交
   const handle2FASubmit = async (e: React.FormEvent) => {
@@ -131,10 +147,10 @@ export function LoginForm({
 
   // 监听 2FA 验证码输入，自动提交
   useEffect(() => {
-    if (twoFactorCode.length === 6 && requires2FA && !isLoading && !authLoading) {
+    if (twoFactorCode.length === 6 && requires2FA && !isLoading) {
       verify2FACode()
     }
-  }, [twoFactorCode, requires2FA, isLoading, authLoading, verify2FACode])
+  }, [twoFactorCode, requires2FA, isLoading, verify2FACode])
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>

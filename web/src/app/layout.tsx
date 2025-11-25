@@ -3,10 +3,11 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { AuthProvider } from "@/contexts/auth-context";
 import { SystemConfigProvider } from "@/contexts/system-config-context";
+import { AuthGate } from "@/components/auth-gate";
 import { DynamicHeadUpdater } from "@/components/dynamic-head-updater";
 import { QueryProvider } from "@/providers/query-provider";
+import { SessionRefreshProvider } from "@/providers/session-refresh-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -74,12 +75,14 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <QueryProvider>
-            <AuthProvider>
-              <SystemConfigProvider>
+            <SystemConfigProvider>
+              <SessionRefreshProvider>
                 <DynamicHeadUpdater />
-                {children}
-              </SystemConfigProvider>
-            </AuthProvider>
+                <AuthGate>
+                  {children}
+                </AuthGate>
+              </SessionRefreshProvider>
+            </SystemConfigProvider>
           </QueryProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>

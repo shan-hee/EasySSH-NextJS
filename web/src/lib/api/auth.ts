@@ -67,6 +67,7 @@ export interface AuthStatusResponse {
   is_authenticated: boolean // 是否已登录
   user?: User               // 已登录时返回用户信息
   system_config?: import("@/lib/api/settings").SystemConfig // 系统公共配置（可选）
+  access_token_ttl_seconds?: number // Access Token 统一配置的有效期(秒),用于前端定时刷新
 }
 
 /**
