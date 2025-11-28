@@ -183,11 +183,6 @@ EasySSH-NextJS/
 ### 常用命令
 
 ```bash
-# 一键启动开发环境
-scripts/dev.sh
-```
-
-```bash
 # 前端开发
 cd web
 pnpm dev          # 开发服务器
