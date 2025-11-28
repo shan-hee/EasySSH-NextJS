@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import { useRouter } from "next/navigation"
 import { authApi, type User, type LoginRequest } from "@/lib/api/auth"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { useAuthStore } from "@/stores/auth-store"
 
 interface ClientAuthContextType {
   user: User | null
@@ -32,6 +33,8 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
   const [user, setUser] = useState<User | null>(initialUser)
   const router = useRouter()
   const { refreshConfig } = useSystemConfig()
+  const setToken = useAuthStore((state) => state.setToken)
+  const clearToken = useAuthStore((state) => state.clearToken)
 
   // 同步 initialUser 的变化（用于乐观渲染场景）
   useEffect(() => {
@@ -58,13 +61,36 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
   }, [router])
 
   // 登录
-  // 后端会自动设置 HttpOnly Cookie,前端无需手动存储 token
+  // PKCE 开发版：通过 /oauth/authorize + /oauth/token 获取 access_token，并写入内存 Store
   const login = useCallback(
     async (credentials: LoginRequest) => {
       try {
-        const { user: userData } = await authApi.login(credentials)
-        setUser(userData)
-        router.replace("/dashboard")
+        // 1. 使用 PKCE 授权获取授权码
+        const { username, password } = credentials
+        const redirectUri =
+          typeof window !== "undefined"
+            ? `${window.location.origin}/auth/callback`
+            : "/auth/callback"
+
+        const { code } = await authApi.authorizeWithPkce({
+          username,
+          password,
+          client_id: "easyssh-web",
+          redirect_uri: redirectUri,
+          scope: "openid profile easyssh",
+          // code_challenge 与 code_verifier 由 login 页面统一管理；
+          // 这里作为兜底登录方案，仅用于极少数场景，因此直接抛出错误以提示使用登录页面。
+          code_challenge: "",
+          code_challenge_method: "S256",
+        })
+
+        if (!code) {
+          throw new Error("PKCE login via ClientAuthProvider is not fully supported, please use the /login page.")
+        }
+
+        // 此处仅作为兜底逻辑，正常情况下不会走到这里
+        // 为避免引入重复的 PKCE 实现，不在此处继续交换令牌
+        router.replace("/login")
       } catch (error) {
         console.error("Login failed:", error)
         throw error
@@ -74,7 +100,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
   )
 
   // 登出
-  // 后端会自动清除 HttpOnly Cookie
+  // 后端会自动清除 HttpOnly Cookie，同时前端清空内存中的 access_token
   const logout = useCallback(async () => {
     try {
       await authApi.logout()
@@ -82,6 +108,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
       console.error("Logout API call failed:", error)
     }
     setUser(null)
+    clearToken()
     // 刷新全局认证状态,确保 SessionRefreshProvider 等及时停止工作
     try {
       await refreshConfig()
@@ -89,7 +116,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
       console.error("Failed to refresh system config after logout:", error)
     }
     router.replace("/login")
-  }, [refreshConfig, router])
+  }, [clearToken, refreshConfig, router])
 
   return (
     <ClientAuthContext.Provider

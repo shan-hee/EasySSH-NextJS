@@ -153,11 +153,11 @@ server/
 
 ## 🎯 API 端点
 
-### 认证 (5 个)
+### 认证 & 授权 (5 个)
+- `POST /oauth/authorize` - 使用用户名密码 + PKCE 发起授权请求（支持 2FA）
+- `POST /oauth/token` - 使用授权码/refresh_token 换取 access_token
 - `POST /api/v1/auth/register` - 用户注册
-- `POST /api/v1/auth/login` - 用户登录
-- `POST /api/v1/auth/logout` - 退出登录
-- `POST /api/v1/auth/refresh` - 刷新令牌
+- `POST /api/v1/auth/logout` - 退出登录（撤销当前会话）
 - `GET /api/v1/users/me` - 获取当前用户信息
 
 ### 服务器管理 (7 个)

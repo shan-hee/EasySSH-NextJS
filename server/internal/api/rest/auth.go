@@ -71,21 +71,10 @@ func getCookieConfig(c *gin.Context, securityService interface{}) (secure bool, 
 	return secure, domain, sameSite
 }
 
-// setAuthCookies 设置认证相关的 HttpOnly Cookie（支持动态配置）
-func setAuthCookies(c *gin.Context, accessToken, refreshToken string, securityService interface{}, accessTokenMaxAge, refreshTokenMaxAge int) {
+// setAuthCookies 设置认证相关的 HttpOnly Cookie（仅用于 refresh_token）
+// 为了向后兼容已有调用签名，此函数忽略 accessToken 参数，只负责写入 refresh_token Cookie。
+func setAuthCookies(c *gin.Context, _ /* accessToken */ string, refreshToken string, securityService interface{}, _ /* accessTokenMaxAge */ int, refreshTokenMaxAge int) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
-
-	// 使用 http.SetCookie 显式设置 SameSite，避免覆盖多个 Set-Cookie 头
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     AccessTokenCookieName,
-		Value:    accessToken,
-		Path:     "/",
-		Domain:   domain,
-		MaxAge:   accessTokenMaxAge,
-		Secure:   secure,
-		HttpOnly: true,
-		SameSite: sameSite,
-	})
 
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     RefreshTokenCookieName,
@@ -222,17 +211,6 @@ type RegisterRequest struct {
 	RunMode  RunMode `json:"run_mode,omitempty"` // 运行模式（可选，仅用于初始化管理员）
 }
 
-// LoginRequest 登录请求
-type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
-// RefreshTokenRequest 刷新令牌请求
-type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
-}
-
 // ChangePasswordRequest 修改密码请求
 type ChangePasswordRequest struct {
 	OldPassword string `json:"old_password" binding:"required"`
@@ -252,6 +230,43 @@ type AuthResponse struct {
 	RefreshToken string      `json:"refresh_token"`
 	TokenType    string      `json:"token_type"`
 	ExpiresIn    int         `json:"expires_in"` // 秒
+}
+
+// OAuthAuthorizeRequest PKCE 授权请求（开发版：采用 JSON 提交用户名密码）
+type OAuthAuthorizeRequest struct {
+	ResponseType        string `json:"response_type" binding:"required"` // 期望为 "code"
+	ClientID            string `json:"client_id" binding:"required"`
+	RedirectURI         string `json:"redirect_uri" binding:"required"`
+	Scope               string `json:"scope"`
+	CodeChallenge       string `json:"code_challenge" binding:"required"`
+	CodeChallengeMethod string `json:"code_challenge_method" binding:"required"` // 期望为 "S256"
+	State               string `json:"state"`
+
+	// 登录凭证（用户名 + 密码）
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// OAuthAuthorizeResponse 授权码响应
+type OAuthAuthorizeResponse struct {
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+// OAuthTokenRequest Token 请求
+type OAuthTokenRequest struct {
+	GrantType    string `json:"grant_type" binding:"required"` // authorization_code 或 refresh_token
+	Code         string `json:"code,omitempty"`
+	RedirectURI  string `json:"redirect_uri,omitempty"`
+	ClientID     string `json:"client_id,omitempty"`
+	CodeVerifier string `json:"code_verifier,omitempty"`
+}
+
+// OAuthTokenResponse Token 响应（不返回 refresh_token，本身仅存在于 HttpOnly Cookie）
+type OAuthTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
 }
 
 // Register 注册新用户
@@ -290,33 +305,46 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	})
 }
 
-// Login 用户登录
-// POST /api/v1/auth/login
-func (h *AuthHandler) Login(c *gin.Context) {
-	var req LoginRequest
+// OAuthAuthorize 使用用户名密码 + PKCE 创建授权码（开发版：JSON 接口，不做浏览器跳转）
+// POST /oauth/authorize
+func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
+	var req OAuthAuthorizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 
-	// 提取设备信息
-	deviceType, deviceName, ipAddress, userAgent := extractDeviceInfo(c)
-	sessionInfo := &auth.SessionInfo{
-		DeviceType: deviceType,
-		DeviceName: deviceName,
-		IPAddress:  ipAddress,
-		UserAgent:  userAgent,
+	// 基本参数校验
+	if strings.ToLower(strings.TrimSpace(req.ResponseType)) != "code" {
+		RespondError(c, http.StatusBadRequest, "invalid_request", "response_type must be 'code'")
+		return
 	}
 
-	user, accessToken, refreshToken, err := h.authService.Login(c.Request.Context(), req.Username, req.Password, sessionInfo)
+	if strings.TrimSpace(req.ClientID) == "" || strings.TrimSpace(req.RedirectURI) == "" {
+		RespondError(c, http.StatusBadRequest, "invalid_request", "client_id and redirect_uri are required")
+		return
+	}
+
+	if !strings.EqualFold(req.ClientID, "easyssh-web") {
+		// 开发版：仅接受内置 SPA 客户端
+		RespondError(c, http.StatusBadRequest, "invalid_client", "unsupported client_id")
+		return
+	}
+
+	// 仅支持 S256
+	if !strings.EqualFold(req.CodeChallengeMethod, "S256") {
+		RespondError(c, http.StatusBadRequest, "invalid_request", "code_challenge_method must be 'S256'")
+		return
+	}
+
+	// 认证用户（此处不创建会话，真正创建会话发生在 /oauth/token 中）
+	user, err := h.authService.AuthenticateUser(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-		// 登录失败时也设置用户名,以便审计日志记录
-		c.Set("username", req.Username)
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			RespondError(c, http.StatusUnauthorized, "invalid_credentials", "Invalid username or password")
 			return
 		}
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to login")
+		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 
@@ -324,139 +352,195 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.Set("user_id", user.ID.String())
 	c.Set("username", user.Username)
 
-	// 检查是否启用了 2FA
+	// 如果启用了 2FA：先返回临时令牌，前端再走 /auth/2fa/verify 完成 2FA + 授权码签发
 	if user.TwoFactorEnabled {
-		// 生成临时令牌（用于 2FA 验证）
 		tempToken, err := h.jwtService.GenerateTempToken(user.ID.String())
 		if err != nil {
 			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate temp token")
 			return
 		}
 
-		// 返回需要 2FA 验证的响应
 		RespondSuccess(c, gin.H{
 			"requires_2fa": true,
 			"temp_token":   tempToken,
-			"message":      "请输入双因子认证代码",
+			"state":        req.State,
 		})
 		return
 	}
 
-	// 未启用 2FA，设置 HttpOnly Cookie 并返回令牌
-	setAuthCookies(c, accessToken, refreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+	// 生成授权码，有效期 5 分钟
+	code, err := h.authService.CreateAuthorizationCode(
+		c.Request.Context(),
+		user.ID,
+		req.ClientID,
+		req.RedirectURI,
+		req.Scope,
+		req.CodeChallenge,
+		req.CodeChallengeMethod,
+		5*time.Minute,
+	)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
 
-	RespondSuccess(c, AuthResponse{
-		User:         user.ToPublic(),
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    h.accessTokenTTLSeconds,
+	// 为审计日志记录用户信息
+	c.Set("user_id", user.ID.String())
+	c.Set("username", user.Username)
+
+	RespondSuccess(c, OAuthAuthorizeResponse{
+		Code:  code,
+		State: req.State,
 	})
+}
+
+// OAuthToken OAuth Token 端点
+// POST /oauth/token
+func (h *AuthHandler) OAuthToken(c *gin.Context) {
+	var req OAuthTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	grantType := strings.ToLower(strings.TrimSpace(req.GrantType))
+
+	switch grantType {
+	case "authorization_code":
+		// 授权码模式
+		if strings.TrimSpace(req.Code) == "" ||
+			strings.TrimSpace(req.RedirectURI) == "" ||
+			strings.TrimSpace(req.ClientID) == "" ||
+			strings.TrimSpace(req.CodeVerifier) == "" {
+			RespondError(c, http.StatusBadRequest, "invalid_request", "code, redirect_uri, client_id and code_verifier are required")
+			return
+		}
+
+		// 提取设备信息用于会话记录
+		deviceType, deviceName, ipAddress, userAgent := extractDeviceInfo(c)
+		sessionInfo := &auth.SessionInfo{
+			DeviceType: deviceType,
+			DeviceName: deviceName,
+			IPAddress:  ipAddress,
+			UserAgent:  userAgent,
+		}
+
+		user, accessToken, refreshToken, err := h.authService.ExchangeAuthorizationCodeForTokens(
+			c.Request.Context(),
+			req.ClientID,
+			req.RedirectURI,
+			req.Code,
+			req.CodeVerifier,
+			sessionInfo,
+		)
+		if err != nil {
+			RespondError(c, http.StatusBadRequest, "invalid_grant", err.Error())
+			return
+		}
+
+		// 设置 HttpOnly refresh_token Cookie
+		if refreshToken != "" {
+			setAuthCookies(c, "", refreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+		}
+
+		// 在上下文中记录用户信息，便于审计日志使用
+		c.Set("user_id", user.ID.String())
+		c.Set("username", user.Username)
+
+		RespondSuccess(c, OAuthTokenResponse{
+			AccessToken: accessToken,
+			TokenType:   "Bearer",
+			ExpiresIn:   h.accessTokenTTLSeconds,
+		})
+
+	case "refresh_token":
+		// 刷新模式：从 HttpOnly Cookie 读取 refresh_token
+		refreshToken, err := c.Cookie(RefreshTokenCookieName)
+		if err == nil {
+			refreshToken = strings.TrimSpace(refreshToken)
+		}
+
+		if refreshToken == "" {
+			clearAuthCookies(c, h.securityService)
+			RespondError(c, http.StatusUnauthorized, "invalid_token", "Missing refresh token")
+			return
+		}
+
+		newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), refreshToken)
+		if err != nil {
+			if errors.Is(err, auth.ErrInvalidToken) ||
+				errors.Is(err, auth.ErrExpiredToken) ||
+				errors.Is(err, auth.ErrSessionNotFound) ||
+				errors.Is(err, auth.ErrSessionExpired) {
+				clearAuthCookies(c, h.securityService)
+				RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid or expired refresh token")
+				return
+			}
+			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to refresh token")
+			return
+		}
+
+		// 如有轮换，更新 refresh_token Cookie
+		if newRefreshToken != "" {
+			setAuthCookies(c, "", newRefreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+		}
+
+		RespondSuccess(c, OAuthTokenResponse{
+			AccessToken: newAccessToken,
+			TokenType:   "Bearer",
+			ExpiresIn:   h.accessTokenTTLSeconds,
+		})
+
+	default:
+		RespondError(c, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be 'authorization_code' or 'refresh_token'")
+	}
 }
 
 // Logout 用户登出
 // POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// 从 Cookie 获取 token
-	accessToken, err := c.Cookie(AccessTokenCookieName)
+	// 从 Authorization 头获取 access_token（Bearer）
+	var accessToken string
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		parts := strings.Fields(authHeader)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			accessToken = strings.TrimSpace(parts[1])
+		}
+	}
 
-	// 如果没有 token,直接清除 Cookie 并返回成功(幂等操作)
-	if err != nil || accessToken == "" {
+	// 从 Cookie 获取 refresh_token（用于撤销当前会话）
+	refreshToken, _ := c.Cookie(RefreshTokenCookieName)
+	refreshToken = strings.TrimSpace(refreshToken)
+
+	// 如果既没有 access_token 也没有 refresh_token, 视为幂等登出
+	if accessToken == "" && refreshToken == "" {
 		clearAuthCookies(c, h.securityService)
 		RespondSuccessWithMessage(c, nil, "Logged out successfully")
 		return
 	}
 
-	// 将 token 加入黑名单
-	if err := h.authService.Logout(c.Request.Context(), accessToken); err != nil {
-		// 即使加入黑名单失败,也清除 Cookie
-		clearAuthCookies(c, h.securityService)
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to logout")
-		return
+	// 将 access_token 加入黑名单（忽略错误以保持幂等性）
+	if accessToken != "" {
+		if err := h.authService.Logout(c.Request.Context(), accessToken); err != nil {
+			// 记录错误但不阻止后续清理
+			// 为避免泄露细节，这里不返回错误给客户端
+		}
+	}
+
+	// 撤销当前 refresh_token 对应的会话（如果存在）
+	if refreshToken != "" {
+		if err := h.authService.RevokeSessionByRefreshToken(c.Request.Context(), refreshToken); err != nil && !errors.Is(err, auth.ErrSessionNotFound) {
+			// 会话撤销失败时，仍然继续清理 Cookie，但返回内部错误
+			clearAuthCookies(c, h.securityService)
+			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to revoke session")
+			return
+		}
 	}
 
 	// 清除 HttpOnly Cookie
 	clearAuthCookies(c, h.securityService)
 
 	RespondSuccessWithMessage(c, nil, "Logged out successfully")
-}
-
-// RefreshToken 刷新访问令牌
-// POST /api/v1/auth/refresh
-func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	// 仅从 HttpOnly Cookie 读取 refresh token
-	refreshToken, err := c.Cookie(RefreshTokenCookieName)
-	if err == nil {
-		refreshToken = strings.TrimSpace(refreshToken)
-	}
-
-	if refreshToken == "" {
-		// 缺少 refresh token：清理 Cookie，返回 401
-		clearAuthCookies(c, h.securityService)
-		RespondError(c, http.StatusUnauthorized, "invalid_token", "Missing refresh token")
-		return
-	}
-
-	newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), refreshToken)
-	if err != nil {
-		// 会话相关错误或 token 无效错误，清除 Cookie 并返回 401
-		if errors.Is(err, auth.ErrInvalidToken) ||
-		   errors.Is(err, auth.ErrExpiredToken) ||
-		   errors.Is(err, auth.ErrSessionNotFound) ||
-		   errors.Is(err, auth.ErrSessionExpired) {
-			// 清除无效的 Cookie
-			clearAuthCookies(c, h.securityService)
-			RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid or expired refresh token")
-			return
-		}
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to refresh token")
-		return
-	}
-
-	// 更新 Access Token Cookie（显式设置 SameSite）
-	secure, domain, sameSite := getCookieConfig(c, h.securityService)
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     AccessTokenCookieName,
-		Value:    newAccessToken,
-		Path:     "/",
-		Domain:   domain,
-		MaxAge:   h.accessTokenTTLSeconds,
-		Secure:   secure,
-		HttpOnly: true,
-		SameSite: sameSite,
-	})
-
-	// 如果启用了令牌轮换，更新 Refresh Token Cookie
-	if newRefreshToken != "" {
-		http.SetCookie(c.Writer, &http.Cookie{
-			Name:     RefreshTokenCookieName,
-			Value:    newRefreshToken,
-			Path:     "/",
-			Domain:   domain,
-			MaxAge:   h.refreshTokenTTLSeconds,
-			Secure:   secure,
-			HttpOnly: true,
-			SameSite: sameSite,
-		})
-	}
-
-	// 构造响应数据
-	// 为了兼容非浏览器客户端,原本会在 JSON 里返回新的 access_token/refresh_token:
-	// response := gin.H{
-	// 	"access_token": newAccessToken,
-	// 	"token_type":   "Bearer",
-	// 	"expires_in":   h.accessTokenTTLSeconds,
-	// }
-	// if newRefreshToken != "" {
-	// 	response["refresh_token"] = newRefreshToken
-	// }
-	//
-	// 但浏览器前端只依赖 HttpOnly Cookie,不会使用这些字段。
-	// 为减少在响应体中暴露敏感令牌,改为仅返回剩余有效期信息。
-
-	RespondSuccess(c, gin.H{
-		"expires_in": h.accessTokenTTLSeconds,
-	})
 }
 
 // GetCurrentUser 获取当前用户信息
@@ -577,7 +661,7 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 
 	// 如果已有管理员，检查当前用户是否已认证
 	if hasAdmin {
-		// 1. 优先使用 Access Token（由 OptionalAuth 中间件解析）
+		// 1. 使用 OptionalAuth 中间件在上下文中解析的用户信息（Authorization: Bearer）
 		userIDStr, exists := c.Get("user_id")
 		if exists && userIDStr != "" {
 			// 解析 UUID
@@ -590,23 +674,26 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 					// 与 /users/me 保持一致，返回公开用户信息
 					response["user"] = user.ToPublic()
 
-					// 动态计算当前 Access Token 剩余有效期:
-					// 从 Cookie 读取 token 再次验证,获取 exp 与当前时间差值
-					if tokenString, err := c.Cookie(AccessTokenCookieName); err == nil && strings.TrimSpace(tokenString) != "" {
-						if claims, err := h.jwtService.ValidateToken(tokenString); err == nil && claims.ExpiresAt != nil {
-							now := time.Now()
-							remaining := claims.ExpiresAt.Time.Sub(now).Seconds()
-							if remaining < 0 {
-								remaining = 0
+					// 尝试根据 Authorization 头中的 Bearer Token 计算剩余有效期
+					if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+						parts := strings.Fields(authHeader)
+						if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+							tokenString := strings.TrimSpace(parts[1])
+							if claims, err := h.jwtService.ValidateToken(tokenString); err == nil && claims.ExpiresAt != nil {
+								now := time.Now()
+								remaining := claims.ExpiresAt.Time.Sub(now).Seconds()
+								if remaining < 0 {
+									remaining = 0
+								}
+								response["access_token_expires_in"] = int(remaining)
 							}
-							response["access_token_expires_in"] = int(remaining)
 						}
 					}
 				}
 			}
 		}
 
-		// 2. 如果未通过 Access Token 认证，尝试使用 Refresh Token 自动续期
+		// 2. 如果还未认证, 尝试通过 refresh_token Cookie 自动续期获取新的 access_token
 		if !response["is_authenticated"].(bool) {
 			refreshToken, err := c.Cookie(RefreshTokenCookieName)
 			if err == nil {
@@ -624,50 +711,39 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 						clearAuthCookies(c, h.securityService)
 					}
 				} else {
-					// 刷新成功：更新 Cookie
-					secure, domain, sameSite := getCookieConfig(c, h.securityService)
-					http.SetCookie(c.Writer, &http.Cookie{
-						Name:     AccessTokenCookieName,
-						Value:    newAccessToken,
-						Path:     "/",
-						Domain:   domain,
-						MaxAge:   h.accessTokenTTLSeconds,
-						Secure:   secure,
-						HttpOnly: true,
-						SameSite: sameSite,
-					})
-
+					// 刷新成功：如有轮换, 更新 refresh_token Cookie
 					if newRefreshToken != "" {
-						http.SetCookie(c.Writer, &http.Cookie{
-							Name:     RefreshTokenCookieName,
-							Value:    newRefreshToken,
-							Path:     "/",
-							Domain:   domain,
-							MaxAge:   h.refreshTokenTTLSeconds,
-							Secure:   secure,
-							HttpOnly: true,
-							SameSite: sameSite,
-						})
+						setAuthCookies(c, "", newRefreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
 					}
 
-					// 解析新的 Access Token 获取用户信息
+					// 使用新的 access_token 解析用户信息
 					claims, err := h.jwtService.ValidateToken(newAccessToken)
 					if err == nil {
 						user, err := h.authService.GetUserByID(c.Request.Context(), claims.UserID)
 						if err == nil && user != nil {
-							// 更新上下文，便于审计日志等中间件使用
+							// 更新上下文, 便于后续中间件使用
 							c.Set("user_id", user.ID.String())
 							c.Set("username", user.Username)
 							c.Set("email", user.Email)
 							c.Set("role", string(user.Role))
 
 							response["is_authenticated"] = true
-							// 与 /users/me 保持一致，返回公开用户信息
 							response["user"] = user.ToPublic()
 
-							// 刷新场景下,新 Access Token 从现在起的剩余时间近似等于统一TTL
-							// (签发时间与当前时间差值可以忽略)
-							response["access_token_expires_in"] = h.accessTokenTTLSeconds
+							// 将新的 access_token 信息返回给前端, 便于内存中保存
+							response["access_token"] = newAccessToken
+
+							// 计算剩余有效期
+							if claims.ExpiresAt != nil {
+								now := time.Now()
+								remaining := claims.ExpiresAt.Time.Sub(now).Seconds()
+								if remaining < 0 {
+									remaining = 0
+								}
+								response["access_token_expires_in"] = int(remaining)
+							} else {
+								response["access_token_expires_in"] = h.accessTokenTTLSeconds
+							}
 						}
 					}
 				}
@@ -773,6 +849,14 @@ type Disable2FARequest struct {
 type Verify2FACodeRequest struct {
 	TempToken string `json:"temp_token" binding:"required"` // 临时令牌
 	Code      string `json:"code" binding:"required"`       // 2FA 代码
+
+	// PKCE + OAuth 相关字段（用于登录场景下在通过 2FA 后签发授权码）
+	ClientID            string `json:"client_id" binding:"required"`
+	RedirectURI         string `json:"redirect_uri" binding:"required"`
+	Scope               string `json:"scope"`
+	CodeChallenge       string `json:"code_challenge" binding:"required"`
+	CodeChallengeMethod string `json:"code_challenge_method" binding:"required"` // 期望为 "S256"
+	State               string `json:"state"`
 }
 
 // Generate2FAResponse 生成 2FA secret 响应
@@ -931,29 +1015,47 @@ func (h *AuthHandler) Verify2FACode(c *gin.Context) {
 		return
 	}
 
-	// 获取用户信息
+	// 基本参数校验（PKCE + OAuth）
+	if !strings.EqualFold(req.ClientID, "easyssh-web") {
+		RespondError(c, http.StatusBadRequest, "invalid_client", "unsupported client_id")
+		return
+	}
+	if strings.TrimSpace(req.RedirectURI) == "" {
+		RespondError(c, http.StatusBadRequest, "invalid_request", "redirect_uri is required")
+		return
+	}
+	if strings.TrimSpace(req.CodeChallenge) == "" || !strings.EqualFold(req.CodeChallengeMethod, "S256") {
+		RespondError(c, http.StatusBadRequest, "invalid_request", "code_challenge and S256 code_challenge_method are required")
+		return
+	}
+
+	// 生成授权码（5 分钟有效）
+	code, err := h.authService.CreateAuthorizationCode(
+		c.Request.Context(),
+		userID,
+		req.ClientID,
+		req.RedirectURI,
+		req.Scope,
+		req.CodeChallenge,
+		req.CodeChallengeMethod,
+		5*time.Minute,
+	)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	// 获取用户信息以便审计日志等使用
 	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get user")
-		return
+	if err == nil && user != nil {
+		c.Set("user_id", user.ID.String())
+		c.Set("username", user.Username)
 	}
 
-	// 生成正式令牌
-	accessToken, refreshToken, err := h.jwtService.GenerateTokens(user)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate tokens")
-		return
-	}
-
-	// 设置 HttpOnly Cookie
-	setAuthCookies(c, accessToken, refreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
-
-	RespondSuccess(c, AuthResponse{
-		User:         user.ToPublic(),
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    h.accessTokenTTLSeconds,
+	// 返回授权码和 state，由前端继续调用 /oauth/token 换取 access_token
+	RespondSuccess(c, OAuthAuthorizeResponse{
+		Code:  code,
+		State: req.State,
 	})
 }
 

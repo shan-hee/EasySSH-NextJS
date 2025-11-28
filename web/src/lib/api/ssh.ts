@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api-client"
 import { getWsUrl } from "@/lib/config"
+import { getCurrentAccessToken } from "@/stores/auth-store"
 
 /**
  * SSH会话信息
@@ -85,6 +86,14 @@ export const sshApi = {
    */
   getTerminalUrl(serverId: string): string {
     // 统一通过同域 /api 走 Next.js rewrites，避免浏览器访问 Docker 内部主机名
-    return getWsUrl(`/api/v1/ssh/terminal/${serverId}`)
+    const params = new URLSearchParams()
+    const accessToken = getCurrentAccessToken()
+    if (accessToken) {
+      params.set("token", accessToken)
+    }
+    const qs = params.toString()
+    return getWsUrl(
+      qs ? `/api/v1/ssh/terminal/${serverId}?${qs}` : `/api/v1/ssh/terminal/${serverId}`,
+    )
   },
 }

@@ -1,41 +1,59 @@
+<div align="center">
+
 # EasySSH
 
-<div align="center">
+**现代化的 SSH 管理平台**
+
+提供直观的 Web 界面进行远程服务器管理，支持终端模拟、文件传输、系统监控等功能
 
 [![Docker Image Version](https://img.shields.io/docker/v/shanheee/easyssh?label=Docker&logo=docker&sort=semver)](https://hub.docker.com/r/shanheee/easyssh)
 [![Docker Image Size](https://img.shields.io/docker/image-size/shanheee/easyssh/latest?logo=docker)](https://hub.docker.com/r/shanheee/easyssh)
 [![Docker Pulls](https://img.shields.io/docker/pulls/shanheee/easyssh?logo=docker)](https://hub.docker.com/r/shanheee/easyssh)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/shan-hee/EasySSH-NextJS/docker-build.yml?branch=main&logo=github)](https://github.com/shan-hee/EasySSH-NextJS/actions)
-[![Security Scan](https://img.shields.io/github/actions/workflow/status/shan-hee/EasySSH-NextJS/docker-build.yml?label=security&logo=github)](https://github.com/shan-hee/EasySSH-NextJS/security)
 [![License](https://img.shields.io/github/license/shan-hee/EasySSH-NextJS)](LICENSE)
+
+[快速开始](#快速开始) • [功能特性](#功能特性) • [技术栈](#技术栈) • [部署指南](#生产环境部署docker) • [开发文档](#开发指南)
 
 </div>
 
-现代化的 SSH 管理平台，提供直观的 Web 界面进行远程服务器管理。
+---
 
-## 项目架构
+## 功能特性
 
-**纯 CSR (Client‑Side Rendering) 架构**：前端静态文件由 Go 后端托管，单容器部署（无 SSR / Server Components）。
+- 🖥️ **Web 终端**：基于 xterm.js 的全功能终端模拟器，支持多标签页
+- 📁 **文件管理**：SFTP 文件浏览、上传下载、在线编辑（Monaco Editor）
+- 📊 **系统监控**：实时 CPU、内存、磁盘、网络监控（WebSocket）
+- 🔐 **安全认证**：OAuth 2.0 + PKCE 授权流程，支持双因素认证（2FA）
+- 🎨 **现代 UI**：基于 Radix UI + Tailwind CSS 的响应式界面
+- 🐳 **容器化部署**：单容器部署，支持 amd64/arm64 架构
+- 🤖 **AI 集成**：Vercel AI SDK 支持（可选）
 
-```
-EasySSH-NextJS/
-├── web/                    # Next.js 前端应用（静态导出）
-├── server/                 # Go 后端服务（API + 静态文件托管）
-│   └── static/            # 前端构建产物（生产环境）
-├── docker/                 # Docker 配置
-├── scripts/                # 自动化脚本
-└── docs/                   # 项目文档
-```
+## 技术栈
 
-**部署架构**：
+### 前端
+- **框架**：Next.js 15.5 (App Router + 静态导出) + React 19
+- **UI**：Radix UI + Shadcn/ui + Tailwind CSS 4.x
+- **终端**：xterm.js
+- **编辑器**：Monaco Editor
+
+### 后端
+- **语言**：Go 1.23+
+- **框架**：Gin + GORM
+- **数据库**：PostgreSQL 16+ / Redis 7+
+- **SSH**：golang.org/x/crypto/ssh
+
+### 架构设计
+
+**纯 CSR 架构**：前端静态文件由 Go 后端托管，单容器部署
+
 ```
 ┌─────────────────────────────────────┐
 │         Docker 容器                  │
 │  ┌──────────────────────────────┐  │
-│  │   Go 后端 (:8521)            │  │
+│  │   Go 后端 (:8520)            │  │
 │  │  ├─ API 服务                 │  │
 │  │  ├─ WebSocket (SSH)          │  │
-│  │  └─ 静态文件托管 (Next.js 静态导出) │  │
+│  │  └─ 静态文件托管             │  │
 │  └──────────────────────────────┘  │
 │           ↓         ↓                │
 │  ┌──────────┐  ┌──────────┐        │
@@ -44,127 +62,36 @@ EasySSH-NextJS/
 └─────────────────────────────────────┘
 ```
 
-## 认证与安全（Cookie‑only）
-
-- 认证完全基于 HttpOnly Cookie（`easyssh_access_token` / `easyssh_refresh_token`）。
-- 前端不使用 `Authorization` 头；刷新接口 `POST /api/v1/auth/refresh` 无请求体，后端仅从 Cookie 读取 refresh token。
-- 开发模式跨域时，前端会自动携带 Cookie（`credentials: include`）；生产同域部署由 Go 托管静态文件，浏览器会自动携带 Cookie。
-
-Cookie 配置建议：
-
-- 开发（HTTP）：`COOKIE_SECURE=false`，`COOKIE_SAMESITE=lax`
-- 生产（HTTPS）：
-  - 同域：`COOKIE_SECURE=true`，`COOKIE_SAMESITE=lax`
-  - 跨域：`COOKIE_SECURE=true`，`COOKIE_SAMESITE=none`（必须 HTTPS）
-
-跨域开发（前端直连后端）：
-
-- 设置 `NEXT_PUBLIC_API_BASE=http://localhost:<后端端口>`，前端将直连 `<base>/api/v1`；
-- 在 `.env` 中配置 `ALLOWED_ORIGINS=http://localhost:<前端端口>,http://127.0.0.1:<前端端口>` 以允许跨域携带 Cookie（`scripts/dev.sh` 会自动写入）。
-
-WebSocket（系统监控）：
-
-- 监控 WS 路径：`/api/v1/monitor/server/:server_id?interval=2`
-- 前端通过 `getWsUrl(path)` 自动选择 `ws://`/`wss://` 并拼接 Host，详见 `web/src/lib/config.ts`。
-
-## 技术栈
-
-### 前端
-- **框架**: Next.js 15.5.4 (App Router + 静态导出) + React 19.1.0
-- **渲染模式**: 纯 CSR (Client-Side Rendering)
-- **UI**: Radix UI + Shadcn/ui + Tailwind CSS 4.x
-- **特性组件**:
-  - xterm.js - 终端模拟器
-  - Monaco Editor - 代码编辑器
-- **AI集成**: Vercel AI SDK
-
-### 后端
-- **语言**: Go 1.23+
-- **框架**: Gin + GORM
-- **数据存储**: PostgreSQL 16+ / Redis 7+
-- **SSH管理**: golang.org/x/crypto/ssh
-- **静态文件**: 托管 Next.js 构建产物
 
 ## 快速开始
 
-### 前置要求
+### 方式一：Docker 部署（推荐）
 
-**开发环境**:
-- Node.js 20+
-- pnpm 9+
-- Go 1.21+
-- PostgreSQL 14+ 和 Redis 7+（或通过 Docker 运行）
-
-**生产环境**（Docker 部署）:
-- Docker 20+
-- Docker Compose 2+
-
-### 开发环境启动
-
-#### 1. 准备配置文件
+**使用 Docker Compose（包含数据库）**：
 
 ```bash
-# 复制环境变量模板（如果还没有 .env 文件）
-cp .env.example .env
+# 1. 下载配置文件
+mkdir easyssh && cd easyssh
+wget https://raw.githubusercontent.com/shan-hee/EasySSH-NextJS/main/docker/docker-compose.yml
 
-# 配置数据库密码和安全密钥（可选，开发环境可使用默认值）
-# 如需修改，编辑 .env 文件
+# 2. 编辑配置（可选，修改端口、密码等）
+vi docker-compose.yml
+
+# 3. 启动服务
+docker compose up -d
+
+# 4. 访问应用
+# http://your-server:8520
 ```
 
-**说明**：`.env.example` 偏向生产配置；执行 `scripts/dev.sh` 将自动写入开发所需参数（`ENV=development`、`COOKIE_SECURE=false`、`COOKIE_SAMESITE=lax`、`NEXT_PUBLIC_API_BASE`、`ALLOWED_ORIGINS` 等）。
+> 💡 **说明**：`docker-compose.yml` 包含默认配置和自动生成的安全密钥，可直接启动。如需自定义端口、密码等，请编辑配置文件。
 
-#### 2. 启动服务
-
-```bash
-# 在项目根目录运行
-./scripts/dev.sh
-```
-
-脚本会自动：
-- ✅ 检查必需的工具（Go、pnpm）
-- ✅ 创建 .env 文件（如果不存在）
-- ✅ 自动配置开发环境参数（`ENV / COOKIE_SECURE / COOKIE_SAMESITE / NEXT_PUBLIC_API_BASE / ALLOWED_ORIGINS` 等）
-- ✅ 安装前端依赖（如果需要）
-- ✅ 启动后端服务（默认端口 8521，支持热重载）
-- ✅ 启动前端服务（默认端口 8520）
-
-#### 3. 访问应用
-
-- **前端**: http://localhost:8520
-- **后端 API**: http://localhost:8521
-
-按 `Ctrl+C` 停止所有服务。
-
----
-
-**如果脚本无法运行，可以手动启动：**
-
-```bash
-# 启动后端（热重载模式）
-cd server
-make dev  # 推荐: 自动使用 Air 热重载,未安装时降级为普通模式
-# 或者直接: /root/go/bin/air
-# 或者无热重载: go run cmd/api/main.go
-```
-
-```bash
-# 启动前端
-cd web
-pnpm dev # 或者指定端口: pnpm dev -p 8520
-```
-
----
-
-### 生产环境部署（Docker）
-
-#### 🐳 方式一：使用 Docker Hub 镜像（推荐）
-
-**单容器快速启动**：
+**单容器部署**（需要外部数据库）：
 
 ```bash
 docker run -d \
   --name easyssh \
-  -p 8521:8521 \
+  -p 8520:8520 \
   -e DB_HOST=your-postgres-host \
   -e DB_PORT=5432 \
   -e DB_USER=easyssh \
@@ -172,71 +99,44 @@ docker run -d \
   -e DB_NAME=easyssh_db \
   -e REDIS_HOST=your-redis-host \
   -e REDIS_PORT=6379 \
-  -e JWT_SECRET=your-long-random-secret-at-least-64-chars \
-  -e ENCRYPTION_KEY=your-32-byte-encryption-key-here \
+  -e JWT_SECRET=$(openssl rand -base64 48) \
+  -e ENCRYPTION_KEY=$(openssl rand -base64 24) \
   shanheee/easyssh:latest
 ```
 
-**使用 Docker Compose**（包含数据库，推荐）：
+**支持架构**：`linux/amd64`、`linux/arm64`
+
+### 方式二：本地开发
+
+**前置要求**：
+- Node.js 20+ / pnpm 9+
+- Go 1.23+
+- PostgreSQL 16+ / Redis 7+
+
+**一键启动**：
 
 ```bash
-# 1. 下载配置文件
-mkdir easyssh && cd easyssh
-wget https://raw.githubusercontent.com/shan-hee/EasySSH-NextJS/main/docker/docker-compose.yml
-wget https://raw.githubusercontent.com/shan-hee/EasySSH-NextJS/main/.env.example
-
-# 2. 配置环境变量并自动生成安全密钥
-cp .env.example .env
-sed -i "s|JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 48)|" .env
-sed -i "s|ENCRYPTION_KEY=.*|ENCRYPTION_KEY=$(openssl rand -base64 24)|" .env
-sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=')|g" .env
-
-# 3. 启动所有服务
-docker compose up -d
+# 在项目根目录运行
+./scripts/dev.sh
 ```
 
-**⚠️ 说明**：
-- 单容器部署：前端静态文件由 Go 后端托管，仅需暴露后端端口（示例 8521；若使用 `docker/docker-compose.yml`，容器内部端口为 8520，请以 Compose 为准）
-- 强烈建议为生产设置强随机密钥：`JWT_SECRET`（≥32 字符）与 `ENCRYPTION_KEY`（32 字节）
-- 按部署拓扑设置 Cookie 策略：同域 `SAMESITE=lax`；跨域且 HTTPS 用 `SAMESITE=none` + `COOKIE_SECURE=true`
+脚本会自动完成环境配置、依赖安装、服务启动（前端 :8520，后端 :8521）
 
-**支持的架构**：
-- `linux/amd64` (x86_64)
-- `linux/arm64` (ARM64/Apple Silicon)
-
-**部署后访问**: http://your-server:8521
-
----
-
-**升级版本**
+**手动启动**：
 
 ```bash
-# 进入部署目录
-cd easyssh
+# 后端（支持热重载）
+cd server && make dev
 
-# 拉取最新镜像
-docker compose pull
-
-# 重启服务
-docker compose up -d
+# 前端
+cd web && pnpm dev
 ```
 
+访问 http://localhost:8520
 
-#### 📦 方式二：从源码构建
-
-```bash
-cd docker
-cp .env.example .env
-vi .env  # 修改配置
-docker compose up -d
-```
-
-#### 常用命令
+### Docker 常用命令
 
 ```bash
-# 启动服务
-docker compose up -d
-
 # 查看日志
 docker compose logs -f
 
@@ -246,208 +146,147 @@ docker compose down
 # 重启服务
 docker compose restart
 
-# 查看状态
-docker compose ps
+# 升级版本
+docker compose pull && docker compose up -d
+
+# 备份数据
+tar -czf easyssh-backup-$(date +%Y%m%d).tar.gz docker/data/
 ```
 
-#### 数据持久化
-
-数据存储在 `docker/data/` 目录：
-- `data/postgres/` - PostgreSQL 数据
-- `data/redis/` - Redis 数据
-
-**备份数据**:
-```bash
-# 备份整个 data 目录
-tar -czf easyssh-backup-$(date +%Y%m%d).tar.gz data/
-```
-
-## 项目结构详解
-
-### Web 目录（前端）
+## 项目结构
 
 ```
-web/
-├── src/
-│   ├── app/                # App Router 页面
-│   │   ├── (auth)/        # 认证相关页面组
-│   │   └── dashboard/     # 主应用界面
-│   ├── components/        # React 组件
-│   │   ├── ui/           # shadcn/ui 基础组件
-│   │   ├── terminal/     # xterm.js 终端组件
-│   │   └── editor/       # Monaco 编辑器组件
-│   ├── lib/              # 工具函数
-│   ├── hooks/            # React Hooks
-│   ├── contexts/         # React Contexts
-│   └── types/            # TypeScript 类型定义
-├── public/               # 静态资源
-└── package.json
-```
-
-### Server 目录（后端）
-
-```
-server/
-├── cmd/api/              # 应用入口
-├── internal/             # 内部代码
-│   ├── api/             # HTTP/WebSocket 处理器
-│   │   ├── rest/        # RESTful APIs
-│   │   └── ws/          # WebSocket (SSH)
-│   ├── domain/          # 业务领域
-│   │   ├── server/      # 服务器管理
-│   │   ├── ssh/         # SSH 连接池
-│   │   └── auth/        # 认证授权
-│   ├── infra/           # 基础设施
-│   │   ├── db/          # PostgreSQL
-│   │   ├── cache/       # Redis
-│   │   └── config/      # 配置管理
-│   └── pkg/             # 内部共享包
-├── migrations/          # 数据库迁移
-├── go.mod
-└── Makefile
+EasySSH-NextJS/
+├── web/                    # Next.js 前端（静态导出）
+│   ├── src/
+│   │   ├── app/           # App Router 页面
+│   │   ├── components/    # React 组件（ui/terminal/editor）
+│   │   ├── lib/           # 工具函数与 API 客户端
+│   │   └── hooks/         # React Hooks
+│   └── public/            # 静态资源
+│
+├── server/                 # Go 后端服务
+│   ├── cmd/api/           # 应用入口
+│   ├── internal/
+│   │   ├── api/           # HTTP/WebSocket 处理器
+│   │   ├── domain/        # 业务领域（server/ssh/auth）
+│   │   └── infra/         # 基础设施（db/cache/config）
+│   └── migrations/        # 数据库迁移
+│
+├── docker/                 # Docker 配置与数据持久化
+├── scripts/                # 自动化脚本
+└── docs/                   # 项目文档
 ```
 
 ## 开发指南
 
-### 前端开发
+### 常用命令
 
 ```bash
+# 一键启动开发环境
+scripts/dev.sh
+```
+
+```bash
+# 前端开发
 cd web
+pnpm dev          # 开发服务器
+pnpm build        # 构建生产版本
+pnpm lint         # 代码检查
 
-# 开发模式
-pnpm dev
-
-# 构建
-pnpm build
-
-# 代码检查
-pnpm lint
-
-# 生成 API 类型（从 OpenAPI）
-pnpm openapi:gen
-```
-
-### 后端开发
-
-```bash
+# 后端开发
 cd server
+make dev          # 开发服务器（热重载）
+make build        # 构建二进制
+make test         # 运行测试
 
-# 运行开发服务器
-make dev
-
-# 或直接运行
-go run cmd/api/main.go
-
-# 构建
-make build
-
-# 运行测试
-make test
-```
-
-### API 类型同步
-
-当修改 `shared/openapi.yaml` 后，运行以下命令同步类型定义：
-
-```bash
+# API 类型同步（修改 OpenAPI 后）
 ./scripts/gen-types.sh
 ```
 
 ## 环境变量配置
 
-### 统一配置文件 (.env)
+项目使用统一的 `.env` 文件（位于项目根目录）进行配置。
 
-项目使用统一的 `.env` 文件进行配置，位于项目根目录。
+### 核心配置项
 
 ```bash
-# ================================
 # 运行模式
-# ================================
 ENV=production                 # development | production
 
-# ================================
-# 端口与服务地址
-# ================================
-PORT=8521                      # 后端服务端口（生产环境唯一端口）
-WEB_DEV_PORT=8520              # 前端开发端口（仅开发环境使用）
+# 服务端口
+PORT=8520                      # 后端服务端口
+WEB_DEV_PORT=3000              # 前端开发端口（仅开发环境）
 
-# 后端 API 地址（前端开发时使用）
-# 开发环境: http://localhost:8521
-# 生产环境: 留空（使用相对路径）
-NEXT_PUBLIC_API_BASE=
-
-# ================================
-# 数据库配置 (PostgreSQL)
-# ================================
+# 数据库 (PostgreSQL)
 DB_HOST=postgres               # Docker: postgres | 开发: localhost
 DB_PORT=5432
 DB_USER=easyssh
 DB_PASSWORD=CHANGE_ME          # ⚠️ 生产环境必须修改
 DB_NAME=easyssh_db
-DB_SSLMODE=disable
 
-# ================================
-# 缓存配置 (Redis)
-# ================================
+# 缓存 (Redis)
 REDIS_HOST=redis               # Docker: redis | 开发: localhost
 REDIS_PORT=6379
-REDIS_PASSWORD=                # 留空表示无密码
 
-# ================================
 # 安全配置 ⚠️ 生产环境必须修改
-# ================================
-# JWT 签名密钥（生成: openssl rand -base64 48）
-JWT_SECRET=CHANGE_ME_IN_PRODUCTION
+JWT_SECRET=CHANGE_ME           # 生成: openssl rand -base64 48
+ENCRYPTION_KEY=CHANGE_ME       # 生成: openssl rand -base64 24
 
-# 数据加密密钥（32字节，生成: openssl rand -base64 24）
-ENCRYPTION_KEY=CHANGE_ME_IN_PRODUCTION_32BYTE
-
-# JWT 过期时间
-JWT_ACCESS_EXPIRE_MINUTES=15
-JWT_REFRESH_IDLE_EXPIRE_DAYS=7
-JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS=30
-
-# Cookie 安全策略
+# Cookie 策略
 COOKIE_SECURE=true             # HTTPS: true | HTTP: false
-COOKIE_SAMESITE=lax            # lax | none | strict
+COOKIE_SAMESITE=lax            # 同域: lax | 跨域+HTTPS: none
 ```
 
-**配置说明**：
-- **开发环境**：`dev.sh` 脚本会自动调整配置（localhost、debug 模式等）
-- **生产环境**：
-  - 单容器部署，仅需暴露 8521 端口
-  - 前端静态文件由 Go 后端托管
-  - 务必修改 `JWT_SECRET`、`ENCRYPTION_KEY` 和 `DB_PASSWORD`
+### 配置说明
+
+- **开发环境**：使用 `./scripts/dev.sh` 自动配置，或手动编辑 `.env`
+- **生产环境**：务必修改 `JWT_SECRET`、`ENCRYPTION_KEY`、`DB_PASSWORD`
 - **Docker 部署**：配置已内置在 `docker-compose.yml` 中
+
+完整配置项请参考 [.env.example](.env.example)
+
+## 认证与安全
+
+### OAuth 2.0 + PKCE 流程
+
+- **登录**：`POST /oauth/authorize` + `POST /oauth/token`（支持 2FA）
+- **Token 策略**：
+  - `access_token`：短期 JWT，存储在内存，用于 API 和 WebSocket 鉴权
+  - `refresh_token`：长期 JWT，HttpOnly Cookie，用于自动续期
+- **自动续期**：`/api/v1/auth/status` 检测到 access_token 失效时自动刷新
+
+### WebSocket 鉴权
+
+- 终端：`/api/v1/ssh/terminal/:server_id?token=<access_token>`
+- 监控：`/api/v1/monitor/server/:server_id?interval=2`
+
+详细文档请参考 [docs/auth-pkce-migration-plan.md](docs/auth-pkce-migration-plan.md)
 
 ## 贡献指南
 
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+欢迎贡献代码！请遵循以下流程：
+
+1. Fork 本仓库
+2. 创建特性分支：`git checkout -b feature/amazing-feature`
+3. 提交更改：`git commit -m 'feat: add amazing feature'`
+4. 推送分支：`git push origin feature/amazing-feature`
+5. 提交 Pull Request
 
 ## 许可证
 
 本项目采用 [Apache License 2.0](LICENSE) 开源协议。
 
-```
-Copyright 2024 EasySSH Contributors
+## 支持与反馈
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+- 🐛 **问题反馈**：[提交 Issue](https://github.com/shan-hee/EasySSH-NextJS/issues)
+- 📖 **文档**：[docs/](docs/)
+- 🐳 **Docker Hub**：[shanheee/easyssh](https://hub.docker.com/r/shanheee/easyssh)
 
-    http://www.apache.org/licenses/LICENSE-2.0
+---
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
+<div align="center">
 
-## 支持
+**如果这个项目对你有帮助，请给个 ⭐️ Star 支持一下！**
 
-如有问题，请提交 [Issue](https://github.com/your-repo/issues)。
+</div>

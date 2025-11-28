@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import SidebarProviderServer from "@/components/sidebar-provider-server"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -8,9 +8,8 @@ import { SidebarInset } from "@/components/ui/sidebar"
 import { ClientAuthProvider } from "@/components/client-auth-provider"
 import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
 import { CompletionConfigProvider } from "@/contexts/completion-config-context"
-import { authApi, type User } from "@/lib/api/auth"
-import { isApiError } from "@/lib/api-client"
-import { getErrorMessage } from "@/lib/error-utils"
+import { useSystemConfig } from "@/contexts/system-config-context"
+import type { User } from "@/lib/api/auth"
 
 /**
  * Dashboard 布局 - Client Component
@@ -22,33 +21,39 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const { authStatus, isLoading } = useSystemConfig()
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // 获取当前用户信息
-        // 注意：如果从首页跳转过来，首页的 checkStatus() 可能已经获取了用户信息
-        // 未来可以考虑通过 state 传递来避免重复请求
-        const currentUser = await authApi.getCurrentUser()
-        setUser(currentUser)
-      } catch (error: unknown) {
-        console.error("Authentication failed:", getErrorMessage(error))
-        // 401 会在 apiFetch 的全局处理里统一跳转到登录页
-        // 这里只处理非 401 的异常情况,作为兜底
-        if (!isApiError(error) || error.status !== 401) {
-          router.push("/login")
-        }
-      }
+    if (isLoading) return
+
+    // 如果加载失败（authStatus 为空），按未认证处理
+    if (!authStatus) {
+      router.replace("/login")
+      return
     }
 
-    checkAuth()
-  }, [router])
+    // 需要初始化 → 跳转到 /setup
+    if (authStatus.need_init) {
+      router.replace("/setup")
+      return
+    }
+
+    // 未认证 → 跳转到登录
+    if (!authStatus.is_authenticated) {
+      router.replace("/login")
+      return
+    }
+  }, [authStatus, isLoading, router])
+
+  const initialUser: User | null =
+    authStatus && authStatus.is_authenticated && authStatus.user
+      ? authStatus.user
+      : null
 
   // 乐观渲染：立即显示界面，后台验证
   // 如果验证失败，会自动跳转到登录页
   return (
-    <ClientAuthProvider initialUser={user}>
+    <ClientAuthProvider initialUser={initialUser}>
       <CompletionConfigProvider>
         <BreadcrumbProvider>
           <SidebarProviderServer>

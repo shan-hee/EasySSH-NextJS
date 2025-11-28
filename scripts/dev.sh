@@ -25,6 +25,10 @@ fi
 BACKEND_PORT=${PORT:-8521}
 FRONTEND_PORT=${WEB_PORT:-8520}
 
+# 导出端口配置给前端（Next rewrites 使用 BACKEND_PORT）
+export BACKEND_PORT
+export FRONTEND_PORT
+
 # 函数：检查命令是否存在
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -96,11 +100,13 @@ set_kv() {
 set_kv ENV development
 
 # 2) Cookie 策略（HTTP 开发环境推荐）
+# 通过 Next 代理避免跨站，请使用默认 SameSite=Lax，避免 SameSite=None + 非 Secure 被浏览器拒绝
 set_kv COOKIE_SECURE false
 set_kv COOKIE_SAMESITE lax
 
 # 3) API 基础地址（Next 重写 & SSR 使用）
-set_kv NEXT_PUBLIC_API_BASE http://localhost:${BACKEND_PORT}
+# 开发环境通过 Next rewrites 代理到后端，这里留空走相对路径 /api,/oauth
+set_kv NEXT_PUBLIC_API_BASE ""
 
 # 4) WS Origin 白名单（可选，明确本机前端端口）
 if ! grep -qE '^ALLOWED_ORIGINS=' .env 2>/dev/null || [[ -z "${ALLOWED_ORIGINS:-}" ]]; then

@@ -3,32 +3,36 @@ package middleware
 import (
 	"errors"
 	"net/http"
+	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/gin-gonic/gin"
 )
 
-// Cookie 名称常量
-const (
-	AccessTokenCookieName = "easyssh_access_token"
-)
+// 从 Authorization 头或查询参数中提取 Bearer Token
+func extractBearerToken(c *gin.Context) string {
+	// 优先从 Authorization 头读取：Authorization: Bearer <token>
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" {
+		parts := strings.Fields(authHeader)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
+	}
 
-// AuthMiddleware JWT 认证中间件
+	// 对于 WebSocket 等场景，允许通过 query 参数传递 token
+	if token := strings.TrimSpace(c.Query("token")); token != "" {
+		return token
+	}
+
+	return ""
+}
+
+// AuthMiddleware JWT 认证中间件（仅接受 Bearer Token，不再从 Cookie 读取）
 func AuthMiddleware(jwtService auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var tokenString string
+		tokenString := extractBearerToken(c)
 
-		// 1. 从 HttpOnly Cookie 获取 token（推荐）
-		if cookie, err := c.Cookie(AccessTokenCookieName); err == nil && cookie != "" {
-			tokenString = cookie
-		}
-
-		// 2. 如果 Cookie 中没有，尝试从 Query 参数获取（用于 WebSocket）
-		if tokenString == "" {
-			tokenString = c.Query("token")
-		}
-
-		// 如果都没有，返回未授权
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
@@ -117,12 +121,7 @@ func RequireAdmin() gin.HandlerFunc {
 // OptionalAuth 可选认证中间件（不强制要求认证）
 func OptionalAuth(jwtService auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var tokenString string
-
-		// 1. 从 Cookie 获取
-		if cookie, err := c.Cookie(AccessTokenCookieName); err == nil && cookie != "" {
-			tokenString = cookie
-		}
+		tokenString := extractBearerToken(c)
 
 		// 如果没有 token，直接继续（可选认证）
 		if tokenString == "" {

@@ -78,7 +78,8 @@ func main() {
 	// 数据库迁移（自动迁移）
 	if err := database.AutoMigrate(
 		&auth.User{},
-		&auth.Session{}, // 用户会话表
+		&auth.Session{},          // 用户会话表
+		&auth.AuthorizationCode{}, // OAuth 授权码表
 		&server.Server{},
 		&auditlog.AuditLog{},
 		&script.Script{},               // 脚本表
@@ -304,6 +305,13 @@ func main() {
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）
 
+	// OAuth 2.0 相关端点（Authorization Code + PKCE）
+	oauth := r.Group("/oauth")
+	{
+		oauth.POST("/authorize", authHandler.OAuthAuthorize)
+		oauth.POST("/token", authHandler.OAuthToken)
+	}
+
 	// API v1 路由组
 	v1 := r.Group("/api/v1")
 	{
@@ -346,10 +354,7 @@ func main() {
 		authRoutes := v1.Group("/auth")
 		{
 			authRoutes.POST("/register", authHandler.Register)
-			// 登录接口应用速率限制（支持动态配置）
-			authRoutes.POST("/login", middleware.LoginRateLimitMiddleware(securityService), authHandler.Login)
 			authRoutes.POST("/logout", authHandler.Logout)
-			authRoutes.POST("/refresh", authHandler.RefreshToken)
 			// 使用可选认证中间件，支持未登录和已登录状态
 			authRoutes.GET("/status", middleware.OptionalAuth(jwtService), authHandler.CheckStatus) // 检查系统和认证状态
 			// 初始化管理员接口应用速率限制（支持动态配置）

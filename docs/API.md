@@ -57,7 +57,7 @@ OpenAPI 规范定义了以下模块：
 
 | 标签 | 描述 | 主要端点 |
 |------|------|---------|
-| `auth` | 用户认证 | `/auth/login`, `/auth/logout` |
+| `auth` | 用户认证 | `/oauth/authorize`, `/oauth/token`, `/auth/logout` |
 | `servers` | 服务器管理 | `/servers`, `/servers/{id}` |
 | `ssh` | SSH 连接 | `/ssh/sessions` |
 | `sftp` | 文件传输 | `/sftp/list`, `/sftp/upload` |
@@ -68,12 +68,18 @@ OpenAPI 规范定义了以下模块：
 
 ## 前后端通信
 
-### 通信方式（Cookie‑only + 纯 CSR）
+### 通信方式（Authorization Code + PKCE + Bearer）
 
-- 认证仅依赖 HttpOnly Cookie，前端不使用 `Authorization` 头。
-- 刷新接口 `POST /api/v1/auth/refresh` 无请求体，后端从 Cookie 读取 refresh token 并通过 `Set‑Cookie` 回写。
-- 开发模式：设置 `NEXT_PUBLIC_API_BASE=http://localhost:<后端端口>`，前端直接请求 `<base>/api/v1`；`apiFetch` 会在跨域时自动携带 Cookie。
-- 生产模式：前端静态文件由后端托管，使用相对路径 `/api/v1` 即可（同源）。
+- 登录采用标准的 Authorization Code + PKCE 流程：
+  - 前端调用 `POST /oauth/authorize`（JSON），提交用户名/密码 + PKCE 参数（`code_challenge(S256)` 等），后端返回授权码或 2FA 临时令牌。
+  - 如启用 2FA：前端再调用 `POST /api/v1/auth/2fa/verify` 完成双因子认证并签发授权码。
+  - 前端使用授权码调用 `POST /oauth/token`：
+    - `grant_type=authorization_code`：返回短期 `access_token`，同时通过 HttpOnly Cookie 写入长期 `refresh_token`。
+- 业务 API 调用统一使用 `Authorization: Bearer <access_token>` 进行认证，不再从 Cookie 读取 access_token。
+- 刷新接口统一使用 `POST /oauth/token`，`grant_type=refresh_token`：
+  - 前端只需携带 Cookie（内含 refresh_token），后端返回新的 access_token，并按需轮换 refresh_token Cookie。
+- 开发模式：设置 `NEXT_PUBLIC_API_BASE=http://localhost:<后端端口>`，前端请求 `<base>/api/v1` 与 `/oauth/*`；`apiFetch` 在跨域时自动携带 Cookie（用于 refresh_token）。
+- 生产模式：前端静态文件由后端托管，同源访问 `/api/v1` 与 `/oauth/*`。
 
 ### 环境变量配置
 
@@ -100,14 +106,37 @@ ALLOWED_ORIGINS=http://localhost:8520,http://127.0.0.1:8520
 ```typescript
 import { apiFetch } from '@/lib/api-client';
 
-// 登录
-await apiFetch('/auth/login', { method: 'POST', body: { username, password } });
+// 使用 PKCE 登录（简化示意）
+// 1. 调用 /oauth/authorize 获取授权码（或 2FA 临时令牌）
+const authorizeResp = await apiFetch('/oauth/authorize', {
+  method: 'POST',
+  body: {
+    response_type: 'code',
+    client_id: 'easyssh-web',
+    redirect_uri: window.location.origin + '/auth/callback',
+    scope: 'openid profile easyssh',
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    state,
+    username,
+    password,
+  },
+});
 
-// 获取用户
-const me = await apiFetch('/users/me');
+// 2. 如未启用 2FA，直接使用授权码换取 access_token
+const tokenResp = await apiFetch('/oauth/token', {
+  method: 'POST',
+  body: {
+    grant_type: 'authorization_code',
+    code: authorizeResp.code,
+    redirect_uri: window.location.origin + '/auth/callback',
+    client_id: 'easyssh-web',
+    code_verifier: codeVerifier,
+  },
+});
 
-// 刷新（无请求体，自动携带 Cookie）
-await apiFetch('/auth/refresh', { method: 'POST' });
+// 3. 调用业务 API 时在前端统一附加 Authorization 头：
+const me = await apiFetch('/users/me'); // 内部会自动添加 Bearer 头
 ```
 
 ### WebSocket 连接（系统监控）

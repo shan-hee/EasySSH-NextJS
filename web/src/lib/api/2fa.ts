@@ -1,5 +1,4 @@
 import { apiFetch } from "@/lib/api-client"
-import type { User } from "@/lib/api/auth"
 
 /**
  * 生成 2FA secret 响应
@@ -18,14 +17,25 @@ export interface Enable2FAResponse {
 }
 
 /**
- * 2FA 验证响应
+ * 登录场景下 2FA + PKCE 校验请求
  */
-export interface Verify2FAResponse {
-  user: User
-  access_token: string
-  refresh_token: string
-  token_type: string
-  expires_in: number
+export interface Verify2FALoginRequest {
+  tempToken: string
+  code: string
+  clientId: string
+  redirectUri: string
+  scope?: string
+  codeChallenge: string
+  codeChallengeMethod: string
+  state?: string
+}
+
+/**
+ * 登录场景下 2FA + PKCE 校验响应（返回授权码）
+ */
+export interface Verify2FALoginResponse {
+  code: string
+  state?: string
 }
 
 /**
@@ -60,17 +70,20 @@ export const twoFactorApi = {
   },
 
   /**
-   * 验证 2FA 代码（用于登录）
+   * 验证 2FA 代码（用于登录 + PKCE）
    */
-  async verify(
-    tempToken: string,
-    code: string
-  ): Promise<Verify2FAResponse> {
-    return apiFetch<Verify2FAResponse>("/auth/2fa/verify", {
+  async verifyLogin(params: Verify2FALoginRequest): Promise<Verify2FALoginResponse> {
+    return apiFetch<Verify2FALoginResponse>("/auth/2fa/verify", {
       method: "POST",
       body: JSON.stringify({
-        temp_token: tempToken,
-        code,
+        temp_token: params.tempToken,
+        code: params.code,
+        client_id: params.clientId,
+        redirect_uri: params.redirectUri,
+        scope: params.scope ?? "openid profile easyssh",
+        code_challenge: params.codeChallenge,
+        code_challenge_method: params.codeChallengeMethod,
+        state: params.state ?? "",
       }),
     })
   },

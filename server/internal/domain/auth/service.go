@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,8 +28,11 @@ type Service interface {
 	// Register 注册新用户
 	Register(ctx context.Context, username, email, password string, role UserRole) (*User, error)
 
-	// Login 用户登录
-	Login(ctx context.Context, username, password string, sessionInfo *SessionInfo) (*User, string, string, error)
+	// AuthenticateUser 验证用户名和密码，返回用户（不创建会话或令牌）
+	AuthenticateUser(ctx context.Context, username, password string) (*User, error)
+
+	// CreateSessionWithTokens 为已认证用户创建会话并生成访问令牌/刷新令牌
+	CreateSessionWithTokens(ctx context.Context, user *User, sessionInfo *SessionInfo) (accessToken, refreshToken string, err error)
 
 	// Logout 用户登出
 	Logout(ctx context.Context, accessToken string) error
@@ -38,6 +42,9 @@ type Service interface {
 
 	// RefreshAccessToken 刷新访问令牌（返回新的访问令牌和刷新令牌）
 	RefreshAccessToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
+
+	// RevokeSessionByRefreshToken 根据 refresh token 撤销会话（用于登出当前设备）
+	RevokeSessionByRefreshToken(ctx context.Context, refreshToken string) error
 
 	// ChangePassword 修改密码
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error
@@ -86,6 +93,14 @@ type Service interface {
 
 	// UpdateNotificationSettings 更新通知设置
 	UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser *bool) error
+
+	// Authorization Code + PKCE
+
+	// CreateAuthorizationCode 为指定用户创建授权码
+	CreateAuthorizationCode(ctx context.Context, userID uuid.UUID, clientID, redirectURI, scope, codeChallenge, codeChallengeMethod string, expiresIn time.Duration) (string, error)
+
+	// ExchangeAuthorizationCodeForTokens 使用授权码和 PKCE code_verifier 换取访问令牌和刷新令牌
+	ExchangeAuthorizationCodeForTokens(ctx context.Context, clientID, redirectURI, code, codeVerifier string, sessionInfo *SessionInfo) (*User, string, string, error)
 }
 
 // authService 认证服务实现
@@ -163,25 +178,31 @@ func (s *authService) Register(ctx context.Context, username, email, password st
 	return user, nil
 }
 
-func (s *authService) Login(ctx context.Context, username, password string, sessionInfo *SessionInfo) (*User, string, string, error) {
+// AuthenticateUser 验证用户名和密码，返回用户信息（不创建会话或令牌）
+func (s *authService) AuthenticateUser(ctx context.Context, username, password string) (*User, error) {
 	// 查找用户
 	user, err := s.repo.FindByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			return nil, "", "", ErrInvalidCredentials
+			return nil, ErrInvalidCredentials
 		}
-		return nil, "", "", err
+		return nil, err
 	}
 
 	// 验证密码
 	if !user.CheckPassword(password) {
-		return nil, "", "", ErrInvalidCredentials
+		return nil, ErrInvalidCredentials
 	}
 
+	return user, nil
+}
+
+// CreateSessionWithTokens 为已认证用户创建会话并生成访问/刷新令牌
+func (s *authService) CreateSessionWithTokens(ctx context.Context, user *User, sessionInfo *SessionInfo) (string, string, error) {
 	// 生成令牌
 	accessToken, refreshToken, err := s.jwtService.GenerateTokens(user)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("failed to generate tokens: %w", err)
+		return "", "", fmt.Errorf("failed to generate tokens: %w", err)
 	}
 
 	// 创建会话记录
@@ -227,7 +248,7 @@ func (s *authService) Login(ctx context.Context, username, password string, sess
 		}()
 	}
 
-	return user, accessToken, refreshToken, nil
+	return accessToken, refreshToken, nil
 }
 
 // hashToken 对 token 进行哈希处理
@@ -296,6 +317,19 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	}
 
 	return newAccessToken, newRefreshToken, nil
+}
+
+// RevokeSessionByRefreshToken 根据 refresh token 撤销会话（登出当前设备）
+func (s *authService) RevokeSessionByRefreshToken(ctx context.Context, refreshToken string) error {
+	if refreshToken == "" {
+		return ErrSessionNotFound
+	}
+
+	tokenHash := s.hashToken(refreshToken)
+	if err := s.repo.DeleteSessionByRefreshToken(ctx, tokenHash); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
@@ -696,6 +730,114 @@ func (s *authService) Verify2FACode(ctx context.Context, userID uuid.UUID, code 
 	}
 
 	return false, nil
+}
+
+// === Authorization Code + PKCE ===
+
+// CreateAuthorizationCode 为指定用户创建授权码
+func (s *authService) CreateAuthorizationCode(
+	ctx context.Context,
+	userID uuid.UUID,
+	clientID, redirectURI, scope, codeChallenge, codeChallengeMethod string,
+	expiresIn time.Duration,
+) (string, error) {
+	if clientID == "" || redirectURI == "" || codeChallenge == "" || codeChallengeMethod == "" {
+		return "", errors.New("missing required parameters for authorization code")
+	}
+
+	// 目前仅支持 S256
+	if strings.ToUpper(codeChallengeMethod) != "S256" {
+		return "", errors.New("unsupported code_challenge_method, only S256 is supported")
+	}
+
+	// 生成高熵随机授权码
+	codeUUID, err := uuid.NewRandom()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate authorization code: %w", err)
+	}
+	code := codeUUID.String()
+
+	ac := &AuthorizationCode{
+		Code:                code,
+		UserID:              userID,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		Scope:               scope,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: strings.ToUpper(codeChallengeMethod),
+		ExpiresAt:           time.Now().Add(expiresIn),
+		Used:                false,
+	}
+
+	if err := s.repo.CreateAuthorizationCode(ctx, ac); err != nil {
+		return "", fmt.Errorf("failed to store authorization code: %w", err)
+	}
+
+	return code, nil
+}
+
+// ExchangeAuthorizationCodeForTokens 使用授权码和 PKCE code_verifier 换取访问令牌和刷新令牌
+func (s *authService) ExchangeAuthorizationCodeForTokens(
+	ctx context.Context,
+	clientID, redirectURI, code, codeVerifier string,
+	sessionInfo *SessionInfo,
+) (*User, string, string, error) {
+	if clientID == "" || redirectURI == "" || code == "" || codeVerifier == "" {
+		return nil, "", "", errors.New("missing required parameters for token exchange")
+	}
+
+	// 查询授权码
+	ac, err := s.repo.GetAuthorizationCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, ErrCodeNotFound) {
+			return nil, "", "", errors.New("invalid or already used authorization code")
+		}
+		return nil, "", "", fmt.Errorf("failed to get authorization code: %w", err)
+	}
+
+	// 检查是否已使用或过期
+	if ac.Used || time.Now().After(ac.ExpiresAt) {
+		return nil, "", "", errors.New("authorization code has expired or already been used")
+	}
+
+	// 检查 client_id 和 redirect_uri 是否匹配
+	if ac.ClientID != clientID {
+		return nil, "", "", errors.New("client_id does not match authorization code")
+	}
+	if ac.RedirectURI != redirectURI {
+		return nil, "", "", errors.New("redirect_uri does not match authorization code")
+	}
+
+	// PKCE 验证：目前仅支持 S256
+	if strings.ToUpper(ac.CodeChallengeMethod) != "S256" {
+		return nil, "", "", errors.New("unsupported code_challenge_method in stored authorization code")
+	}
+
+	// 计算 code_verifier 的 S256 摘要并进行 Base64URL 编码
+	verifierHash := sha256.Sum256([]byte(codeVerifier))
+	computedChallenge := base64.RawURLEncoding.EncodeToString(verifierHash[:])
+	if computedChallenge != ac.CodeChallenge {
+		return nil, "", "", errors.New("code_verifier does not match code_challenge")
+	}
+
+	// 标记授权码为已使用
+	if err := s.repo.MarkAuthorizationCodeUsed(ctx, ac.Code); err != nil {
+		return nil, "", "", fmt.Errorf("failed to mark authorization code as used: %w", err)
+	}
+
+	// 获取用户信息
+	user, err := s.repo.FindByID(ctx, ac.UserID)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("failed to load user for authorization code: %w", err)
+	}
+
+	// 为用户创建会话并生成令牌
+	accessToken, refreshToken, err := s.CreateSessionWithTokens(ctx, user, sessionInfo)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	return user, accessToken, refreshToken, nil
 }
 
 // === Session Management ===

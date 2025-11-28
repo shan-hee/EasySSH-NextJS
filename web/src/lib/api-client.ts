@@ -1,4 +1,5 @@
-import { getApiUrl } from "@/lib/config"
+import { getApiBase, getApiUrl } from "@/lib/config"
+import { getCurrentAccessToken, useAuthStore } from "@/stores/auth-store"
 
 // 全局刷新会话 Promise，避免并发重复刷新
 let refreshPromise: Promise<void> | null = null
@@ -44,8 +45,19 @@ async function refreshSession(): Promise<void> {
   if (refreshPromise) return refreshPromise
 
   refreshPromise = (async () => {
-    const apiUrl = getApiUrl()
-    const url = `${apiUrl}/auth/refresh`
+    // 构造 /oauth/token 完整 URL
+    let url: string
+    const apiBase = getApiBase()
+    if (apiBase) {
+      url = `${apiBase.replace(/\/+$/, '')}/oauth/token`
+    } else {
+      // 生产同域场景：使用 window.location.origin
+      if (typeof window === 'undefined') {
+        throw new Error('Refresh not supported on server')
+      }
+      const origin = window.location.origin
+      url = `${origin}/oauth/token`
+    }
 
     // 根据是否跨域选择 credentials 策略，保持与 apiFetchInternal 一致
     let credentials: RequestCredentials = 'same-origin'
@@ -66,13 +78,36 @@ async function refreshSession(): Promise<void> {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}), // 刻意不传 refresh_token，后端将从 Cookie 读取
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+      }),
       credentials,
     })
     if (!res.ok) {
       throw new Error(`Refresh failed: ${res.status}`)
     }
-    // 刷新成功，后端通过 Set-Cookie 更新会话，无需处理响应体
+
+    // 解析响应，更新内存中的 access_token
+    try {
+      const json = await res.json() as
+        | { access_token?: string; expires_in?: number }
+        | { data?: { access_token?: string; expires_in?: number } }
+
+      const payload =
+        json && typeof json === 'object' && 'data' in json && json.data
+          ? json.data!
+          : (json as { access_token?: string; expires_in?: number })
+
+      if (payload.access_token) {
+        const expiresIn =
+          typeof payload.expires_in === 'number' ? payload.expires_in : 0
+        useAuthStore.getState().setToken(payload.access_token, expiresIn)
+      } else {
+        throw new Error('Missing access_token in refresh response')
+      }
+    } catch {
+      throw new Error('Failed to parse refresh response')
+    }
   })()
 
   try {
@@ -199,6 +234,9 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   let url: string
   if (path.startsWith("http")) {
     url = path
+  } else if (path.startsWith("/oauth/")) {
+    // OAuth 端点始终走当前 origin（Next dev 可通过 rewrites 代理到后端）
+    url = path
   } else {
     const apiUrl = getApiUrl()
     // getApiUrl() 在客户端返回相对路径 /api
@@ -206,9 +244,29 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     url = `${apiUrl}${path}`
   }
 
+  // OAuth 端点不需要也不应该附带 Authorization 头
+  const isOAuthEndpoint =
+    url.includes("/oauth/authorize") || url.includes("/oauth/token")
+
   const headers: HeadersInit = {
     Accept: "application/json",
     ...options.headers,
+  }
+
+  // 如有可用的 access_token，则自动附加 Bearer 认证头
+  // 注意：对 /oauth/* 端点不附加 Authorization，避免干扰 PKCE 与 CORS
+  if (!isOAuthEndpoint) {
+    const currentToken = getCurrentAccessToken()
+    if (currentToken) {
+      const headersRecord = headers as Record<string, string>
+      const hasAuthHeader =
+        Object.keys(headersRecord).some(
+          (k) => k.toLowerCase() === "authorization",
+        )
+      if (!hasAuthHeader) {
+        headersRecord["Authorization"] = `Bearer ${currentToken}`
+      }
+    }
   }
 
   // 创建超时控制器

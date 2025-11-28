@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import type { SystemConfig } from "@/lib/api/settings"
 import { authApi, type AuthStatusResponse } from "@/lib/api/auth"
+import { useAuthStore } from "@/stores/auth-store"
 
 /**
  * 系统配置 Context
@@ -67,7 +68,8 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
   const [config, setConfig] = useState<SystemConfig | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null)
+  const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null)
+  const setToken = useAuthStore((state) => state.setToken)
 
   const loadConfig = async () => {
     try {
@@ -102,6 +104,22 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
   useEffect(() => {
     loadConfig()
   }, [])
+
+  // 当 /auth/status 返回新的 access_token 时, 同步写入内存中的 token store
+  useEffect(() => {
+    if (!authStatus || !authStatus.is_authenticated || !authStatus.access_token) {
+      return
+    }
+
+    const ttlSeconds =
+      authStatus.access_token_expires_in ??
+      authStatus.access_token_ttl_seconds ??
+      0
+
+    if (ttlSeconds > 0) {
+      setToken(authStatus.access_token, ttlSeconds)
+    }
+  }, [authStatus, setToken])
 
   return (
     <SystemConfigContext.Provider value={{ config, isLoading, error, refreshConfig, authStatus }}>

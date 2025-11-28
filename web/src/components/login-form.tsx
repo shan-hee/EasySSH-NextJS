@@ -27,6 +27,8 @@ import { authApi } from "@/lib/api/auth"
 import { twoFactorApi } from "@/lib/api/2fa"
 import { FadeSlideIn } from "@/components/ui/fade-slide-in"
 import { getErrorMessage } from "@/lib/error-utils"
+import { generateCodeVerifier, deriveCodeChallenge } from "@/lib/pkce"
+import { useAuthStore } from "@/stores/auth-store"
 
 export function LoginForm({
   className,
@@ -35,6 +37,7 @@ export function LoginForm({
   const router = useRouter()
   const searchParams = useSearchParams()
   const { config, refreshConfig } = useSystemConfig()
+  const setToken = useAuthStore((state) => state.setToken)
 
   // 为避免预取到“未登录”的缓存结果，删除预取 dashboard 的逻辑
 
@@ -44,10 +47,16 @@ export function LoginForm({
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
 
-  // 2FA 相关状态
+  // 2FA 相关状态（PKCE + 2FA）
   const [requires2FA, setRequires2FA] = useState(false)
   const [tempToken, setTempToken] = useState("")
   const [twoFactorCode, setTwoFactorCode] = useState("")
+
+  // PKCE 状态，在 2FA 流程中复用
+  const [codeVerifier, setCodeVerifier] = useState("")
+  const [codeChallenge, setCodeChallenge] = useState("")
+  const [pkceState, setPkceState] = useState("")
+  const [redirectUri, setRedirectUri] = useState("")
 
   // 登录成功后的回跳路径,优先使用 /login?next=xxx 中的 next
   const getRedirectTarget = useCallback(() => {
@@ -71,12 +80,37 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      // 第一步：常规登录（仅一次调用，依赖后端下发的 HttpOnly Cookie）
-      const response = await authApi.login({ username, password })
+      // 1. 生成 code_verifier 和 code_challenge
+      const verifier = generateCodeVerifier()
+      const challenge = await deriveCodeChallenge(verifier)
+      const state = generateCodeVerifier(32)
 
-      // 检查是否需要 2FA
-      if (response.requires_2fa) {
-        setTempToken(response.temp_token || '')
+      const ru =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/auth/callback`
+          : "/auth/callback"
+
+      // 保存 PKCE 参数供 2FA 步骤复用
+      setCodeVerifier(verifier)
+      setCodeChallenge(challenge)
+      setPkceState(state)
+      setRedirectUri(ru)
+
+      // 2. 调用 /oauth/authorize：根据是否启用 2FA 决定流程
+      const authorizeResp = await authApi.authorizeWithPkce({
+        username,
+        password,
+        client_id: "easyssh-web",
+        redirect_uri: ru,
+        scope: "openid profile easyssh",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        state,
+      })
+
+      // 启用 2FA：进入第二步
+      if (authorizeResp.requires_2fa && authorizeResp.temp_token) {
+        setTempToken(authorizeResp.temp_token)
         setRequires2FA(true)
         toast.info("需要双因子认证", {
           description: "请输入认证应用中的 6 位验证码",
@@ -85,7 +119,25 @@ export function LoginForm({
         return
       }
 
-      // 没有 2FA，后端已设置 HttpOnly Cookie，直接跳转
+      // 未启用 2FA：直接使用授权码换取 access_token
+      if (!authorizeResp.code) {
+        throw new Error("授权码为空")
+      }
+
+      const tokenResp = await authApi.exchangeCodeForToken({
+        code: authorizeResp.code,
+        client_id: "easyssh-web",
+        redirect_uri: ru,
+        code_verifier: verifier,
+      })
+
+      if (!tokenResp.access_token) {
+        throw new Error("未能获取 access_token")
+      }
+
+      const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
+      setToken(tokenResp.access_token, expiresIn)
+
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
       })
@@ -101,8 +153,9 @@ export function LoginForm({
     }
   }
 
-  // 处理 2FA 验证逻辑
-  const verify2FACode = useCallback(async () => {
+  // 处理 2FA 表单提交
+  const handle2FASubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (isLoading) return
 
     if (!twoFactorCode || twoFactorCode.length !== 6) {
@@ -113,13 +166,39 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      await twoFactorApi.verify(tempToken, twoFactorCode)
+      const verifyResp = await twoFactorApi.verifyLogin({
+        tempToken,
+        code: twoFactorCode,
+        clientId: "easyssh-web",
+        redirectUri,
+        scope: "openid profile easyssh",
+        codeChallenge: codeChallenge,
+        codeChallengeMethod: "S256",
+        state: pkceState,
+      })
+
+      if (!verifyResp.code) {
+        throw new Error("2FA 验证成功但未返回授权码")
+      }
+
+      const tokenResp = await authApi.exchangeCodeForToken({
+        code: verifyResp.code,
+        client_id: "easyssh-web",
+        redirect_uri: redirectUri,
+        code_verifier: codeVerifier,
+      })
+
+      if (!tokenResp.access_token) {
+        throw new Error("未能获取 access_token")
+      }
+
+      const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
+      setToken(tokenResp.access_token, expiresIn)
 
       toast.success("验证成功", {
         description: "正在跳转到控制台...",
       })
 
-      // 更新全局认证状态后再跳转
       await refreshConfig()
       router.replace(getRedirectTarget())
     } catch (error: unknown) {
@@ -130,12 +209,6 @@ export function LoginForm({
     } finally {
       setIsLoading(false)
     }
-  }, [getRedirectTarget, isLoading, twoFactorCode, tempToken, refreshConfig, router])
-
-  // 处理 2FA 表单提交
-  const handle2FASubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    await verify2FACode()
   }
 
   // 返回到账号密码登录
@@ -146,12 +219,14 @@ export function LoginForm({
     setPassword("")
   }
 
-  // 监听 2FA 验证码输入，自动提交
+  // 监听 2FA 验证码输入，长度达到 6 位时自动提交
   useEffect(() => {
     if (twoFactorCode.length === 6 && requires2FA && !isLoading) {
-      verify2FACode()
+      void (async () => {
+        await handle2FASubmit(new Event("submit") as any)
+      })()
     }
-  }, [twoFactorCode, requires2FA, isLoading, verify2FACode])
+  }, [twoFactorCode, requires2FA, isLoading])
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>

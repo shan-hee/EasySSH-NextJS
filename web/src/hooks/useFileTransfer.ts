@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
 import { sftpApi, type FileInfo } from '@/lib/api/sftp';
 import { getWsUrl } from '@/lib/config';
+import { getCurrentAccessToken } from '@/stores/auth-store';
 
 /**
  * 传输任务接口
@@ -99,8 +100,16 @@ export function useFileTransfer() {
       try {
         // 如果启用 WebSocket，先建立连接
         if (enableWebSocket) {
-          // 使用统一的 WebSocket URL 构建函数（凭 Cookie 认证，不再拼接 token）
-          const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}`);
+          // 使用统一的 WebSocket URL 构建函数，附带 access_token 作为 token 查询参数
+          const params = new URLSearchParams();
+          const accessToken = getCurrentAccessToken();
+          if (accessToken) {
+            params.set('token', accessToken);
+          }
+          const qs = params.toString();
+          const wsUrl = getWsUrl(
+            qs ? `/api/v1/sftp/upload/ws/${task.id}?${qs}` : `/api/v1/sftp/upload/ws/${task.id}`,
+          );
 
           wsConnection = new WebSocket(wsUrl);
           // 记录 WebSocket 连接,以支持取消时发送控制消息

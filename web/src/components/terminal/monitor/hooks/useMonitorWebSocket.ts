@@ -6,6 +6,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { monitor } from '@/lib/proto/metrics';
 import { getWsUrl } from '@/lib/config';
+import { getCurrentAccessToken } from '@/stores/auth-store';
 import { useMonitorStore, WSStatus, type MonitorMetrics as StoreMonitorMetrics } from '@/stores/monitor-store';
 
 // 重新导出 WSStatus 供外部使用
@@ -217,8 +218,14 @@ export function useMonitorWebSocket({
     }
 
     try {
-      // 构建 WebSocket URL（凭 Cookie 认证，不再拼接 token）
-      const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?interval=${interval}`);
+      // 构建 WebSocket URL，附带 Bearer Token 作为 query 参数（token）
+      const params = new URLSearchParams()
+      params.set('interval', String(interval))
+      const accessToken = getCurrentAccessToken()
+      if (accessToken) {
+        params.set('token', accessToken)
+      }
+      const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?${params.toString()}`);
 
       setStatus(WSStatus.CONNECTING);
       onStatusChange?.(WSStatus.CONNECTING);

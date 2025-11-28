@@ -4,6 +4,7 @@
  */
 
 import { getWsUrl } from './config'
+import { getCurrentAccessToken } from "@/stores/auth-store"
 
 export interface TerminalWebSocketOptions {
   serverId: string
@@ -88,8 +89,15 @@ export class TerminalWebSocket {
       // 触发正在连接回调
       this.onConnecting?.()
 
-      // 构建 WebSocket URL（凭 HttpOnly Cookie 认证，不再拼接 token）
-      const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?cols=${this.cols}&rows=${this.rows}`)
+      // 构建 WebSocket URL，优先使用 Authorization: Bearer 的 access_token 作为 query token 参数
+      const params = new URLSearchParams()
+      params.set("cols", String(this.cols))
+      params.set("rows", String(this.rows))
+      const accessToken = getCurrentAccessToken()
+      if (accessToken) {
+        params.set("token", accessToken)
+      }
+      const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?${params.toString()}`)
 
       this.ws = new WebSocket(wsUrl)
       this.ws.binaryType = "arraybuffer" // 设置为二进制模式
