@@ -25,6 +25,7 @@ import {
  Copy,
  Check
 } from "lucide-react"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 interface Message {
  id: string
@@ -76,6 +77,7 @@ export default function AIAssistantPage() {
  const [isLoading, setIsLoading] = useState(false)
  const [copiedId, setCopiedId] = useState<string | null>(null)
  const [mounted, setMounted] = useState(false)
+ const { ready } = useAuthReady()
  const messagesEndRef = useRef<HTMLDivElement>(null)
  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -219,9 +221,9 @@ export default function AIAssistantPage() {
  }
  }
 
- // 避免 hydration 错误
- if (!mounted) {
- return null
+ // 避免 hydration 错误；同时等待认证状态就绪
+ if (!mounted || !ready) {
+   return null
  }
 
  return (

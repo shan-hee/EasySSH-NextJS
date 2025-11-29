@@ -26,8 +26,10 @@ import {
 import { Plus, X, RefreshCw } from "lucide-react"
 import { scriptsApi, type Script } from "@/lib/api"
 import { createScriptColumns } from "./components/script-columns"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 export default function ScriptsPage() {
+ const { ready } = useAuthReady()
  const [scripts, setScripts] = useState<Script[]>([])
  const [loading, setLoading] = useState(true)
  const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -99,13 +101,14 @@ export default function ScriptsPage() {
  const handleRefresh = async () => {
  setRefreshing(true)
  await loadScripts()
- }
+}
 
-// 初始加载与分页变化
-useEffect(() => {
-  setLoading(true)
-  loadScripts()
-}, [page, pageSize, loadScripts])
+ // 初始加载与分页变化（仅在已认证且全局状态就绪时触发）
+ useEffect(() => {
+   if (!ready) return
+   setLoading(true)
+   loadScripts()
+ }, [page, pageSize, loadScripts, ready])
 
  // 自动滚动选中的建议项到可见区域
  useEffect(() => {

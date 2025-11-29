@@ -40,6 +40,7 @@ import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { useFileTransfer } from "@/hooks/useFileTransfer"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 将后端FileInfo转换为组件使用的文件格式
 type ComponentFile = {
@@ -275,6 +276,7 @@ DragPreviewToolbar.displayName = "DragPreviewToolbar"
 SortableSession.displayName = "SortableSession"
 
 export default function SftpPage() {
+ const { ready } = useAuthReady()
  const [servers, setServers] = useState<ApiServer[]>([])
  const [loading, setLoading] = useState(true)
  // 认证改为基于 HttpOnly Cookie，不再需要前端 token
@@ -324,8 +326,9 @@ export default function SftpPage() {
  }, [])
 
  useEffect(() => {
- loadServers()
- }, [loadServers])
+   if (!ready) return
+   loadServers()
+ }, [loadServers, ready])
 
  // 配置拖拽传感器 - 最小化激活约束
  const sensors = useSensors(

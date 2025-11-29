@@ -10,6 +10,7 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
 import { auditLogColumns } from "./audit-log-columns"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 interface AuditLogsPageData {
   logs: AuditLog[]
@@ -29,6 +30,7 @@ interface AuditLogsClientProps {
  * 纯 CSR 模式：在客户端加载数据
  */
 export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
+  const { ready } = useAuthReady()
   const [logs, setLogs] = useState<AuditLog[]>(initialData?.logs || [])
   const [statistics, setStatistics] = useState<AuditLogStatisticsResponse | null>(
     initialData?.statistics || null
@@ -75,13 +77,13 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
     }
   }
 
-  // 初始加载数据（纯 CSR 模式）
+  // 初始加载数据（纯 CSR 模式，仅在已认证且全局状态就绪时触发）
   React.useEffect(() => {
-    if (!initialData) {
-      loadData(page, pageSize)
-    }
+    if (initialData) return
+    if (!ready) return
+    loadData(page, pageSize)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [ready, initialData])
 
   // 页码变化
   const handlePageChange = (newPage: number) => {

@@ -58,8 +58,10 @@ import {
  Trash2,
 } from "lucide-react"
 import { batchTasksApi, scriptsApi, serversApi, type BatchTask, type Script, type Server } from "@/lib/api"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 export default function AutomationBatchPage() {
+ const { ready } = useAuthReady()
  // 数据状态
  const [tasks, setTasks] = useState<BatchTask[]>([])
  const [servers, setServers] = useState<Server[]>([])
@@ -136,10 +138,11 @@ export default function AutomationBatchPage() {
  await loadData()
  }
 
- // 初始加载
+ // 初始加载（仅在已认证且全局状态就绪时触发）
  useEffect(() => {
+   if (!ready) return
    loadData()
- }, [])
+ }, [ready])
 
  // 过滤服务器
  const filteredServers = servers.filter(server =>

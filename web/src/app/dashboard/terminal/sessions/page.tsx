@@ -11,6 +11,7 @@ import { Search, RefreshCw, Activity, Server, ArrowUpDown, ArrowDownUp, Loader2,
 import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 const statusColors = {
   active: "bg-green-100 text-green-800",
@@ -51,6 +52,7 @@ function formatTimestamp(timestamp: string): { date: string; time: string } {
 }
 
 export default function TerminalSessionsPage() {
+  const { ready } = useAuthReady()
   const [sessions, setSessions] = useState<SSHSessionDetail[]>([])
   const [statistics, setStatistics] = useState<SSHSessionStatistics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -79,10 +81,11 @@ export default function TerminalSessionsPage() {
     }
   }
 
-  // 初始加载
+  // 初始加载（仅在已认证且全局状态就绪时触发）
   useEffect(() => {
+    if (!ready) return
     loadData()
-  }, [])
+  }, [ready])
 
   // 客户端搜索过滤
   const filteredSessions = sessions.filter(session => {

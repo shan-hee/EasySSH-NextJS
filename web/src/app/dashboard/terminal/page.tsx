@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { serversApi, type Server } from "@/lib/api"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { useTabUIStore } from "@/stores/tab-ui-store"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 性能优化：将 lastActivity 从 sessions 状态中分离，避免每次命令触发整个组件树重渲染
 const lastActivityMap = new Map<string, number>()
@@ -17,6 +18,7 @@ const lastActivityMap = new Map<string, number>()
 function TerminalPageContent() {
  const router = useRouter()
  const searchParams = useSearchParams()
+ const { ready } = useAuthReady()
  const [servers, setServers] = useState<QuickServer[]>([])
  const [loading, setLoading] = useState(true)
 
@@ -181,8 +183,9 @@ function TerminalPageContent() {
  }, [])
 
  useEffect(() => {
- loadServers()
- }, [loadServers])
+   if (!ready) return
+   loadServers()
+ }, [loadServers, ready])
 
  // 读取通用设置（仅使用本地存储集成）- 异步化避免阻塞初始渲染
  useEffect(() => {

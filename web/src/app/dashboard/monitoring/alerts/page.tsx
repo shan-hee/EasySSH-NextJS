@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Plus, Search, MoreHorizontal, Bell, BellOff, Edit, Trash2, AlertTriangle, TrendingUp } from "lucide-react"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 const mockAlertRules = [
  { id: 1, name: "CPU使用率过高", metric: "CPU", condition: "> 85%", duration: "5分钟", severity: "high", status: "active", servers: ["All Servers"], notifications: ["邮件", "钉钉"], lastTriggered: "2024-01-15 14:30", triggerCount: 3 },
@@ -25,8 +26,14 @@ const severityColors = {
 }
 
 export default function MonitoringAlertsPage() {
+ const { ready } = useAuthReady()
  const [rules] = useState(mockAlertRules)
  const [searchTerm, setSearchTerm] = useState("")
+
+ if (!ready) {
+   // 等待认证就绪后再展示告警规则（后续会接入后端）
+   return null
+ }
 
  return (
  <>

@@ -29,6 +29,7 @@ import { FadeSlideIn } from "@/components/ui/fade-slide-in"
 import { getErrorMessage } from "@/lib/error-utils"
 import { generateCodeVerifier, deriveCodeChallenge } from "@/lib/pkce"
 import { useAuthStore } from "@/stores/auth-store"
+import { resetUnauthorizedRedirectFlag } from "@/lib/api-client"
 
 export function LoginForm({
   className,
@@ -70,6 +71,11 @@ export function LoginForm({
     }
     return "/dashboard"
   }, [searchParams])
+
+  // 进入登录表单时，重置全局 401 重定向标记，开始新的认证周期
+  useEffect(() => {
+    resetUnauthorizedRedirectFlag()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

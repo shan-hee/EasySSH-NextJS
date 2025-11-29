@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createSessionColumns } from "./session-columns"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 格式化数据传输量
 function formatBytes(bytes: number): string {
@@ -37,6 +38,7 @@ interface SessionsClientProps {
  * 接收服务端传递的初始数据，处理客户端交互
  */
 export function SessionsClient({ initialData }: SessionsClientProps) {
+  const { ready } = useAuthReady()
   const [isPending, startTransition] = useTransition()
   const [sessions, setSessions] = useState<SSHSessionDetail[]>(initialData?.sessions || [])
   const [statistics, setStatistics] = useState<SSHSessionStatistics>(initialData?.statistics || {
@@ -91,13 +93,13 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     []
   )
 
-  // 初始加载数据（纯 CSR 模式）
+  // 初始加载数据（纯 CSR 模式，仅在已认证且全局状态就绪时触发）
   React.useEffect(() => {
-    if (!initialData) {
-      loadData(page, pageSize)
-    }
+    if (initialData) return
+    if (!ready) return
+    loadData(page, pageSize)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [ready, initialData])
 
   // 刷新数据
   const handleRefresh = async () => {

@@ -1,6 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
-import { getApiBase } from "@/lib/config"
-import { useAuthStore } from "@/stores/auth-store"
+import { performRefreshToken } from "@/lib/session-refresh"
 
 /**
  * 用户基础信息
@@ -135,77 +134,12 @@ export const authApi = {
     }
 
     // 未认证（可能仅存在 refresh_token Cookie），尝试静默刷新一次
-    // 检查是否存在 refresh_token Cookie，若不存在则无需尝试刷新
+    // 注意：refresh_token 保存在 HttpOnly 且 Path=/oauth 的 Cookie 中，
+    // 无法通过 document.cookie 在 /login 或 /dashboard 等路径检测是否存在，
+    // 因此这里不再依赖前端读取 Cookie，而是直接尝试调用统一的 refresh 工具。
     try {
-      const hasRefreshToken = document.cookie
-        .split("; ")
-        .some((c) => c.startsWith("easyssh_refresh_token="))
-      if (!hasRefreshToken) {
-        return status
-      }
-    } catch {
-      // Cookie 读取失败时不做静默刷新，直接返回当前状态
-      return status
-    }
-
-    try {
-      const apiBase = getApiBase()
-      let url: string
-
-      if (apiBase) {
-        url = `${apiBase.replace(/\/+$/, "")}/oauth/token`
-      } else {
-        url = `${window.location.origin}/oauth/token`
-      }
-
-      let credentials: RequestCredentials = "same-origin"
-      try {
-        const reqUrl = new URL(url, window.location.href)
-        if (reqUrl.origin !== window.location.origin) {
-          credentials = "include"
-        }
-      } catch {
-        // ignore
-      }
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ grant_type: "refresh_token" }),
-        credentials,
-      })
-
-      if (!res.ok) {
-        // 刷新失败，保持原始未认证状态
-        return status
-      }
-
-      const json = (await res.json()) as
-        | { access_token?: string; expires_in?: number }
-        | { data?: { access_token?: string; expires_in?: number } }
-
-      const payload =
-        json && typeof json === "object" && "data" in json && json.data
-          ? json.data!
-          : (json as { access_token?: string; expires_in?: number })
-
-      if (!payload.access_token) {
-        return status
-      }
-
-      const expiresIn =
-        typeof payload.expires_in === "number" ? payload.expires_in : 0
-
-      // 将新的 access_token 写入全局认证 Store
-      if (expiresIn > 0) {
-        useAuthStore.getState().setToken(payload.access_token, expiresIn)
-      } else {
-        // TTL 不明确时也写入一次，交由后续 401 逻辑兜底
-        useAuthStore.getState().setToken(payload.access_token, 0)
-      }
+      // 统一调用刷新工具，内部会更新内存中的 access_token
+      await performRefreshToken()
 
       // 第二步：在拥有新的 access_token 情况下再次查询状态
       status = await apiFetch<AuthStatusResponse>("/auth/status", {

@@ -5,6 +5,7 @@ import { useForm, type UseFormReturn, type FieldValues } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 interface UseSettingsFormOptions<T extends FieldValues> {
   schema: z.ZodType<T>
@@ -44,6 +45,7 @@ export function useSettingsForm<T extends FieldValues>({
   onError,
   defaultValues,
 }: UseSettingsFormOptions<T>): UseSettingsFormReturn<T> {
+  const { ready } = useAuthReady()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -67,11 +69,12 @@ export function useSettingsForm<T extends FieldValues>({
     }
   }
 
-  // 初始加载
+  // 初始加载（仅在已认证且全局状态就绪时触发）
   useEffect(() => {
+    if (!ready) return
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [ready])
 
   // 保存配置
   const handleSave = async () => {

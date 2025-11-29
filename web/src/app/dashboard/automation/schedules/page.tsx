@@ -65,8 +65,10 @@ import {
  type Script,
  type Server
 } from "@/lib/api"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 export default function AutomationSchedulesPage() {
+ const { ready } = useAuthReady()
  // 数据状态
  const [tasks, setTasks] = useState<ScheduledTask[]>([])
  const [servers, setServers] = useState<Server[]>([])
@@ -168,10 +170,11 @@ export default function AutomationSchedulesPage() {
  await loadData()
  }
 
- // 初始加载
+ // 初始加载（仅在已认证且全局状态就绪时触发）
  useEffect(() => {
+   if (!ready) return
    loadData()
- }, [])
+ }, [ready])
 
  // 过滤任务
  const filteredTasks = tasks.filter((task) => {

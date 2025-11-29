@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { HardDrive, Trash2, FolderOpen, File, AlertCircle, Database } from "lucide-react"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 const mockStorageData = [
  {
@@ -77,6 +78,7 @@ const typeLabels = {
 }
 
 export default function StoragePage() {
+ const { ready } = useAuthReady()
  const [storage] = useState(mockStorageData)
 
  const totalSize = storage.reduce((acc, item) => {
@@ -87,6 +89,11 @@ export default function StoragePage() {
  const cleanableSize = storage
  .filter(item => item.canClean)
  .reduce((acc, item) => acc + parseFloat(item.size), 0)
+
+ if (!ready) {
+   // 等待认证就绪时先不渲染具体内容，保持与其他 Dashboard 页一致
+   return null
+ }
 
  return (
  <>

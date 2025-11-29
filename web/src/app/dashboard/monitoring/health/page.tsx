@@ -26,6 +26,7 @@ import {
  type Server as ApiServer,
 } from "@/lib/api"
 import { SkeletonCard } from "@/components/ui/loading"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 健康检查项
 interface HealthCheckItem {
@@ -54,6 +55,7 @@ interface ServerHealthCheck {
 }
 
 export default function MonitoringHealthPage() {
+ const { ready } = useAuthReady()
  const [healthChecks, setHealthChecks] = useState<ServerHealthCheck[]>([])
  const [loading, setLoading] = useState(true)
  const [refreshing, setRefreshing] = useState(false)
@@ -242,10 +244,11 @@ export default function MonitoringHealthPage() {
  await loadData()
  }
 
- // 初始加载
+ // 初始加载（仅在已认证且全局状态就绪时触发）
  useEffect(() => {
+   if (!ready) return
    loadData()
- }, [])
+ }, [ready])
 
  // 计算总体统计
  const totalServers = healthChecks.length

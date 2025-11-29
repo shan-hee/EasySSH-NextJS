@@ -34,10 +34,12 @@ import { SkeletonCard } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createUserColumns } from "@/app/dashboard/users/components/user-columns"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 提取自 /dashboard/users/page.tsx 的用户管理内容
 // 去掉了 PageHeader，作为 Tab 内容使用
 export function UserManagementContent() {
+  const { ready } = useAuthReady()
   // 数据状态
   const [users, setUsers] = useState<UserDetail[]>([])
   const [loading, setLoading] = useState(true)
@@ -113,10 +115,11 @@ export function UserManagementContent() {
     await loadUsers()
   }
 
-  // 初始加载
+  // 初始加载（仅在已认证且全局状态就绪时触发）
   useEffect(() => {
+    if (!ready) return
     loadUsers()
-  }, [])
+  }, [ready])
 
   // 创建用户
   const handleCreateUser = async () => {

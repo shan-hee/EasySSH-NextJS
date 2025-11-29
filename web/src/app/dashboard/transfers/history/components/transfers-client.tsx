@@ -9,6 +9,7 @@ import { getErrorMessage } from "@/lib/error-utils"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createTransferColumns } from "./transfer-columns"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 定义页面数据类型
 interface FileTransfersPageData {
@@ -38,6 +39,7 @@ interface TransfersClientProps {
  * 纯 CSR 模式：在客户端加载数据
  */
 export function TransfersClient({ initialData }: TransfersClientProps) {
+  const { ready } = useAuthReady()
   const [isPending, startTransition] = useTransition()
   const [transfers, setTransfers] = useState<FileTransfer[]>(initialData?.transfers || [])
   const [statistics, setStatistics] = useState<FileTransferStatistics>(initialData?.statistics || {
@@ -89,13 +91,13 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     []
   )
 
-  // 初始加载数据（纯 CSR 模式）
+  // 初始加载数据（纯 CSR 模式，仅在已认证且全局状态就绪时触发）
   React.useEffect(() => {
-    if (!initialData) {
-      loadData(page, pageSize)
-    }
+    if (initialData) return
+    if (!ready) return
+    loadData(page, pageSize)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [ready, initialData])
 
   // 刷新数据
   const handleRefresh = async () => {

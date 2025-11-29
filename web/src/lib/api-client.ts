@@ -1,11 +1,20 @@
-import { getApiBase, getApiUrl } from "@/lib/config"
-import { getCurrentAccessToken, useAuthStore } from "@/stores/auth-store"
+import { getApiUrl } from "@/lib/config"
+import { getCurrentAccessToken } from "@/stores/auth-store"
+import { performRefreshToken } from "@/lib/session-refresh"
 
 // 全局刷新会话 Promise，避免并发重复刷新
 let refreshPromise: Promise<void> | null = null
 
 // 全局 401 处理标记，避免重复跳转
 let hasRedirectedFor401 = false
+
+/**
+ * 重置全局 401 重定向标记
+ * - 典型场景: 进入登录页 / 登录成功后，开始新的认证周期
+ */
+export function resetUnauthorizedRedirectFlag() {
+  hasRedirectedFor401 = false
+}
 
 function handleGlobalUnauthorized(error: unknown) {
   if (typeof window === 'undefined') return
@@ -45,69 +54,7 @@ async function refreshSession(): Promise<void> {
   if (refreshPromise) return refreshPromise
 
   refreshPromise = (async () => {
-    // 构造 /oauth/token 完整 URL
-    let url: string
-    const apiBase = getApiBase()
-    if (apiBase) {
-      url = `${apiBase.replace(/\/+$/, '')}/oauth/token`
-    } else {
-      // 生产同域场景：使用 window.location.origin
-      if (typeof window === 'undefined') {
-        throw new Error('Refresh not supported on server')
-      }
-      const origin = window.location.origin
-      url = `${origin}/oauth/token`
-    }
-
-    // 根据是否跨域选择 credentials 策略，保持与 apiFetchInternal 一致
-    let credentials: RequestCredentials = 'same-origin'
-    try {
-      if (typeof window !== 'undefined') {
-        const reqUrl = new URL(url, window.location.href)
-        if (reqUrl.origin !== window.location.origin) {
-          credentials = 'include'
-        }
-      }
-    } catch {
-      // 忽略 URL 解析错误，回退到 same-origin
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-      }),
-      credentials,
-    })
-    if (!res.ok) {
-      throw new Error(`Refresh failed: ${res.status}`)
-    }
-
-    // 解析响应，更新内存中的 access_token
-    try {
-      const json = await res.json() as
-        | { access_token?: string; expires_in?: number }
-        | { data?: { access_token?: string; expires_in?: number } }
-
-      const payload =
-        json && typeof json === 'object' && 'data' in json && json.data
-          ? json.data!
-          : (json as { access_token?: string; expires_in?: number })
-
-      if (payload.access_token) {
-        const expiresIn =
-          typeof payload.expires_in === 'number' ? payload.expires_in : 0
-        useAuthStore.getState().setToken(payload.access_token, expiresIn)
-      } else {
-        throw new Error('Missing access_token in refresh response')
-      }
-    } catch {
-      throw new Error('Failed to parse refresh response')
-    }
+    await performRefreshToken()
   })()
 
   try {

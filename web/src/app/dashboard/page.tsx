@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity, FileText, Server, ServerOff } from "lucide-react"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
-import { useClientAuth } from "@/components/client-auth-provider"
 import { isApiError } from "@/lib/api-client"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 /**
  * 统计卡片骨架屏 - 精确匹配真实卡片的高度和布局
@@ -42,10 +42,10 @@ function StatsCardSkeleton() {
  */
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const { isAuthenticated } = useClientAuth()
+  const { ready } = useAuthReady()
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!ready) {
       return
     }
 
@@ -63,7 +63,7 @@ export default function DashboardPage() {
     }
 
     loadStats()
-  }, [isAuthenticated])
+  }, [ready])
 
   return (
     <>

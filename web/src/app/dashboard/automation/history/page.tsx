@@ -50,6 +50,7 @@ import {
  Calendar,
  Server
 } from "lucide-react"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 模拟执行记录数据
 const mockHistory = [
@@ -175,6 +176,7 @@ const sourceTypeColors = {
 }
 
 export default function AutomationHistoryPage() {
+ const { ready } = useAuthReady()
  const [history] = useState(mockHistory)
  const [searchTerm, setSearchTerm] = useState("")
  const [selectedStatus, setSelectedStatus] = useState<string>("all")
@@ -203,6 +205,11 @@ export default function AutomationHistoryPage() {
  return <Badge className="bg-blue-100 text-blue-800">执行中</Badge>
  default:
  return <Badge variant="secondary">{status}</Badge>
+ }
+
+ if (!ready) {
+   // 未来接入后端前，先等待认证就绪再展示历史记录 UI
+   return null
  }
  }
 

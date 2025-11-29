@@ -20,6 +20,7 @@ import { serversApi, monitoringApi, type Server as ApiServer } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { SkeletonCard } from "@/components/ui/loading"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 服务器资源数据接口
 interface ServerResource {
@@ -55,13 +56,15 @@ function formatNetworkSpeed(bytesPerSec: number): { value: number; unit: string 
 }
 
 export default function MonitoringResourcesPage() {
+ const { ready } = useAuthReady()
  const [servers, setServers] = useState<ServerResource[]>([])
  const [loading, setLoading] = useState(true)
  const [isRefreshing, setIsRefreshing] = useState(false)
 
  useEffect(() => {
+   if (!ready) return
    loadData()
- }, [])
+ }, [ready])
 
  async function loadData() {
  try {

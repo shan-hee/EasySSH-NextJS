@@ -44,6 +44,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { AnimatedList } from "@/components/ui/animated-list"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 // 可排序的服务器项组件
 function SortableServerItem({
@@ -161,9 +162,9 @@ function SortableServerItem({
   )
 }
 
-
 export default function ServersPage() {
  const router = useRouter()
+ const { ready } = useAuthReady()
  const [servers, setServers] = useState<Server[]>([])
  const [filteredServers, setFilteredServers] = useState<Server[]>([])
  const [searchTerm, setSearchTerm] = useState("")
@@ -198,10 +199,11 @@ export default function ServersPage() {
  }, [])
 
  // 加载服务器列表
-useEffect(() => {
-  loadServers()
-  loadStatistics()
-}, [])
+ useEffect(() => {
+   if (!ready) return
+   loadServers()
+   loadStatistics()
+ }, [ready])
 
  // 根据搜索词和激活的标签过滤服务器
  useEffect(() => {
