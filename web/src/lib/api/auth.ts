@@ -135,17 +135,16 @@ export const authApi = {
     }
 
     // 未认证（可能仅存在 refresh_token Cookie），尝试静默刷新一次
-    // 为减少未登录场景下多余的 401，仅在“曾登录过”时才尝试
-    if (typeof window === "undefined") {
-      return status
-    }
+    // 检查是否存在 refresh_token Cookie，若不存在则无需尝试刷新
     try {
-      const hasLoginFlag = window.localStorage.getItem("easyssh_has_login")
-      if (!hasLoginFlag) {
+      const hasRefreshToken = document.cookie
+        .split("; ")
+        .some((c) => c.startsWith("easyssh_refresh_token="))
+      if (!hasRefreshToken) {
         return status
       }
     } catch {
-      // 读取失败时不做静默刷新，直接返回当前状态
+      // Cookie 读取失败时不做静默刷新，直接返回当前状态
       return status
     }
 

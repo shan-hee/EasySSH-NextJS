@@ -20,13 +20,14 @@ type Encryptor struct {
 }
 
 // NewEncryptor 创建加密器
-// key 必须是 16、24 或 32 字节（对应 AES-128、AES-192、AES-256）
+// key 必须是 Base64 编码的 32 字节密钥（与 ENCRYPTION_KEY 语义保持一致）
 func NewEncryptor(key string) (*Encryptor, error) {
-	keyBytes := []byte(key)
-	keyLen := len(keyBytes)
+	if key == "" {
+		return nil, ErrInvalidKey
+	}
 
-	// 验证密钥长度
-	if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+	keyBytes, err := base64.StdEncoding.DecodeString(key)
+	if err != nil || len(keyBytes) != 32 {
 		return nil, ErrInvalidKey
 	}
 

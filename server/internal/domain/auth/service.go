@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -625,15 +624,15 @@ func (s *authService) Enable2FA(ctx context.Context, userID uuid.UUID, code stri
 		return nil, fmt.Errorf("failed to generate backup codes: %w", err)
 	}
 
-	// 将备份码序列化为 JSON
-	backupCodesJSON, err := json.Marshal(backupCodes)
+	// 加密备份码后存储
+	encryptedBackupCodes, err := EncryptBackupCodes(backupCodes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal backup codes: %w", err)
+		return nil, fmt.Errorf("failed to encrypt backup codes: %w", err)
 	}
 
 	// 启用 2FA
 	user.TwoFactorEnabled = true
-	user.BackupCodes = string(backupCodesJSON)
+	user.BackupCodes = encryptedBackupCodes
 
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to enable 2FA: %w", err)

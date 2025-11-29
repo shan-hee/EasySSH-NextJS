@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -18,7 +19,7 @@ type Config struct {
 type ServerConfig struct {
 	Port          int
 	Env           string // development, production
-	EncryptionKey string // 加密密钥（16、24 或 32 字节用于 AES）
+	EncryptionKey string // 加密密钥（Base64 编码的 32 字节 AES 密钥）
 	WebDevPort    int    // 前端开发端口（从 WEB_PORT 读取）
 }
 
@@ -61,7 +62,7 @@ func Load() (*Config, error) {
 		Server: ServerConfig{
 			Port:          getEnvInt("PORT", 8521),
 			Env:           getEnv("ENV", "development"),
-			EncryptionKey: getEnv("ENCRYPTION_KEY", "easyssh-encryption-key-32byte"), // 32 字节
+			EncryptionKey: getEnv("ENCRYPTION_KEY", "ZWFzeXNzaC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE="), // Base64 编码的 32 字节（仅开发环境占位）
 			WebDevPort:    getEnvInt("WEB_PORT", 8520),
 		},
 		Database: DatabaseConfig{
@@ -132,12 +133,12 @@ func (c *Config) Validate() error {
 	if c.Server.EncryptionKey == "" {
 		return fmt.Errorf("encryption key is required")
 	}
-	keyLen := len(c.Server.EncryptionKey)
-	if keyLen != 16 && keyLen != 24 && keyLen != 32 {
-		return fmt.Errorf("encryption key must be 16, 24 or 32 bytes, got %d bytes", keyLen)
+	decoded, err := base64.StdEncoding.DecodeString(c.Server.EncryptionKey)
+	if err != nil || len(decoded) != 32 {
+		return fmt.Errorf("encryption key must be a base64-encoded 32-byte key")
 	}
 	// 生产环境必须使用强加密密钥
-	if c.Server.Env == "production" && c.Server.EncryptionKey == "easyssh-encryption-key-32byte" {
+	if c.Server.Env == "production" && c.Server.EncryptionKey == "ZWFzeXNzaC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE=" {
 		return fmt.Errorf("must change encryption key in production environment")
 	}
 

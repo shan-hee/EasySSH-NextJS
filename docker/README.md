@@ -47,7 +47,7 @@ DB_PASSWORD=your_secure_password_here
 
 # 安全配置（生产环境必须修改）
 JWT_SECRET=$(openssl rand -base64 48)
-ENCRYPTION_KEY=$(openssl rand -base64 24)
+ENCRYPTION_KEY=$(openssl rand -base64 32)
 ```
 
 ### 2. 启动服务
@@ -280,8 +280,8 @@ sudo sysctl -p
    # 生成 JWT 密钥
    JWT_SECRET=$(openssl rand -base64 48)
 
-   # 生成加密密钥
-   ENCRYPTION_KEY=$(openssl rand -base64 24)
+   # 生成加密密钥（32 字节，Base64 表示）
+   ENCRYPTION_KEY=$(openssl rand -base64 32)
    ```
 
 3. **启用 HTTPS**：

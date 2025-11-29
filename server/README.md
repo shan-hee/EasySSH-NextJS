@@ -59,8 +59,8 @@ REDIS_PORT=6379
 # JWT 密钥
 JWT_SECRET=your-jwt-secret-key
 
-# AES 加密密钥（32字节）
-ENCRYPTION_KEY=your-32-byte-encryption-key-here
+# AES 加密密钥（32字节，Base64 编码）
+ENCRYPTION_KEY=$(openssl rand -base64 32)
 ```
 
 ### 3. 安装依赖
@@ -305,7 +305,7 @@ golangci-lint run
 |--------|------|--------|------|
 | `SERVER_PORT` | 服务器端口 | 8521 | 否 |
 | `SERVER_ENV` | 运行环境 | development | 否 |
-| `ENCRYPTION_KEY` | AES 加密密钥（32字节） | - | ✅ |
+| `ENCRYPTION_KEY` | AES 加密密钥（32字节，Base64 编码） | - | ✅ |
 | `DB_HOST` | 数据库主机 | localhost | ✅ |
 | `DB_PORT` | 数据库端口 | 5432 | ✅ |
 | `DB_USER` | 数据库用户 | - | ✅ |
@@ -327,7 +327,7 @@ golangci-lint run
 
 ```bash
 # 生成 32 字节随机密钥（用于 ENCRYPTION_KEY）
-openssl rand -hex 32
+ENCRYPTION_KEY=$(openssl rand -base64 32)
 
 # 生成 JWT 密钥
 openssl rand -base64 64

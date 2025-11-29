@@ -3,7 +3,6 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/base32"
-	"encoding/json"
 	"fmt"
 
 	"github.com/pquerna/otp"
@@ -66,11 +65,12 @@ func (s *totpService) GenerateBackupCodes() ([]string, error) {
 	return codes, nil
 }
 
-// VerifyBackupCode 验证备份码并返回剩余的备份码
-func (s *totpService) VerifyBackupCode(storedCodesJSON, code string) (bool, string, error) {
-	var storedCodes []string
-	if err := json.Unmarshal([]byte(storedCodesJSON), &storedCodes); err != nil {
-		return false, "", fmt.Errorf("failed to unmarshal backup codes: %w", err)
+// VerifyBackupCode 验证备份码并返回剩余的备份码（加密后）
+func (s *totpService) VerifyBackupCode(encryptedCodes, code string) (bool, string, error) {
+	// 解密备份码
+	storedCodes, err := DecryptBackupCodes(encryptedCodes)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to decrypt backup codes: %w", err)
 	}
 
 	// 查找并移除使用过的备份码
@@ -79,13 +79,13 @@ func (s *totpService) VerifyBackupCode(storedCodesJSON, code string) (bool, stri
 			// 移除这个备份码
 			storedCodes = append(storedCodes[:i], storedCodes[i+1:]...)
 
-			// 序列化剩余的备份码
-			updatedCodesJSON, err := json.Marshal(storedCodes)
+			// 加密剩余的备份码
+			updatedEncryptedCodes, err := EncryptBackupCodes(storedCodes)
 			if err != nil {
-				return false, "", fmt.Errorf("failed to marshal backup codes: %w", err)
+				return false, "", fmt.Errorf("failed to encrypt updated backup codes: %w", err)
 			}
 
-			return true, string(updatedCodesJSON), nil
+			return true, updatedEncryptedCodes, nil
 		}
 	}
 

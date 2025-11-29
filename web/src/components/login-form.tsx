@@ -136,14 +136,6 @@ export function LoginForm({
 
       const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
       setToken(tokenResp.access_token, expiresIn)
-      // 标记当前设备曾成功登录，用于后续按需尝试基于 refresh_token 的静默续期
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem("easyssh_has_login", "1")
-        } catch {
-          // ignore
-        }
-      }
 
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
@@ -201,13 +193,6 @@ export function LoginForm({
 
       const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
       setToken(tokenResp.access_token, expiresIn)
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem("easyssh_has_login", "1")
-        } catch {
-          // ignore
-        }
-      }
 
       toast.success("验证成功", {
         description: "正在跳转到控制台...",

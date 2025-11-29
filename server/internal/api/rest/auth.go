@@ -17,7 +17,6 @@ import (
 
 // Cookie 配置常量
 const (
-	AccessTokenCookieName  = "easyssh_access_token"
 	RefreshTokenCookieName = "easyssh_refresh_token"
 )
 
@@ -93,21 +92,10 @@ func setAuthCookies(c *gin.Context, _ /* accessToken */ string, refreshToken str
 func clearAuthCookies(c *gin.Context, securityService interface{}) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
 
-	// 通过设置过期时间和 MaxAge<0 来清除 Cookie，保持 SameSite 与 Secure 一致
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     AccessTokenCookieName,
-		Value:    "",
-		Path:     "/",
-		Domain:   domain,
-		MaxAge:   -1,
-		Secure:   secure,
-		HttpOnly: true,
-		SameSite: sameSite,
-	})
+	// 同时清理新路径(/oauth)和历史路径(/)上的 refresh_token Cookie，确保迁移过程中的兼容性
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     RefreshTokenCookieName,
 		Value:    "",
-		// 同时清理新路径(/oauth)和历史路径(/)上的 Cookie，确保迁移过程中的兼容性
 		Path:     "/oauth",
 		Domain:   domain,
 		MaxAge:   -1,

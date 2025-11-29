@@ -109,14 +109,6 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
     }
     setUser(null)
     clearToken()
-    // 清除“曾登录”标记，避免未登录状态下多余的 refresh_token 请求
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem("easyssh_has_login")
-      } catch {
-        // ignore
-      }
-    }
     // 刷新全局认证状态,确保 SessionRefreshProvider 等及时停止工作
     try {
       await refreshConfig()

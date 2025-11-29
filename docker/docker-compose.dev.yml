@@ -56,7 +56,7 @@ services:
       # 安全密钥（请务必替换为强随机值）
       # ------------------------------
       JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-development}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 48
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 24
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 32
 
       # ------------------------------
       # JWT 过期与刷新策略

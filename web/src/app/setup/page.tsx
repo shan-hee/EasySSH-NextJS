@@ -86,14 +86,6 @@ export default function SetupPage() {
       })
 
       // 令牌由后端以 HttpOnly Cookie 下发，前端无需手动保存
-      // 标记当前设备已完成登录，用于后续基于 refresh_token 的静默续期
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem("easyssh_has_login", "1")
-        } catch {
-          // ignore
-        }
-      }
 
       // 刷新全局系统配置与认证状态，确保 need_init=false 且后续跳转不会再回到 /setup
       await refreshConfig()
