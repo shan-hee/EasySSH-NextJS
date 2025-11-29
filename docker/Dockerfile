@@ -8,6 +8,9 @@ WORKDIR /frontend
 # 启用 Corepack 并安装 pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# 复制版本号文件（供 next.config.ts 读取）
+COPY VERSION /VERSION
+
 # 复制前端依赖文件
 COPY web/package.json web/pnpm-lock.yaml* ./
 
