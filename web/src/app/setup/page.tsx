@@ -15,7 +15,7 @@ type RunMode = "demo" | "development" | "production"
 
 export default function SetupPage() {
   const router = useRouter()
-  const { authStatus, isLoading } = useSystemConfig()
+  const { authStatus, isLoading, refreshConfig } = useSystemConfig()
   const [step, setStep] = useState<"checking" | "welcome" | "mode-selection" | "create-admin" | "completed">("checking")
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
@@ -26,6 +26,9 @@ export default function SetupPage() {
   const [error, setError] = useState("")
 
   useEffect(() => {
+    // 仅在初始检查阶段处理重定向逻辑，后续步骤不再重复跳转
+    if (step !== "checking") return
+
     // 等待全局认证状态加载完成
     if (isLoading) return
 
@@ -42,7 +45,7 @@ export default function SetupPage() {
       // 需要初始化，显示欢迎页面
       setStep("welcome")
     }
-  }, [authStatus, isLoading, router])
+  }, [authStatus, isLoading, router, step])
 
   const handleStartSetup = () => {
     setStep("mode-selection")
@@ -83,6 +86,17 @@ export default function SetupPage() {
       })
 
       // 令牌由后端以 HttpOnly Cookie 下发，前端无需手动保存
+      // 标记当前设备已完成登录，用于后续基于 refresh_token 的静默续期
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("easyssh_has_login", "1")
+        } catch {
+          // ignore
+        }
+      }
+
+      // 刷新全局系统配置与认证状态，确保 need_init=false 且后续跳转不会再回到 /setup
+      await refreshConfig()
 
       // 显示完成页面
       setStep("completed")
