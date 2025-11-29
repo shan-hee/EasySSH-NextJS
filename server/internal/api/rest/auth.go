@@ -79,7 +79,8 @@ func setAuthCookies(c *gin.Context, _ /* accessToken */ string, refreshToken str
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     RefreshTokenCookieName,
 		Value:    refreshToken,
-		Path:     "/",
+		// 将 refresh_token Cookie 限定在 /oauth 路径下，仅用于令牌刷新相关端点
+		Path:     "/oauth",
 		Domain:   domain,
 		MaxAge:   refreshTokenMaxAge,
 		Secure:   secure,
@@ -97,6 +98,17 @@ func clearAuthCookies(c *gin.Context, securityService interface{}) {
 		Name:     AccessTokenCookieName,
 		Value:    "",
 		Path:     "/",
+		Domain:   domain,
+		MaxAge:   -1,
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: sameSite,
+	})
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     RefreshTokenCookieName,
+		Value:    "",
+		// 同时清理新路径(/oauth)和历史路径(/)上的 Cookie，确保迁移过程中的兼容性
+		Path:     "/oauth",
 		Domain:   domain,
 		MaxAge:   -1,
 		Secure:   secure,
@@ -289,12 +301,30 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// 生成令牌
-	accessToken, refreshToken, err := h.jwtService.GenerateTokens(user)
+	// 提取设备信息，用于创建会话
+	deviceType, deviceName, ipAddress, userAgent := extractDeviceInfo(c)
+	sessionInfo := &auth.SessionInfo{
+		DeviceType: deviceType,
+		DeviceName: deviceName,
+		IPAddress:  ipAddress,
+		UserAgent:  userAgent,
+	}
+
+	// 创建会话并生成令牌（带 session_id）
+	accessToken, refreshToken, err := h.authService.CreateSessionWithTokens(c.Request.Context(), user, sessionInfo)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate tokens")
 		return
 	}
+
+	// 设置 HttpOnly refresh_token Cookie（与登录流程保持一致）
+	if strings.TrimSpace(refreshToken) != "" {
+		setAuthCookies(c, "", refreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+	}
+
+	// 在上下文中记录用户信息，便于审计日志使用
+	c.Set("user_id", user.ID.String())
+	c.Set("username", user.Username)
 
 	RespondCreated(c, AuthResponse{
 		User:         user.ToPublic(),
@@ -508,15 +538,18 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 
-	// 从 Cookie 获取 refresh_token（用于撤销当前会话）
-	refreshToken, _ := c.Cookie(RefreshTokenCookieName)
-	refreshToken = strings.TrimSpace(refreshToken)
-
-	// 如果既没有 access_token 也没有 refresh_token, 视为幂等登出
-	if accessToken == "" && refreshToken == "" {
+	// 如果没有 access_token, 视为幂等登出（仅清理 Cookie）
+	if accessToken == "" {
 		clearAuthCookies(c, h.securityService)
 		RespondSuccessWithMessage(c, nil, "Logged out successfully")
 		return
+	}
+
+	// 尝试根据 access_token 中的 session_id 撤销当前会话（不会阻止后续流程）
+	if claims, err := h.jwtService.ValidateToken(accessToken); err == nil {
+		if claims.SessionID != uuid.Nil {
+			_ = h.authService.RevokeSession(c.Request.Context(), claims.UserID, claims.SessionID)
+		}
 	}
 
 	// 将 access_token 加入黑名单（忽略错误以保持幂等性）
@@ -524,16 +557,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		if err := h.authService.Logout(c.Request.Context(), accessToken); err != nil {
 			// 记录错误但不阻止后续清理
 			// 为避免泄露细节，这里不返回错误给客户端
-		}
-	}
-
-	// 撤销当前 refresh_token 对应的会话（如果存在）
-	if refreshToken != "" {
-		if err := h.authService.RevokeSessionByRefreshToken(c.Request.Context(), refreshToken); err != nil && !errors.Is(err, auth.ErrSessionNotFound) {
-			// 会话撤销失败时，仍然继续清理 Cookie，但返回内部错误
-			clearAuthCookies(c, h.securityService)
-			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to revoke session")
-			return
 		}
 	}
 
@@ -693,62 +716,9 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 			}
 		}
 
-		// 2. 如果还未认证, 尝试通过 refresh_token Cookie 自动续期获取新的 access_token
-		if !response["is_authenticated"].(bool) {
-			refreshToken, err := c.Cookie(RefreshTokenCookieName)
-			if err == nil {
-				refreshToken = strings.TrimSpace(refreshToken)
-			}
-
-			if refreshToken != "" {
-				newAccessToken, newRefreshToken, err := h.authService.RefreshAccessToken(c.Request.Context(), refreshToken)
-				if err != nil {
-					// 无效或过期的 refresh token：清理 Cookie，维持未认证状态
-					if errors.Is(err, auth.ErrInvalidToken) ||
-						errors.Is(err, auth.ErrExpiredToken) ||
-						errors.Is(err, auth.ErrSessionNotFound) ||
-						errors.Is(err, auth.ErrSessionExpired) {
-						clearAuthCookies(c, h.securityService)
-					}
-				} else {
-					// 刷新成功：如有轮换, 更新 refresh_token Cookie
-					if newRefreshToken != "" {
-						setAuthCookies(c, "", newRefreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
-					}
-
-					// 使用新的 access_token 解析用户信息
-					claims, err := h.jwtService.ValidateToken(newAccessToken)
-					if err == nil {
-						user, err := h.authService.GetUserByID(c.Request.Context(), claims.UserID)
-						if err == nil && user != nil {
-							// 更新上下文, 便于后续中间件使用
-							c.Set("user_id", user.ID.String())
-							c.Set("username", user.Username)
-							c.Set("email", user.Email)
-							c.Set("role", string(user.Role))
-
-							response["is_authenticated"] = true
-							response["user"] = user.ToPublic()
-
-							// 将新的 access_token 信息返回给前端, 便于内存中保存
-							response["access_token"] = newAccessToken
-
-							// 计算剩余有效期
-							if claims.ExpiresAt != nil {
-								now := time.Now()
-								remaining := claims.ExpiresAt.Time.Sub(now).Seconds()
-								if remaining < 0 {
-									remaining = 0
-								}
-								response["access_token_expires_in"] = int(remaining)
-							} else {
-								response["access_token_expires_in"] = h.accessTokenTTLSeconds
-							}
-						}
-					}
-				}
-			}
-		}
+		// 刷新逻辑由前端 apiFetch 统一处理:
+		// 收到 401 时自动调用 /oauth/token (grant_type=refresh_token) 并重放原请求，
+		// 因此此处不再直接读取 refresh_token Cookie。
 	}
 
 	// 附带公共系统配置（未登录场景下也可使用）
@@ -1101,21 +1071,20 @@ func (h *AuthHandler) ListSessions(c *gin.Context) {
 		return
 	}
 
-	// 从 Cookie 获取当前 refresh token（仅在服务端用于标记当前会话）
-	currentRefreshToken, _ := c.Cookie(RefreshTokenCookieName)
-	currentRefreshTokenHash := ""
-	if strings.TrimSpace(currentRefreshToken) != "" {
-		currentRefreshTokenHash = hashRefreshToken(currentRefreshToken)
+	// 从上下文获取当前会话ID（由 JWT 中的 session_id 提供）
+	var currentSessionID uuid.UUID
+	if sidValue, exists := c.Get("session_id"); exists {
+		if sidStr, ok := sidValue.(string); ok {
+			if sid, err := uuid.Parse(sidStr); err == nil {
+				currentSessionID = sid
+			}
+		}
 	}
 
 	// 转换为响应格式
 	var response []SessionResponse
 	for _, session := range sessions {
-		isCurrent := false
-		// 通过比较 refresh token 哈希精确判断是否为当前会话
-		if currentRefreshTokenHash != "" && session.RefreshToken == currentRefreshTokenHash {
-			isCurrent = true
-		}
+		isCurrent := currentSessionID != uuid.Nil && session.ID == currentSessionID
 
 		response = append(response, SessionResponse{
 			ID:           session.ID.String(),
@@ -1190,16 +1159,25 @@ func (h *AuthHandler) RevokeAllOtherSessions(c *gin.Context) {
 		return
 	}
 
-	// TODO: 获取当前会话 ID (需要从 refresh token 或其他方式获取)
-	// 暂时使用一个临时方案:查找最近活动的会话作为当前会话
-	sessions, err := h.authService.ListUserSessions(c.Request.Context(), userID)
-	if err != nil || len(sessions) == 0 {
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get current session")
-		return
+	// 优先从上下文获取当前会话ID（由 JWT 中的 session_id 提供）
+	var currentSessionID uuid.UUID
+	if sidValue, exists := c.Get("session_id"); exists {
+		if sidStr, ok := sidValue.(string); ok {
+			if sid, err := uuid.Parse(sidStr); err == nil {
+				currentSessionID = sid
+			}
+		}
 	}
 
-	// 使用最近活动的会话作为当前会话
-	currentSessionID := sessions[0].ID
+	// 如果无法从 JWT 获取当前会话ID，则回退到“最近活动会话”方案
+	if currentSessionID == uuid.Nil {
+		sessions, err := h.authService.ListUserSessions(c.Request.Context(), userID)
+		if err != nil || len(sessions) == 0 {
+			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get current session")
+			return
+		}
+		currentSessionID = sessions[0].ID
+	}
 
 	// 撤销所有其他会话
 	if err := h.authService.RevokeAllOtherSessions(c.Request.Context(), userID, currentSessionID); err != nil {

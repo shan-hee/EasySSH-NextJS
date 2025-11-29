@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api-client"
 import { getApiBase } from "@/lib/config"
+import { useAuthStore } from "@/stores/auth-store"
 
 /**
  * 用户基础信息
@@ -123,9 +124,99 @@ export const authApi = {
    * 检查系统和认证状态
    */
   async checkStatus(): Promise<AuthStatusResponse> {
-    return apiFetch<AuthStatusResponse>("/auth/status", {
+    // 第一步：直接查询当前状态（如果已有有效 access_token，会被视为已认证）
+    let status = await apiFetch<AuthStatusResponse>("/auth/status", {
       method: "GET",
     })
+
+    // 已认证或运行在服务端环境时，直接返回
+    if (status.is_authenticated || typeof window === "undefined") {
+      return status
+    }
+
+    // 未认证（可能仅存在 refresh_token Cookie），尝试静默刷新一次
+    // 为减少未登录场景下多余的 401，仅在“曾登录过”时才尝试
+    if (typeof window === "undefined") {
+      return status
+    }
+    try {
+      const hasLoginFlag = window.localStorage.getItem("easyssh_has_login")
+      if (!hasLoginFlag) {
+        return status
+      }
+    } catch {
+      // 读取失败时不做静默刷新，直接返回当前状态
+      return status
+    }
+
+    try {
+      const apiBase = getApiBase()
+      let url: string
+
+      if (apiBase) {
+        url = `${apiBase.replace(/\/+$/, "")}/oauth/token`
+      } else {
+        url = `${window.location.origin}/oauth/token`
+      }
+
+      let credentials: RequestCredentials = "same-origin"
+      try {
+        const reqUrl = new URL(url, window.location.href)
+        if (reqUrl.origin !== window.location.origin) {
+          credentials = "include"
+        }
+      } catch {
+        // ignore
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ grant_type: "refresh_token" }),
+        credentials,
+      })
+
+      if (!res.ok) {
+        // 刷新失败，保持原始未认证状态
+        return status
+      }
+
+      const json = (await res.json()) as
+        | { access_token?: string; expires_in?: number }
+        | { data?: { access_token?: string; expires_in?: number } }
+
+      const payload =
+        json && typeof json === "object" && "data" in json && json.data
+          ? json.data!
+          : (json as { access_token?: string; expires_in?: number })
+
+      if (!payload.access_token) {
+        return status
+      }
+
+      const expiresIn =
+        typeof payload.expires_in === "number" ? payload.expires_in : 0
+
+      // 将新的 access_token 写入全局认证 Store
+      if (expiresIn > 0) {
+        useAuthStore.getState().setToken(payload.access_token, expiresIn)
+      } else {
+        // TTL 不明确时也写入一次，交由后续 401 逻辑兜底
+        useAuthStore.getState().setToken(payload.access_token, 0)
+      }
+
+      // 第二步：在拥有新的 access_token 情况下再次查询状态
+      status = await apiFetch<AuthStatusResponse>("/auth/status", {
+        method: "GET",
+      })
+      return status
+    } catch {
+      // 刷新过程中出现异常时，不影响原始状态，按未认证处理
+      return status
+    }
   },
 
   /**

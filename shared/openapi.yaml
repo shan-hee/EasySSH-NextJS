@@ -103,14 +103,46 @@ components:
           example: 5
 
     # ========================================
-    # 认证相关
+    # 认证相关（OAuth 2.0 + PKCE）
     # ========================================
-    LoginRequest:
+    OAuthAuthorizeRequest:
       type: object
       required:
+        - response_type
+        - client_id
+        - redirect_uri
+        - code_challenge
+        - code_challenge_method
         - username
         - password
       properties:
+        response_type:
+          type: string
+          description: 固定为 "code"
+          example: code
+        client_id:
+          type: string
+          description: SPA 客户端标识
+          example: easyssh-web
+        redirect_uri:
+          type: string
+          format: uri
+          description: 登录成功后前端回调地址
+          example: https://app.example.com/auth/callback
+        scope:
+          type: string
+          description: OAuth 作用域
+          example: openid profile easyssh
+        code_challenge:
+          type: string
+          description: 由 code_verifier 推导的 S256 code_challenge
+        code_challenge_method:
+          type: string
+          description: 固定为 "S256"
+          example: S256
+        state:
+          type: string
+          description: 防 CSRF 的随机字符串，将在响应中原样返回
         username:
           type: string
           example: admin
@@ -119,24 +151,67 @@ components:
           format: password
           example: password123
 
-    LoginResponse:
+    OAuthAuthorizeResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 授权码（未启用 2FA 时返回）
+          example: AbCdEfGh123
+        state:
+          type: string
+          description: 从请求中透传返回的 state
+        requires_2fa:
+          type: boolean
+          description: 是否需要继续进行 2FA 验证
+          example: true
+        temp_token:
+          type: string
+          description: 启用 2FA 时返回的临时令牌
+
+    OAuthTokenRequest:
+      type: object
+      required:
+        - grant_type
+      properties:
+        grant_type:
+          type: string
+          description: 授权类型，支持 authorization_code 与 refresh_token
+          enum: [authorization_code, refresh_token]
+          example: authorization_code
+        code:
+          type: string
+          description: 使用授权码模式时必填
+        redirect_uri:
+          type: string
+          format: uri
+          description: 使用授权码模式时必填
+        client_id:
+          type: string
+          description: 使用授权码模式时必填
+          example: easyssh-web
+        code_verifier:
+          type: string
+          description: 使用授权码模式时必填，对应于之前生成的 code_verifier
+
+    OAuthTokenResponse:
       type: object
       required:
         - access_token
-        - refresh_token
-        - user
+        - token_type
+        - expires_in
       properties:
         access_token:
           type: string
+          description: 短期访问令牌，前端需以 Bearer Token 方式携带
           example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-        refresh_token:
+        token_type:
           type: string
-          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+          example: Bearer
         expires_in:
           type: integer
+          description: access_token 的有效期（秒）
           example: 3600
-        user:
-          $ref: '#/components/schemas/User'
 
     # ========================================
     # 用户
@@ -564,26 +639,81 @@ paths:
   # ========================================
   # 认证
   # ========================================
-  /auth/login:
+  # 登录采用 OAuth 2.0 Authorization Code + PKCE（端点 /oauth/*）
+  # 业务 API 使用 Bearer Token 认证，登出接口位于 /api/v1/auth/logout
+  /oauth/authorize:
     post:
       tags:
         - auth
-      summary: 用户登录
+      summary: 使用用户名密码 + PKCE 创建授权码
+      description: |
+        前端以 JSON 方式提交用户名密码与 PKCE 参数，成功时返回授权码；
+        如用户启用 2FA，则返回 requires_2fa=true 与临时令牌。
+      servers:
+        - url: http://localhost:8521
+          description: 本地开发环境（根路径）
+        - url: https://api.easyssh.example.com
+          description: 生产环境（根路径）
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: '#/components/schemas/OAuthAuthorizeRequest'
       responses:
         '200':
-          description: 登录成功
+          description: 授权码创建成功或需要 2FA
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginResponse'
+                $ref: '#/components/schemas/OAuthAuthorizeResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
-          description: 认证失败
+          description: 认证失败（用户名或密码错误）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /oauth/token:
+    post:
+      tags:
+        - auth
+      summary: 使用授权码或 refresh_token 换取访问令牌
+      description: |
+        当 grant_type=authorization_code 时，从请求体读取授权码等参数；
+        当 grant_type=refresh_token 时，从 HttpOnly Cookie 中读取 refresh_token。
+      servers:
+        - url: http://localhost:8521
+          description: 本地开发环境（根路径）
+        - url: https://api.easyssh.example.com
+          description: 生产环境（根路径）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthTokenRequest'
+      responses:
+        '200':
+          description: 令牌签发成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenResponse'
+        '400':
+          description: 请求参数错误或授权码无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: refresh_token 缺失或无效
           content:
             application/json:
               schema:
@@ -603,30 +733,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
-
-  /auth/refresh:
-    post:
-      tags:
-        - auth
-      summary: 刷新访问令牌
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - refresh_token
-              properties:
-                refresh_token:
-                  type: string
-      responses:
-        '200':
-          description: 刷新成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LoginResponse'
 
   # ========================================
   # 服务器管理

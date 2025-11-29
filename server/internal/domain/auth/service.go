@@ -43,9 +43,6 @@ type Service interface {
 	// RefreshAccessToken 刷新访问令牌（返回新的访问令牌和刷新令牌）
 	RefreshAccessToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
 
-	// RevokeSessionByRefreshToken 根据 refresh token 撤销会话（用于登出当前设备）
-	RevokeSessionByRefreshToken(ctx context.Context, refreshToken string) error
-
 	// ChangePassword 修改密码
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error
 
@@ -199,8 +196,11 @@ func (s *authService) AuthenticateUser(ctx context.Context, username, password s
 
 // CreateSessionWithTokens 为已认证用户创建会话并生成访问/刷新令牌
 func (s *authService) CreateSessionWithTokens(ctx context.Context, user *User, sessionInfo *SessionInfo) (string, string, error) {
-	// 生成令牌
-	accessToken, refreshToken, err := s.jwtService.GenerateTokens(user)
+	// 为当前登录生成会话ID，用于 access_token 中标记当前会话
+	sessionID := uuid.New()
+
+	// 生成令牌（在 access_token 中嵌入 session_id）
+	accessToken, refreshToken, err := s.jwtService.GenerateTokensForSession(user, sessionID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate tokens: %w", err)
 	}
@@ -208,6 +208,7 @@ func (s *authService) CreateSessionWithTokens(ctx context.Context, user *User, s
 	// 创建会话记录
 	if sessionInfo != nil {
 		session := &Session{
+			ID:           sessionID,
 			UserID:       user.ID,
 			RefreshToken: s.hashToken(refreshToken), // 存储哈希值
 			DeviceType:   sessionInfo.DeviceType,
@@ -317,19 +318,6 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	}
 
 	return newAccessToken, newRefreshToken, nil
-}
-
-// RevokeSessionByRefreshToken 根据 refresh token 撤销会话（登出当前设备）
-func (s *authService) RevokeSessionByRefreshToken(ctx context.Context, refreshToken string) error {
-	if refreshToken == "" {
-		return ErrSessionNotFound
-	}
-
-	tokenHash := s.hashToken(refreshToken)
-	if err := s.repo.DeleteSessionByRefreshToken(ctx, tokenHash); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
@@ -469,8 +457,9 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 		fmt.Printf("⚠️  Warning: failed to initialize with run mode %s: %v\n", runMode, err)
 	}
 
-	// 生成令牌
-	accessToken, refreshToken, err := s.jwtService.GenerateTokens(user)
+	// 生成会话ID并创建令牌（在 access_token 中嵌入 session_id）
+	sessionID := uuid.New()
+	accessToken, refreshToken, err := s.jwtService.GenerateTokensForSession(user, sessionID)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to generate tokens: %w", err)
 	}
@@ -478,6 +467,7 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 	// 创建会话记录
 	if sessionInfo != nil {
 		session := &Session{
+			ID:           sessionID,
 			UserID:       user.ID,
 			RefreshToken: s.hashToken(refreshToken), // 存储哈希值
 			DeviceType:   sessionInfo.DeviceType,

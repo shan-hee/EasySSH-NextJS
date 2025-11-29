@@ -43,7 +43,6 @@ export function LoginForm({
 
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
 
@@ -137,6 +136,14 @@ export function LoginForm({
 
       const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
       setToken(tokenResp.access_token, expiresIn)
+      // 标记当前设备曾成功登录，用于后续按需尝试基于 refresh_token 的静默续期
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("easyssh_has_login", "1")
+        } catch {
+          // ignore
+        }
+      }
 
       toast.success("登录成功", {
         description: "正在跳转到控制台...",
@@ -194,6 +201,13 @@ export function LoginForm({
 
       const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
       setToken(tokenResp.access_token, expiresIn)
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("easyssh_has_login", "1")
+        } catch {
+          // ignore
+        }
+      }
 
       toast.success("验证成功", {
         description: "正在跳转到控制台...",
@@ -406,22 +420,9 @@ export function LoginForm({
                 </Field>
               </FadeSlideIn>
 
-              {/* 记住密码和忘记密码 */}
+              {/* 忘记密码 */}
               <FadeSlideIn delay={0.3}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="remember"
-                      checked={rememberMe}
-                      onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                    />
-                    <Label
-                      htmlFor="remember"
-                      className="text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors"
-                    >
-                      记住密码
-                    </Label>
-                  </div>
+                <div className="flex items-center justify-end">
                   <Button
                     type="button"
                     variant="link"

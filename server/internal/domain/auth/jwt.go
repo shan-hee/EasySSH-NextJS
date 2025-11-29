@@ -23,6 +23,7 @@ type Claims struct {
 	Username       string    `json:"username"`
 	Email          string    `json:"email"`
 	Role           UserRole  `json:"role"`
+	SessionID      uuid.UUID `json:"session_id,omitempty"`       // 会话ID（用于标记当前会话）
 	TokenFamily    string    `json:"token_family,omitempty"`     // 令牌家族ID（用于轮换）
 	TokenVersion   int       `json:"token_version,omitempty"`    // 令牌版本号
 	AbsoluteExpiry int64     `json:"absolute_expiry,omitempty"`  // 绝对过期时间戳
@@ -34,6 +35,9 @@ type Claims struct {
 type JWTService interface {
 	// GenerateTokens 生成访问令牌和刷新令牌
 	GenerateTokens(user *User) (accessToken, refreshToken string, err error)
+
+	// GenerateTokensForSession 为指定会话生成访问令牌和刷新令牌（在 access_token 中包含 session_id）
+	GenerateTokensForSession(user *User, sessionID uuid.UUID) (accessToken, refreshToken string, err error)
 
 	// ValidateToken 验证令牌
 	ValidateToken(tokenString string) (*Claims, error)
@@ -97,14 +101,14 @@ func (s *jwtService) GenerateTokens(user *User) (string, string, error) {
 	// 计算绝对过期时间
 	absoluteExpiry := now.Add(s.refreshAbsoluteExpireDuration).Unix()
 
-	// 生成访问令牌（不包含刷新令牌特有字段）
-	accessToken, err := s.generateAccessToken(user, now)
+	// 生成访问令牌（不包含会话标识，适用于不需要会话管理的场景）
+	accessToken, err := s.generateAccessToken(user, now, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	// 生成刷新令牌（包含滑动过期和轮换字段）
-	refreshToken, err := s.generateRefreshToken(user, now, tokenFamily, 1, absoluteExpiry)
+	// 生成刷新令牌（包含滑动过期和轮换字段，不绑定会话）
+	refreshToken, err := s.generateRefreshToken(user, now, tokenFamily, 1, absoluteExpiry, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
 	}
@@ -123,7 +127,44 @@ func (s *jwtService) GenerateTokens(user *User) (string, string, error) {
 	return accessToken, refreshToken, nil
 }
 
-func (s *jwtService) generateAccessToken(user *User, now time.Time) (string, error) {
+// GenerateTokensForSession 为指定会话生成访问/刷新令牌（在 access_token 中嵌入 session_id）
+func (s *jwtService) GenerateTokensForSession(user *User, sessionID uuid.UUID) (string, string, error) {
+	now := time.Now()
+
+	// 生成令牌家族ID（用于轮换检测）
+	tokenFamily := uuid.New().String()
+
+	// 计算绝对过期时间
+	absoluteExpiry := now.Add(s.refreshAbsoluteExpireDuration).Unix()
+
+	// 生成包含 session_id 的访问令牌
+	accessToken, err := s.generateAccessToken(user, now, &sessionID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	// 生成刷新令牌（写入相同的 session_id，用于后续刷新时保持会话关联）
+	refreshToken, err := s.generateRefreshToken(user, now, tokenFamily, 1, absoluteExpiry, &sessionID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	// 如果启用了轮换，存储令牌家族信息到Redis
+	if s.refreshRotate {
+		ctx := context.Background()
+		familyKey := fmt.Sprintf("token_family:%s", tokenFamily)
+		// 存储令牌家族信息，过期时间为绝对过期时间
+		err = s.redisClient.Set(ctx, familyKey, "1", s.refreshAbsoluteExpireDuration).Err()
+		if err != nil {
+			return "", "", fmt.Errorf("failed to store token family: %w", err)
+		}
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+// generateAccessToken 生成访问令牌，可选包含 session_id
+func (s *jwtService) generateAccessToken(user *User, now time.Time, sessionID *uuid.UUID) (string, error) {
 	claims := Claims{
 		UserID:   user.ID,
 		Username: user.Username,
@@ -138,11 +179,16 @@ func (s *jwtService) generateAccessToken(user *User, now time.Time) (string, err
 		},
 	}
 
+	// 可选设置会话ID
+	if sessionID != nil {
+		claims.SessionID = *sessionID
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.secretKey)
 }
 
-func (s *jwtService) generateRefreshToken(user *User, now time.Time, tokenFamily string, version int, absoluteExpiry int64) (string, error) {
+func (s *jwtService) generateRefreshToken(user *User, now time.Time, tokenFamily string, version int, absoluteExpiry int64, sessionID *uuid.UUID) (string, error) {
 	// 刷新令牌的过期时间使用闲置过期时间
 	claims := Claims{
 		UserID:         user.ID,
@@ -161,6 +207,11 @@ func (s *jwtService) generateRefreshToken(user *User, now time.Time, tokenFamily
 			Subject:   user.ID.String(),
 			Audience:  jwt.ClaimStrings{"refresh"}, // 标记为刷新令牌
 		},
+	}
+
+	// 将会话ID也写入刷新令牌（用于刷新时保持与会话表的关联）
+	if sessionID != nil {
+		claims.SessionID = *sessionID
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -275,8 +326,13 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 		Role:     claims.Role,
 	}
 
-	// 生成新的访问令牌
-	newAccessToken, err := s.generateAccessToken(user, now)
+	// 生成新的访问令牌，沿用刷新令牌中的会话ID（如果存在）
+	var sessionIDPtr *uuid.UUID
+	if claims.SessionID != (uuid.UUID{}) {
+		sid := claims.SessionID
+		sessionIDPtr = &sid
+	}
+	newAccessToken, err := s.generateAccessToken(user, now, sessionIDPtr)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate new access token: %w", err)
 	}
@@ -290,6 +346,7 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 			claims.TokenFamily,      // 保持相同的家族ID
 			claims.TokenVersion+1,   // 版本号+1
 			claims.AbsoluteExpiry,   // 保持相同的绝对过期时间
+			sessionIDPtr,            // 保持相同的会话ID（如有）
 		)
 		if err != nil {
 			return "", "", fmt.Errorf("failed to generate new refresh token: %w", err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // 从 Authorization 头或查询参数中提取 Bearer Token
@@ -70,6 +71,11 @@ func AuthMiddleware(jwtService auth.JWTService) gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Set("email", claims.Email)
 		c.Set("role", string(claims.Role))
+
+		// 将会话ID存入上下文（如存在），用于会话管理等场景
+		if claims.SessionID != (uuid.UUID{}) {
+			c.Set("session_id", claims.SessionID.String())
+		}
 
 		c.Next()
 	}
@@ -141,6 +147,11 @@ func OptionalAuth(jwtService auth.JWTService) gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Set("email", claims.Email)
 		c.Set("role", string(claims.Role))
+
+		// 可选地记录会话ID
+		if claims.SessionID != (uuid.UUID{}) {
+			c.Set("session_id", claims.SessionID.String())
+		}
 
 		c.Next()
 	}

@@ -48,7 +48,8 @@ import type { components } from '@/types/openapi';
 
 type Server = components['schemas']['Server'];
 type ServerCreate = components['schemas']['ServerCreate'];
-type LoginRequest = components['schemas']['LoginRequest'];
+type OAuthAuthorizeRequest = components['schemas']['OAuthAuthorizeRequest'];
+type OAuthTokenRequest = components['schemas']['OAuthTokenRequest'];
 ```
 
 ### API 模块划分
@@ -230,27 +231,33 @@ func (h *Handler) CreateServer(c *gin.Context) {
 }
 ```
 
-### 路由注册
+### 路由注册（简化示例）
 
 ```go
 // server/cmd/api/main.go
-func setupRoutes(r *gin.Engine, handler *rest.Handler) {
+func setupRoutes(r *gin.Engine, authHandler *rest.AuthHandler, handler *rest.Handler) {
+    // OAuth 2.0 + PKCE 端点（不在 /api/v1 前缀下）
+    oauth := r.Group("/oauth")
+    {
+        oauth.POST("/authorize", authHandler.OAuthAuthorize)
+        oauth.POST("/token", authHandler.OAuthToken)
+    }
+
     v1 := r.Group("/api/v1")
     {
         // 健康检查
         v1.GET("/health", handler.HealthCheck)
 
-        // 认证
+        // 认证（登出等）
         auth := v1.Group("/auth")
         {
-            auth.POST("/login", handler.Login)
-            auth.POST("/logout", handler.Logout)
-            auth.POST("/refresh", handler.RefreshToken)
+            auth.POST("/register", authHandler.Register)
+            auth.POST("/logout", authHandler.Logout)
         }
 
-        // 需要认证的路由
+        // 需要认证的路由（使用 Bearer Token）
         protected := v1.Group("")
-        protected.Use(AuthMiddleware())
+        protected.Use(AuthMiddleware(jwtService))
         {
             // 服务器管理
             servers := protected.Group("/servers")
@@ -277,12 +284,7 @@ func setupRoutes(r *gin.Engine, handler *rest.Handler) {
 # 健康检查
 curl http://localhost:8521/api/v1/health
 
-# 登录
-curl -X POST http://localhost:8521/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"password123"}'
-
-# 获取服务器列表（需要 token）
+# 获取服务器列表（需要事先通过 /oauth/* 获取 access_token）
 curl http://localhost:8521/api/v1/servers \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
@@ -315,16 +317,11 @@ curl http://localhost:8521/api/v1/servers \
 ### JWT 认证
 
 ```typescript
-// 前端存储 token
-localStorage.setItem('access_token', data.access_token);
+import { apiFetch } from "@/lib/api-client";
 
-// 每次请求携带 token
-const token = localStorage.getItem('access_token');
-const response = await fetch('/api/v1/servers', {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-  },
-});
+// 业务请求示例：apiFetch 会自动附加 Authorization: Bearer <access_token>
+// 并在 401 时通过携带 HttpOnly refresh_token 的 /oauth/token 自动刷新会话。
+const response = await apiFetch("/servers");
 ```
 
 ### CORS 配置（后端）

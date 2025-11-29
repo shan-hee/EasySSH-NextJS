@@ -238,10 +238,13 @@ server/
 - ✅ **传输**: 支持 HTTPS（生产环境）
 
 ### 认证授权
-- ✅ **JWT 认证**: Access Token (1小时) + Refresh Token (7天)
-- ✅ **令牌黑名单**: Redis 存储已注销令牌
-- ✅ **RBAC**: 基于角色的访问控制（Admin/User/Viewer）
-- ✅ **资源隔离**: 用户只能访问自己的资源
+- ✅ **OAuth 2.0 + PKCE 登录**：通过 `/oauth/authorize` + `/oauth/token` 的 Authorization Code + PKCE 流程完成用户名密码登录（支持 2FA）
+- ✅ **访问令牌 (Access Token)**：短期 JWT，仅通过 `Authorization: Bearer <token>` 传递，由前端内存存储和自动刷新管理
+- ✅ **刷新令牌 (Refresh Token)**：长期 JWT，仅存放于 HttpOnly Cookie（`Path=/oauth`），只在 `POST /oauth/token` 的 `grant_type=refresh_token` 流程中使用
+- ✅ **会话管理**：每次登录创建独立会话 `session_id`，写入 access_token claims，并记录到 `user_sessions` 表，用于“当前会话标记”和远程注销
+- ✅ **令牌黑名单**：Redis 存储已注销访问令牌（登出/踢下线后立即失效）
+- ✅ **RBAC**：基于角色的访问控制（Admin/User/Viewer）
+- ✅ **资源隔离**：用户只能访问自己的资源
 
 ### 审计追踪
 - ✅ 记录所有关键操作（登录、SSH 连接、文件操作等）
