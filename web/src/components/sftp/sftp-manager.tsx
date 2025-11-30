@@ -529,10 +529,12 @@ export function SftpManager(props: SftpManagerProps) {
       return
     }
 
-    // 移动文件到文件夹
+    // 移动文件到文件夹:
+    // - onRename 的约定是 (oldName, newName)，由外层负责拼接 currentPath
+    // - 这里仅传递目标文件夹名 + 原文件名，避免路径重复拼接
     if (targetType === "directory") {
-      const newPath = `${currentPath}/${targetFileName}/${draggedFileName}`.replace(/\/+/g, "/")
-      onRename(draggedFileName, newPath)
+      const newName = `${targetFileName}/${draggedFileName}`.replace(/\/+/g, "/")
+      onRename(draggedFileName, newName)
     }
 
     setDragOverFolder(null)
@@ -1744,7 +1746,7 @@ export function SftpManager(props: SftpManagerProps) {
           <div className="flex items-center justify-center h-full">
             <LoadingSpinner size="lg" label="正在加载文件列表..." />
           </div>
-        ) : filteredFiles.length === 0 ? (
+        ) : filteredFiles.length === 0 && !creatingNew ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <FolderOpen className={cn(
