@@ -618,22 +618,19 @@ export default function SftpPage() {
  }
 
  // 下载文件
- const handleDownload = (sessionId: string, fileName: string) => {
+ const handleDownload = async (sessionId: string, fileName: string) => {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) return
 
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
- const downloadUrl = sftpApi.getDownloadUrl(session.serverId, filePath)
 
- // 创建隐藏的下载链接并触发下载
- const link = document.createElement("a")
- link.href = downloadUrl
- link.download = fileName
- document.body.appendChild(link)
- link.click()
- document.body.removeChild(link)
-
- toast.success(`开始下载: ${fileName}`)
+ try {
+   await sftpApi.downloadFile(session.serverId, filePath, fileName)
+   toast.success(`开始下载: ${fileName}`)
+ } catch (error: unknown) {
+   console.error("Failed to download:", error)
+   toast.error(getErrorMessage(error, "下载失败"))
+ }
  }
 
  // 删除文件

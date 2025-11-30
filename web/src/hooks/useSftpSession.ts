@@ -206,14 +206,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         ? `${currentPath}${fileName}`
         : `${currentPath}/${fileName}`;
 
-      const downloadUrl = sftpApi.getDownloadUrl(serverId, fullPath);
-
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await sftpApi.downloadFile(serverId, fullPath, fileName);
       // 下载开始提示
       toast.success(`开始下载: ${fileName}`);
     },

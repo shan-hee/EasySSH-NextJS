@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { getApiUrl } from "@/lib/config"
+import { getCurrentAccessToken } from "@/stores/auth-store"
 
 export function BackupRestoreTab() {
   const [loading, setLoading] = useState<string | null>(null)
@@ -28,8 +29,14 @@ export function BackupRestoreTab() {
       const url = `${apiUrl}/backup/export-config`
 
       // 使用原生 fetch 以支持 blob 响应，通过 Cookie 认证
+      const headers: HeadersInit = {}
+      const token = getCurrentAccessToken()
+      if (token) {
+        ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+      }
+
       const response = await fetch(url, {
-        credentials: 'include',
+        headers,
       })
 
       if (!response.ok) {
@@ -75,9 +82,15 @@ export function BackupRestoreTab() {
         const apiUrl = getApiUrl()
         const url = `${apiUrl}/backup/import-config`
 
+        const headers: HeadersInit = {}
+        const token = getCurrentAccessToken()
+        if (token) {
+          ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+        }
+
         const response = await fetch(url, {
           method: "POST",
-          credentials: 'include',
+          headers,
           body: formData,
         })
 
@@ -109,8 +122,14 @@ export function BackupRestoreTab() {
       const apiUrl = getApiUrl()
       const url = `${apiUrl}/backup/export-database`
 
+      const headers: HeadersInit = {}
+      const token = getCurrentAccessToken()
+      if (token) {
+        ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+      }
+
       const response = await fetch(url, {
-        credentials: 'include',
+        headers,
       })
 
       if (!response.ok) {
@@ -160,9 +179,15 @@ export function BackupRestoreTab() {
         const apiUrl = getApiUrl()
         const url = `${apiUrl}/backup/import-database`
 
+        const headers: HeadersInit = {}
+        const token = getCurrentAccessToken()
+        if (token) {
+          ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+        }
+
         const response = await fetch(url, {
           method: "POST",
-          credentials: 'include',
+          headers,
           body: formData,
         })
 

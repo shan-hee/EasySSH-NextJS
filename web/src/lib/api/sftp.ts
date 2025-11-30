@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api-client"
 import { getApiUrl } from "../config"
+import { getCurrentAccessToken } from "@/stores/auth-store"
 
 /**
  * 文件信息
@@ -121,21 +122,16 @@ export const sftpApi = {
    * 读取文件内容
    */
   async readFile(serverId: string, path: string): Promise<string> {
-    // 注意: 后端返回的是纯文本(text/plain),不是JSON
-    const apiUrl = getApiUrl()
-    const response = await fetch(`${apiUrl}/sftp/${serverId}/read?path=${encodeURIComponent(path)}`, {
-      method: "GET",
-      // 凭 Cookie 认证（跨域请求需要 include）
-      credentials: 'include',
+    // 使用统一的 apiFetch，自动附带 Bearer Token
+    // 后端返回的是 text/plain，这里通过泛型声明为 string
+    return apiFetch<string>(`/sftp/${serverId}/read?path=${encodeURIComponent(path)}`, {
+      headers: {
+        // 明确告知后端我们接受文本响应
+        Accept: "text/plain",
+      },
+      // 读文件一般不需要重试，避免对远端 SFTP 增加额外压力
+      retry: false,
     })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: "Read failed" }))
-      throw new Error(error.message || "Read failed")
-    }
-
-    // 直接返回文本内容
-    return await response.text()
   },
 
   /**
@@ -253,7 +249,12 @@ export const sftpApi = {
 
       // 发送请求
       xhr.open("POST", url)
-      // 凭 Cookie 认证
+      // 附带 Bearer Token（与其他 API 一致）
+      const token = getCurrentAccessToken()
+      if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+      }
+      // 保留 Cookie 认证（用于跨域场景下的刷新等）
       xhr.withCredentials = true
       xhr.send(formData)
     })
@@ -281,12 +282,17 @@ export const sftpApi = {
     excludePatterns?: string[]
   ): Promise<void> {
     const apiUrl = getApiUrl()
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    }
+    const token = getCurrentAccessToken()
+    if (token) {
+      ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+    }
+
     const response = await fetch(`${apiUrl}/sftp/${serverId}/batch-download`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include", // 凭 Cookie 认证
+      headers,
       body: JSON.stringify({
         paths,
         mode,
@@ -319,5 +325,44 @@ export const sftpApi = {
     a.click()
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
+  },
+
+  /**
+   * 单文件下载（通过 fetch + Blob，支持附带 Bearer Token）
+   */
+  async downloadFile(serverId: string, path: string, fileName?: string): Promise<void> {
+    const apiUrl = getApiUrl()
+    const url = `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(path)}`
+
+    const headers: HeadersInit = {}
+    const token = getCurrentAccessToken()
+    if (token) {
+      ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+    }
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Download failed" }))
+      throw new Error(error.message || "Download failed")
+    }
+
+    const blob = await response.blob()
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = downloadUrl
+    a.download =
+      fileName ||
+      (() => {
+        const parts = path.split("/").filter(Boolean)
+        return parts[parts.length - 1] || "download"
+      })()
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(downloadUrl)
   },
 }
