@@ -1,8 +1,8 @@
 "use client"
 
 import { SettingsSection } from "@/components/settings/settings-section"
-import { FormInput, FormSelect } from "@/components/settings/form-field"
-import { Settings, Save, Loader2, RotateCcw } from "lucide-react"
+import { FormInput, FormSelect, FormSwitch } from "@/components/settings/form-field"
+import { Settings, Save, Loader2, RotateCcw, UserPlus, Key } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { basicInfoSchema } from "@/schemas/settings/system-config.schema"
@@ -47,6 +47,10 @@ export function BasicTab() {
         default_language: data.default_language,
         default_timezone: data.default_timezone,
         date_format: data.date_format,
+        allow_registration: data.allow_registration ?? false,
+        oauth_enabled: data.oauth_enabled ?? false,
+        google_client_id: data.google_client_id ?? "",
+        google_client_secret: data.google_client_secret ?? "",
       }
     },
     saveFn: async (data) => {
@@ -186,6 +190,67 @@ export function BasicTab() {
             <p className="text-sm font-medium mb-1">格式预览：</p>
             <p className="text-lg font-mono">{formatPreview(selectedFormat)}</p>
           </div>
+        )}
+      </SettingsSection>
+
+      {/* 注册配置 */}
+      <SettingsSection
+        title="注册配置"
+        description="控制用户注册功能"
+        icon={<UserPlus className="h-5 w-5" />}
+      >
+        <FormSwitch
+          form={form}
+          name="allow_registration"
+          label="允许用户注册"
+          description="开启后，用户可以在登录页面自主注册账号"
+        />
+      </SettingsSection>
+
+      {/* OAuth 配置 */}
+      <SettingsSection
+        title="OAuth 登录配置"
+        description="配置第三方登录功能"
+        icon={<Key className="h-5 w-5" />}
+      >
+        <FormSwitch
+          form={form}
+          name="oauth_enabled"
+          label="启用 Google 登录"
+          description="允许用户使用 Google 账号登录"
+        />
+
+        {form.watch("oauth_enabled") && (
+          <>
+            <FormInput
+              form={form}
+              name="google_client_id"
+              label="Google Client ID"
+              description="从 Google Cloud Console 获取的 Client ID"
+              placeholder="your-client-id.apps.googleusercontent.com"
+            />
+
+            <FormInput
+              form={form}
+              name="google_client_secret"
+              label="Google Client Secret"
+              description="从 Google Cloud Console 获取的 Client Secret（加密存储）"
+              type="password"
+              placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxx"
+            />
+
+            <div className="rounded-lg border p-4 bg-blue-50 dark:bg-blue-950/20">
+              <p className="text-sm font-medium mb-2 text-blue-900 dark:text-blue-100">配置说明：</p>
+              <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
+                <li>访问 <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a></li>
+                <li>创建或选择一个项目</li>
+                <li>启用 Google+ API</li>
+                <li>创建 OAuth 2.0 客户端 ID（Web 应用）</li>
+                <li>添加授权的重定向 URI：<code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">{typeof window !== "undefined" ? `${window.location.origin}/auth/google/callback` : "https://your-domain.com/auth/google/callback"}</code></li>
+                <li>复制 Client ID 和 Client Secret 到上方输入框</li>
+              </ol>
+            </div>
+          </>
         )}
       </SettingsSection>
 

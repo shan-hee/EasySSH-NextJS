@@ -107,6 +107,14 @@ export interface SystemConfig {
     ttl_minutes: number
     max_entries: number
   }
+
+  // 注册配置
+  allow_registration?: boolean
+
+  // OAuth 配置
+  oauth_enabled?: boolean
+  google_client_id?: string
+  google_client_secret?: string
 }
 
 /**

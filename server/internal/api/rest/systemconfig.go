@@ -39,6 +39,12 @@ type SystemConfigDTOV2 struct {
 	CompletionProviders     *systemconfig.CompletionProvidersConfig  `json:"completion_providers,omitempty"`
 	CompletionQuotas        *systemconfig.CompletionQuotasConfig     `json:"completion_quotas,omitempty"`
 	CompletionCache         *systemconfig.CompletionCacheConfig      `json:"completion_cache,omitempty"`
+	// 注册配置
+	AllowRegistration       bool                                     `json:"allow_registration"`
+	// OAuth 配置
+	OAuthEnabled            bool                                     `json:"oauth_enabled"`
+	GoogleClientID          string                                   `json:"google_client_id"`
+	GoogleClientSecret      string                                   `json:"google_client_secret,omitempty"`
 }
 
 // GetSystemConfig 获取系统配置
@@ -105,6 +111,10 @@ func (h *SystemConfigHandler) toDTO(config *systemconfig.SystemConfig) *SystemCo
 		SkipExcludedOnUpload:    config.SkipExcludedOnUpload,
 		MaxFileUploadSize:       config.MaxFileUploadSize,
 		CompletionEnabled:       config.CompletionEnabled,
+		AllowRegistration:       config.AllowRegistration,
+		OAuthEnabled:            config.OAuthEnabled,
+		GoogleClientID:          config.GoogleClientID,
+		GoogleClientSecret:      config.GoogleClientSecret,
 	}
 
 	// 解析补全配置
@@ -146,6 +156,10 @@ func (h *SystemConfigHandler) fromDTO(dto *SystemConfigDTOV2) (*systemconfig.Sys
 		SkipExcludedOnUpload:    dto.SkipExcludedOnUpload,
 		MaxFileUploadSize:       dto.MaxFileUploadSize,
 		CompletionEnabled:       dto.CompletionEnabled,
+		AllowRegistration:       dto.AllowRegistration,
+		OAuthEnabled:            dto.OAuthEnabled,
+		GoogleClientID:          dto.GoogleClientID,
+		GoogleClientSecret:      dto.GoogleClientSecret,
 	}
 
 	// 序列化补全配置

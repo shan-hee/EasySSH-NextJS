@@ -1,0 +1,312 @@
+"use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Image from "next/image"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { Eye, EyeOff, Lock, User, Mail } from "lucide-react"
+import { toast } from "@/components/ui/sonner"
+import { useSystemConfig } from "@/contexts/system-config-context"
+import { authApi } from "@/lib/api/auth"
+import { FadeSlideIn } from "@/components/ui/fade-slide-in"
+import { getErrorMessage } from "@/lib/error-utils"
+import { useAuthStore } from "@/stores/auth-store"
+
+export function RegisterForm({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  const router = useRouter()
+  const { config, refreshConfig } = useSystemConfig()
+  const setToken = useAuthStore((state) => state.setToken)
+
+  const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // 避免重复提交
+    if (isLoading) return
+
+    // 验证密码匹配
+    if (password !== confirmPassword) {
+      toast.error("密码不匹配", {
+        description: "两次输入的密码不一致，请重新输入",
+      })
+      return
+    }
+
+    // 验证密码长度
+    if (password.length < 6) {
+      toast.error("密码太短", {
+        description: "密码至少需要 6 个字符",
+      })
+      return
+    }
+
+    // 验证用户名长度
+    if (username.length < 3 || username.length > 50) {
+      toast.error("用户名长度不符", {
+        description: "用户名长度需要在 3-50 个字符之间",
+      })
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      // 调用注册 API
+      const response = await authApi.register({
+        username,
+        email,
+        password,
+      })
+
+      toast.success("注册成功", {
+        description: "正在跳转到登录页面...",
+      })
+
+      // 刷新系统配置
+      await refreshConfig()
+
+      // 跳转到登录页面
+      setTimeout(() => {
+        router.push("/login")
+      }, 1000)
+    } catch (error: unknown) {
+      console.error("Register error:", error)
+      toast.error("注册失败", {
+        description: getErrorMessage(error, "请检查输入信息并重试"),
+      })
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className={cn("flex flex-col gap-6", className)} {...props}>
+      <form onSubmit={handleSubmit}>
+        <FieldGroup>
+          {/* Logo 和标题 */}
+          <FadeSlideIn delay={0}>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex size-16 items-center justify-center">
+                  <Image
+                    src={config?.system_logo || "/logo.svg"}
+                    alt={`${config?.system_name || "EasySSH"} Logo`}
+                    width={64}
+                    height={64}
+                    className="size-16 transition-opacity duration-200"
+                    priority
+                    style={{
+                      width: '64px',
+                      height: '64px',
+                      willChange: 'opacity',
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+                    注册 {config?.system_name || "EasySSH"} 账号
+                  </h1>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                    创建您的账号以开始使用
+                  </p>
+                </div>
+              </div>
+            </div>
+          </FadeSlideIn>
+
+          {/* 表单卡片 */}
+          <div className="rounded-xl p-6 bg-transparent">
+            <div className="space-y-4">
+              {/* 用户名输入 */}
+              <FadeSlideIn delay={0.1}>
+                <Field>
+                  <FieldLabel htmlFor="username" className="text-zinc-700 dark:text-zinc-200">
+                    用户名
+                  </FieldLabel>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
+                    <Input
+                      id="username"
+                      type="text"
+                      placeholder="请输入用户名（3-50个字符）"
+                      name="username"
+                      autoComplete="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="pl-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                      required
+                      minLength={3}
+                      maxLength={50}
+                    />
+                  </div>
+                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
+                    用户名将用于登录系统
+                  </FieldDescription>
+                </Field>
+              </FadeSlideIn>
+
+              {/* 邮箱输入 */}
+              <FadeSlideIn delay={0.2}>
+                <Field>
+                  <FieldLabel htmlFor="email" className="text-zinc-700 dark:text-zinc-200">
+                    邮箱
+                  </FieldLabel>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="请输入邮箱地址"
+                      name="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                      required
+                    />
+                  </div>
+                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
+                    用于接收系统通知和找回密码
+                  </FieldDescription>
+                </Field>
+              </FadeSlideIn>
+
+              {/* 密码输入 */}
+              <FadeSlideIn delay={0.3}>
+                <Field>
+                  <FieldLabel htmlFor="password" className="text-zinc-700 dark:text-zinc-200">
+                    密码
+                  </FieldLabel>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="请输入密码（至少6个字符）"
+                      name="password"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="pl-10 pr-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </Field>
+              </FadeSlideIn>
+
+              {/* 确认密码输入 */}
+              <FadeSlideIn delay={0.4}>
+                <Field>
+                  <FieldLabel htmlFor="confirmPassword" className="text-zinc-700 dark:text-zinc-200">
+                    确认密码
+                  </FieldLabel>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="请再次输入密码"
+                      name="confirmPassword"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="pl-10 pr-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </Field>
+              </FadeSlideIn>
+
+              {/* 注册按钮 */}
+              <FadeSlideIn delay={0.5}>
+                <Field>
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {isLoading ? (
+                      <>
+                        <span className="mr-2">注册中</span>
+                        <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                      </>
+                    ) : (
+                      "注册"
+                    )}
+                  </Button>
+                </Field>
+              </FadeSlideIn>
+            </div>
+          </div>
+
+          {/* 底部提示 */}
+          <div className="space-y-3">
+            {/* 登录提示 */}
+            <FadeSlideIn delay={0.6}>
+              <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
+                已有账号？
+                <Button
+                  type="button"
+                  variant="link"
+                  className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
+                  onClick={() => router.push("/login")}
+                >
+                  立即登录
+                </Button>
+              </div>
+            </FadeSlideIn>
+
+            {/* 版本信息 */}
+            <FadeSlideIn delay={0.7}>
+              <div className="text-center text-xs text-zinc-500 dark:text-zinc-600">
+                {config?.system_name || "EasySSH"} v1.0.0 | © 2025 All rights reserved
+              </div>
+            </FadeSlideIn>
+          </div>
+        </FieldGroup>
+      </form>
+    </div>
+  )
+}

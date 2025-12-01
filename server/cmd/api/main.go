@@ -252,6 +252,13 @@ func main() {
 		refreshTokenTTLSeconds,
 		systemConfigService,
 	)
+	oauthHandler := rest.NewOAuthHandler(
+		authService,
+		systemConfigService,
+		securityService,
+		accessTokenTTLSeconds,
+		refreshTokenTTLSeconds,
+	)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
@@ -310,6 +317,8 @@ func main() {
 	{
 		oauth.POST("/authorize", authHandler.OAuthAuthorize)
 		oauth.POST("/token", authHandler.OAuthToken)
+		// Google OAuth ID Token 验证（与 /api/v1/oauth/google/verify 保持一致，方便前端通过 /oauth 路径访问）
+		oauth.POST("/google/verify", oauthHandler.GoogleVerify)
 	}
 
 	// API v1 路由组
@@ -360,6 +369,12 @@ func main() {
 			// 初始化管理员接口应用速率限制（支持动态配置）
 			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(securityService), authHandler.InitializeAdmin)
 			authRoutes.POST("/2fa/verify", authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
+		}
+
+		// OAuth 路由（公开）
+		oauthRoutes := v1.Group("/oauth")
+		{
+			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify) // 验证 Google ID Token
 		}
 
 		// 用户路由（需要认证）

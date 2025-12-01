@@ -278,6 +278,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// 检查是否允许注册
+	if h.systemConfigService != nil {
+		config, err := h.systemConfigService.Get(c.Request.Context())
+		if err == nil && config != nil && !config.AllowRegistration {
+			RespondError(c, http.StatusForbidden, "registration_disabled", "User registration is currently disabled")
+			return
+		}
+	}
+
 	// 注册用户（默认角色为 user）
 	user, err := h.authService.Register(c.Request.Context(), req.Username, req.Email, req.Password, auth.RoleUser)
 	if err != nil {
@@ -713,17 +722,20 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 	if h.systemConfigService != nil {
 		if cfg, err := h.systemConfigService.Get(c.Request.Context()); err == nil && cfg != nil {
 			response["system_config"] = gin.H{
-				"system_name":              cfg.SystemName,
-				"system_logo":              cfg.SystemLogo,
-				"system_favicon":           cfg.SystemFavicon,
-				"default_language":         cfg.DefaultLanguage,
-				"default_timezone":         cfg.DefaultTimezone,
-				"date_format":              cfg.DateFormat,
+				"system_name":               cfg.SystemName,
+				"system_logo":               cfg.SystemLogo,
+				"system_favicon":            cfg.SystemFavicon,
+				"default_language":          cfg.DefaultLanguage,
+				"default_timezone":          cfg.DefaultTimezone,
+				"date_format":               cfg.DateFormat,
 				"download_exclude_patterns": cfg.DownloadExcludePatterns,
 				"default_download_mode":     cfg.DefaultDownloadMode,
 				"skip_excluded_on_upload":   cfg.SkipExcludedOnUpload,
 				"max_file_upload_size":      cfg.MaxFileUploadSize,
 				"completion_enabled":        cfg.CompletionEnabled,
+				"allow_registration":        cfg.AllowRegistration,
+				"oauth_enabled":             cfg.OAuthEnabled,
+				"google_client_id":          cfg.GoogleClientID,
 			}
 		}
 	}

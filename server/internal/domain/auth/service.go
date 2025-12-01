@@ -39,6 +39,12 @@ type Service interface {
 	// GetUserByID 根据 ID 获取用户
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error)
 
+	// GetUserByEmail 根据邮箱获取用户
+	GetUserByEmail(ctx context.Context, email string) (*User, error)
+
+	// RegisterOAuthUser 通过 OAuth 注册用户（不需要密码）
+	RegisterOAuthUser(ctx context.Context, username, email, avatar string, role UserRole) (*User, error)
+
 	// RefreshAccessToken 刷新访问令牌（返回新的访问令牌和刷新令牌）
 	RefreshAccessToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
 
@@ -268,6 +274,54 @@ func (s *authService) Logout(ctx context.Context, accessToken string) error {
 
 func (s *authService) GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error) {
 	return s.repo.FindByID(ctx, userID)
+}
+
+func (s *authService) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	return s.repo.FindByEmail(ctx, email)
+}
+
+func (s *authService) RegisterOAuthUser(ctx context.Context, username, email, avatar string, role UserRole) (*User, error) {
+	// 参数验证
+	if username == "" || email == "" {
+		return nil, errors.New("username and email are required")
+	}
+
+	// 检查用户名是否已存在
+	existingUser, err := s.repo.FindByUsername(ctx, username)
+	if err == nil && existingUser != nil {
+		// 用户名已存在，添加随机后缀
+		username = fmt.Sprintf("%s_%d", username, time.Now().Unix()%10000)
+	}
+
+	// 检查邮箱是否已存在
+	existingUser, err = s.repo.FindByEmail(ctx, email)
+	if err == nil && existingUser != nil {
+		return nil, ErrUserAlreadyExists
+	}
+
+	// 如果没有提供头像，生成默认头像
+	if avatar == "" {
+		avatar, err = s.generateAvatarForUser(username, email)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate avatar: %w", err)
+		}
+	}
+
+	// 创建用户（OAuth 用户不需要密码）
+	user := &User{
+		ID:       uuid.New(),
+		Username: username,
+		Email:    email,
+		Password: "", // OAuth 用户不设置密码
+		Role:     role,
+		Avatar:   avatar,
+	}
+
+	if err := s.repo.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return user, nil
 }
 
 func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) {

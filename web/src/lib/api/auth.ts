@@ -212,4 +212,28 @@ export const authApi = {
       },
     })
   },
+
+  /**
+   * 验证 Google ID Token 并登录/注册
+   */
+  async verifyGoogleToken(idToken: string): Promise<{
+    access_token: string
+    refresh_token: string
+    token_type: string
+    expires_in: number
+    user: User
+  }> {
+    return apiFetch<{
+      access_token: string
+      refresh_token: string
+      token_type: string
+      expires_in: number
+      user: User
+    }>("/oauth/google/verify", {
+      method: "POST",
+      body: {
+        id_token: idToken,
+      },
+    })
+  },
 }

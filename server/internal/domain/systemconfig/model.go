@@ -32,6 +32,14 @@ type SystemConfig struct {
 	CompletionQuotas    string `gorm:"type:jsonb" json:"completion_quotas"`    // JSON: CompletionQuotasConfig
 	CompletionCache     string `gorm:"type:jsonb" json:"completion_cache"`     // JSON: CompletionCacheConfig
 
+	// 注册配置
+	AllowRegistration bool `gorm:"not null;default:false" json:"allow_registration"`
+
+	// OAuth 配置
+	OAuthEnabled       bool   `gorm:"not null;default:false" json:"oauth_enabled"`
+	GoogleClientID     string `gorm:"size:255" json:"google_client_id"`
+	GoogleClientSecret string `gorm:"size:255" json:"-"` // 加密存储，不返回给前端
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

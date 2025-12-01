@@ -26,14 +26,18 @@ func SecurityHeaders() gin.HandlerFunc {
 		if csp == "" {
 			csp = "default-src 'self'; " +
 				// 允许从 jsDelivr 加载 Monaco 相关脚本, 并允许 blob: 用于 Worker
-				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net blob:; " +
+				// 允许 Google OAuth 相关脚本
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://accounts.google.com https://apis.google.com blob:; " +
 				// 显式允许 Web Worker / blob: Worker, 避免回退到 script-src 限制
 				"worker-src 'self' blob:; " +
 				// 允许从 jsDelivr 加载 Monaco 所需的样式
-				"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+				"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://accounts.google.com; " +
 				"img-src 'self' data: https:; " +
-				"font-src 'self' data:; " +
-				"connect-src 'self' https://cdn.jsdelivr.net https://api.dicebear.com"
+				"font-src 'self' data: https://fonts.gstatic.com; " +
+				// 允许连接到 Google OAuth 相关域名
+				"connect-src 'self' https://cdn.jsdelivr.net https://api.dicebear.com https://accounts.google.com https://oauth2.googleapis.com; " +
+				// 允许 Google OAuth iframe
+				"frame-src 'self' https://accounts.google.com"
 		}
 		c.Header("Content-Security-Policy", csp)
 
@@ -52,6 +56,15 @@ func SecurityHeaders() gin.HandlerFunc {
 		// 权限策略 (Permissions Policy)
 		// 限制浏览器功能访问
 		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		// Cross-Origin-Opener-Policy (COOP)
+		// 设置为 unsafe-none 以支持 Google OAuth 登录
+		// 这允许跨域窗口通信，是 Google OAuth 所必需的
+		c.Header("Cross-Origin-Opener-Policy", "unsafe-none")
+
+		// Cross-Origin-Embedder-Policy (COEP)
+		// 设置为 unsafe-none 以兼容 Google OAuth 和其他第三方资源
+		c.Header("Cross-Origin-Embedder-Policy", "unsafe-none")
 
 		c.Next()
 	}

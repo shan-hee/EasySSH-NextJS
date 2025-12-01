@@ -10,6 +10,12 @@ export const basicInfoSchema = z.object({
   }),
   default_timezone: z.string().min(1, "时区不能为空"),
   date_format: z.string().min(1, "日期格式不能为空"),
+  // 注册配置
+  allow_registration: z.boolean().default(false),
+  // OAuth 配置
+  oauth_enabled: z.boolean().default(false),
+  google_client_id: z.string().optional(),
+  google_client_secret: z.string().optional(),
 })
 
 // 国际化设置 Schema
