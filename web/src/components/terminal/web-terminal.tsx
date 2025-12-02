@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useLayoutEffect, useState } from "react"
 import { useTheme } from "next-themes"
+import { useTranslations } from "next-intl"
 import { ConnectionLoader } from "./connection-loader"
 import { getTerminalTheme } from "./terminal-themes"
 import { CompletionPopup } from "./completion-popup"
@@ -92,6 +93,8 @@ export function WebTerminal({
   completionShowIcon = true,
   completionShowDescription = true,
 }: WebTerminalProps) {
+  const tTerminal = useTranslations("terminal")
+
   // 使用 next-themes 获取应用主题
   const { theme: appTheme, resolvedTheme } = useTheme()
 
@@ -722,7 +725,7 @@ export function WebTerminal({
       <div className="h-full w-full bg-background flex items-center justify-center">
         <ConnectionLoader
           serverName={serverName}
-          message={t("connectionLoaderInitializing")}
+          message={tTerminal("connectionLoaderInitializing")}
         />
       </div>
     )
