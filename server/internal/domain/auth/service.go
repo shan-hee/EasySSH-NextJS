@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 // SessionInfo 会话信息
@@ -113,6 +115,7 @@ type authService struct {
 	emailService        EmailService   // 可选的邮件服务
 	runMode             string         // 存储运行模式
 	sessionIdleDuration time.Duration  // 会话闲置过期时间（用于 user_sessions.ExpiresAt）
+	redisClient         *redis.Client  // Redis 客户端（用于 Authorization Code 和 2FA Token）
 }
 
 // EmailService 邮件服务接口（可选依赖）
@@ -124,7 +127,7 @@ type EmailService interface {
 
 // NewService 创建认证服务
 // sessionIdleDuration 用于 user_sessions.ExpiresAt，通常应与 JWT 刷新闲置过期时间保持一致
-func NewService(repo Repository, jwtService JWTService, sessionIdleDuration time.Duration) Service {
+func NewService(repo Repository, jwtService JWTService, sessionIdleDuration time.Duration, redisClient *redis.Client) Service {
 	return &authService{
 		repo:                repo,
 		jwtService:          jwtService,
@@ -132,6 +135,7 @@ func NewService(repo Repository, jwtService JWTService, sessionIdleDuration time
 		emailService:        nil, // 默认不启用邮件服务
 		runMode:             "production",
 		sessionIdleDuration: sessionIdleDuration,
+		redisClient:         redisClient,
 	}
 }
 
@@ -787,7 +791,7 @@ func (s *authService) Verify2FACode(ctx context.Context, userID uuid.UUID, code 
 
 // === Authorization Code + PKCE ===
 
-// CreateAuthorizationCode 为指定用户创建授权码
+// CreateAuthorizationCode 为指定用户创建授权码（存储在 Redis）
 func (s *authService) CreateAuthorizationCode(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -810,26 +814,32 @@ func (s *authService) CreateAuthorizationCode(
 	}
 	code := codeUUID.String()
 
-	ac := &AuthorizationCode{
-		Code:                code,
-		UserID:              userID,
-		ClientID:            clientID,
-		RedirectURI:         redirectURI,
-		Scope:               scope,
-		CodeChallenge:       codeChallenge,
-		CodeChallengeMethod: strings.ToUpper(codeChallengeMethod),
-		ExpiresAt:           time.Now().Add(expiresIn),
-		Used:                false,
+	// 将授权码数据存储到 Redis（使用 Hash 结构）
+	key := fmt.Sprintf("auth_code:%s", code)
+	data := map[string]interface{}{
+		"user_id":                userID.String(),
+		"client_id":              clientID,
+		"redirect_uri":           redirectURI,
+		"scope":                  scope,
+		"code_challenge":         codeChallenge,
+		"code_challenge_method":  strings.ToUpper(codeChallengeMethod),
+		"created_at":             time.Now().Unix(),
 	}
 
-	if err := s.repo.CreateAuthorizationCode(ctx, ac); err != nil {
-		return "", fmt.Errorf("failed to store authorization code: %w", err)
+	// 存储到 Redis
+	if err := s.redisClient.HMSet(ctx, key, data).Err(); err != nil {
+		return "", fmt.Errorf("failed to store authorization code in Redis: %w", err)
+	}
+
+	// 设置过期时间
+	if err := s.redisClient.Expire(ctx, key, expiresIn).Err(); err != nil {
+		return "", fmt.Errorf("failed to set expiration for authorization code: %w", err)
 	}
 
 	return code, nil
 }
 
-// ExchangeAuthorizationCodeForTokens 使用授权码和 PKCE code_verifier 换取访问令牌和刷新令牌
+// ExchangeAuthorizationCodeForTokens 使用授权码和 PKCE code_verifier 换取访问令牌和刷新令牌（从 Redis 读取）
 func (s *authService) ExchangeAuthorizationCodeForTokens(
 	ctx context.Context,
 	clientID, redirectURI, code, codeVerifier string,
@@ -839,47 +849,60 @@ func (s *authService) ExchangeAuthorizationCodeForTokens(
 		return nil, "", "", errors.New("missing required parameters for token exchange")
 	}
 
-	// 查询授权码
-	ac, err := s.repo.GetAuthorizationCode(ctx, code)
+	// 从 Redis 获取授权码数据
+	key := fmt.Sprintf("auth_code:%s", code)
+	data, err := s.redisClient.HGetAll(ctx, key).Result()
 	if err != nil {
-		if errors.Is(err, ErrCodeNotFound) {
-			return nil, "", "", errors.New("invalid or already used authorization code")
-		}
-		return nil, "", "", fmt.Errorf("failed to get authorization code: %w", err)
+		return nil, "", "", fmt.Errorf("failed to get authorization code from Redis: %w", err)
 	}
 
-	// 检查是否已使用或过期
-	if ac.Used || time.Now().After(ac.ExpiresAt) {
-		return nil, "", "", errors.New("authorization code has expired or already been used")
+	// 检查授权码是否存在（如果不存在或已过期，Redis 会返回空 map）
+	if len(data) == 0 {
+		return nil, "", "", errors.New("invalid or expired authorization code")
 	}
+
+	// 解析数据
+	userIDStr, ok := data["user_id"]
+	if !ok {
+		return nil, "", "", errors.New("invalid authorization code data: missing user_id")
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("invalid user_id in authorization code: %w", err)
+	}
+
+	storedClientID := data["client_id"]
+	storedRedirectURI := data["redirect_uri"]
+	storedCodeChallenge := data["code_challenge"]
+	storedCodeChallengeMethod := data["code_challenge_method"]
 
 	// 检查 client_id 和 redirect_uri 是否匹配
-	if ac.ClientID != clientID {
+	if storedClientID != clientID {
 		return nil, "", "", errors.New("client_id does not match authorization code")
 	}
-	if ac.RedirectURI != redirectURI {
+	if storedRedirectURI != redirectURI {
 		return nil, "", "", errors.New("redirect_uri does not match authorization code")
 	}
 
 	// PKCE 验证：目前仅支持 S256
-	if strings.ToUpper(ac.CodeChallengeMethod) != "S256" {
+	if strings.ToUpper(storedCodeChallengeMethod) != "S256" {
 		return nil, "", "", errors.New("unsupported code_challenge_method in stored authorization code")
 	}
 
 	// 计算 code_verifier 的 S256 摘要并进行 Base64URL 编码
 	verifierHash := sha256.Sum256([]byte(codeVerifier))
 	computedChallenge := base64.RawURLEncoding.EncodeToString(verifierHash[:])
-	if computedChallenge != ac.CodeChallenge {
+	if computedChallenge != storedCodeChallenge {
 		return nil, "", "", errors.New("code_verifier does not match code_challenge")
 	}
 
-	// 标记授权码为已使用
-	if err := s.repo.MarkAuthorizationCodeUsed(ctx, ac.Code); err != nil {
-		return nil, "", "", fmt.Errorf("failed to mark authorization code as used: %w", err)
+	// 删除授权码（确保一次性使用）
+	if err := s.redisClient.Del(ctx, key).Err(); err != nil {
+		return nil, "", "", fmt.Errorf("failed to delete authorization code: %w", err)
 	}
 
 	// 获取用户信息
-	user, err := s.repo.FindByID(ctx, ac.UserID)
+	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to load user for authorization code: %w", err)
 	}

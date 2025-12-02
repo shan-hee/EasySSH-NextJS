@@ -15,7 +15,6 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrSessionNotFound    = errors.New("session not found or has been revoked")
 	ErrSessionExpired     = errors.New("session has expired")
-	ErrCodeNotFound       = errors.New("authorization code not found")
 )
 
 // Repository 用户数据访问接口
@@ -72,20 +71,6 @@ type Repository interface {
 
 	// DeleteExpiredSessions 清理过期会话
 	DeleteExpiredSessions(ctx context.Context) error
-
-	// === Authorization Code Management ===
-
-	// CreateAuthorizationCode 创建授权码
-	CreateAuthorizationCode(ctx context.Context, code *AuthorizationCode) error
-
-	// GetAuthorizationCode 根据 code 获取授权码
-	GetAuthorizationCode(ctx context.Context, code string) (*AuthorizationCode, error)
-
-	// MarkAuthorizationCodeUsed 将授权码标记为已使用
-	MarkAuthorizationCodeUsed(ctx context.Context, code string) error
-
-	// DeleteExpiredAuthorizationCodes 清理过期的授权码
-	DeleteExpiredAuthorizationCodes(ctx context.Context) error
 }
 
 // gormRepository GORM 实现
@@ -278,46 +263,4 @@ func (r *gormRepository) DeleteAllUserSessions(ctx context.Context, userID uuid.
 // DeleteExpiredSessions 清理过期会话
 func (r *gormRepository) DeleteExpiredSessions(ctx context.Context) error {
 	return r.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&Session{}).Error
-}
-
-// === Authorization Code Management ===
-
-// CreateAuthorizationCode 创建授权码
-func (r *gormRepository) CreateAuthorizationCode(ctx context.Context, code *AuthorizationCode) error {
-	return r.db.WithContext(ctx).Create(code).Error
-}
-
-// GetAuthorizationCode 根据 code 获取授权码
-func (r *gormRepository) GetAuthorizationCode(ctx context.Context, code string) (*AuthorizationCode, error) {
-	var ac AuthorizationCode
-	if err := r.db.WithContext(ctx).Where("code = ?", code).First(&ac).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrCodeNotFound
-		}
-		return nil, err
-	}
-	return &ac, nil
-}
-
-// MarkAuthorizationCodeUsed 将授权码标记为已使用
-func (r *gormRepository) MarkAuthorizationCodeUsed(ctx context.Context, code string) error {
-	result := r.db.WithContext(ctx).
-		Model(&AuthorizationCode{}).
-		Where("code = ? AND used = ?", code, false).
-		Updates(map[string]interface{}{
-			"used":       true,
-			"expires_at": time.Now(), // 标记为立即过期
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrCodeNotFound
-	}
-	return nil
-}
-
-// DeleteExpiredAuthorizationCodes 清理过期授权码
-func (r *gormRepository) DeleteExpiredAuthorizationCodes(ctx context.Context) error {
-	return r.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&AuthorizationCode{}).Error
 }

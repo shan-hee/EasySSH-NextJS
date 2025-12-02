@@ -79,7 +79,7 @@ func main() {
 	if err := database.AutoMigrate(
 		&auth.User{},
 		&auth.Session{},          // 用户会话表
-		&auth.AuthorizationCode{}, // OAuth 授权码表
+		// Authorization Code 已迁移到 Redis，不再需要数据库表
 		&server.Server{},
 		&auditlog.AuditLog{},
 		&script.Script{},               // 脚本表
@@ -117,7 +117,7 @@ func main() {
 
 	// 认证服务（会话过期时间与 JWT 刷新闲置过期时间保持一致）
 	authRepo := auth.NewRepository(database)
-	authService := auth.NewService(authRepo, jwtService, refreshIdleDuration)
+	authService := auth.NewService(authRepo, jwtService, refreshIdleDuration, redisClient.GetClient())
 
 	// 新的配置服务
 	// 系统配置服务

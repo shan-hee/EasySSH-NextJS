@@ -400,10 +400,15 @@ func (s *jwtService) IsBlacklisted(tokenString string) (bool, error) {
 	return result == "1", nil
 }
 
-// GenerateTempToken 生成临时令牌（用于 2FA 验证，有效期 5 分钟）
+// GenerateTempToken 生成临时令牌（用于 2FA 验证，有效期 5 分钟，存储在 Redis）
 func (s *jwtService) GenerateTempToken(userID string) (string, error) {
 	now := time.Now()
+
+	// 生成唯一的 token ID
+	tokenID := uuid.New().String()
+
 	claims := jwt.RegisteredClaims{
+		ID:        tokenID, // JWT ID，用于 Redis 存储
 		ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)), // 5 分钟有效期
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
@@ -413,10 +418,22 @@ func (s *jwtService) GenerateTempToken(userID string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.secretKey)
+	tokenString, err := token.SignedString(s.secretKey)
+	if err != nil {
+		return "", err
+	}
+
+	// 将 token ID 存储到 Redis（用于一次性使用验证）
+	ctx := context.Background()
+	key := fmt.Sprintf("2fa_token:%s", tokenID)
+	if err := s.redisClient.Set(ctx, key, userID, 5*time.Minute).Err(); err != nil {
+		return "", fmt.Errorf("failed to store 2FA token in Redis: %w", err)
+	}
+
+	return tokenString, nil
 }
 
-// ValidateTempToken 验证临时令牌并返回用户 ID
+// ValidateTempToken 验证临时令牌并返回用户 ID（使用 Redis GETDEL 实现一次性使用）
 func (s *jwtService) ValidateTempToken(tokenString string) (string, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
 		// 验证签名算法
@@ -445,6 +462,22 @@ func (s *jwtService) ValidateTempToken(tokenString string) (string, error) {
 	// 验证是否是 2FA 临时令牌
 	if len(claims.Audience) == 0 || claims.Audience[0] != "2fa-verification" {
 		return "", errors.New("not a 2FA temp token")
+	}
+
+	// 从 Redis 中获取并删除 token（确保一次性使用）
+	ctx := context.Background()
+	key := fmt.Sprintf("2fa_token:%s", claims.ID)
+	userID, err := s.redisClient.GetDel(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", errors.New("2FA token has already been used or expired")
+		}
+		return "", fmt.Errorf("failed to verify 2FA token in Redis: %w", err)
+	}
+
+	// 验证 Redis 中的 userID 与 JWT 中的 Subject 是否一致
+	if userID != claims.Subject {
+		return "", errors.New("2FA token user_id mismatch")
 	}
 
 	return claims.Subject, nil

@@ -100,21 +100,3 @@ func (u *User) ToPublic() map[string]interface{} {
 	}
 }
 
-// AuthorizationCode OAuth 授权码模型（用于 Authorization Code + PKCE 流程）
-type AuthorizationCode struct {
-	Code                string    `gorm:"primaryKey;size:255" json:"code"`                 // 授权码本体（高熵随机字符串）
-	UserID              uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`         // 关联的用户 ID
-	ClientID            string    `gorm:"size:100;not null;index" json:"client_id"`        // 客户端 ID（如 easyssh-web）
-	RedirectURI         string    `gorm:"size:500;not null" json:"redirect_uri"`           // 回调地址
-	Scope               string    `gorm:"size:255" json:"scope"`                           // 作用域（可选，逗号分隔）
-	CodeChallenge       string    `gorm:"size:255;not null" json:"code_challenge"`         // PKCE code_challenge
-	CodeChallengeMethod string    `gorm:"size:50;not null" json:"code_challenge_method"`   // PKCE 方法（目前仅支持 S256）
-	ExpiresAt           time.Time `gorm:"not null;index" json:"expires_at"`                // 过期时间
-	Used                bool      `gorm:"not null;default:false;index" json:"used"`        // 是否已使用（一次性）
-	CreatedAt           time.Time `gorm:"autoCreateTime" json:"created_at"`                // 创建时间
-}
-
-// TableName 指定授权码表名
-func (AuthorizationCode) TableName() string {
-	return "authorization_codes"
-}
