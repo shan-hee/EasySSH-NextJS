@@ -73,7 +73,7 @@ import { twoFactorApi } from "@/lib/api/2fa"
 import { sessionsApi, type Session } from "@/lib/api/sessions"
 import { notificationsApi } from "@/lib/api/notifications"
 import * as sshKeysApi from "@/lib/api/ssh-keys"
-import { getEffectiveLocale, getEffectiveTimezone, formatInTimezone } from "@/utils/datetime"
+import { getEffectiveLocale, getEffectiveTimezone, formatInTimezone, saveLocaleToStorage } from "@/utils/datetime"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
@@ -443,6 +443,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
     setPreferencesLoading(true)
     try {
+      // 立即保存到 localStorage，确保页面刷新时能立即使用
+      if (preferencesForm.language === "zh-CN" || preferencesForm.language === "en-US") {
+        saveLocaleToStorage(preferencesForm.language)
+      }
+
       await authApi.updateProfile({
         language: preferencesForm.language,
         timezone: preferencesForm.timezone,

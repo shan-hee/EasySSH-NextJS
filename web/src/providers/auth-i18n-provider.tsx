@@ -19,11 +19,14 @@ interface AuthI18nProviderProps {
 
 /**
  * 认证/初始化流程使用的 i18n Provider
- * 仅依赖系统配置中的默认语言，不依赖登录用户信息
+ * 优先使用 localStorage 缓存的语言设置（避免闪烁）
+ * 其次依赖系统配置中的默认语言
+ * 不依赖登录用户信息（因为用户可能未登录）
  */
 export function AuthI18nProvider({ children }: AuthI18nProviderProps) {
   const { config } = useSystemConfig()
 
+  // 直接调用 getEffectiveLocale，它会自动从 localStorage 读取
   const locale = getEffectiveLocale(null, config)
 
   const messages = useMemo(() => {

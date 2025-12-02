@@ -63,13 +63,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        {/* no-FOUC: 在样式加载前同步设置主题类，避免闪烁 */}
+        {/* no-FOUC: 在样式加载前同步设置主题类和语言属性，避免闪烁 */}
         <script
-          id="no-flash-theme"
+          id="no-flash-init"
           dangerouslySetInnerHTML={{
-            __html: `!function(){try{var d=document.documentElement;var t=localStorage.getItem('theme');var dark=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(dark){d.classList.add('dark')}else{d.classList.remove('dark')}}catch(e){}}();`,
+            __html: `!function(){try{var d=document.documentElement;var t=localStorage.getItem('theme');var dark=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(dark){d.classList.add('dark')}else{d.classList.remove('dark')};var l=localStorage.getItem('user-language');if(l==='zh-CN'||l==='en-US'){d.setAttribute('lang',l)}}catch(e){}}();`,
           }}
         />
       </head>
