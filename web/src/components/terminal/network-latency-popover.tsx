@@ -9,6 +9,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { useLatencyData } from "./monitor/contexts/MonitorWebSocketContext"
+import { useTranslations } from "next-intl"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 interface NetworkNode {
   name: string
@@ -27,25 +29,38 @@ interface NetworkNode {
  */
 export function NetworkLatencyPopover() {
   // 【性能优化】只订阅延迟数据，不订阅监控数据
-  const latencyData = useLatencyData();
+  const latencyData = useLatencyData()
+  const t = useTranslations("terminal")
+  const { config } = useSystemConfig()
 
   // 计算综合网络延迟和节点拓扑
   const { currentLatency, nodes } = useMemo(() => {
-    const localLatency = latencyData.localLatencySmoothedMs || latencyData.localLatencyMs || 0;
-    const sshLatency = latencyData.sshLatencyMs || 0;
-    const total = localLatency + sshLatency;
+    const localLatency = latencyData.localLatencySmoothedMs || latencyData.localLatencyMs || 0
+    const sshLatency = latencyData.sshLatencyMs || 0
+    const total = localLatency + sshLatency
 
     const networkNodes: NetworkNode[] = [
-      { name: "本地", latency: 0, icon: "monitor" },
-      { name: "EasySSH", latency: localLatency, icon: "wifi" },
-      { name: "服务器", latency: total, icon: "server" },
-    ];
+      { name: t("latencyNodeLocal"), latency: 0, icon: "monitor" },
+      {
+        name: config?.system_name || "EasySSH",
+        latency: localLatency,
+        icon: "wifi",
+      },
+      { name: t("latencyNodeServer"), latency: total, icon: "server" },
+    ]
 
     return {
       currentLatency: total,
       nodes: networkNodes,
-    };
-  }, [latencyData.localLatencyMs, latencyData.localLatencySmoothedMs, latencyData.sshLatencyMs]);
+    }
+    // t 和 config 只影响展示文案，不影响数值
+  }, [
+    latencyData.localLatencyMs,
+    latencyData.localLatencySmoothedMs,
+    latencyData.sshLatencyMs,
+    t,
+    config?.system_name,
+  ])
   // 获取节点图标
   const getNodeIcon = (icon?: string) => {
     const iconClass = "h-3.5 w-3.5"
@@ -65,17 +80,17 @@ export function NetworkLatencyPopover() {
     if (latency < 50) return {
       textColor: "text-status-connected",
       bgColor: "bg-status-connected",
-      label: "优秀"
+      label: t("latencyStatusExcellent"),
     }
     if (latency < 100) return {
       textColor: "text-status-warning",
       bgColor: "bg-status-warning",
-      label: "良好"
+      label: t("latencyStatusGood"),
     }
     return {
       textColor: "text-status-danger",
       bgColor: "bg-status-danger",
-      label: "较慢"
+      label: t("latencyStatusSlow"),
     }
   }
 
@@ -88,7 +103,7 @@ export function NetworkLatencyPopover() {
           variant="ghost"
           size="sm"
           className="h-7 rounded-md transition-colors flex items-center gap-2 px-2.5 text-foreground hover:bg-accent hover:text-accent-foreground"
-          aria-label="网络延迟"
+          aria-label={t("latencyAriaLabel")}
         >
           <Globe className="h-3.5 w-3.5 shrink-0" />
           <div className="flex flex-col items-start leading-none text-left min-w-[3.5rem]">
@@ -110,7 +125,10 @@ export function NetworkLatencyPopover() {
           {/* 标题 - 居中对齐 */}
           <div className="text-center">
             <h4 className="text-sm font-medium text-foreground">
-              网络延迟: <span className={`${status.textColor} inline-block min-w-[4.5rem] text-center tabular-nums`}>{currentLatency} ms</span>
+              {t("latencyTitle")}:{" "}
+              <span className={`${status.textColor} inline-block min-w-[4.5rem] text-center tabular-nums`}>
+                {currentLatency} ms
+              </span>
             </h4>
           </div>
 

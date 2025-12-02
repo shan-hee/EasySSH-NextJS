@@ -78,10 +78,12 @@ import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
 import { FileEditor } from "@/components/sftp/file-editor"
 import { ChmodDialog } from "@/components/sftp/chmod-dialog"
+import { useTranslations } from "next-intl"
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner"
 import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransfer"
 import { FileActionMenu, type FileAction } from "@/components/sftp/file-action-menu"
 import { useFileListVirtualizer } from "@/hooks/use-file-list-virtualizer"
+import { toast } from "sonner"
 
 interface FileItem {
   name: string
@@ -136,6 +138,9 @@ interface SftpManagerProps {
 }
 
 export function SftpManager(props: SftpManagerProps) {
+  const tSftp = useTranslations("sftp")
+  const tCommon = useTranslations("common")
+
   const {
     host,
     username,
@@ -805,7 +810,7 @@ export function SftpManager(props: SftpManagerProps) {
   // 开始创建新文件/文件夹
   const startCreateNew = (type: "file" | "folder") => {
     setCreatingNew(type)
-    const newName = type === "folder" ? "新建文件夹" : "新建文件.txt"
+    const newName = type === "folder" ? "New folder" : "New file.txt"
     setEditingFileName(newName)
   }
 
@@ -1210,7 +1215,12 @@ export function SftpManager(props: SftpManagerProps) {
       onRefresh()
     } catch (error) {
       console.error("Failed to chmod:", error)
-      alert(`修改权限失败: ${error instanceof Error ? error.message : String(error)}`)
+      const message = error instanceof Error ? error.message : String(error)
+      toast.error(
+        tSftp("toastChmodFailed", {
+          message,
+        })
+      )
     }
   }
 
@@ -1270,7 +1280,7 @@ export function SftpManager(props: SftpManagerProps) {
               className={cn(
                 "text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-zinc-200 text-zinc-800 dark:hover:bg-zinc-800/60 dark:text-zinc-200",
               )}
-              title="双击编辑会话名称"
+              title={tSftp("sessionEditTitle")}
             >
               {sessionLabel}
             </button>
@@ -1299,7 +1309,7 @@ export function SftpManager(props: SftpManagerProps) {
                       "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
                       "transition-all duration-200"
                     )}
-                    title="根目录"
+                    title="Root directory"
                   >
                     <Home className="h-3.5 w-3.5" />
                   </button>
@@ -1332,7 +1342,7 @@ export function SftpManager(props: SftpManagerProps) {
                       }
                     }}
                     autoFocus
-                    placeholder="输入路径..."
+                    placeholder={tSftp("pathInputPlaceholder")}
                     className={cn(
                       "h-7 text-xs font-mono pl-8 pr-3 py-1 border-0 bg-zinc-100 dark:bg-zinc-900/50",
                       "placeholder:text-zinc-400 dark:placeholder:text-zinc-600",
@@ -1348,7 +1358,7 @@ export function SftpManager(props: SftpManagerProps) {
                     "text-xs font-mono cursor-text rounded-md overflow-x-auto scrollbar-custom",
                     "hover:bg-zinc-200 dark:hover:bg-zinc-800/60 transition-colors"
                   )}
-                  title="点击编辑路径"
+                  title={tSftp("pathClickToEdit")}
                 >
                   {/* Home图标 - 显示模式 */}
                   <button
@@ -1365,7 +1375,7 @@ export function SftpManager(props: SftpManagerProps) {
                       "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
                       "transition-all duration-200"
                     )}
-                    title="根目录"
+                    title={tSftp("pathRootTooltip")}
                   >
                     <Home className="h-3.5 w-3.5" />
                   </button>
@@ -1444,7 +1454,7 @@ export function SftpManager(props: SftpManagerProps) {
                 setViewMode("grid")
               })
             }}
-            title="图标视图"
+            title={tSftp("viewGridTooltip")}
           >
             <LayoutGrid className="h-3.5 w-3.5" />
           </Button>
@@ -1463,7 +1473,7 @@ export function SftpManager(props: SftpManagerProps) {
                 setViewMode("list")
               })
             }}
-            title="列表视图"
+            title={tSftp("viewListTooltip")}
           >
             <List className="h-3.5 w-3.5" />
           </Button>
@@ -1478,7 +1488,7 @@ export function SftpManager(props: SftpManagerProps) {
                   className={cn(
                     "h-7 w-7 rounded-md transition-all duration-200 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400 relative",
                   )}
-                  title="传输任务"
+                  title={tSftp("transferPanelButtonTitle")}
                 >
                   <Upload className="h-3.5 w-3.5" />
                   {effectiveTransferTasks.filter(t => t.status !== "completed" && t.status !== "failed" && t.status !== "cancelled").length > 0 && (
@@ -1494,7 +1504,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <div className="flex items-center gap-2">
                     <Activity className="h-4 w-4 text-blue-500" />
                     <span className="text-sm font-medium">
-                      传输任务 ({effectiveTransferTasks.length})
+                      {tSftp("transferPanelTitle", { count: effectiveTransferTasks.length })}
                     </span>
                   </div>
                   {effectiveTransferTasks.some(t => t.status === "completed" || t.status === "failed" || t.status === "cancelled") && onClearCompletedTransfers && (
@@ -1504,7 +1514,7 @@ export function SftpManager(props: SftpManagerProps) {
                       className="h-6 px-2 text-xs"
                       onClick={handleClearCompleted}
                     >
-                      清除已完成
+                      {tSftp("transferPanelClearCompleted")}
                     </Button>
                   )}
                 </div>
@@ -1529,7 +1539,9 @@ export function SftpManager(props: SftpManagerProps) {
                             variant="outline"
                             className="text-[10px] h-4 px-1 shrink-0"
                           >
-                            {task.type === "upload" ? "上传" : "下载"}
+                            {task.type === "upload"
+                              ? tSftp("transferTypeUpload")
+                              : tSftp("transferTypeDownload")}
                           </Badge>
                         </div>
 
@@ -1556,11 +1568,17 @@ export function SftpManager(props: SftpManagerProps) {
                               <span>{task.timeRemaining}</span>
                             </>
                           ) : task.status === "completed" ? (
-                            <span className="text-green-600 dark:text-green-400">已完成</span>
+                            <span className="text-green-600 dark:text-green-400">
+                              {tSftp("transferStatusCompleted")}
+                            </span>
                           ) : task.status === "failed" ? (
-                            <span className="text-red-600 dark:text-red-400">失败</span>
+                            <span className="text-red-600 dark:text-red-400">
+                              {tSftp("transferStatusFailed")}
+                            </span>
                           ) : task.status === "cancelled" ? (
-                            <span className="text-zinc-500 dark:text-zinc-400">已取消</span>
+                            <span className="text-zinc-500 dark:text-zinc-400">
+                              {tSftp("transferStatusCancelled")}
+                            </span>
                           ) : null}
                         </div>
                           <div className="flex items-center gap-2">
@@ -1572,7 +1590,7 @@ export function SftpManager(props: SftpManagerProps) {
                                 className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-500 transition-colors"
                               >
                                 <XCircle className="h-3 w-3" />
-                                <span>取消</span>
+                                <span>{tCommon("cancel")}</span>
                               </button>
                             )}
                           </div>
@@ -1582,7 +1600,7 @@ export function SftpManager(props: SftpManagerProps) {
                   </div>
                 ) : (
                   <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-                    暂无传输任务
+                    {tSftp("transferPanelEmpty")}
                   </div>
                 )}
               </DropdownMenuContent>
@@ -1598,7 +1616,7 @@ export function SftpManager(props: SftpManagerProps) {
               "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
               onClick={onToggleFullscreen}
-              title={isFullscreen ? "退出全屏 (ESC)" : "全屏"}
+              title={isFullscreen ? tSftp("fullscreenExit") : tSftp("fullscreen")}
             >
               {isFullscreen ? (
                 <Minimize2 className="h-3.5 w-3.5" />
@@ -1615,7 +1633,7 @@ export function SftpManager(props: SftpManagerProps) {
               "h-7 w-7 rounded-md transition-all duration-200 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
             )}
             onClick={onDisconnect}
-            title="关闭"
+            title={tSftp("close")}
           >
             <X className="h-3.5 w-3.5" />
           </Button>
@@ -1652,7 +1670,7 @@ export function SftpManager(props: SftpManagerProps) {
                     onNavigate(parentPath ? `/${parentPath}` : "/")
                   })
                 }}
-                title="返回上级目录"
+                title={tSftp("breadcrumbBack")}
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
               </Button>
@@ -1663,7 +1681,7 @@ export function SftpManager(props: SftpManagerProps) {
                 "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500",
               )} />
               <Input
-                placeholder="搜索文件..."
+                placeholder={tSftp("searchPlaceholder")}
                 className={cn(
                   "h-7 pl-8 pr-2 text-xs border-0 bg-zinc-100 dark:bg-zinc-900/50",
                 )}
@@ -1688,7 +1706,7 @@ export function SftpManager(props: SftpManagerProps) {
                   setShowHidden(!showHidden)
                 })
               }}
-              title={showHidden ? "隐藏隐藏文件" : "显示隐藏文件"}
+              title={showHidden ? tSftp("toggleHiddenOn") : tSftp("toggleHiddenOff")}
             >
               {showHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             </Button>
@@ -1701,17 +1719,19 @@ export function SftpManager(props: SftpManagerProps) {
                 "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
               )}
               onClick={onRefresh}
-              title="刷新"
+              title={tSftp("contextRefresh")}
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
 
             {/* 已选择文件提示 */}
             {selectedFiles.length > 0 && (
-              <div className={cn(
-                "flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400",
-              )}>
-                <span>已选择 {selectedFiles.length} 项</span>
+              <div
+                className={cn(
+                  "flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                )}
+              >
+                <span>{tSftp("selectedCount", { count: selectedFiles.length })}</span>
               </div>
             )}
           </div>
@@ -1736,15 +1756,19 @@ export function SftpManager(props: SftpManagerProps) {
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm border-2 border-dashed border-blue-500 m-4 rounded-lg">
                 <div className="text-center">
                   <Upload className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-                  <p className="text-lg font-semibold text-blue-500">拖放文件到这里上传</p>
-                  <p className="text-sm text-muted-foreground mt-2">支持多文件上传</p>
+                  <p className="text-lg font-semibold text-blue-500">
+                    {tSftp("overlayDropTitle")}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {tSftp("overlayDropDescription")}
+                  </p>
                 </div>
               </div>
             )}
 
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
-            <LoadingSpinner size="lg" label="正在加载文件列表..." />
+            <LoadingSpinner size="lg" label={tSftp("loadingFiles")} />
           </div>
         ) : filteredFiles.length === 0 && !creatingNew ? (
           <div className="flex items-center justify-center h-full">
@@ -1755,10 +1779,10 @@ export function SftpManager(props: SftpManagerProps) {
               <h3 className={cn(
                 "text-lg font-semibold mb-2 text-zinc-600 dark:text-zinc-500",
               )}>
-                目录为空
+                {tSftp("emptyDirTitle")}
               </h3>
               <p className="text-sm text-muted-foreground">
-                {searchTerm ? "没有匹配的文件" : "此目录下没有文件或文件夹"}
+                {searchTerm ? tSftp("emptyDirNoMatch") : tSftp("emptyDirNoFiles")}
               </p>
             </div>
           </div>
@@ -1807,7 +1831,7 @@ export function SftpManager(props: SftpManagerProps) {
                           )}
                         />
                         <div className="text-[10px] text-muted-foreground truncate mt-1">
-                          {creatingNew === "folder" ? "目录" : "0 B"}
+                          {creatingNew === "folder" ? tSftp("itemTypeFolder") : "0 B"}
                         </div>
                       </div>
                     </div>
@@ -1912,7 +1936,7 @@ export function SftpManager(props: SftpManagerProps) {
                                     </div>
                                   )}
                                   <div className="text-[10px] text-muted-foreground truncate">
-                                    {file.type === "directory" ? "目录" : file.size}
+                                    {file.type === "directory" ? tSftp("itemTypeFolder") : file.size}
                                   </div>
                                 </div>
                               </div>
@@ -2002,7 +2026,7 @@ export function SftpManager(props: SftpManagerProps) {
                               </div>
                             )}
                             <div className="text-[10px] text-muted-foreground truncate">
-                              {file.type === "directory" ? "目录" : file.size}
+                              {file.type === "directory" ? tSftp("itemTypeFolder") : file.size}
                             </div>
                           </div>
                         </div>
@@ -2032,7 +2056,8 @@ export function SftpManager(props: SftpManagerProps) {
                       })
                     }}
                   >
-                    名称 {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+                    {tSftp("columnName")}{" "}
+                    {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
                   </TableHead>
                   <TableHead
                     className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
@@ -2044,7 +2069,8 @@ export function SftpManager(props: SftpManagerProps) {
                       })
                     }}
                   >
-                    大小 {sortBy === "size" && (sortOrder === "asc" ? "↑" : "↓")}
+                    {tSftp("columnSize")}{" "}
+                    {sortBy === "size" && (sortOrder === "asc" ? "↑" : "↓")}
                   </TableHead>
                   <TableHead
                     className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
@@ -2056,13 +2082,14 @@ export function SftpManager(props: SftpManagerProps) {
                       })
                     }}
                   >
-                    修改时间 {sortBy === "modified" && (sortOrder === "asc" ? "↑" : "↓")}
+                    {tSftp("columnModified")}{" "}
+                    {sortBy === "modified" && (sortOrder === "asc" ? "↑" : "↓")}
                   </TableHead>
                   <TableHead className={cn(stickyHeaderCellClass)}>
-                    权限
+                    {tSftp("columnPermissions")}
                   </TableHead>
                   <TableHead className={cn(stickyHeaderCellClass, "text-right")}>
-                    操作
+                    {tSftp("columnActions")}
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -2109,7 +2136,9 @@ export function SftpManager(props: SftpManagerProps) {
                     </TableCell>
 
                     <TableCell>
-                      <span className="text-xs text-muted-foreground">刚刚</span>
+                      <span className="text-xs text-muted-foreground">
+                        {tSftp("justNow")}
+                      </span>
                     </TableCell>
 
                     <TableCell>
@@ -2472,14 +2501,14 @@ export function SftpManager(props: SftpManagerProps) {
       <Dialog open={showCreateFolder} onOpenChange={setShowCreateFolder}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>新建文件夹</DialogTitle>
+            <DialogTitle>{tSftp("contextNewFolder")}</DialogTitle>
             <DialogDescription>
-              在当前目录 {currentPath || "/"} 下创建一个新的文件夹
+              {currentPath || "/"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Input
-              placeholder="文件夹名称"
+              placeholder={tSftp("contextNewFolder")}
               value={newFolderName}
               onChange={e => setNewFolderName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleCreateFolder()}
@@ -2490,10 +2519,10 @@ export function SftpManager(props: SftpManagerProps) {
                 variant="outline"
                 onClick={() => setShowCreateFolder(false)}
               >
-                取消
+                {tCommon("cancel")}
               </Button>
               <Button onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
-                创建
+                {tCommon("create")}
               </Button>
             </div>
           </div>
@@ -2524,10 +2553,12 @@ export function SftpManager(props: SftpManagerProps) {
             {/* 标题 - 显示选中数量 */}
             {selectedFiles.length > 1 && (
               <>
-                <div className={cn(
-                  "px-3 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400",
-                )}>
-                  已选中 {selectedFiles.length} 项
+                <div
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400",
+                  )}
+                >
+                  {tSftp("contextSelectedTitle", { count: selectedFiles.length })}
                 </div>
                 <div className={cn("h-px mx-2 mb-1 bg-zinc-200 dark:bg-zinc-700/50")} />
               </>
@@ -2545,7 +2576,7 @@ export function SftpManager(props: SftpManagerProps) {
                   }}
                 >
                   <FolderPlus className="h-4 w-4" />
-                  <span className="flex-1">新建文件夹</span>
+                  <span className="flex-1">{tSftp("contextNewFolder")}</span>
                   <kbd className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
@@ -2562,7 +2593,7 @@ export function SftpManager(props: SftpManagerProps) {
                   }}
                 >
                   <FileText className="h-4 w-4" />
-                  <span className="flex-1">新建文件</span>
+                  <span className="flex-1">{tSftp("contextNewFile")}</span>
                   <kbd className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
@@ -2579,7 +2610,7 @@ export function SftpManager(props: SftpManagerProps) {
                   }}
                 >
                   <Upload className="h-4 w-4" />
-                  <span className="flex-1">上传文件</span>
+                  <span className="flex-1">{tSftp("contextUploadFile")}</span>
                   <kbd className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>
@@ -2596,7 +2627,7 @@ export function SftpManager(props: SftpManagerProps) {
                   }}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  <span className="flex-1">刷新</span>
+                  <span className="flex-1">{tSftp("contextRefresh")}</span>
                   <kbd className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   )}>

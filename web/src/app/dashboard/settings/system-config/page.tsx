@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import {
   Settings,
@@ -19,25 +20,26 @@ import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupCon
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function SystemConfigPage() {
-  const [activeSection, setActiveSection] = useState("基本信息")
+  const t = useTranslations("settingsMain")
+  const [activeSection, setActiveSection] = useState("basic")
   const [isLoading] = useState(false)
 
   const navItems = [
-    { name: "基本信息", icon: Settings },
-    { name: "国际化", icon: Globe },
-    { name: "性能设置", icon: Zap },
-    { name: "文件传输", icon: HardDrive },
-    { name: "补全设置", icon: Command },
+    { id: "basic", icon: Settings, labelKey: "itemBasic" },
+    { id: "i18n", icon: Globe, labelKey: "itemI18n" },
+    { id: "performance", icon: Zap, labelKey: "itemPerformance" },
+    { id: "fileTransfer", icon: HardDrive, labelKey: "itemFileTransfer" },
+    { id: "completion", icon: Command, labelKey: "itemCompletion" },
   ]
 
-  const handleSectionChange = (section: string) => {
-    setActiveSection(section)
+  const handleSectionChange = (sectionId: string) => {
+    setActiveSection(sectionId)
   }
 
   if (isLoading) {
     return (
       <>
-        <PageHeader title="系统配置" />
+        <PageHeader title={t("groupSystemConfig")} />
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
           <SkeletonCard showHeader lines={8} className="flex-1" />
         </div>
@@ -47,7 +49,7 @@ export default function SystemConfigPage() {
 
   return (
     <>
-      <PageHeader title="系统配置" />
+      <PageHeader title={t("groupSystemConfig")} />
 
       <div className="flex flex-1 overflow-hidden">
         <SidebarProvider>
@@ -58,15 +60,15 @@ export default function SystemConfigPage() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {navItems.map((item) => (
-                      <SidebarMenuItem key={item.name}>
+                      <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
                           asChild
-                          isActive={item.name === activeSection}
-                          onClick={() => handleSectionChange(item.name)}
+                          isActive={item.id === activeSection}
+                          onClick={() => handleSectionChange(item.id)}
                         >
                           <button>
                             <item.icon />
-                            <span>{item.name}</span>
+                            <span>{t(item.labelKey)}</span>
                           </button>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -83,14 +85,14 @@ export default function SystemConfigPage() {
             <div className="md:hidden border-b px-4 py-3">
               <Select value={activeSection} onValueChange={handleSectionChange}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="选择设置" />
+                  <SelectValue placeholder={t("mobileSelectPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {navItems.map((item) => (
-                    <SelectItem key={item.name} value={item.name}>
+                    <SelectItem key={item.id} value={item.id}>
                       <div className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
-                        <span>{item.name}</span>
+                        <span>{t(item.labelKey)}</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -101,11 +103,11 @@ export default function SystemConfigPage() {
             {/* 内容滚动区域 */}
             <div className="flex-1 overflow-y-auto scrollbar-custom">
               <div className="space-y-4 p-4">
-                {activeSection === "基本信息" && <BasicTab />}
-                {activeSection === "国际化" && <I18nTab />}
-                {activeSection === "性能设置" && <PerformanceTab />}
-                {activeSection === "文件传输" && <FileTransferTab />}
-                {activeSection === "补全设置" && <CompletionTab />}
+                {activeSection === "basic" && <BasicTab />}
+                {activeSection === "i18n" && <I18nTab />}
+                {activeSection === "performance" && <PerformanceTab />}
+                {activeSection === "fileTransfer" && <FileTransferTab />}
+                {activeSection === "completion" && <CompletionTab />}
               </div>
             </div>
           </main>

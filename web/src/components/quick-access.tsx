@@ -4,6 +4,7 @@ import * as React from "react"
 import { Plus, Search, Zap, Bot } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useTranslations } from "next-intl"
 
 import { Input } from "@/components/ui/input"
 import {
@@ -18,6 +19,7 @@ import {
 export function QuickAccess() {
   const [searchQuery, setSearchQuery] = React.useState("")
   const pathname = usePathname()
+  const tDashboard = useTranslations("dashboard")
 
   const quickActions: Array<{
     title: string
@@ -27,21 +29,21 @@ export function QuickAccess() {
     action?: () => void
   }> = [
     {
-      title: "快速连接",
+      title: tDashboard("quickAccessActionQuickConnect"),
       icon: Zap,
-      description: "打开终端并快速连接",
+      description: tDashboard("quickAccessActionQuickConnectDesc"),
       href: "/dashboard/terminal",
     },
     {
-      title: "添加服务器",
+      title: tDashboard("quickAccessActionAddServer"),
       icon: Plus,
-      description: "添加新的SSH服务器",
+      description: tDashboard("quickAccessActionAddServerDesc"),
       href: "/dashboard/servers",
     },
     {
-      title: "AI助手",
+      title: tDashboard("quickAccessActionAiAssistant"),
       icon: Bot,
-      description: "把需求交给AI，生成计划并执行",
+      description: tDashboard("quickAccessActionAiAssistantDesc"),
       href: "/dashboard/ai-assistant",
     },
   ]
@@ -49,7 +51,7 @@ export function QuickAccess() {
   return (
     <SidebarGroup>
       <SidebarGroupLabel className="text-xs font-medium text-muted-foreground">
-        快速访问
+        {tDashboard("quickAccessLabel")}
       </SidebarGroupLabel>
       <SidebarGroupContent>
         {/* 全局搜索 */}
@@ -57,7 +59,7 @@ export function QuickAccess() {
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="搜索服务器、命令..."
+              placeholder={tDashboard("quickAccessSearchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 h-8 text-sm"

@@ -10,6 +10,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Download, Trash2, Eye, Copy, MoreHorizontal } from "lucide-react"
 import { AuditLog } from "@/lib/api/audit-logs"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 
 interface BatchActionsProps {
   selectedLogs: AuditLog[]
@@ -27,6 +30,11 @@ export function BatchActions({
   onViewDetails,
 }: BatchActionsProps) {
   const hasSelection = selectedLogs.length > 0
+
+  const { user } = useClientAuth()
+  const { data: systemConfig } = useSystemConfig()
+  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
 
   if (!hasSelection) {
     return null
@@ -165,8 +173,14 @@ export function exportLogsToCSV(logs: AuditLog[]): string {
     '耗时'
   ]
 
+  // 使用统一的时区和语言格式化时间
+  const { user } = useClientAuth()
+  const { data: systemConfig } = useSystemConfig()
+  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+
   const rows = logs.map(log => [
-    new Date(log.created_at).toLocaleString('zh-CN'),
+    formatInTimezone(log.created_at, {}, effectiveLocale, effectiveTimezone),
     log.username,
     log.action,
     log.resource,

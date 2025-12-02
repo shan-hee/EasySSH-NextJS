@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Bot, User, Sparkles, Loader2 } from "lucide-react"
+import { useTranslations } from "next-intl"
 import {
   Collapsible,
   CollapsibleContent,
@@ -147,6 +148,8 @@ MessageItem.displayName = 'MessageItem'
 
 export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
   // ========== 状态管理 ==========
+  const tAI = useTranslations("aiAssistant")
+
   const [input, setInput] = useState("")
   const [model, setModel] = useState("auto")
   const [isExpanded, setIsExpanded] = useState(false)
@@ -165,50 +168,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // ========== 消息数据 ==========
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "你好！我是 AI 助手，可以帮你执行终端命令、解释输出、提供建议等。有什么我可以帮你的吗？",
-      timestamp: new Date(Date.now() - 600000),
-    },
-    {
-      id: "2",
-      role: "user",
-      content: "帮我查看一下当前目录下的文件",
-      timestamp: new Date(Date.now() - 540000),
-    },
-    {
-      id: "3",
-      role: "assistant",
-      content: "好的，我建议使用以下命令：\n\n```bash\nls -lah\n```\n\n这个命令会显示：\n- `-l`: 详细列表格式\n- `-a`: 包含隐藏文件\n- `-h`: 人类可读的文件大小",
-      timestamp: new Date(Date.now() - 520000),
-    },
-    {
-      id: "4",
-      role: "user",
-      content: "如何查看系统内存使用情况？",
-      timestamp: new Date(Date.now() - 400000),
-    },
-    {
-      id: "5",
-      role: "assistant",
-      content: "有几种方法可以查看内存使用情况：\n\n1. **free 命令**（推荐）：\n```bash\nfree -h\n```\n\n2. **查看详细信息**：\n```bash\ncat /proc/meminfo\n```\n\n3. **实时监控**：\n```bash\ntop\n```\n然后按 M 键按内存排序。",
-      timestamp: new Date(Date.now() - 380000),
-    },
-    {
-      id: "6",
-      role: "user",
-      content: "谢谢！很有帮助",
-      timestamp: new Date(Date.now() - 300000),
-    },
-    {
-      id: "7",
-      role: "assistant",
-      content: "不客气！随时为您服务。如果还有其他问题，欢迎继续提问。😊",
-      timestamp: new Date(Date.now() - 280000),
-    },
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
 
   // ========== Effects ==========
   // 自动滚动到底部（平滑滚动）
@@ -272,18 +232,18 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
         const aiMessage: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: `收到您的消息："${userInput}"。这是一个模拟回复，实际的 AI 功能需要接入后端 API。`,
+          content: tAI("panelMockReply", { content: userInput }),
           timestamp: new Date(),
         }
         setMessages((prev) => [...prev, aiMessage])
         setIsLoading(false)
       } catch (err) {
-        setError('发送失败，请重试')
+        setError(tAI("panelErrorSendFailed"))
         setIsLoading(false)
         console.error('AI response error:', err)
       }
     }, AI_RESPONSE_DELAY)
-  }, [input, isLoading])
+  }, [input, isLoading, tAI])
 
   // 拖拽开始处理
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -392,7 +352,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
     <div
       ref={containerRef}
       role="dialog"
-      aria-label="AI 助手面板"
+      aria-label={tAI("panelAriaPanelLabel")}
       aria-modal={isOpen}
       className={cn(
         "absolute bottom-0 left-0 right-0 z-50",
@@ -431,7 +391,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
               )}
               onMouseDown={handleDragStart}
               onDoubleClick={handleDoubleClick}
-              title="拖拽展开 • 双击展开"
+              title={tAI("panelDragExpandTitle")}
             />
           </div>
         )}
@@ -459,7 +419,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
                 )}
                 onMouseDown={handleDragStart}
                 onDoubleClick={handleDoubleClick}
-                title="拖拽调整高度 • 双击展开/收起"
+                title={tAI("panelDragResizeTitle")}
               />
 
               <ScrollArea style={{ height: `${messageHeight}px` }}>
@@ -468,7 +428,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
                   role="log"
                   aria-live="polite"
                   aria-relevant="additions"
-                  aria-label="对话历史"
+                  aria-label={tAI("panelAriaHistoryLabel")}
                   className="px-4 pt-2 pb-4 flex flex-col gap-3"
                 >
                   {messages.map((message) => (
@@ -482,7 +442,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
                       </div>
                       <div className="px-3 py-2 rounded-lg text-sm bg-muted text-foreground flex items-center gap-2">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>正在思考...</span>
+                        <span>{tAI("panelThinking")}</span>
                       </div>
                     </div>
                   )}
@@ -507,7 +467,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
                   ref={inputRef as any}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="向 AI 助手提问..."
+                  placeholder={tAI("panelInputPlaceholder")}
                   className="min-h-[60px] text-base"
                 />
 
@@ -541,7 +501,7 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
                     <PromptInputSubmit
                       disabled={!input.trim() || isLoading}
                       className="h-8 w-8"
-                      aria-label="发送消息"
+                      aria-label="Send message"
                     />
                   </div>
                 </PromptInputToolbar>
@@ -564,15 +524,15 @@ export function AiAssistantPanel({ isOpen }: AiAssistantPanelProps) {
               <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
                 Enter
               </kbd>{" "}
-              发送 •{" "}
+              {tAI("panelHintSend")} •{" "}
               <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
                 Shift+Enter
               </kbd>{" "}
-              换行 •{" "}
+              {tAI("panelHintNewline")} •{" "}
               <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
                 Esc
               </kbd>{" "}
-              关闭
+              {tAI("panelHintClose")}
             </div>
           </div>
         </div>

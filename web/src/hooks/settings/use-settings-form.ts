@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 interface UseSettingsFormOptions<T extends FieldValues> {
   schema: z.ZodType<T>
@@ -46,6 +47,7 @@ export function useSettingsForm<T extends FieldValues>({
   defaultValues,
 }: UseSettingsFormOptions<T>): UseSettingsFormReturn<T> {
   const { ready } = useAuthReady()
+  const t = useTranslations("settingsCommon")
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -62,7 +64,11 @@ export function useSettingsForm<T extends FieldValues>({
       form.reset(data)
     } catch (error) {
       const err = error as Error
-      toast.error("加载配置失败: " + (err.message || "未知错误"))
+      toast.error(
+        t("toastLoadFailed", {
+          message: err.message || t("errorUnknown"),
+        })
+      )
       onError?.(err)
     } finally {
       setIsLoading(false)
@@ -81,7 +87,7 @@ export function useSettingsForm<T extends FieldValues>({
     // 先进行表单验证
     const isValid = await form.trigger()
     if (!isValid) {
-      toast.error("请检查表单输入")
+      toast.error(t("toastFormInvalid"))
       return
     }
 
@@ -90,11 +96,15 @@ export function useSettingsForm<T extends FieldValues>({
 
     try {
       await saveFn(data)
-      toast.success("保存成功")
+      toast.success(t("toastSaveSuccess"))
       onSuccess?.()
     } catch (error) {
       const err = error as Error
-      toast.error("保存失败: " + (err.message || "未知错误"))
+      toast.error(
+        t("toastSaveFailed", {
+          message: err.message || t("errorUnknown"),
+        })
+      )
       onError?.(err)
     } finally {
       setIsSaving(false)

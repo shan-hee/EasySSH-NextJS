@@ -7,22 +7,26 @@ import { UserManagementContent } from "./_tabs/user-management-content"
 import { BackupRestoreTab } from "./_tabs/backup-restore-tab"
 import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useTranslations } from "next-intl"
+
+type SectionId = "users" | "backup"
 
 export default function ManagementPage() {
-  const [activeSection, setActiveSection] = useState("用户管理")
+  const t = useTranslations("settingsManagement")
+  const [activeSection, setActiveSection] = useState<SectionId>("users")
 
-  const navItems = [
-    { name: "用户管理", icon: Users },
-    { name: "备份恢复", icon: Database },
+  const navItems: { id: SectionId; icon: typeof Users; labelKey: "navUsers" | "navBackup" }[] = [
+    { id: "users", icon: Users, labelKey: "navUsers" },
+    { id: "backup", icon: Database, labelKey: "navBackup" },
   ]
 
-  const handleSectionChange = (section: string) => {
+  const handleSectionChange = (section: SectionId) => {
     setActiveSection(section)
   }
 
   return (
     <>
-      <PageHeader title="管理运维" />
+      <PageHeader title={t("pageTitle")} />
 
       <div className="flex flex-1 overflow-hidden">
         <SidebarProvider>
@@ -33,15 +37,15 @@ export default function ManagementPage() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {navItems.map((item) => (
-                      <SidebarMenuItem key={item.name}>
+                      <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
                           asChild
-                          isActive={item.name === activeSection}
-                          onClick={() => handleSectionChange(item.name)}
+                          isActive={item.id === activeSection}
+                          onClick={() => handleSectionChange(item.id)}
                         >
                           <button>
                             <item.icon />
-                            <span>{item.name}</span>
+                            <span>{t(item.labelKey)}</span>
                           </button>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -56,16 +60,16 @@ export default function ManagementPage() {
           <main className="flex min-h-[400px] flex-1 flex-col overflow-hidden">
             {/* 移动端下拉选择器 */}
             <div className="md:hidden border-b px-4 py-3">
-              <Select value={activeSection} onValueChange={handleSectionChange}>
+              <Select value={activeSection} onValueChange={(value: SectionId) => handleSectionChange(value)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="选择设置" />
+                  <SelectValue placeholder={t("selectPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {navItems.map((item) => (
-                    <SelectItem key={item.name} value={item.name}>
+                    <SelectItem key={item.id} value={item.id}>
                       <div className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
-                        <span>{item.name}</span>
+                        <span>{t(item.labelKey)}</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -76,8 +80,8 @@ export default function ManagementPage() {
             {/* 内容滚动区域 */}
             <div className="flex-1 overflow-y-auto scrollbar-custom">
               <div className="space-y-4 p-4">
-                {activeSection === "用户管理" && <UserManagementContent />}
-                {activeSection === "备份恢复" && <BackupRestoreTab />}
+                {activeSection === "users" && <UserManagementContent />}
+                {activeSection === "backup" && <BackupRestoreTab />}
               </div>
             </div>
           </main>

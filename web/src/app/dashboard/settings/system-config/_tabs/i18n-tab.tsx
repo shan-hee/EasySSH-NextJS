@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormSelect } from "@/components/settings/form-field"
 import { Globe, Save, Loader2, RotateCcw } from "lucide-react"
@@ -9,27 +10,30 @@ import { i18nSchema } from "@/schemas/settings/system-config.schema"
 import { settingsApi } from "@/lib/api/settings"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 
-const timezoneOptions = [
-  { label: "Asia/Shanghai (东八区)", value: "Asia/Shanghai" },
-  { label: "Asia/Tokyo (东九区)", value: "Asia/Tokyo" },
-  { label: "Asia/Hong_Kong (东八区)", value: "Asia/Hong_Kong" },
-  { label: "America/New_York (西五区)", value: "America/New_York" },
-  { label: "America/Los_Angeles (西八区)", value: "America/Los_Angeles" },
-  { label: "Europe/London (零时区)", value: "Europe/London" },
-  { label: "Europe/Paris (东一区)", value: "Europe/Paris" },
-  { label: "UTC (协调世界时)", value: "UTC" },
-]
-
-const dateFormatOptions = [
-  { label: "YYYY-MM-DD HH:mm:ss", value: "YYYY-MM-DD HH:mm:ss" },
-  { label: "YYYY/MM/DD HH:mm:ss", value: "YYYY/MM/DD HH:mm:ss" },
-  { label: "DD/MM/YYYY HH:mm:ss", value: "DD/MM/YYYY HH:mm:ss" },
-  { label: "MM/DD/YYYY HH:mm:ss", value: "MM/DD/YYYY HH:mm:ss" },
-  { label: "YYYY-MM-DD", value: "YYYY-MM-DD" },
-  { label: "DD-MM-YYYY", value: "DD-MM-YYYY" },
-]
-
 export function I18nTab() {
+  const t = useTranslations("settingsSystemI18n")
+  const tBasic = useTranslations("settingsSystemBasic")
+  const tCommon = useTranslations("common")
+
+  const timezoneOptions = [
+    { label: tBasic("timezoneAsiaShanghai"), value: "Asia/Shanghai" },
+    { label: tBasic("timezoneAsiaTokyo"), value: "Asia/Tokyo" },
+    { label: tBasic("timezoneAsiaHongKong"), value: "Asia/Hong_Kong" },
+    { label: tBasic("timezoneAmericaNewYork"), value: "America/New_York" },
+    { label: tBasic("timezoneAmericaLosAngeles"), value: "America/Los_Angeles" },
+    { label: tBasic("timezoneEuropeLondon"), value: "Europe/London" },
+    { label: tBasic("timezoneEuropeParis"), value: "Europe/Paris" },
+    { label: tBasic("timezoneUTC"), value: "UTC" },
+  ]
+
+  const dateFormatOptions = [
+    { label: "YYYY-MM-DD HH:mm:ss", value: "YYYY-MM-DD HH:mm:ss" },
+    { label: "YYYY/MM/DD HH:mm:ss", value: "YYYY/MM/DD HH:mm:ss" },
+    { label: "DD/MM/YYYY HH:mm:ss", value: "DD/MM/YYYY HH:mm:ss" },
+    { label: "MM/DD/YYYY HH:mm:ss", value: "MM/DD/YYYY HH:mm:ss" },
+    { label: "YYYY-MM-DD", value: "YYYY-MM-DD" },
+    { label: "DD-MM-YYYY", value: "DD-MM-YYYY" },
+  ]
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: i18nSchema,
     loadFn: async () => {
@@ -77,33 +81,33 @@ export function I18nTab() {
   return (
     <div className="space-y-4">
       <SettingsSection
-        title="国际化设置"
-        description="配置时区和日期时间格式"
+        title={t("sectionTitle")}
+        description={t("sectionDescription")}
         icon={<Globe className="h-5 w-5" />}
       >
         <FormSelect
           form={form}
           name="default_timezone"
-          label="默认时区"
-          description="系统使用的默认时区"
+          label={t("fieldDefaultTimezone")}
+          description={t("fieldDefaultTimezoneDesc")}
           required
           options={timezoneOptions}
-          placeholder="选择时区"
+          placeholder={t("placeholderTimezone")}
         />
 
         <FormSelect
           form={form}
           name="date_format"
-          label="日期格式"
-          description="系统中日期时间的显示格式"
+          label={t("fieldDateFormat")}
+          description={t("fieldDateFormatDesc")}
           required
           options={dateFormatOptions}
-          placeholder="选择日期格式"
+          placeholder={t("placeholderDateFormat")}
         />
 
         {selectedFormat && (
           <div className="rounded-lg border p-4 bg-muted/50">
-            <p className="text-sm font-medium mb-1">格式预览：</p>
+            <p className="text-sm font-medium mb-1">{t("previewTitle")}</p>
             <p className="text-lg font-mono">{formatPreview(selectedFormat)}</p>
           </div>
         )}
@@ -113,18 +117,18 @@ export function I18nTab() {
       <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
-          重置
+          {tCommon("reset")}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
+              {tCommon("saving")}
             </>
           ) : (
             <>
               <Save className="mr-2 h-4 w-4" />
-              保存
+              {tCommon("save")}
             </>
           )}
         </Button>

@@ -29,8 +29,9 @@ export const metadata: Metadata = {
     default: "EasySSH",
     template: "%s | EasySSH",
   },
-  description: "EasySSH 是一个现代化的 SSH 服务器管理平台，提供便捷的服务器连接、文件传输、操作审计等功能",
-  keywords: ["SSH", "服务器管理", "远程连接", "文件传输", "审计日志", "EasySSH"],
+  description:
+    "EasySSH is a modern SSH server management platform for secure connections, file transfers and operation auditing.",
+  keywords: ["SSH", "server management", "remote access", "file transfer", "audit logs", "EasySSH"],
   authors: [{ name: "EasySSH Team" }],
   creator: "EasySSH",
   publisher: "EasySSH",
@@ -39,15 +40,16 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    locale: "zh_CN",
+    locale: "en_US",
     title: "EasySSH",
-    description: "现代化的 SSH 服务器管理平台，提供便捷的服务器连接、文件传输、操作审计等功能",
+    description:
+      "EasySSH is a modern SSH server management platform for secure connections, file transfers and operation auditing.",
     siteName: "EasySSH",
   },
   twitter: {
     card: "summary_large_image",
     title: "EasySSH",
-    description: "现代化的 SSH 服务器管理平台",
+    description: "Modern SSH server management platform",
   },
   robots: {
     index: false, // 内部管理系统，不需要被搜索引擎索引

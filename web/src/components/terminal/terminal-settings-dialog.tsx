@@ -32,6 +32,7 @@ import {
   Command,
 } from "lucide-react"
 import { KeyboardShortcutInput } from "./keyboard-shortcut-input"
+import { useTranslations } from "next-intl"
 
 export interface TerminalSettings {
   // 终端设置
@@ -113,6 +114,7 @@ export function TerminalSettingsDialog({
   settings,
   onSettingsChange,
 }: TerminalSettingsDialogProps) {
+  const t = useTranslations("terminalSettings")
   const [localSettings, setLocalSettings] = useState(settings)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -171,10 +173,10 @@ export function TerminalSettingsDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
-              终端设置
+              {t("dialogTitle")}
             </DialogTitle>
             <DialogDescription>
-              配置终端外观、行为和快捷键设置
+              {t("dialogDescription")}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -183,30 +185,30 @@ export function TerminalSettingsDialog({
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="terminal" className="flex items-center gap-2">
               <Terminal className="h-4 w-4" />
-              终端
+              {t("tabTerminal")}
             </TabsTrigger>
             <TabsTrigger value="appearance" className="flex items-center gap-2">
               <Palette className="h-4 w-4" />
-              外观
+              {t("tabAppearance")}
             </TabsTrigger>
             <TabsTrigger value="behavior" className="flex items-center gap-2">
               <Layers className="h-4 w-4" />
-              行为
+              {t("tabBehavior")}
             </TabsTrigger>
             <TabsTrigger value="shortcuts" className="flex items-center gap-2">
               <Keyboard className="h-4 w-4" />
-              快捷键
+              {t("tabShortcuts")}
             </TabsTrigger>
             <TabsTrigger value="completion" className="flex items-center gap-2">
               <Command className="h-4 w-4" />
-              补全
+              {t("tabCompletion")}
             </TabsTrigger>
           </TabsList>
 
           {/* 终端设置 */}
           <TabsContent value="terminal" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="fontSize">字体大小</Label>
+              <Label htmlFor="fontSize">{t("fontSizeLabel")}</Label>
               <div className="flex items-center gap-4">
                 <Slider
                   id="fontSize"
@@ -218,13 +220,13 @@ export function TerminalSettingsDialog({
                   className="flex-1"
                 />
                 <span className="w-12 text-sm text-muted-foreground">
-                  {localSettings.fontSize}px
+                  {t("fontSizeValue", { value: localSettings.fontSize })}
                 </span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="fontFamily">字体</Label>
+              <Label htmlFor="fontFamily">{t("fontFamilyLabel")}</Label>
               <Select
                 value={localSettings.fontFamily}
                 onValueChange={(value) => updateSetting('fontFamily', value)}
@@ -247,7 +249,7 @@ export function TerminalSettingsDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cursorStyle">光标样式</Label>
+              <Label htmlFor="cursorStyle">{t("cursorStyleLabel")}</Label>
               <Select
                 value={localSettings.cursorStyle}
                 onValueChange={(value: 'block' | 'underline' | 'bar') =>
@@ -258,15 +260,15 @@ export function TerminalSettingsDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="block">方块</SelectItem>
-                  <SelectItem value="underline">下划线</SelectItem>
-                  <SelectItem value="bar">竖线</SelectItem>
+                  <SelectItem value="block">{t("cursorStyleBlock")}</SelectItem>
+                  <SelectItem value="underline">{t("cursorStyleUnderline")}</SelectItem>
+                  <SelectItem value="bar">{t("cursorStyleBar")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex items-center justify-between">
-              <Label htmlFor="cursorBlink">光标闪烁</Label>
+              <Label htmlFor="cursorBlink">{t("cursorBlinkLabel")}</Label>
               <Switch
                 id="cursorBlink"
                 checked={localSettings.cursorBlink}
@@ -276,9 +278,9 @@ export function TerminalSettingsDialog({
 
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="rightClickPaste">右键粘贴</Label>
+                <Label htmlFor="rightClickPaste">{t("rightClickPasteLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  在终端中右键单击即可粘贴剪贴板内容
+                  {t("rightClickPasteDescription")}
                 </p>
               </div>
               <Switch
@@ -290,9 +292,9 @@ export function TerminalSettingsDialog({
 
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="copyOnSelect">选中复制</Label>
+                <Label htmlFor="copyOnSelect">{t("copyOnSelectLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  选中文本时自动复制到剪贴板
+                  {t("copyOnSelectDescription")}
                 </p>
               </div>
               <Switch
@@ -303,7 +305,7 @@ export function TerminalSettingsDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="scrollback">回滚缓冲行数</Label>
+              <Label htmlFor="scrollback">{t("scrollbackLabel")}</Label>
               <div className="flex items-center gap-4">
                 <Slider
                   id="scrollback"
@@ -315,7 +317,7 @@ export function TerminalSettingsDialog({
                   className="flex-1"
                 />
                 <span className="w-20 text-sm text-muted-foreground">
-                  {localSettings.scrollback} 行
+                  {t("scrollbackValue", { lines: localSettings.scrollback })}
                 </span>
               </div>
             </div>
@@ -324,7 +326,7 @@ export function TerminalSettingsDialog({
           {/* 外观设置 */}
           <TabsContent value="appearance" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="theme">终端主题</Label>
+              <Label htmlFor="theme">{t("themeLabel")}</Label>
               <Select
                 value={localSettings.theme}
                 onValueChange={(value: typeof localSettings.theme) =>
@@ -335,22 +337,22 @@ export function TerminalSettingsDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">默认（跟随应用主题）</SelectItem>
-                  <SelectItem value="dark">暗色</SelectItem>
-                  <SelectItem value="light">亮色</SelectItem>
+                  <SelectItem value="default">{t("themeOptionDefault")}</SelectItem>
+                  <SelectItem value="dark">{t("themeOptionDark")}</SelectItem>
+                  <SelectItem value="light">{t("themeOptionLight")}</SelectItem>
                   <SelectItem value="solarized">Solarized</SelectItem>
                   <SelectItem value="dracula">Dracula</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {localSettings.theme === 'default'
-                  ? '当前主题将跟随应用的明暗模式自动切换（右上角主题切换）'
-                  : '当前使用固定的终端配色方案'}
+                  ? t("themeHelpFollowApp")
+                  : t("themeHelpFixed")}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="opacity">背景透明度</Label>
+              <Label htmlFor="opacity">{t("opacityLabel")}</Label>
               <div className="flex items-center gap-4">
                 <Slider
                   id="opacity"
@@ -369,21 +371,21 @@ export function TerminalSettingsDialog({
 
             <div className="border-t pt-4 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="backgroundImage">自定义背景图片</Label>
+                <Label htmlFor="backgroundImage">{t("backgroundImageLabel")}</Label>
                 <Input
                   id="backgroundImage"
                   value={localSettings.backgroundImage}
                   onChange={(e) => updateSetting('backgroundImage', e.target.value)}
-                  placeholder="输入图片 URL 或留空使用默认背景"
+                  placeholder={t("backgroundImagePlaceholder")}
                 />
                 <p className="text-xs text-muted-foreground">
-                  支持 http:// 或 https:// 开头的图片链接
+                  {t("backgroundImageHelp")}
                 </p>
               </div>
 
               {localSettings.backgroundImage && (
                 <div className="space-y-2">
-                  <Label htmlFor="backgroundImageOpacity">背景图片透明度</Label>
+                  <Label htmlFor="backgroundImageOpacity">{t("backgroundImageOpacityLabel")}</Label>
                   <div className="flex items-center gap-4">
                     <Slider
                       id="backgroundImageOpacity"
@@ -399,14 +401,14 @@ export function TerminalSettingsDialog({
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    调整背景图片的不透明度，数值越小越透明
+                    {t("backgroundImageOpacityHelp")}
                   </p>
                 </div>
               )}
 
               {localSettings.backgroundImage && (
                 <div className="rounded-lg border p-4 space-y-2">
-                  <Label>预览</Label>
+                  <Label>{t("previewLabel")}</Label>
                   <div
                     className="w-full h-32 rounded-md bg-cover bg-center bg-no-repeat border"
                     style={{
@@ -422,7 +424,7 @@ export function TerminalSettingsDialog({
           {/* 行为设置 */}
           <TabsContent value="behavior" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="maxTabs">最大标签页数量</Label>
+              <Label htmlFor="maxTabs">{t("maxTabsLabel")}</Label>
               <div className="flex items-center gap-4">
                 <Slider
                   id="maxTabs"
@@ -443,7 +445,7 @@ export function TerminalSettingsDialog({
               <Label htmlFor="inactiveMinutes">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  长时间未活动提醒（分钟）
+                  {t("inactiveMinutesLabel")}
                 </div>
               </Label>
               <div className="flex items-center gap-4">
@@ -457,16 +459,16 @@ export function TerminalSettingsDialog({
                   className="flex-1"
                 />
                 <span className="w-16 text-sm text-muted-foreground">
-                  {localSettings.inactiveMinutes} 分钟
+                  {t("inactiveMinutesValue", { minutes: localSettings.inactiveMinutes })}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="hibernateBackground">后台休眠</Label>
+                <Label htmlFor="hibernateBackground">{t("hibernateLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  隐藏的标签页将进入休眠状态以节省资源
+                  {t("hibernateDescription")}
                 </p>
               </div>
               <Switch
@@ -478,9 +480,9 @@ export function TerminalSettingsDialog({
 
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="autoReconnect">自动重连</Label>
+                <Label htmlFor="autoReconnect">{t("autoReconnectLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  连接断开后自动尝试重新连接
+                  {t("autoReconnectDescription")}
                 </p>
               </div>
               <Switch
@@ -492,9 +494,9 @@ export function TerminalSettingsDialog({
 
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="confirmBeforeClose">关闭前确认</Label>
+                <Label htmlFor="confirmBeforeClose">{t("confirmBeforeCloseLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  关闭活动连接前显示确认对话框
+                  {t("confirmBeforeCloseDescription")}
                 </p>
               </div>
               <Switch
@@ -508,7 +510,7 @@ export function TerminalSettingsDialog({
               <Label htmlFor="monitorInterval">
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4" />
-                  监控数据采集间隔
+                  {t("monitorIntervalLabel")}
                 </div>
               </Label>
               <div className="flex items-center gap-4">
@@ -522,11 +524,11 @@ export function TerminalSettingsDialog({
                   className="flex-1"
                 />
                 <span className="w-14 text-sm text-muted-foreground">
-                  {localSettings.monitorInterval} 秒
+                  {t("monitorIntervalValue", { seconds: localSettings.monitorInterval })}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                调整系统监控面板的数据采集频率。间隔越短，数据越实时，但可能增加系统负载
+                {t("monitorIntervalHelp")}
               </p>
             </div>
           </TabsContent>
@@ -534,41 +536,41 @@ export function TerminalSettingsDialog({
           {/* 快捷键设置 */}
           <TabsContent value="shortcuts" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="copyShortcut">复制</Label>
+              <Label htmlFor="copyShortcut">{t("shortcutsCopyLabel")}</Label>
               <KeyboardShortcutInput
                 id="copyShortcut"
                 value={localSettings.copyShortcut}
                 onChange={(value) => updateSetting('copyShortcut', value)}
-                placeholder="点击后按下快捷键"
+                placeholder={t("shortcutsPlaceholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="pasteShortcut">粘贴</Label>
+              <Label htmlFor="pasteShortcut">{t("shortcutsPasteLabel")}</Label>
               <KeyboardShortcutInput
                 id="pasteShortcut"
                 value={localSettings.pasteShortcut}
                 onChange={(value) => updateSetting('pasteShortcut', value)}
-                placeholder="点击后按下快捷键"
+                placeholder={t("shortcutsPlaceholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="clearShortcut">清屏</Label>
+              <Label htmlFor="clearShortcut">{t("shortcutsClearLabel")}</Label>
               <KeyboardShortcutInput
                 id="clearShortcut"
                 value={localSettings.clearShortcut}
                 onChange={(value) => updateSetting('clearShortcut', value)}
-                placeholder="点击后按下快捷键"
+                placeholder={t("shortcutsPlaceholder")}
               />
             </div>
 
             <div className="rounded-lg bg-muted p-4 space-y-2">
-              <p className="text-sm font-medium">提示</p>
+              <p className="text-sm font-medium">{t("shortcutsTipsTitle")}</p>
               <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• 点击输入框后，按下任意键组合即可自动录入</li>
-                <li>• 支持 Ctrl、Shift、Alt、Meta 等修饰键</li>
-                <li>• 点击输入框右侧的 × 图标可清除快捷键</li>
+                <li>• {t("shortcutsTipClick")}</li>
+                <li>• {t("shortcutsTipModifiers")}</li>
+                <li>• {t("shortcutsTipClear")}</li>
               </ul>
             </div>
           </TabsContent>
@@ -577,9 +579,9 @@ export function TerminalSettingsDialog({
           <TabsContent value="completion" className="space-y-4 overflow-y-auto scrollbar-custom pr-2 mt-4">
             <div className="flex items-center justify-between">
               <div>
-                <Label htmlFor="completionEnabled">启用补全</Label>
+                <Label htmlFor="completionEnabled">{t("completionEnabledLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  在当前终端中启用命令补全功能
+                  {t("completionEnabledDescription")}
                 </p>
               </div>
               <Switch
@@ -592,7 +594,7 @@ export function TerminalSettingsDialog({
             {localSettings.completionEnabled && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="completionTrigger">触发方式</Label>
+                  <Label htmlFor="completionTrigger">{t("completionTriggerLabel")}</Label>
                   <Select
                     value={localSettings.completionTrigger}
                     onValueChange={(value: 'tab' | 'auto') =>
@@ -603,20 +605,20 @@ export function TerminalSettingsDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="tab">Tab 键触发</SelectItem>
-                      <SelectItem value="auto">自动触发</SelectItem>
+                      <SelectItem value="tab">{t("completionTriggerTab")}</SelectItem>
+                      <SelectItem value="auto">{t("completionTriggerAuto")}</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     {localSettings.completionTrigger === 'tab'
-                      ? '按 Tab 键手动触发补全'
-                      : '输入时自动显示补全建议'}
+                      ? t("completionTriggerHelpTab")
+                      : t("completionTriggerHelpAuto")}
                   </p>
                 </div>
 
                 {localSettings.completionTrigger === 'auto' && (
                   <div className="space-y-2">
-                    <Label htmlFor="completionAutoDelay">自动触发延迟</Label>
+                    <Label htmlFor="completionAutoDelay">{t("completionAutoDelayLabel")}</Label>
                     <div className="flex items-center gap-4">
                       <Slider
                         id="completionAutoDelay"
@@ -632,13 +634,13 @@ export function TerminalSettingsDialog({
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      停止输入后等待多久显示补全建议
+                      {t("completionAutoDelayHelp")}
                     </p>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="completionMaxItems">最大显示数量</Label>
+                  <Label htmlFor="completionMaxItems">{t("completionMaxItemsLabel")}</Label>
                   <div className="flex items-center gap-4">
                     <Slider
                       id="completionMaxItems"
@@ -650,20 +652,20 @@ export function TerminalSettingsDialog({
                       className="flex-1"
                     />
                     <span className="w-12 text-sm text-muted-foreground">
-                      {localSettings.completionMaxItems} 项
+                      {t("completionMaxItemsValue", { count: localSettings.completionMaxItems })}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    补全弹窗中最多显示的补全项数量
+                    {t("completionMaxItemsHelp")}
                   </p>
                 </div>
 
                 <div className="border-t pt-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="completionShowIcon">显示图标</Label>
+                      <Label htmlFor="completionShowIcon">{t("completionShowIconLabel")}</Label>
                       <p className="text-sm text-muted-foreground">
-                        在补全项中显示类型图标
+                        {t("completionShowIconDescription")}
                       </p>
                     </div>
                     <Switch
@@ -675,9 +677,9 @@ export function TerminalSettingsDialog({
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="completionShowDescription">显示描述</Label>
+                      <Label htmlFor="completionShowDescription">{t("completionShowDescriptionLabel")}</Label>
                       <p className="text-sm text-muted-foreground">
-                        在补全项中显示详细描述信息
+                        {t("completionShowDescriptionDescription")}
                       </p>
                     </div>
                     <Switch
@@ -694,14 +696,14 @@ export function TerminalSettingsDialog({
 
         <div className="flex justify-between pt-4 pb-6 px-6 shrink-0">
           <Button variant="outline" onClick={handleReset}>
-            恢复默认
+            {t("btnReset")}
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              {t("btnCancel")}
             </Button>
             <Button onClick={handleSave}>
-              保存设置
+              {t("btnSave")}
             </Button>
           </div>
         </div>

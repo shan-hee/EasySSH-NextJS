@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useCallback, useTransition, useOptimistic } from "react"
+import { useTranslations } from "next-intl"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, Activity, ArrowUpDown, ArrowDownUp } from "lucide-react"
 import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
@@ -38,6 +39,7 @@ interface SessionsClientProps {
  * 接收服务端传递的初始数据，处理客户端交互
  */
 export function SessionsClient({ initialData }: SessionsClientProps) {
+  const t = useTranslations("connectionHistory")
   const { ready } = useAuthReady()
   const [isPending, startTransition] = useTransition()
   const [sessions, setSessions] = useState<SSHSessionDetail[]>(initialData?.sessions || [])
@@ -85,12 +87,12 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
         setTotalCount(sessionsResponse.total || 0)
         setStatistics(statsResponse)
       } catch (error: unknown) {
-        toast.error(getErrorMessage(error, "无法加载历史连接"))
+        toast.error(getErrorMessage(error, t("toastLoadFailed")))
       } finally {
         setRefreshing(false)
       }
     },
-    []
+    [t]
   )
 
   // 初始加载数据（纯 CSR 模式，仅在已认证且全局状态就绪时触发）
@@ -127,7 +129,7 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
 
   // 删除会话记录（使用 API + 乐观更新）
   const handleDelete = async (id: string) => {
-    if (!confirm("确定要删除这条会话记录吗？")) {
+    if (!confirm(t("toastDeleteConfirm"))) {
       return
     }
 
@@ -137,11 +139,11 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     startTransition(async () => {
       try {
         await sshSessionsApi.delete(id)
-        toast.success("会话记录已删除")
+        toast.success(t("toastDeleteSuccess"))
         // 刷新数据
         await loadData(page, pageSize)
       } catch (error: unknown) {
-        toast.error(getErrorMessage(error, "删除失败"))
+        toast.error(getErrorMessage(error, t("toastDeleteFailed")))
         // 恢复数据
         await loadData(page, pageSize)
       }
@@ -172,24 +174,27 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     a.download = `session-${session.session_id.substring(0, 8)}-export.json`
     a.click()
     URL.revokeObjectURL(url)
-    toast.success("会话数据已导出")
+    toast.success(t("toastExportSuccess"))
   }
 
   // 创建列定义
-  const columns = createSessionColumns({
-    onExport: handleExportSession,
-    onDelete: handleDelete,
-  })
+  const columns = createSessionColumns(
+    {
+      onExport: handleExportSession,
+      onDelete: handleDelete,
+    },
+    (key, values) => t(key as any, values)
+  )
 
   // 状态筛选选项
   const statusFilters = [
     {
       column: "status",
-      title: "状态",
+      title: t("filterStatusTitle"),
       options: [
-        { label: "活动", value: "active" },
-        { label: "已关闭", value: "closed" },
-        { label: "超时", value: "timeout" },
+        { label: t("filterStatusActive"), value: "active" },
+        { label: t("filterStatusClosed"), value: "closed" },
+        { label: t("filterStatusTimeout"), value: "timeout" },
       ],
     },
   ]
@@ -200,53 +205,69 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
       <div className="grid gap-4 md:grid-cols-4 shrink-0">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">总会话</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsTotalTitle")}
+            </CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statistics?.total_sessions || 0}</div>
             <p className="text-xs text-muted-foreground">
-              活动 {statistics?.active_sessions || 0} 个
+              {t("statsTotalDesc", {
+                active: statistics?.active_sessions || 0,
+              })}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">已关闭</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsClosedTitle")}
+            </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-600">
               {statistics?.closed_sessions || 0}
             </div>
-            <p className="text-xs text-muted-foreground">历史会话</p>
+            <p className="text-xs text-muted-foreground">
+              {t("statsClosedDesc")}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">上传流量</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsUploadTitle")}
+            </CardTitle>
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
               {formatBytes(statistics?.total_bytes_sent || 0)}
             </div>
-            <p className="text-xs text-muted-foreground">总发送</p>
+            <p className="text-xs text-muted-foreground">
+              {t("statsUploadDesc")}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">下载流量</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsDownloadTitle")}
+            </CardTitle>
             <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
               {formatBytes(statistics?.total_bytes_received || 0)}
             </div>
-            <p className="text-xs text-muted-foreground">总接收</p>
+            <p className="text-xs text-muted-foreground">
+              {t("statsDownloadDesc")}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -261,12 +282,12 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
         totalRows={totalCount}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
-        emptyMessage="暂无历史连接"
+        emptyMessage={t("tableEmpty")}
         toolbar={(table) => (
           <DataTableToolbar
             table={table}
             searchKey="server_name"
-            searchPlaceholder="搜索服务器名称或IP..."
+            searchPlaceholder={t("tableSearchPlaceholder")}
             filters={statusFilters}
             onRefresh={handleRefresh}
             showRefresh={true}

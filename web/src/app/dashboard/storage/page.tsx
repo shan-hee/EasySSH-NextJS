@@ -7,11 +7,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { HardDrive, Trash2, FolderOpen, File, AlertCircle, Database } from "lucide-react"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 const mockStorageData = [
  {
  id: 1,
- name: "临时文件",
+ name: "temp",
  path: "/tmp/easyssh/",
  size: "2.3 GB",
  fileCount: 145,
@@ -21,7 +22,7 @@ const mockStorageData = [
  },
  {
  id: 2,
- name: "上传缓存",
+ name: "cache",
  path: "/var/easyssh/uploads/",
  size: "5.8 GB",
  fileCount: 328,
@@ -31,7 +32,7 @@ const mockStorageData = [
  },
  {
  id: 3,
- name: "日志文件",
+ name: "logs",
  path: "/var/log/easyssh/",
  size: "1.2 GB",
  fileCount: 892,
@@ -41,7 +42,7 @@ const mockStorageData = [
  },
  {
  id: 4,
- name: "会话录像",
+ name: "recordings",
  path: "/var/easyssh/recordings/",
  size: "15.6 GB",
  fileCount: 67,
@@ -51,7 +52,7 @@ const mockStorageData = [
  },
  {
  id: 5,
- name: "备份文件",
+ name: "backups",
  path: "/var/backups/easyssh/",
  size: "8.9 GB",
  fileCount: 23,
@@ -69,16 +70,17 @@ const typeColors = {
  backups: "bg-red-100 text-red-800",
 }
 
-const typeLabels = {
- temp: "临时",
- cache: "缓存",
- logs: "日志",
- recordings: "录像",
- backups: "备份",
+const typeLabels: Record<string, keyof typeof typeColors> = {
+ temp: "temp",
+ cache: "cache",
+ logs: "logs",
+ recordings: "recordings",
+ backups: "backups",
 }
 
 export default function StoragePage() {
  const { ready } = useAuthReady()
+ const t = useTranslations("storage")
  const [storage] = useState(mockStorageData)
 
  const totalSize = storage.reduce((acc, item) => {
@@ -97,10 +99,10 @@ export default function StoragePage() {
 
  return (
  <>
- <PageHeader title="存储空间">
+ <PageHeader title={t("pageTitle")}>
  <Button variant="destructive" size="sm">
  <Trash2 className="mr-2 h-4 w-4" />
- 清理空间
+ {t("actionClean")}
  </Button>
  </PageHeader>
 
@@ -108,83 +110,90 @@ export default function StoragePage() {
  <div className="grid gap-4 md:grid-cols-4">
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">总使用空间</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsTotalTitle")}</CardTitle>
  <HardDrive className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold">{totalSize.toFixed(1)} GB</div>
- <p className="text-xs text-muted-foreground">系统总占用</p>
+ <p className="text-xs text-muted-foreground">{t("statsTotalDesc")}</p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">可清理空间</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsCleanableTitle")}</CardTitle>
  <Trash2 className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold text-orange-600">{cleanableSize.toFixed(1)} GB</div>
- <p className="text-xs text-muted-foreground">临时文件和缓存</p>
+ <p className="text-xs text-muted-foreground">{t("statsCleanableDesc")}</p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">文件总数</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsFileCountTitle")}</CardTitle>
  <File className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold">
  {storage.reduce((acc, item) => acc + item.fileCount, 0)}
  </div>
- <p className="text-xs text-muted-foreground">所有类型文件</p>
+ <p className="text-xs text-muted-foreground">{t("statsFileCountDesc")}</p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">磁盘使用率</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsDiskUsageTitle")}</CardTitle>
  <Database className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold text-green-600">42%</div>
- <p className="text-xs text-muted-foreground">剩余 58 GB</p>
- </CardContent>
+           <CardContent>
+           <div className="text-2xl font-bold text-green-600">42%</div>
+           <p className="text-xs text-muted-foreground">
+           {t("statsDiskUsageDesc", { free: "58 GB" })}
+           </p>
+           </CardContent>
  </Card>
  </div>
 
  <Card>
- <CardHeader>
- <div className="flex items-center justify-between">
- <div>
- <CardTitle>磁盘使用情况</CardTitle>
- <CardDescription>总容量 100 GB</CardDescription>
- </div>
- </div>
- </CardHeader>
+         <CardHeader>
+         <div className="flex items-center justify-between">
+         <div>
+         <CardTitle>{t("chartTitle")}</CardTitle>
+         <CardDescription>{t("chartDesc", { total: "100 GB" })}</CardDescription>
+         </div>
+         </div>
+         </CardHeader>
  <CardContent>
  <div className="space-y-2">
  <div className="h-8 bg-gray-200 rounded-lg overflow-hidden flex">
  <div className="bg-yellow-500 flex items-center justify-center text-xs text-white font-medium" style={{width: "23%"}}>
- 临时 2.3GB
+ {t("typeTempShort")} 2.3GB
  </div>
  <div className="bg-blue-500 flex items-center justify-center text-xs text-white font-medium" style={{width: "58%"}}>
- 缓存 5.8GB
+ {t("typeCacheShort")} 5.8GB
  </div>
  <div className="bg-purple-500 flex items-center justify-center text-xs text-white font-medium" style={{width: "12%"}}>
- 日志 1.2GB
+ {t("typeLogsShort")} 1.2GB
  </div>
  <div className="bg-green-500 flex items-center justify-center text-xs text-white font-medium" style={{width: "156%"}}>
- 录像 15.6GB
+ {t("typeRecordingsShort")} 15.6GB
  </div>
  <div className="bg-red-500 flex items-center justify-center text-xs text-white font-medium" style={{width: "89%"}}>
- 备份 8.9GB
+ {t("typeBackupsShort")} 8.9GB
  </div>
  </div>
- <div className="flex items-center justify-between text-sm text-muted-foreground">
- <span>已使用: {totalSize.toFixed(1)} GB (42%)</span>
- <span>可用: 58 GB</span>
- </div>
+         <div className="flex items-center justify-between text-sm text-muted-foreground">
+         <span>
+         {t("chartUsedLabel", {
+         used: `${totalSize.toFixed(1)} GB`,
+         percent: "42%",
+         })}
+         </span>
+         <span>{t("chartFreeLabel", { free: "58 GB" })}</span>
+         </div>
  </div>
  </CardContent>
  </Card>
@@ -200,29 +209,53 @@ export default function StoragePage() {
  </div>
  <div>
  <div className="flex items-center gap-2">
- <h3 className="font-medium">{item.name}</h3>
+ <h3 className="font-medium">
+   {t(
+     item.name === "temp"
+       ? "typeTempName"
+       : item.name === "cache"
+       ? "typeCacheName"
+       : item.name === "logs"
+       ? "typeLogsName"
+       : item.name === "recordings"
+       ? "typeRecordingsName"
+       : "typeBackupsName",
+   )}
+ </h3>
  <Badge className={typeColors[item.type as keyof typeof typeColors]}>
- {typeLabels[item.type as keyof typeof typeLabels]}
+   {t(
+     item.type === "temp"
+       ? "typeTempShort"
+       : item.type === "cache"
+       ? "typeCacheShort"
+       : item.type === "logs"
+       ? "typeLogsShort"
+       : item.type === "recordings"
+       ? "typeRecordingsShort"
+       : "typeBackupsShort",
+   )}
  </Badge>
  {item.canClean && (
- <Badge variant="outline" className="text-xs">可清理</Badge>
+ <Badge variant="outline" className="text-xs">{t("badgeCleanable")}</Badge>
  )}
  </div>
  <p className="text-sm text-muted-foreground">{item.path}</p>
- <p className="text-xs text-muted-foreground mt-1">
- 最后修改: {item.lastModified}
- </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {t("lastModified", { time: item.lastModified })}
+        </p>
  </div>
  </div>
  <div className="text-right space-y-2">
  <div>
  <div className="text-2xl font-bold">{item.size}</div>
- <div className="text-sm text-muted-foreground">{item.fileCount} 个文件</div>
+        <div className="text-sm text-muted-foreground">
+          {t("fileCount", { count: item.fileCount })}
+        </div>
  </div>
  {item.canClean && (
  <Button variant="outline" size="sm">
  <Trash2 className="mr-2 h-4 w-4" />
- 清理
+ {t("itemClean")}
  </Button>
  )}
  </div>
@@ -232,14 +265,14 @@ export default function StoragePage() {
  ))}
  </div>
 
- <Card className="border-yellow-200 bg-yellow-50">
+<Card className="border-yellow-200 bg-yellow-50">
  <CardContent className="pt-6">
  <div className="flex items-start gap-3">
  <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
  <div>
- <h4 className="font-medium text-yellow-900">存储空间提示</h4>
+ <h4 className="font-medium text-yellow-900">{t("hintTitle")}</h4>
  <p className="text-sm text-yellow-800 mt-1">
- 建议定期清理临时文件和缓存以释放磁盘空间。录像文件和备份文件请谨慎清理，确保已经完成归档或不再需要。
+   {t("hintContent")}
  </p>
  </div>
  </div>

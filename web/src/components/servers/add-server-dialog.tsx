@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/select"
 import { X, Plus } from "lucide-react"
 import { PrivateKeyInput } from "@/components/servers/private-key-input"
-
+import { useTranslations } from "next-intl"
+import { toast } from "@/components/ui/sonner"
 interface AddServerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -68,6 +69,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
   })
 
   const [newTag, setNewTag] = useState("")
+  const tServers = useTranslations("servers")
 
   const handleInputChange = (field: keyof ServerFormData, value: string | boolean) => {
     setFormData(prev => ({
@@ -96,18 +98,18 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
   const handleSave = () => {
     // 验证必填字段
     if (!formData.host.trim()) {
-      alert("请输入服务器地址")
+      toast.error(tServers("quickFormHostRequired"))
       return
     }
     if (!formData.username.trim()) {
-      alert("请输入用户名")
+      toast.error(tServers("quickFormUsernameRequired"))
       return
     }
 
     // 验证端口号
     const port = parseInt(formData.port)
     if (isNaN(port) || port < 1 || port > 65535) {
-      alert("端口号必须是1-65535之间的数字")
+      toast.error(tServers("quickFormPortInvalid"))
       return
     }
 
@@ -145,35 +147,35 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
       <DialogContent className="max-w-3xl h-[580px] flex flex-col p-0">
         <div className="px-6 pt-6">
           <DialogHeader>
-            <DialogTitle>新建连接</DialogTitle>
+            <DialogTitle>{tServers("quickFormDialogTitle")}</DialogTitle>
             {/* 为无障碍提供描述，避免控制台警告 */}
             <DialogDescription className="sr-only">
-              填写服务器连接信息（主机、端口、用户名与认证方式），并选择是否自动连接与保持连接。
+              {tServers("quickFormDialogDescription")}
             </DialogDescription>
           </DialogHeader>
         </div>
 
         <Tabs defaultValue="server" className="w-full flex-1 flex flex-col overflow-hidden px-6">
           <TabsList className="w-full">
-            <TabsTrigger value="server">云服务器</TabsTrigger>
-            <TabsTrigger value="advanced">高级配置</TabsTrigger>
-            <TabsTrigger value="settings">其他设置</TabsTrigger>
+            <TabsTrigger value="server">{tServers("quickFormTabServer")}</TabsTrigger>
+            <TabsTrigger value="advanced">{tServers("quickFormTabAdvanced")}</TabsTrigger>
+            <TabsTrigger value="settings">{tServers("quickFormTabSettings")}</TabsTrigger>
           </TabsList>
 
           {/* 云服务器标签 */}
           <TabsContent value="server" className="space-y-4 mt-4 flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="host">云服务器公网IP或域名</Label>
+                <Label htmlFor="host">{tServers("quickFormHostLabel")}</Label>
                 <Input
                   id="host"
-                  placeholder="请输入云服务器公网IP或域名"
+                  placeholder={tServers("quickFormHostPlaceholder")}
                   value={formData.host}
                   onChange={(e) => handleInputChange("host", e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="port">云服务器端口</Label>
+                <Label htmlFor="port">{tServers("quickFormPortLabel")}</Label>
                 <Input
                   id="port"
                   placeholder="22"
@@ -185,20 +187,20 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="username">用户名</Label>
+                <Label htmlFor="username">{tServers("quickFormUsernameLabel")}</Label>
                 <Input
                   id="username"
                   autoComplete="username"
-                  placeholder="请输入用户名"
+                  placeholder={tServers("quickFormUsernamePlaceholder")}
                   value={formData.username}
                   onChange={(e) => handleInputChange("username", e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="name">备注 (选填)</Label>
+                <Label htmlFor="name">{tServers("quickFormNameLabel")}</Label>
                 <Input
                   id="name"
-                  placeholder="请输入备注"
+                  placeholder={tServers("quickFormNamePlaceholder")}
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                 />
@@ -206,21 +208,27 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
             </div>
 
             <div className="space-y-2">
-              <Label>验证方式</Label>
+              <Label>{tServers("quickFormAuthMethodLabel")}</Label>
               <Tabs
                 className="w-full"
                 value={formData.authMethod}
                 onValueChange={(value) => handleInputChange("authMethod", value as "password" | "privateKey")}
               >
                 <TabsList className="w-1/2">
-                  <TabsTrigger value="password">密码验证</TabsTrigger>
-                  <TabsTrigger value="privateKey">私钥验证</TabsTrigger>
+                  <TabsTrigger value="password">
+                    {tServers("quickFormAuthMethodPassword")}
+                  </TabsTrigger>
+                  <TabsTrigger value="privateKey">
+                    {tServers("quickFormAuthMethodPrivateKey")}
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="password" forceMount className="space-y-2 mt-4 data-[state=inactive]:hidden">
                   {/* 将密码输入包裹在 form 中，并提供隐藏的用户名字段，满足密码管理器与无障碍建议 */}
                   <form className="space-y-2" onSubmit={(e) => e.preventDefault()}>
-                    <Label htmlFor="username-hidden" className="sr-only">用户名</Label>
+                    <Label htmlFor="username-hidden" className="sr-only">
+                      {tServers("quickFormUsernameLabel")}
+                    </Label>
                     <Input
                       id="username-hidden"
                       name="username"
@@ -230,12 +238,12 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
                       onChange={(e) => handleInputChange("username", e.target.value)}
                       className="sr-only"
                     />
-                    <Label htmlFor="password">密码 (选填)</Label>
+                    <Label htmlFor="password">{tServers("quickFormPasswordLabel")}</Label>
                     <Input
                       id="password"
                       type="password"
                       autoComplete="new-password"
-                      placeholder="请输入密码"
+                      placeholder={tServers("quickFormPasswordPlaceholder")}
                       value={formData.password}
                       onChange={(e) => handleInputChange("password", e.target.value)}
                     />
@@ -251,7 +259,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
                         htmlFor="remember"
                         className="text-sm font-normal cursor-pointer"
                       >
-                        记住密码
+                        {tServers("quickFormRememberPasswordLabel")}
                       </Label>
                     </div>
                   </form>
@@ -260,10 +268,10 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
                 <TabsContent value="privateKey" forceMount className="mt-4 data-[state=inactive]:hidden">
                   <PrivateKeyInput
                     id="privateKey"
-                    label="私钥"
+                    label={tServers("quickFormPrivateKeyLabel")}
                     value={formData.privateKey}
                     onChange={(v) => handleInputChange("privateKey", v)}
-                    placeholder="请输入或从文件导入私钥内容"
+                    placeholder={tServers("quickFormPrivateKeyPlaceholder")}
                   />
                 </TabsContent>
               </Tabs>
@@ -273,10 +281,10 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
           {/* 高级配置标签 */}
           <TabsContent value="advanced" className="space-y-4 mt-4 flex-1 overflow-y-auto">
             <div className="space-y-2">
-              <Label htmlFor="description">服务器描述</Label>
+              <Label htmlFor="description">{tServers("quickFormDescriptionLabel")}</Label>
               <Textarea
                 id="description"
-                placeholder="输入服务器描述信息..."
+                placeholder={tServers("quickFormDescriptionPlaceholder")}
                 value={formData.description}
                 onChange={(e) => handleInputChange("description", e.target.value)}
                 rows={4}
@@ -284,16 +292,16 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="jumpServer">跳板机</Label>
+              <Label htmlFor="jumpServer">{tServers("quickFormJumpServerLabel")}</Label>
               <Select
                 value={formData.jumpServer}
                 onValueChange={(value) => handleInputChange("jumpServer", value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择跳板机（可选）" />
+                  <SelectValue placeholder={tServers("quickFormJumpServerPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">无</SelectItem>
+                  <SelectItem value="none">{tServers("quickFormJumpServerNone")}</SelectItem>
                   <SelectItem value="jump-01">跳板机01 (192.168.1.10)</SelectItem>
                   <SelectItem value="jump-02">跳板机02 (192.168.1.11)</SelectItem>
                 </SelectContent>
@@ -301,7 +309,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
             </div>
 
             <div className="space-y-2">
-              <Label>标签</Label>
+              <Label>{tServers("quickFormTagsLabel")}</Label>
               <div className="flex flex-wrap gap-2 mb-2">
                 {formData.tags.map((tag) => (
                   <Badge key={tag} variant="secondary" className="flex items-center gap-1">
@@ -322,7 +330,7 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
                 <Input
                   value={newTag}
                   onChange={(e) => setNewTag(e.target.value)}
-                  placeholder="添加标签"
+                  placeholder={tServers("quickFormTagsPlaceholder")}
                   onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
                 />
                 <Button type="button" variant="outline" onClick={handleAddTag}>
@@ -337,9 +345,9 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="space-y-0.5">
-                  <Label>自动连接</Label>
+                  <Label>{tServers("quickFormAutoConnectLabel")}</Label>
                   <p className="text-sm text-muted-foreground">
-                    在服务器列表中自动建立连接
+                    {tServers("quickFormAutoConnectDescription")}
                   </p>
                 </div>
                 <Switch
@@ -350,9 +358,9 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
 
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="space-y-0.5">
-                  <Label>保持连接</Label>
+                  <Label>{tServers("quickFormKeepAliveLabel")}</Label>
                   <p className="text-sm text-muted-foreground">
-                    启用TCP Keep-Alive保持连接活跃
+                    {tServers("quickFormKeepAliveDescription")}
                   </p>
                 </div>
                 <Switch
@@ -367,10 +375,10 @@ export function AddServerDialog({ open, onOpenChange, onSubmit }: AddServerDialo
         {/* 底部按钮 */}
         <div className="flex justify-end gap-2 p-6">
           <Button variant="outline" onClick={handleCancel}>
-            取消
+            {tServers("quickFormCancelButton")}
           </Button>
           <Button onClick={handleSave}>
-            保存
+            {tServers("quickFormSaveButton")}
           </Button>
         </div>
       </DialogContent>

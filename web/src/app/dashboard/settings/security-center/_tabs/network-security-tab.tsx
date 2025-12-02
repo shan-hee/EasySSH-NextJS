@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput } from "@/components/settings/form-field"
 import { Globe, Shield, Zap, Save, Loader2, RotateCcw, Plus, X } from "lucide-react"
@@ -16,6 +17,8 @@ import { Badge } from "@/components/ui/badge"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 
 export function NetworkSecurityTab() {
+  const t = useTranslations("settingsSecurityNetwork")
+  const tCommon = useTranslations("common")
   // 统一的表单管理
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: networkSecurityFullSchema,
@@ -118,17 +121,17 @@ export function NetworkSecurityTab() {
     <div className="space-y-4">
       {/* CORS配置 */}
       <SettingsSection
-        title="CORS跨域配置"
-        description="配置跨域资源共享(CORS)策略"
+        title={t("corsSectionTitle")}
+        description={t("corsSectionDescription")}
         icon={<Globe className="h-5 w-5" />}
       >
         <div className="space-y-4">
           {/* 允许的源 */}
           <div className="space-y-3">
-            <Label>允许的源 (Origins)</Label>
+            <Label>{t("labelAllowedOrigins")}</Label>
             <div className="flex gap-2">
               <Input
-                placeholder="输入域名,例如: https://example.com"
+                placeholder={t("placeholderAllowedOrigins")}
                 value={originInput}
                 onChange={(e) => setOriginInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addOrigin()}
@@ -151,16 +154,16 @@ export function NetworkSecurityTab() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              使用 * 表示允许所有源(不推荐用于生产环境)
+              {t("helperAllowedOrigins")}
             </p>
           </div>
 
           {/* 允许的方法 */}
           <div className="space-y-3">
-            <Label>允许的HTTP方法 (Methods)</Label>
+            <Label>{t("labelAllowedMethods")}</Label>
             <div className="flex gap-2">
               <Input
-                placeholder="输入HTTP方法,例如: GET, POST"
+                placeholder={t("placeholderAllowedMethods")}
                 value={methodInput}
                 onChange={(e) => setMethodInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addMethod()}
@@ -183,16 +186,16 @@ export function NetworkSecurityTab() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              常用方法: GET, POST, PUT, DELETE, PATCH, OPTIONS
+              {t("helperAllowedMethods")}
             </p>
           </div>
 
           {/* 允许的请求头 */}
           <div className="space-y-3">
-            <Label>允许的请求头 (Headers)</Label>
+            <Label>{t("labelAllowedHeaders")}</Label>
             <div className="flex gap-2">
               <Input
-                placeholder="输入请求头,例如: Content-Type"
+                placeholder={t("placeholderAllowedHeaders")}
                 value={headerInput}
                 onChange={(e) => setHeaderInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addHeader()}
@@ -215,7 +218,7 @@ export function NetworkSecurityTab() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              使用 * 表示允许所有请求头。常用: Content-Type, Authorization, X-Requested-With
+              {t("helperAllowedHeaders")}
             </p>
           </div>
         </div>
@@ -223,22 +226,22 @@ export function NetworkSecurityTab() {
         <Alert>
           <InfoIcon className="h-4 w-4" />
           <AlertDescription>
-            CORS配置会影响前端应用的跨域请求。请根据实际需求配置,避免过于宽松的设置。
+            {t("alertContent")}
           </AlertDescription>
         </Alert>
       </SettingsSection>
 
       {/* 速率限制配置 */}
       <SettingsSection
-        title="速率限制"
-        description="配置API和登录请求的速率限制"
+        title={t("rateLimitSectionTitle")}
+        description={t("rateLimitSectionDescription")}
         icon={<Zap className="h-5 w-5" />}
       >
         <FormInput
           form={form}
           name="login_limit"
-          label="登录速率限制 (次/分钟)"
-          description="每个IP地址每分钟允许的登录尝试次数 (1-100)"
+          label={t("fieldLoginLimit")}
+          description={t("fieldLoginLimitDesc")}
           type="number"
           min={1}
           max={100}
@@ -249,8 +252,8 @@ export function NetworkSecurityTab() {
         <FormInput
           form={form}
           name="api_limit"
-          label="API速率限制 (次/分钟)"
-          description="每个用户每分钟允许的API请求次数 (10-10000)"
+          label={t("fieldApiLimit")}
+          description={t("fieldApiLimitDesc")}
           type="number"
           min={10}
           max={10000}
@@ -259,21 +262,17 @@ export function NetworkSecurityTab() {
         />
 
         <div className="rounded-lg border p-4 bg-muted/50">
-          <p className="text-sm font-medium mb-2">当前配置预览:</p>
+          <p className="text-sm font-medium mb-2">{t("previewTitle")}</p>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>
-              • 每个IP每分钟最多尝试登录{" "}
-              <span className="font-semibold text-foreground">
-                {form.watch("login_limit")}
-              </span>{" "}
-              次
+              {t("previewLoginPrefix")}
+              <span className="font-semibold text-foreground">{form.watch("login_limit")}</span>
+              {t("previewLoginSuffix")}
             </p>
             <p>
-              • 每个用户每分钟最多发起{" "}
-              <span className="font-semibold text-foreground">
-                {form.watch("api_limit")}
-              </span>{" "}
-              次API请求
+              {t("previewApiPrefix")}
+              <span className="font-semibold text-foreground">{form.watch("api_limit")}</span>
+              {t("previewApiSuffix")}
             </p>
           </div>
         </div>
@@ -281,7 +280,7 @@ export function NetworkSecurityTab() {
         <Alert>
           <InfoIcon className="h-4 w-4" />
           <AlertDescription>
-            速率限制可以有效防止暴力破解和API滥用。建议根据实际使用情况合理设置限制值。
+            {t("alertContent")}
           </AlertDescription>
         </Alert>
       </SettingsSection>
@@ -290,18 +289,18 @@ export function NetworkSecurityTab() {
       <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
-          重置
+          {tCommon("reset")}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
+              {tCommon("saving")}
             </>
           ) : (
             <>
               <Save className="mr-2 h-4 w-4" />
-              保存
+              {tCommon("save")}
             </>
           )}
         </Button>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -17,13 +18,14 @@ import { getApiUrl } from "@/lib/config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
 
 export function BackupRestoreTab() {
+  const t = useTranslations("settingsManagementBackup")
   const [loading, setLoading] = useState<string | null>(null)
 
   // 导出配置文件
   const handleExportConfig = async () => {
     try {
       setLoading("export-config")
-      toast.info("正在导出配置文件...")
+      toast.info(t("toastExportConfigLoading"))
 
       const apiUrl = getApiUrl()
       const url = `${apiUrl}/backup/export-config`
@@ -54,10 +56,10 @@ export function BackupRestoreTab() {
       window.URL.revokeObjectURL(downloadUrl)
       document.body.removeChild(a)
 
-      toast.success("配置文件导出成功")
+      toast.success(t("toastExportConfigSuccess"))
     } catch (error) {
       console.error("Failed to export config:", error)
-      toast.error("导出配置文件失败")
+      toast.error(t("toastExportConfigFailed"))
     } finally {
       setLoading(null)
     }
@@ -74,7 +76,7 @@ export function BackupRestoreTab() {
 
       try {
         setLoading("import-config")
-        toast.info("正在导入配置文件...")
+        toast.info(t("toastImportConfigLoading"))
 
         const formData = new FormData()
         formData.append("file", file)
@@ -98,10 +100,10 @@ export function BackupRestoreTab() {
           throw new Error("Import failed")
         }
 
-        toast.success("配置文件导入成功")
+        toast.success(t("toastImportConfigSuccess"))
       } catch (error) {
         console.error("Failed to import config:", error)
-        toast.error("导入配置文件失败")
+        toast.error(t("toastImportConfigFailed"))
       } finally {
         setLoading(null)
       }
@@ -111,13 +113,13 @@ export function BackupRestoreTab() {
 
   // 导出数据库
   const handleExportDatabase = async () => {
-    if (!confirm("确定要导出数据库吗？此操作可能需要几分钟时间。")) {
+    if (!confirm(t("confirmExportDb"))) {
       return
     }
 
     try {
       setLoading("export-db")
-      toast.info("正在导出数据库...")
+      toast.info(t("toastExportDbLoading"))
 
       const apiUrl = getApiUrl()
       const url = `${apiUrl}/backup/export-database`
@@ -147,10 +149,10 @@ export function BackupRestoreTab() {
       window.URL.revokeObjectURL(downloadUrl)
       document.body.removeChild(a)
 
-      toast.success("数据库导出成功")
+      toast.success(t("toastExportDbSuccess"))
     } catch (error) {
       console.error("Failed to export database:", error)
-      toast.error("导出数据库失败")
+      toast.error(t("toastExportDbFailed"))
     } finally {
       setLoading(null)
     }
@@ -158,7 +160,7 @@ export function BackupRestoreTab() {
 
   // 导入数据库
   const handleImportDatabase = async () => {
-    if (!confirm("警告：导入数据库将覆盖当前所有数据！确定要继续吗？")) {
+    if (!confirm(t("confirmImportDb"))) {
       return
     }
 
@@ -171,7 +173,7 @@ export function BackupRestoreTab() {
 
       try {
         setLoading("import-db")
-        toast.info("正在导入数据库...")
+        toast.info(t("toastImportDbLoading"))
 
         const formData = new FormData()
         formData.append("file", file)
@@ -195,10 +197,10 @@ export function BackupRestoreTab() {
           throw new Error("Import failed")
         }
 
-        toast.success("数据库导入成功，系统将在5秒后重启...")
+        toast.success(t("toastImportDbSuccess"))
       } catch (error) {
         console.error("Failed to import database:", error)
-        toast.error("导入数据库失败")
+        toast.error(t("toastImportDbFailed"))
       } finally {
         setLoading(null)
       }
@@ -212,12 +214,12 @@ export function BackupRestoreTab() {
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          <p className="font-medium mb-2">重要提示：</p>
+          <p className="font-medium mb-2">{t("alertTitle")}</p>
           <ul className="text-sm space-y-1 list-disc list-inside">
-            <li>导出的配置文件包含系统设置、用户配置等信息</li>
-            <li>导出的数据库包含所有业务数据</li>
-            <li>导入操作会覆盖现有数据，请谨慎操作</li>
-            <li>建议定期导出备份到安全位置</li>
+            <li>{t("alertItemConfig")}</li>
+            <li>{t("alertItemDatabase")}</li>
+            <li>{t("alertItemImportWarning")}</li>
+            <li>{t("alertItemSuggestion")}</li>
           </ul>
         </AlertDescription>
       </Alert>
@@ -228,9 +230,9 @@ export function BackupRestoreTab() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-blue-500" />
-              <CardTitle>配置文件</CardTitle>
+              <CardTitle>{t("cardConfigTitle")}</CardTitle>
             </div>
-            <CardDescription>导入或导出系统配置文件</CardDescription>
+            <CardDescription>{t("cardConfigDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Button
@@ -242,12 +244,12 @@ export function BackupRestoreTab() {
               {loading === "export-config" ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  导出中...
+                  {t("btnExportConfigLoading")}
                 </>
               ) : (
                 <>
                   <Download className="mr-2 h-4 w-4" />
-                  导出配置文件
+                  {t("btnExportConfig")}
                 </>
               )}
             </Button>
@@ -261,19 +263,19 @@ export function BackupRestoreTab() {
               {loading === "import-config" ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  导入中...
+                  {t("btnImportConfigLoading")}
                 </>
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  导入配置文件
+                  {t("btnImportConfig")}
                 </>
               )}
             </Button>
 
             <div className="text-xs text-muted-foreground pt-2">
-              <p>• 支持格式：JSON, YAML</p>
-              <p>• 包含：系统设置、通知配置、安全配置等</p>
+              <p>{t("configHintFormats")}</p>
+              <p>{t("configHintContent")}</p>
             </div>
           </CardContent>
         </Card>
@@ -283,9 +285,9 @@ export function BackupRestoreTab() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <HardDrive className="h-5 w-5 text-green-500" />
-              <CardTitle>数据库</CardTitle>
+              <CardTitle>{t("cardDbTitle")}</CardTitle>
             </div>
-            <CardDescription>导入或导出完整数据库</CardDescription>
+            <CardDescription>{t("cardDbDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Button
@@ -297,12 +299,12 @@ export function BackupRestoreTab() {
               {loading === "export-db" ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  导出中...
+                  {t("btnExportDbLoading")}
                 </>
               ) : (
                 <>
                   <Download className="mr-2 h-4 w-4" />
-                  导出数据库
+                  {t("btnExportDb")}
                 </>
               )}
             </Button>
@@ -316,20 +318,20 @@ export function BackupRestoreTab() {
               {loading === "import-db" ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  导入中...
+                  {t("btnImportDbLoading")}
                 </>
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  导入数据库
+                  {t("btnImportDb")}
                 </>
               )}
             </Button>
 
             <div className="text-xs text-muted-foreground pt-2">
-              <p>• 支持格式：SQL, SQL.GZ, ZIP</p>
-              <p>• 包含：所有服务器、用户、日志等数据</p>
-              <p className="text-destructive">• 导入会覆盖现有数据！</p>
+              <p>{t("dbHintFormats")}</p>
+              <p>{t("dbHintContent")}</p>
+              <p className="text-destructive">{t("dbHintWarning")}</p>
             </div>
           </CardContent>
         </Card>

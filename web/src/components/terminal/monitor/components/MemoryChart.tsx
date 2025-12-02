@@ -1,6 +1,7 @@
 "use client"
 
 import React from 'react';
+import { useTranslations } from "next-intl";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import type { MemoryData } from '../types/metrics';
@@ -34,6 +35,8 @@ const chartConfig = {
  * 固定高度 142px
  */
 export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => {
+  const t = useTranslations("terminalMonitor");
+  const memoryTooltipUsedLabel = t("memoryTooltipUsed");
   const chartData = React.useMemo(
     () => ({
       ramPercent: data.ram.percent,
@@ -81,7 +84,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
               <div style="margin-bottom:4px;">${isRam ? "RAM" : "Swap"}</div>
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${params.color};"></span>
-                <span>已用:</span>
+                <span>${memoryTooltipUsedLabel}</span>
                 <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
                   ${mem.value} ${mem.unit}
                 </span>
@@ -162,13 +165,13 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
         },
       ],
     };
-  }, [chartData, ramColor, swapColor, data]);
+  }, [chartData, ramColor, swapColor, data, memoryTooltipUsedLabel]);
 
   return (
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-semibold">内存</span>
+        <span className="text-xs font-semibold">{t("memoryLabel")}</span>
       </div>
 
       {/* 图表区域 - 固定高度 106px,左文右图 */}

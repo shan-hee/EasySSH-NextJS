@@ -3,6 +3,7 @@
 import { Terminal, Server, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { AnimatedList } from "@/components/ui/animated-list"
+import { useTranslations } from "next-intl"
 
 export type QuickServer = {
   id: number | string  // 支持 UUID 字符串
@@ -23,6 +24,8 @@ interface QuickConnectProps {
 }
 
 export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnectProps) {
+  const tTerminal = useTranslations("terminal")
+
   // 先分离在线和离线服务器
   const onlineServers = servers.filter((s) => s.status === "online")
   const offlineServers = servers.filter((s) => s.status === "offline")
@@ -59,10 +62,10 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
 
             <div className="space-y-3">
               <h1 className={"text-3xl font-semibold text-zinc-900 dark:text-white"}>
-                快速连接
+                {tTerminal("quickConnectTitle")}
               </h1>
               <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
-                选择一个服务器开始终端会话
+                {tTerminal("quickConnectSubtitle")}
               </p>
             </div>
           </div>
@@ -73,7 +76,9 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
               <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
               <div className="flex flex-col items-center justify-center py-12 gap-4">
                 <Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600" />
-                <p className="text-sm text-zinc-500 dark:text-zinc-600">加载服务器列表...</p>
+                <p className="text-sm text-zinc-500 dark:text-zinc-600">
+                  {tTerminal("quickConnectLoading")}
+                </p>
               </div>
             </div>
           ) : sortedOnlineServers.length > 0 ? (
@@ -117,10 +122,10 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
               </div>
               <div className="space-y-1">
                 <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
-                  暂无可用服务器
+                  {tTerminal("quickConnectEmptyTitle")}
                 </p>
                 <p className={"text-xs text-zinc-500 dark:text-zinc-600"}>
-                  请先在服务器管理中添加服务器
+                  {tTerminal("quickConnectEmptyDescription")}
                 </p>
               </div>
             </div>
@@ -129,7 +134,7 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
           {!isLoading && offlineServers.length > 0 && (
             <div className={"rounded-lg border p-3 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/30 dark:border-zinc-800/30"}>
               <div className={"text-xs mb-2 text-zinc-600 dark:text-zinc-500"}>
-                离线服务器
+                {tTerminal("quickConnectOfflineSectionTitle")}
               </div>
               <div className="space-y-1.5">
                 {offlineServers.map((server) => (

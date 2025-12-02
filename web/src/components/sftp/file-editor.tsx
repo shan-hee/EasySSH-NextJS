@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom"
 import Editor from "@monaco-editor/react"
 import { useTheme } from "next-themes"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -40,6 +41,7 @@ export function FileEditor({
   onSave,
   onDownload,
 }: FileEditorProps) {
+  const tSftp = useTranslations("sftp")
   const { resolvedTheme } = useTheme()
   const monacoTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'light'
   const [content, setContent] = useState(fileContent || '')
@@ -231,7 +233,7 @@ export function FileEditor({
                 <span className="font-semibold text-sm">{fileName}</span>
                 {isModified && (
                   <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                    未保存
+                    {tSftp("editorBadgeUnsaved")}
                   </Badge>
                 )}
               </div>
@@ -239,7 +241,7 @@ export function FileEditor({
 
             {/* 右侧：操作按钮 */}
             <div className="flex items-center gap-1">
-              {/* 查找 */}
+              {/* Find */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -247,13 +249,13 @@ export function FileEditor({
                   "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={handleFind}
-                title="查找 (Ctrl+F)"
+                title={tSftp("editorActionFindTooltip")}
               >
                 <Search className="h-3.5 w-3.5" />
-                <span className="text-xs">查找</span>
+                <span className="text-xs">{tSftp("editorActionFind")}</span>
               </Button>
 
-              {/* 替换 */}
+              {/* Replace */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -261,13 +263,13 @@ export function FileEditor({
                   "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={handleReplace}
-                title="替换 (Ctrl+H)"
+                title={tSftp("editorActionReplaceTooltip")}
               >
                 <Replace className="h-3.5 w-3.5" />
-                <span className="text-xs">替换</span>
+                <span className="text-xs">{tSftp("editorActionReplace")}</span>
               </Button>
 
-              {/* 格式化 */}
+              {/* Format */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -275,17 +277,17 @@ export function FileEditor({
                   "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={formatCode}
-                title="格式化代码"
+                title={tSftp("editorActionFormatTooltip")}
               >
                 <FileCode className="h-3.5 w-3.5" />
-                <span className="text-xs">格式化</span>
+                <span className="text-xs">{tSftp("editorActionFormat")}</span>
               </Button>
 
               <div className={cn(
                 "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
               )} />
 
-              {/* 重置 */}
+              {/* Reset */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -294,13 +296,13 @@ export function FileEditor({
                 )}
                 onClick={handleReset}
                 disabled={!isModified}
-                title="重置更改"
+                title={tSftp("editorActionResetTooltip")}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                <span className="text-xs">重置</span>
+                <span className="text-xs">{tSftp("editorActionReset")}</span>
               </Button>
 
-              {/* 下载 */}
+              {/* Download */}
               {onDownload && (
                 <Button
                   variant="ghost"
@@ -309,14 +311,14 @@ export function FileEditor({
                     "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                   )}
                   onClick={onDownload}
-                  title="下载文件"
+                  title={tSftp("editorActionDownloadTooltip")}
                 >
                   <Download className="h-3.5 w-3.5" />
-                  <span className="text-xs">下载</span>
+                  <span className="text-xs">{tSftp("editorActionDownload")}</span>
                 </Button>
               )}
 
-              {/* 保存 */}
+              {/* Save */}
               <Button
                 variant="default"
                 size="sm"
@@ -325,17 +327,21 @@ export function FileEditor({
                 )}
                 onClick={handleSave}
                 disabled={!isModified || isSaving}
-                title="保存文件 (Ctrl+S)"
+                title={tSftp("editorActionSaveTooltip")}
               >
                 <Save className="h-3.5 w-3.5" />
-                <span className="text-xs">{isSaving ? "保存中..." : "保存"}</span>
+                <span className="text-xs">
+                  {isSaving
+                    ? tSftp("editorActionSaveSaving")
+                    : tSftp("editorActionSave")}
+                </span>
               </Button>
 
               <div className={cn(
                 "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
               )} />
 
-              {/* 退出全屏 */}
+              {/* Exit fullscreen */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -343,12 +349,12 @@ export function FileEditor({
                   "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={toggleFullscreen}
-                title="退出全屏 (Esc)"
+                title={tSftp("editorFullscreenExitTooltip")}
               >
                 <Minimize2 className="h-4 w-4" />
               </Button>
 
-              {/* 关闭 */}
+              {/* Close */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -356,7 +362,7 @@ export function FileEditor({
                   "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
                 )}
                 onClick={onClose}
-                title="关闭编辑器"
+                title={tSftp("editorCloseTooltip")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -403,7 +409,7 @@ export function FileEditor({
                   <div className={cn(
                     "text-sm text-zinc-400 dark:text-zinc-500",
                   )}>
-                    加载编辑器...
+                    {tSftp("editorLoading")}
                   </div>
                 </div>
               }
@@ -424,11 +430,15 @@ export function FileEditor({
               <span>LF</span>
             </div>
             <div className="flex items-center gap-3">
-              <span>行 {fileStats.lines}</span>
-              <span>字符 {fileStats.chars}</span>
+              <span>
+                {tSftp("editorStatusLine", { line: fileStats.lines })}
+              </span>
+              <span>
+                {tSftp("editorStatusChars", { count: fileStats.chars })}
+              </span>
               {isModified && (
                 <span className={"text-yellow-600 dark:text-yellow-400"}>
-                  • 已修改
+                  {tSftp("editorStatusModified")}
                 </span>
               )}
             </div>
@@ -447,13 +457,13 @@ export function FileEditor({
   // 嵌入模式
   return (
     <div className="flex flex-col h-full">
-      {/* 编辑器工具栏 */}
+      {/* Editor toolbar */}
       <div
         className={cn(
           "flex items-center justify-between px-3 py-2 border-b bg-zinc-50 border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
         )}
       >
-        {/* 左侧：文件信息 */}
+        {/* Left: file info */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -462,7 +472,7 @@ export function FileEditor({
               "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={onClose}
-            title="返回文件列表"
+            title={tSftp("editorTitleBackToList")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -473,15 +483,15 @@ export function FileEditor({
             <span className="font-semibold text-sm">{fileName}</span>
             {isModified && (
               <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                未保存
+                {tSftp("editorBadgeUnsaved")}
               </Badge>
             )}
           </div>
         </div>
 
-        {/* 右侧：操作按钮 */}
+        {/* Right: actions */}
         <div className="flex items-center gap-1">
-          {/* 查找 */}
+          {/* Find */}
           <Button
             variant="ghost"
             size="sm"
@@ -489,13 +499,13 @@ export function FileEditor({
               "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleFind}
-            title="查找 (Ctrl+F)"
+            title={tSftp("editorActionFindTooltip")}
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="text-xs">查找</span>
+            <span className="text-xs">{tSftp("editorActionFind")}</span>
           </Button>
 
-          {/* 替换 */}
+          {/* Replace */}
           <Button
             variant="ghost"
             size="sm"
@@ -503,13 +513,13 @@ export function FileEditor({
               "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleReplace}
-            title="替换 (Ctrl+H)"
+            title={tSftp("editorActionReplaceTooltip")}
           >
             <Replace className="h-3.5 w-3.5" />
-            <span className="text-xs">替换</span>
+            <span className="text-xs">{tSftp("editorActionReplace")}</span>
           </Button>
 
-          {/* 格式化 */}
+          {/* Format */}
           <Button
             variant="ghost"
             size="sm"
@@ -517,17 +527,17 @@ export function FileEditor({
               "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={formatCode}
-            title="格式化代码"
+            title={tSftp("editorActionFormatTooltip")}
           >
             <FileCode className="h-3.5 w-3.5" />
-            <span className="text-xs">格式化</span>
+            <span className="text-xs">{tSftp("editorActionFormat")}</span>
           </Button>
 
           <div className={cn(
             "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
           )} />
 
-          {/* 重置 */}
+          {/* Reset */}
           <Button
             variant="ghost"
             size="sm"
@@ -536,13 +546,13 @@ export function FileEditor({
             )}
             onClick={handleReset}
             disabled={!isModified}
-            title="重置更改"
+            title={tSftp("editorActionResetTooltip")}
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            <span className="text-xs">重置</span>
+            <span className="text-xs">{tSftp("editorActionReset")}</span>
           </Button>
 
-          {/* 下载 */}
+          {/* Download */}
           {onDownload && (
             <Button
               variant="ghost"
@@ -551,14 +561,14 @@ export function FileEditor({
                 "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
               )}
               onClick={onDownload}
-              title="下载文件"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="text-xs">下载</span>
-            </Button>
+              title={tSftp("editorActionDownloadTooltip")}
+          >
+            <Download className="h-3.5 w-3.5" />
+              <span className="text-xs">{tSftp("editorActionDownload")}</span>
+          </Button>
           )}
 
-          {/* 保存 */}
+          {/* Save */}
           <Button
             variant="default"
             size="sm"
@@ -567,17 +577,21 @@ export function FileEditor({
             )}
             onClick={handleSave}
             disabled={!isModified || isSaving}
-            title="保存文件 (Ctrl+S)"
+            title={tSftp("editorActionSaveTooltip")}
           >
             <Save className="h-3.5 w-3.5" />
-            <span className="text-xs">{isSaving ? "保存中..." : "保存"}</span>
+            <span className="text-xs">
+              {isSaving
+                ? tSftp("editorActionSaveSaving")
+                : tSftp("editorActionSave")}
+            </span>
           </Button>
 
           <div className={cn(
             "h-6 w-px mx-1 bg-zinc-200 dark:bg-zinc-800",
           )} />
 
-          {/* 全屏 */}
+          {/* Fullscreen */}
           <Button
             variant="ghost"
             size="icon"
@@ -585,7 +599,7 @@ export function FileEditor({
               "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={toggleFullscreen}
-            title="全屏"
+            title={tSftp("editorFullscreenEnterTooltip")}
           >
             <Maximize2 className="h-4 w-4" />
           </Button>
@@ -632,7 +646,7 @@ export function FileEditor({
               <div className={cn(
                 "text-sm text-zinc-400 dark:text-zinc-500",
               )}>
-                加载编辑器...
+                {tSftp("editorLoading")}
               </div>
             </div>
           }
@@ -653,11 +667,15 @@ export function FileEditor({
           <span>LF</span>
         </div>
         <div className="flex items-center gap-3">
-          <span>行 {fileStats.lines}</span>
-          <span>字符 {fileStats.chars}</span>
+          <span>
+            {tSftp("editorStatusLine", { line: fileStats.lines })}
+          </span>
+          <span>
+            {tSftp("editorStatusChars", { count: fileStats.chars })}
+          </span>
           {isModified && (
             <span className={"text-yellow-600 dark:text-yellow-400"}>
-              • 已修改
+              {tSftp("editorStatusModified")}
             </span>
           )}
         </div>

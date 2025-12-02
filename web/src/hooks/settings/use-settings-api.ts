@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { toast } from "sonner"
+import { useTranslations } from "next-intl"
 
 interface UseSettingsAPIOptions<T> {
   onSuccess?: (data: T) => void
@@ -34,6 +35,8 @@ interface UseSettingsAPIReturn<T> {
 export function useSettingsAPI<T>(
   options: UseSettingsAPIOptions<T> = {}
 ): UseSettingsAPIReturn<T> {
+  const t = useTranslations("settingsCommon")
+
   const [data, setData] = useState<T | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -51,13 +54,13 @@ export function useSettingsAPI<T>(
         const error = err as Error
         setError(error)
         options.onError?.(error)
-        toast.error(error.message || "操作失败")
+        toast.error(error.message || t("toastActionFailed"))
         return null
       } finally {
         setIsLoading(false)
       }
     },
-    [options]
+    [options, t]
   )
 
   const reset = useCallback(() => {

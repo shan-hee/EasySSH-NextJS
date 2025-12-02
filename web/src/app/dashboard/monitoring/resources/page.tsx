@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { SkeletonCard } from "@/components/ui/loading"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 // 服务器资源数据接口
 interface ServerResource {
@@ -40,10 +41,13 @@ function formatBytes(bytes: number): number {
  return Number((bytes / (1024 * 1024 * 1024)).toFixed(1))
 }
 
-function formatUptime(seconds: number): string {
- const days = Math.floor(seconds / 86400)
- const hours = Math.floor((seconds % 86400) / 3600)
- return `${days}天 ${hours}小时`
+function formatUptime(
+  seconds: number,
+  t: (key: string, values?: Record<string, unknown>) => string,
+): string {
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  return t("uptimeFormat", { days, hours })
 }
 
 function formatNetworkSpeed(bytesPerSec: number): { value: number; unit: string } {
@@ -57,6 +61,7 @@ function formatNetworkSpeed(bytesPerSec: number): { value: number; unit: string 
 
 export default function MonitoringResourcesPage() {
  const { ready } = useAuthReady()
+ const t = useTranslations("monitoringResources")
  const [servers, setServers] = useState<ServerResource[]>([])
  const [loading, setLoading] = useState(true)
  const [isRefreshing, setIsRefreshing] = useState(false)
@@ -95,8 +100,8 @@ export default function MonitoringResourcesPage() {
  memory: { used: 0, total: 0, usage: 0 },
  disk: { used: 0, total: 0, usage: 0 },
  network: { rx: 0, tx: 0, unit: "MB/s" },
- uptime: "0天 0小时",
- lastUpdate: new Date().toLocaleTimeString("zh-CN"),
+ uptime: t("uptimeFormat", { days: 0, hours: 0 }),
+ lastUpdate: new Date().toLocaleTimeString(),
  }
  }
 
@@ -152,8 +157,8 @@ export default function MonitoringResourcesPage() {
  tx: txFormatted.value,
  unit: rxFormatted.unit,
  },
- uptime: formatUptime(systemInfo.uptime),
- lastUpdate: new Date().toLocaleTimeString("zh-CN"),
+ uptime: formatUptime(systemInfo.uptime, t),
+ lastUpdate: new Date().toLocaleTimeString(),
  }
  } catch (error) {
  console.error(`Failed to load monitoring data for ${server.name || server.host}:`, error)
@@ -167,8 +172,8 @@ export default function MonitoringResourcesPage() {
  memory: { used: 0, total: 0, usage: 0 },
  disk: { used: 0, total: 0, usage: 0 },
  network: { rx: 0, tx: 0, unit: "MB/s" },
- uptime: "未知",
- lastUpdate: new Date().toLocaleTimeString("zh-CN"),
+ uptime: t("uptimeUnknown"),
+ lastUpdate: new Date().toLocaleTimeString(),
  }
  }
  })
@@ -177,7 +182,7 @@ export default function MonitoringResourcesPage() {
  setServers(resourcesData)
  } catch (error: unknown) {
  console.error("Failed to load monitoring data:", error)
- toast.error(getErrorMessage(error, "加载监控数据失败"))
+ toast.error(getErrorMessage(error, t("toastLoadFailed")))
  } finally {
  setLoading(false)
  }
@@ -187,7 +192,7 @@ export default function MonitoringResourcesPage() {
  setIsRefreshing(true)
  await loadData()
  setIsRefreshing(false)
- toast.success("数据已刷新")
+ toast.success(t("toastRefreshSuccess"))
  }
 
  const getStatusColor = (status: string) => {
@@ -202,11 +207,11 @@ export default function MonitoringResourcesPage() {
 
  const getStatusBadge = (status: string) => {
  switch (status) {
- case "online": return <Badge className="bg-green-100 text-green-800">在线</Badge>
- case "warning": return <Badge className="bg-yellow-100 text-yellow-800">警告</Badge>
- case "offline": return <Badge className="bg-red-100 text-red-800">离线</Badge>
- case "error": return <Badge className="bg-orange-100 text-orange-800">错误</Badge>
- default: return <Badge variant="secondary">未知</Badge>
+ case "online": return <Badge className="bg-green-100 text-green-800">{t("statusOnline")}</Badge>
+ case "warning": return <Badge className="bg-yellow-100 text-yellow-800">{t("statusWarning")}</Badge>
+ case "offline": return <Badge className="bg-red-100 text-red-800">{t("statusOffline")}</Badge>
+ case "error": return <Badge className="bg-orange-100 text-orange-800">{t("statusError")}</Badge>
+ default: return <Badge variant="secondary">{t("statusUnknown")}</Badge>
  }
  }
 
@@ -220,7 +225,7 @@ export default function MonitoringResourcesPage() {
  if (loading) {
  return (
  <>
- <PageHeader title="资源监控" />
+ <PageHeader title={t("pageTitle")} />
  <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
  {/* 统计卡片骨架屏 */}
  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -242,7 +247,7 @@ export default function MonitoringResourcesPage() {
 
  return (
  <>
- <PageHeader title="资源监控">
+ <PageHeader title={t("pageTitle")}>
  <Button
  variant="outline"
  size="sm"
@@ -250,7 +255,7 @@ export default function MonitoringResourcesPage() {
  disabled={isRefreshing}
  >
  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
- 刷新数据
+ {t("refresh")}
  </Button>
  </PageHeader>
 
@@ -259,22 +264,22 @@ export default function MonitoringResourcesPage() {
  <div className="grid gap-4 md:grid-cols-4">
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">在线服务器</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsOnlineServersTitle")}</CardTitle>
  <Server className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold text-green-600">
  {servers.filter(s => s.status === "online").length}
  </div>
- <p className="text-xs text-muted-foreground">
- 共 {servers.length} 台服务器
- </p>
+        <p className="text-xs text-muted-foreground">
+        {t("statsOnlineServersDesc", { total: servers.length })}
+        </p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">平均CPU使用率</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsAvgCpuTitle")}</CardTitle>
  <Cpu className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
@@ -282,14 +287,14 @@ export default function MonitoringResourcesPage() {
  {Math.round(servers.reduce((acc, s) => acc + s.cpu.usage, 0) / servers.length)}%
  </div>
  <p className="text-xs text-muted-foreground">
- 过去1小时平均值
+ {t("statsAvgCpuDesc")}
  </p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">平均内存使用率</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsAvgMemoryTitle")}</CardTitle>
  <MemoryStick className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
@@ -297,14 +302,14 @@ export default function MonitoringResourcesPage() {
  {Math.round(servers.reduce((acc, s) => acc + s.memory.usage, 0) / servers.length)}%
  </div>
  <p className="text-xs text-muted-foreground">
- 过去1小时平均值
+ {t("statsAvgMemoryDesc")}
  </p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">告警数量</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsAlertsCountTitle")}</CardTitle>
  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
@@ -312,7 +317,7 @@ export default function MonitoringResourcesPage() {
  {servers.filter(s => s.status === "warning").length}
  </div>
  <p className="text-xs text-muted-foreground">
- 需要关注的服务器
+ {t("statsAlertsCountDesc")}
  </p>
  </CardContent>
  </Card>
@@ -341,11 +346,16 @@ export default function MonitoringResourcesPage() {
  <div className="flex items-center justify-between text-sm">
  <div className="flex items-center gap-2">
  <Cpu className="h-4 w-4" />
- <span>CPU</span>
+ <span>{t("cpuLabel")}</span>
  </div>
- <span className="font-mono">
- {server.cpu.usage}% ({server.cpu.cores} 核心{server.cpu.temperature ? `, ${server.cpu.temperature}°C` : ''})
- </span>
+        <span className="font-mono">
+        {t("cpuDetails", {
+        usage: server.cpu.usage,
+        cores: server.cpu.cores,
+        temperaturePart:
+          server.cpu.temperature != null ? `, ${server.cpu.temperature}°C` : "",
+        })}
+        </span>
  </div>
  <Progress
  value={server.cpu.usage}
@@ -359,7 +369,7 @@ export default function MonitoringResourcesPage() {
  <div className="flex items-center justify-between text-sm">
  <div className="flex items-center gap-2">
  <MemoryStick className="h-4 w-4" />
- <span>内存</span>
+ <span>{t("memoryLabel")}</span>
  </div>
  <span className="font-mono">
  {server.memory.used}GB / {server.memory.total}GB ({server.memory.usage}%)
@@ -377,7 +387,7 @@ export default function MonitoringResourcesPage() {
  <div className="flex items-center justify-between text-sm">
  <div className="flex items-center gap-2">
  <HardDrive className="h-4 w-4" />
- <span>磁盘</span>
+ <span>{t("diskLabel")}</span>
  </div>
  <span className="font-mono">
  {server.disk.used}GB / {server.disk.total}GB ({server.disk.usage}%)
@@ -395,7 +405,7 @@ export default function MonitoringResourcesPage() {
  <div className="flex items-center justify-between text-sm">
  <div className="flex items-center gap-2">
  <Wifi className="h-4 w-4" />
- <span>网络</span>
+ <span>{t("networkLabel")}</span>
  </div>
  <span className="font-mono">
  ↓ {server.network.rx} {server.network.unit} / ↑ {server.network.tx} {server.network.unit}
@@ -405,8 +415,8 @@ export default function MonitoringResourcesPage() {
 
  {/* 运行时间和最后更新 */}
  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
- <span>运行时间: {server.uptime}</span>
- <span>更新于: {server.lastUpdate}</span>
+ <span>{t("uptimeLabel")}: {server.uptime}</span>
+ <span>{t("lastUpdateLabel")}: {server.lastUpdate}</span>
  </div>
  </CardContent>
  </Card>

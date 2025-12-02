@@ -25,6 +25,9 @@ type User struct {
 	Password         string         `gorm:"not null;size:255" json:"-"` // bcrypt hash，不在 JSON 中返回
 	Role             UserRole       `gorm:"type:varchar(20);default:'user'" json:"role"`
 	Avatar           string         `gorm:"type:text" json:"avatar"`
+	// 个性化偏好
+	Language         string         `gorm:"size:20;default:''" json:"language"` // 用户界面语言偏好，如 zh-CN、en-US
+	Timezone         string         `gorm:"size:50;default:''" json:"timezone"` // 用户时区偏好，如 Asia/Shanghai
 	TwoFactorEnabled bool           `gorm:"default:false" json:"two_factor_enabled"`
 	TwoFactorSecret  string         `gorm:"size:255" json:"-"` // TOTP secret，不在 JSON 中返回
 	BackupCodes      string         `gorm:"type:text" json:"-"` // 备份码列表（JSON 格式），不在 JSON 中返回
@@ -86,6 +89,8 @@ func (u *User) ToPublic() map[string]interface{} {
 		"email":              u.Email,
 		"role":               u.Role,
 		"avatar":             u.Avatar,
+		"language":           u.Language,
+		"timezone":           u.Timezone,
 		"two_factor_enabled": u.TwoFactorEnabled,
 		"notify_email_login": u.NotifyEmailLogin,
 		"notify_email_alert": u.NotifyEmailAlert,

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Github, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
+import { useTranslations } from "next-intl"
 
 import {
   SidebarMenu,
@@ -12,6 +13,7 @@ import {
 
 export const NavExtra = React.memo(function NavExtra() {
   const { setTheme } = useTheme()
+  const tCommon = useTranslations("common")
 
   const handleThemeToggle = React.useCallback(() => {
     const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark")
@@ -23,20 +25,23 @@ export const NavExtra = React.memo(function NavExtra() {
       <SidebarMenuItem>
         <SidebarMenuButton
           asChild
-          tooltip="GitHub"
+          tooltip={tCommon("githubTooltip")}
         >
           <a href="https://github.com/shan-hee/EasySSH-NextJS" target="_blank" rel="noopener noreferrer">
             <Github />
-            <span>GitHub</span>
+            <span>{tCommon("githubLabel")}</span>
           </a>
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>
-        <SidebarMenuButton onClick={handleThemeToggle} tooltip="主题切换">
+        <SidebarMenuButton
+          onClick={handleThemeToggle}
+          tooltip={tCommon("themeToggleTooltip")}
+        >
           {/* 基于 CSS 的无闪烁切换：在暗色下显示 Moon，亮色下显示 Sun */}
           <Sun className="dark:hidden" />
           <Moon className="hidden dark:block" />
-          <span>主题切换</span>
+          <span>{tCommon("themeToggleLabel")}</span>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>

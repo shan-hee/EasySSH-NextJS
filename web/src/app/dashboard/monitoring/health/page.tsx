@@ -27,6 +27,10 @@ import {
 } from "@/lib/api"
 import { SkeletonCard } from "@/components/ui/loading"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { useTranslations } from "next-intl"
 
 // 健康检查项
 interface HealthCheckItem {
@@ -56,6 +60,11 @@ interface ServerHealthCheck {
 
 export default function MonitoringHealthPage() {
  const { ready } = useAuthReady()
+ const { user } = useClientAuth()
+ const { data: systemConfig } = useSystemConfig()
+ const t = useTranslations("monitoringHealth")
+ const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+ const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
  const [healthChecks, setHealthChecks] = useState<ServerHealthCheck[]>([])
  const [loading, setLoading] = useState(true)
  const [refreshing, setRefreshing] = useState(false)
@@ -83,7 +92,12 @@ export default function MonitoringHealthPage() {
  status: "offline" as const,
  checks: [],
  overall: { total: 0, healthy: 0, warning: 0, unhealthy: 0 },
- lastCheck: new Date().toLocaleString("zh-CN"),
+ lastCheck: formatInTimezone(
+   new Date(),
+   {},
+   effectiveLocale,
+   effectiveTimezone,
+ ),
  }
  }
 
@@ -104,20 +118,20 @@ export default function MonitoringHealthPage() {
  const cpuStatus =
  cpuInfo.usage_percent < 70 ? "healthy" :
  cpuInfo.usage_percent < 90 ? "warning" : "unhealthy"
- checks.push({
- name: "CPU",
- status: cpuStatus,
- value: `${cpuInfo.usage_percent.toFixed(1)}%`,
- details: `${cpuInfo.cores} 核心`,
- icon: <Cpu className="h-4 w-4" />
- })
+  checks.push({
+  name: "cpu",
+  status: cpuStatus,
+  value: `${cpuInfo.usage_percent.toFixed(1)}%`,
+  details: t("cpuCoresDetails", { cores: cpuInfo.cores }),
+  icon: <Cpu className="h-4 w-4" />
+  })
 
  // 2. 内存检查
  const memoryStatus =
  memoryInfo.usage_percent < 70 ? "healthy" :
  memoryInfo.usage_percent < 90 ? "warning" : "unhealthy"
  checks.push({
- name: "内存",
+ name: "memory",
  status: memoryStatus,
  value: `${memoryInfo.usage_percent.toFixed(1)}%`,
  details: `${(memoryInfo.used / (1024 * 1024 * 1024)).toFixed(1)}/${(memoryInfo.total / (1024 * 1024 * 1024)).toFixed(1)} GB`,
@@ -132,7 +146,7 @@ export default function MonitoringHealthPage() {
  diskUsagePercent < 70 ? "healthy" :
  diskUsagePercent < 90 ? "warning" : "unhealthy"
  checks.push({
- name: "磁盘",
+ name: "disk",
  status: diskStatus,
  value: `${diskUsagePercent.toFixed(1)}%`,
  details: `${(totalDiskUsed / (1024 * 1024 * 1024)).toFixed(1)}/${(totalDiskSize / (1024 * 1024 * 1024)).toFixed(1)} GB`,
@@ -144,7 +158,7 @@ export default function MonitoringHealthPage() {
  memoryInfo.swap_usage_percent < 50 ? "healthy" :
  memoryInfo.swap_usage_percent < 80 ? "warning" : "unhealthy"
  checks.push({
- name: "Swap",
+ name: "swap",
  status: swapStatus,
  value: `${memoryInfo.swap_usage_percent.toFixed(1)}%`,
  details: `${(memoryInfo.swap_used / (1024 * 1024 * 1024)).toFixed(1)}/${(memoryInfo.swap_total / (1024 * 1024 * 1024)).toFixed(1)} GB`,
@@ -155,13 +169,13 @@ export default function MonitoringHealthPage() {
  const hasActiveNetwork = networkInfo.some(
  iface => iface.bytes_sent > 0 || iface.bytes_recv > 0
  )
- checks.push({
- name: "网络",
- status: hasActiveNetwork ? "healthy" : "warning",
- value: hasActiveNetwork ? "活跃" : "未检测到流量",
- details: `${networkInfo.length} 个接口`,
- icon: <Wifi className="h-4 w-4" />
- })
+  checks.push({
+  name: "network",
+  status: hasActiveNetwork ? "healthy" : "warning",
+  value: hasActiveNetwork ? t("networkValueActive") : t("networkValueInactive"),
+  details: t("networkInterfacesDetails", { count: networkInfo.length }),
+  icon: <Wifi className="h-4 w-4" />
+  })
 
  // 6. 系统负载检查
  const loadAvg1 = cpuInfo.load_average[0]
@@ -170,10 +184,10 @@ export default function MonitoringHealthPage() {
  loadPerCore < 0.7 ? "healthy" :
  loadPerCore < 1.0 ? "warning" : "unhealthy"
  checks.push({
- name: "系统负载",
+ name: "load",
  status: loadStatus,
  value: loadAvg1.toFixed(2),
- details: `1分钟平均`,
+ details: t("loadAvg1m"),
  icon: <Activity className="h-4 w-4" />
  })
 
@@ -195,7 +209,7 @@ export default function MonitoringHealthPage() {
  const days = Math.floor(seconds / 86400)
  const hours = Math.floor((seconds % 86400) / 3600)
  const minutes = Math.floor((seconds % 3600) / 60)
- return `${days}天 ${hours}小时 ${minutes}分钟`
+ return t("uptimeFormat", { days, hours, minutes })
  }
 
  return {
@@ -210,7 +224,12 @@ export default function MonitoringHealthPage() {
  warning: warningCount,
  unhealthy: unhealthyCount,
  },
- lastCheck: new Date().toLocaleString("zh-CN"),
+ lastCheck: formatInTimezone(
+   new Date(),
+   {},
+   effectiveLocale,
+   effectiveTimezone,
+ ),
  uptime: formatUptime(systemInfo.uptime),
  }
  } catch (error: unknown) {
@@ -222,7 +241,12 @@ export default function MonitoringHealthPage() {
  status: "error" as const,
  checks: [],
  overall: { total: 0, healthy: 0, warning: 0, unhealthy: 0 },
- lastCheck: new Date().toLocaleString("zh-CN"),
+ lastCheck: formatInTimezone(
+   new Date(),
+   {},
+   effectiveLocale,
+   effectiveTimezone,
+ ),
  }
  }
  })
@@ -230,8 +254,8 @@ export default function MonitoringHealthPage() {
  const healthChecksData = await Promise.all(healthChecksPromises)
  setHealthChecks(healthChecksData)
  } catch (error: unknown) {
- console.error("加载健康检查数据失败:", error)
- toast.error(getErrorMessage(error, "加载健康检查数据失败"))
+ console.error("Failed to load health checks:", error)
+ toast.error(getErrorMessage(error, t("errorMessage")))
  } finally {
  setLoading(false)
  setRefreshing(false)
@@ -288,23 +312,42 @@ export default function MonitoringHealthPage() {
  const getStatusBadge = (status: string) => {
  switch (status) {
  case "healthy":
- return <Badge className="bg-green-100 text-green-800">健康</Badge>
+ return <Badge className="bg-green-100 text-green-800">{t("statusHealthy")}</Badge>
  case "warning":
- return <Badge className="bg-yellow-100 text-yellow-800">警告</Badge>
+ return <Badge className="bg-yellow-100 text-yellow-800">{t("statusWarning")}</Badge>
  case "unhealthy":
- return <Badge className="bg-red-100 text-red-800">异常</Badge>
+ return <Badge className="bg-red-100 text-red-800">{t("statusUnhealthy")}</Badge>
  case "offline":
- return <Badge variant="secondary">离线</Badge>
+ return <Badge variant="secondary">{t("statusOffline")}</Badge>
  case "error":
- return <Badge className="bg-red-100 text-red-800">错误</Badge>
+ return <Badge className="bg-red-100 text-red-800">{t("statusError")}</Badge>
  default:
- return <Badge variant="secondary">未知</Badge>
+ return <Badge variant="secondary">{t("statusUnknown")}</Badge>
+ }
+ }
+
+ const getCheckName = (name: string) => {
+ switch (name) {
+ case "cpu":
+ return t("checkNameCpu")
+ case "memory":
+ return t("checkNameMemory")
+ case "disk":
+ return t("checkNameDisk")
+ case "swap":
+ return t("checkNameSwap")
+ case "network":
+ return t("checkNameNetwork")
+ case "load":
+ return t("checkNameLoad")
+ default:
+ return name
  }
  }
 
  return (
  <>
-      <PageHeader title="健康检查">
+     <PageHeader title={t("pageTitle")}>
  <Button
  variant="outline"
  size="sm"
@@ -312,7 +355,7 @@ export default function MonitoringHealthPage() {
  disabled={refreshing}
  >
  <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
- 刷新
+ {t("refresh")}
  </Button>
  </PageHeader>
 
@@ -341,51 +384,59 @@ export default function MonitoringHealthPage() {
  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">服务器总数</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsCardTotalServers")}</CardTitle>
  <Server className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold">{totalServers}</div>
- <p className="text-xs text-muted-foreground">
- {healthyServers} 健康 / {warningServers} 警告 / {unhealthyServers + offlineServers + errorServers} 异常
- </p>
- </CardContent>
+        <CardContent>
+        <div className="text-2xl font-bold">{totalServers}</div>
+        <p className="text-xs text-muted-foreground">
+        {t("statsCardTotalServersDesc", {
+        healthy: healthyServers,
+        warning: warningServers,
+        abnormal: unhealthyServers + offlineServers + errorServers,
+        })}
+        </p>
+        </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">健康检查项</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsCardChecks")}</CardTitle>
  <Activity className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold">{totalChecks}</div>
- <p className="text-xs text-muted-foreground">
- {healthyChecks} 正常 / {warningChecks} 警告 / {unhealthyChecks} 异常
- </p>
- </CardContent>
+        <CardContent>
+        <div className="text-2xl font-bold">{totalChecks}</div>
+        <p className="text-xs text-muted-foreground">
+        {t("statsCardChecksDesc", {
+        normal: healthyChecks,
+        warning: warningChecks,
+        abnormal: unhealthyChecks,
+        })}
+        </p>
+        </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">平均健康率</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsCardAvgHealth")}</CardTitle>
  <CheckCircle className="h-4 w-4 text-green-600" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold text-green-600">{avgHealthRate}%</div>
- <p className="text-xs text-muted-foreground">所有检查项平均</p>
+ <p className="text-xs text-muted-foreground">{t("statsCardAvgHealthDesc")}</p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">需要关注</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsCardNeedAttention")}</CardTitle>
  <AlertCircle className="h-4 w-4 text-yellow-600" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold text-yellow-600">
  {warningServers + unhealthyServers}
  </div>
- <p className="text-xs text-muted-foreground">服务器需要处理</p>
+ <p className="text-xs text-muted-foreground">{t("statsCardNeedAttentionDesc")}</p>
  </CardContent>
  </Card>
  </div>
@@ -396,7 +447,7 @@ export default function MonitoringHealthPage() {
  <Card>
  <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
  <Server className="h-12 w-12 mb-4" />
- <p>暂无服务器</p>
+ <p>{t("emptyNoServers")}</p>
  </CardContent>
  </Card>
  ) : (
@@ -412,7 +463,7 @@ export default function MonitoringHealthPage() {
  <p className="text-sm text-muted-foreground">{check.ip}</p>
  {check.uptime && (
  <span className="text-xs text-muted-foreground">
- • 运行时间: {check.uptime}
+ • {t("uptimeLabel")}: {check.uptime}
  </span>
  )}
  </div>
@@ -427,12 +478,12 @@ export default function MonitoringHealthPage() {
  {check.status === "offline" ? (
  <div className="flex items-center justify-center py-8 text-muted-foreground">
  <Server className="h-8 w-8 mr-2" />
- <p>服务器离线</p>
+ <p>{t("offlineMessage")}</p>
  </div>
  ) : check.status === "error" ? (
  <div className="flex items-center justify-center py-8 text-destructive">
  <XCircle className="h-8 w-8 mr-2" />
- <p>健康检查失败</p>
+ <p>{t("errorMessage")}</p>
  </div>
  ) : (
  <>
@@ -451,7 +502,7 @@ export default function MonitoringHealthPage() {
  <div className="flex items-center gap-3">
  {getStatusIcon(item.status)}
  <div>
- <div className="font-medium">{item.name}</div>
+ <div className="font-medium">{getCheckName(item.name)}</div>
  {item.details && (
  <div className="text-xs text-muted-foreground">
  {item.details}
@@ -463,10 +514,10 @@ export default function MonitoringHealthPage() {
  <div className="font-mono text-sm font-bold">{item.value}</div>
  <Badge variant="outline" className="text-xs mt-1">
  {item.status === "healthy"
- ? "正常"
+ ? t("badgeNormal")
  : item.status === "warning"
- ? "警告"
- : "异常"}
+ ? t("badgeWarning")
+ : t("badgeUnhealthy")}
  </Badge>
  </div>
  </div>
@@ -474,9 +525,12 @@ export default function MonitoringHealthPage() {
  </div>
  <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm text-muted-foreground">
  <span>
- 检查项: {check.overall.healthy}/{check.overall.total} 正常
+ {t("summaryChecksPrefix")}: {check.overall.healthy}/{check.overall.total}{" "}
+ {t("summaryChecksSuffix")}
  </span>
- <span>最后检查: {check.lastCheck}</span>
+ <span>
+ {t("summaryLastCheckPrefix")}: {check.lastCheck}
+ </span>
  </div>
  </>
  )}

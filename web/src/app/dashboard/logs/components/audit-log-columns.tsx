@@ -1,4 +1,3 @@
-import React from "react"
 import { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -6,13 +5,63 @@ import { ArrowUpDown, ArrowUp, ArrowDown, Clock, User, Server, Globe, AlertTrian
 import { AuditLog } from "@/lib/api/audit-logs"
 import {
   getActionColor,
-  getActionLabel,
-  getResourceLabel,
   formatTimestamp,
-  formatDuration
 } from "@/components/ui/data-table"
 
-export const auditLogColumns: ColumnDef<AuditLog>[] = [
+/**
+ * 根据传入的多语言函数创建操作日志表格列定义。
+ * 将 `useTranslations("logsAudit")` 写在调用方组件中，再把 `t` 传进来。
+ */
+function getActionLabel(
+  t: (key: string) => string,
+  action: string,
+): string {
+  const labelMap: Record<string, string> = {
+    login: t("actionLogin"),
+    logout: t("actionLogout"),
+    connect: t("actionConnect"),
+    disconnect: t("actionDisconnect"),
+    upload: t("actionUpload"),
+    download: t("actionDownload"),
+    delete: t("actionDelete"),
+    create: t("actionCreate"),
+    update: t("actionUpdate"),
+  }
+  return labelMap[action] || action
+}
+
+function getResourceLabel(
+  t: (key: string) => string,
+  resource: string,
+): string {
+  const labelMap: Record<string, string> = {
+    server: t("resourceServer"),
+    file: t("resourceFile"),
+    user: t("resourceUser"),
+    system: t("resourceSystem"),
+    session: t("resourceSession"),
+  }
+  return labelMap[resource] || resource
+}
+
+function formatDurationWithI18n(
+  t: (key: string, values?: Record<string, unknown>) => string,
+  seconds: number | undefined,
+): string {
+  if (!seconds) return "-"
+  if (seconds < 60) return t("durationSeconds", { seconds })
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return t("durationMinutesSeconds", {
+    minutes,
+    seconds: remainingSeconds,
+  })
+}
+
+export function createAuditLogColumns(
+  t: (key: string, values?: Record<string, unknown>) => string,
+): ColumnDef<AuditLog>[] {
+  return [
   // 时间列
   {
     id: "created_at",
@@ -26,7 +75,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
         >
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            时间
+            {t("columnTime")}
           </div>
           {column.getIsSorted() === "asc" ? (
             <ArrowUp className="ml-2 h-4 w-4" />
@@ -67,7 +116,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
       >
         <div className="flex items-center gap-2">
           <User className="h-4 w-4" />
-          用户
+          {t("columnUser")}
         </div>
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
@@ -96,7 +145,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         className="px-2"
       >
-        操作
+        {t("columnAction")}
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
         ) : column.getIsSorted() === "desc" ? (
@@ -110,7 +159,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
       const action = row.getValue("action") as string
       return (
         <Badge className={getActionColor(action)}>
-          {getActionLabel(action)}
+          {getActionLabel(t, action)}
         </Badge>
       )
     },
@@ -129,7 +178,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         className="px-2"
       >
-        资源
+        {t("columnResource")}
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
         ) : column.getIsSorted() === "desc" ? (
@@ -143,7 +192,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
       const resource = row.getValue("resource") as string
       return (
         <Badge variant="outline">
-          {getResourceLabel(resource)}
+          {getResourceLabel(t, resource)}
         </Badge>
       )
     },
@@ -162,7 +211,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         className="px-2"
       >
-        状态
+        {t("columnStatus")}
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
         ) : column.getIsSorted() === "desc" ? (
@@ -189,7 +238,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
                 : "bg-red-100 text-red-800 border-red-200"
             }
           >
-            {isSuccess ? "成功" : "失败"}
+            {isSuccess ? t("filterStatusSuccessLabel") : t("filterStatusFailureLabel")}
           </Badge>
         </div>
       )
@@ -211,7 +260,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
       >
         <div className="flex items-center gap-2">
           <Globe className="h-4 w-4" />
-          IP地址
+          {t("columnIp")}
         </div>
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
@@ -234,7 +283,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
   {
     id: "details",
     accessorKey: "details",
-    header: "详情",
+    header: t("columnDetails"),
     cell: ({ row }) => {
       const log = row.original
       return (
@@ -268,7 +317,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         className="px-2"
       >
-        耗时
+        {t("columnDuration")}
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
         ) : column.getIsSorted() === "desc" ? (
@@ -282,7 +331,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
       const duration = row.getValue("duration") as number
       return (
         <div className="font-mono text-sm">
-          {formatDuration(duration)}
+          {formatDurationWithI18n(t, duration)}
         </div>
       )
     },
@@ -300,7 +349,7 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
       >
         <div className="flex items-center gap-2">
           <Server className="h-4 w-4" />
-          服务器
+          {t("columnServer")}
         </div>
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
@@ -322,3 +371,4 @@ export const auditLogColumns: ColumnDef<AuditLog>[] = [
     enableHiding: true,
   },
 ]
+}

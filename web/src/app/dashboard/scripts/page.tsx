@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +30,7 @@ import { createScriptColumns } from "./components/script-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 
 export default function ScriptsPage() {
+ const t = useTranslations("scripts")
  const { ready } = useAuthReady()
  const [scripts, setScripts] = useState<Script[]>([])
  const [loading, setLoading] = useState(true)
@@ -77,9 +79,9 @@ export default function ScriptsPage() {
  const [selectedEditSuggestionIndex, setSelectedEditSuggestionIndex] = useState(-1)
  const editSuggestionRefs = useRef<(HTMLButtonElement | null)[]>([])
 
- // 加载脚本列表
+// 加载脚本列表
  const loadScripts = useCallback(async () => {
-   try {
+  try {
      const response = await scriptsApi.list({
        page,
        limit: pageSize,
@@ -90,7 +92,7 @@ export default function ScriptsPage() {
      setTotalPages(response.total_pages || 1)
    } catch (error: unknown) {
      console.error("加载脚本列表失败:", error)
-     toast.error(getErrorMessage(error, "加载脚本失败"))
+     toast.error(getErrorMessage(error, t("toastLoadFailed")))
    } finally {
      setLoading(false)
      setRefreshing(false)
@@ -153,9 +155,9 @@ export default function ScriptsPage() {
  : availableEditTags
 
 // 事件处理函数 - 使用 useCallback 避免闭包陷阱
- const handleExecute = useCallback((scriptId: string) => {
- console.log("执行脚本:", scriptId)
- toast.info("脚本执行功能即将推出")
+const handleExecute = useCallback((scriptId: string) => {
+ console.log("Execute script:", scriptId)
+ toast.info(t("toastExecuteInfo"))
  // TODO: 实现脚本执行对话框和逻辑
  }, [])
 
@@ -174,26 +176,27 @@ export default function ScriptsPage() {
  }, [scripts])
 
  const handleDelete = useCallback(async (scriptId: string) => {
- if (!confirm("确定要删除这个脚本吗？")) {
+ if (!confirm(t("toastDeleteConfirm"))) {
  return
  }
 
  try {
  await scriptsApi.delete(scriptId)
- toast.success("脚本删除成功")
+ toast.success(t("toastDeleteSuccess"))
  await loadScripts()
  } catch (error: unknown) {
  console.error("删除脚本失败:", error)
- toast.error(getErrorMessage(error, "删除脚本失败"))
+ toast.error(getErrorMessage(error, t("toastDeleteFailed")))
  }
- }, [loadScripts])
+ }, [loadScripts, t])
 
 // DataTable 列定义与可见列
 const columns = useMemo(() => createScriptColumns({
   onExecute: handleExecute,
   onEdit: handleEdit,
   onDelete: handleDelete,
-}), [handleExecute, handleEdit, handleDelete])
+  t: (key: string) => t(key),
+}), [handleExecute, handleEdit, handleDelete, t])
 
 const visibleColumns = useMemo(
   () => columns.filter((col) =>
@@ -327,7 +330,7 @@ const filterOptions = useMemo(() => {
 
  const handleCreateScript = async () => {
  if (!newScript.name || !newScript.content) {
- toast.error("请填写脚本名称和内容")
+ toast.error(t("toastFormIncomplete"))
  return
  }
 
@@ -340,7 +343,7 @@ const filterOptions = useMemo(() => {
   tags: newScript.tags,
 })
 
- toast.success("脚本创建成功")
+ toast.success(t("toastCreateSuccess"))
  setIsDialogOpen(false)
 
  // 重置表单
@@ -355,8 +358,8 @@ const filterOptions = useMemo(() => {
  // 重新加载列表
  await loadScripts()
  } catch (error: unknown) {
- console.error("创建脚本失败:", error)
- toast.error(getErrorMessage(error, "创建脚本失败"))
+  console.error("创建脚本失败:", error)
+ toast.error(getErrorMessage(error, t("toastCreateFailed")))
  }
  }
 
@@ -380,7 +383,7 @@ const filterOptions = useMemo(() => {
 
  const handleUpdateScript = async () => {
  if (!editScript.name || !editScript.content) {
- toast.error("请填写脚本名称和内容")
+ toast.error(t("toastFormIncomplete"))
  return
  }
 
@@ -395,7 +398,7 @@ const filterOptions = useMemo(() => {
   tags: editScript.tags,
 })
 
- toast.success("脚本更新成功")
+ toast.success(t("toastUpdateSuccess"))
  setIsEditDialogOpen(false)
  setEditingScriptId(null)
 
@@ -411,8 +414,8 @@ const filterOptions = useMemo(() => {
  // 重新加载列表
  await loadScripts()
  } catch (error: unknown) {
- console.error("更新脚本失败:", error)
- toast.error(getErrorMessage(error, "更新脚本失败"))
+  console.error("更新脚本失败:", error)
+ toast.error(getErrorMessage(error, t("toastUpdateFailed")))
  }
  }
 
@@ -433,10 +436,10 @@ const filterOptions = useMemo(() => {
 
  return (
  <>
- <PageHeader title="脚本管理">
+ <PageHeader title={t("pageTitle")}>
  <Button onClick={handleOpenDialog}>
  <Plus className="mr-2 h-4 w-4" />
- 新建脚本
+ {t("btnNew")}
  </Button>
 </PageHeader>
 
@@ -444,21 +447,21 @@ const filterOptions = useMemo(() => {
   <Card className="flex-1 min-h-0">
     <CardHeader className="flex flex-row items-center justify-between">
       <div>
-        <CardTitle className="text-lg">脚本库</CardTitle>
-        <CardDescription>显示 {scripts.length} 条记录</CardDescription>
+        <CardTitle className="text-lg">{t("cardTitle")}</CardTitle>
+        <CardDescription>{t("cardDescription", { count: scripts.length })}</CardDescription>
       </div>
       <div className="flex gap-2">
         <ColumnVisibility
           columns={[
-            { id: 'name', label: '名称' },
-            { id: 'description', label: '描述' },
-            { id: 'content', label: '内容' },
+            { id: 'name', label: t("cvName") },
+            { id: 'description', label: t("cvDescription") },
+            { id: 'content', label: t("cvContent") },
             // 以下列用于筛选，为避免报错，不允许在此处隐藏
             // { id: 'tags', label: '标签' },
             // { id: 'language', label: '语言' },
             // { id: 'author', label: '作者' },
-            { id: 'updated_at', label: '更新时间' },
-            { id: 'executions', label: '执行次数' },
+            { id: 'updated_at', label: t("cvUpdatedAt") },
+            { id: 'executions', label: t("cvExecutions") },
           ].map(column => ({
             id: column.id,
             label: column.label,
@@ -481,16 +484,16 @@ const filterOptions = useMemo(() => {
         totalRows={totalRows}
         onPageSizeChange={setPageSize}
         onPageChange={setPage}
-        emptyMessage="暂无脚本"
+        emptyMessage={t("tableEmpty")}
         className="flex h-full flex-col"
         toolbar={(table) => (
           <DataTableToolbar
             table={table}
             searchKey="name"
-            searchPlaceholder="搜索脚本名称或描述..."
+            searchPlaceholder={t("tableSearchPlaceholder")}
             filters={[
-              { column: 'author', title: '作者', options: filterOptions.authors },
-              { column: 'tags', title: '标签', options: filterOptions.tags },
+              { column: 'author', title: t("filterAuthorTitle"), options: filterOptions.authors },
+              { column: 'tags', title: t("filterTagsTitle"), options: filterOptions.tags },
             ]}
             onRefresh={handleRefresh}
             showRefresh={true}
@@ -515,25 +518,25 @@ const filterOptions = useMemo(() => {
  </DialogHeader>
 
  <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
- {/* 脚本名称 */}
- <div className="space-y-2">
- <Label htmlFor="script-name">
- 脚本名称 <span className="text-destructive">*</span>
- </Label>
- <Input
- id="script-name"
- placeholder="例如：系统监控脚本"
+{/* 脚本名称 */}
+<div className="space-y-2">
+<Label htmlFor="script-name">
+{t("fieldNameLabel")} <span className="text-destructive">*</span>
+</Label>
+<Input
+id="script-name"
+placeholder={t("fieldNamePlaceholder")}
  value={newScript.name}
  onChange={(e) => setNewScript({ ...newScript, name: e.target.value })}
  />
  </div>
 
- {/* 脚本描述 */}
- <div className="space-y-2">
- <Label htmlFor="script-description">脚本描述</Label>
- <Input
- id="script-description"
- placeholder="简要描述脚本的功能"
+{/* 脚本描述 */}
+<div className="space-y-2">
+<Label htmlFor="script-description">{t("fieldDescriptionLabel")}</Label>
+<Input
+id="script-description"
+placeholder={t("fieldDescriptionPlaceholder")}
  value={newScript.description}
  onChange={(e) => setNewScript({ ...newScript, description: e.target.value })}
  />
@@ -542,7 +545,7 @@ const filterOptions = useMemo(() => {
  {/* 脚本内容 */}
  <div className="space-y-2">
  <Label htmlFor="script-content">
- 脚本内容 <span className="text-destructive">*</span>
+ {t("fieldContentLabel")} <span className="text-destructive">*</span>
  </Label>
  <Textarea
  id="script-content"
@@ -552,17 +555,17 @@ const filterOptions = useMemo(() => {
  onChange={(e) => setNewScript({ ...newScript, content: e.target.value })}
  />
  <p className="text-xs text-muted-foreground">
- 支持使用变量，如 $HOST, $PORT 等
+ {t("fieldContentHint")}
  </p>
  </div>
 
  {/* 标签 */}
  <div className="space-y-2">
- <Label htmlFor="script-tags">标签</Label>
+ <Label htmlFor="script-tags">{t("fieldTagsLabel")}</Label>
  <div className="relative">
  <Input
  id="script-tags"
- placeholder="输入标签名称，按回车添加"
+ placeholder={t("tagsInputPlaceholder")}
  value={tagInput}
  onChange={(e) => {
  setTagInput(e.target.value)
@@ -611,14 +614,14 @@ const filterOptions = useMemo(() => {
  </div>
 
  <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
- 输入标签名称，
+ {t("tagsHintPrefix")}
  <Kbd>↑</Kbd>
  <Kbd>↓</Kbd>
- 选择建议，
+ {t("tagsHintSelect")}
  <Kbd>Enter</Kbd>
- 添加，
+ {t("tagsHintEnter")}
  <Kbd>Esc</Kbd>
- 关闭
+ {t("tagsHintEsc")}
  </p>
 
  {/* 已添加的标签 */}
@@ -643,10 +646,10 @@ const filterOptions = useMemo(() => {
 
  <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
- 取消
+ {t("dialogCancel")}
  </Button>
  <Button onClick={handleCreateScript}>
- 创建脚本
+ {t("dialogCreateSubmit")}
  </Button>
  </DialogFooter>
  </DialogContent>
@@ -656,9 +659,9 @@ const filterOptions = useMemo(() => {
  <Dialog open={isEditDialogOpen} onOpenChange={handleCloseEditDialog}>
  <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
  <DialogHeader className="shrink-0">
- <DialogTitle>编辑脚本</DialogTitle>
+ <DialogTitle>{t("editDialogTitle")}</DialogTitle>
  <DialogDescription>
- 修改脚本信息和内容
+ {t("editDialogDescription")}
  </DialogDescription>
  </DialogHeader>
 
@@ -666,11 +669,11 @@ const filterOptions = useMemo(() => {
  {/* 脚本名称 */}
  <div className="space-y-2">
  <Label htmlFor="edit-script-name">
- 脚本名称 <span className="text-destructive">*</span>
+ {t("fieldNameLabel")} <span className="text-destructive">*</span>
  </Label>
  <Input
  id="edit-script-name"
- placeholder="例如：系统监控脚本"
+ placeholder={t("fieldNamePlaceholder")}
  value={editScript.name}
  onChange={(e) => setEditScript({ ...editScript, name: e.target.value })}
  />
@@ -678,10 +681,10 @@ const filterOptions = useMemo(() => {
 
  {/* 脚本描述 */}
  <div className="space-y-2">
- <Label htmlFor="edit-script-description">脚本描述</Label>
+ <Label htmlFor="edit-script-description">{t("fieldDescriptionLabel")}</Label>
  <Input
  id="edit-script-description"
- placeholder="简要描述脚本的功能"
+ placeholder={t("fieldDescriptionPlaceholder")}
  value={editScript.description}
  onChange={(e) => setEditScript({ ...editScript, description: e.target.value })}
  />
@@ -690,7 +693,7 @@ const filterOptions = useMemo(() => {
  {/* 脚本内容 */}
  <div className="space-y-2">
  <Label htmlFor="edit-script-content">
- 脚本内容 <span className="text-destructive">*</span>
+ {t("fieldContentLabel")} <span className="text-destructive">*</span>
  </Label>
  <Textarea
  id="edit-script-content"
@@ -700,17 +703,17 @@ const filterOptions = useMemo(() => {
  onChange={(e) => setEditScript({ ...editScript, content: e.target.value })}
  />
  <p className="text-xs text-muted-foreground">
- 支持使用变量，如 $HOST, $PORT 等
+ {t("fieldContentHint")}
  </p>
  </div>
 
  {/* 标签 */}
  <div className="space-y-2">
- <Label htmlFor="edit-script-tags">标签</Label>
+ <Label htmlFor="edit-script-tags">{t("fieldTagsLabel")}</Label>
  <div className="relative">
  <Input
  id="edit-script-tags"
- placeholder="输入标签名称，按回车添加"
+ placeholder={t("tagsInputPlaceholder")}
  value={editTagInput}
  onChange={(e) => {
  setEditTagInput(e.target.value)
@@ -759,14 +762,14 @@ const filterOptions = useMemo(() => {
  </div>
 
  <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
- 输入标签名称，
+ {t("tagsHintPrefix")}
  <Kbd>↑</Kbd>
  <Kbd>↓</Kbd>
- 选择建议，
+ {t("tagsHintSelect")}
  <Kbd>Enter</Kbd>
- 添加，
+ {t("tagsHintEnter")}
  <Kbd>Esc</Kbd>
- 关闭
+ {t("tagsHintEsc")}
  </p>
 
  {/* 已添加的标签 */}
@@ -791,10 +794,10 @@ const filterOptions = useMemo(() => {
 
  <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
- 取消
+ {t("dialogCancel")}
  </Button>
  <Button onClick={handleUpdateScript}>
- 保存修改
+ {t("editDialogSave")}
  </Button>
  </DialogFooter>
  </DialogContent>

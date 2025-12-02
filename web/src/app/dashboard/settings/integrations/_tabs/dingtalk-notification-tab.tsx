@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
@@ -11,7 +12,6 @@ import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-
 import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface DingTalkNotificationTabProps {
@@ -20,6 +20,7 @@ interface DingTalkNotificationTabProps {
 }
 
 export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_enabled" }: DingTalkNotificationTabProps) {
+  const t = useTranslations("settingsIntegrationsDingTalk")
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
   const enabled = form.watch(enabledFieldName)
 
@@ -33,21 +34,21 @@ export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_ena
 
     await testConnection(async () => {
       await settingsApi.testDingTalkConnection(config)
-      toast.success("测试消息发送成功！请检查您的钉钉群组。")
+      toast.success(t("toastTestSuccess"))
     })
   }
 
   return (
     <SettingsSection
-      title="钉钉通知配置"
-      description="配置钉钉机器人Webhook接收系统通知"
+      title={t("sectionTitle")}
+      description={t("sectionDescription")}
       icon={<MessageSquare className="h-5 w-5" />}
     >
       <FormSwitch
         form={form}
         name={enabledFieldName}
-        label="启用钉钉通知"
-        description="开启后系统将通过钉钉机器人发送通知"
+        label={t("fieldEnabledLabel")}
+        description={t("fieldEnabledDesc")}
       />
 
       {enabled && (
@@ -55,20 +56,20 @@ export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_ena
           <FormInput
             form={form}
             name="dingtalk_webhook_url"
-            label="Webhook URL"
-            description="钉钉自定义机器人的Webhook地址"
+            label={t("fieldWebhookUrlLabel")}
+            description={t("fieldWebhookUrlDesc")}
             type="url"
-            placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."
+            placeholder={t("fieldWebhookUrlPlaceholder")}
             required
           />
 
           <FormInput
             form={form}
             name="dingtalk_secret"
-            label="签名密钥（可选）"
-            description="钉钉机器人的加签密钥，用于验证消息来源"
+            label={t("fieldSecretLabel")}
+            description={t("fieldSecretDesc")}
             type="password"
-            placeholder="SECxxxxxxxxxxxxxxxxxxxxxxxx"
+            placeholder={t("fieldSecretPlaceholder")}
           />
 
           <Button
@@ -80,12 +81,12 @@ export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_ena
             {isTesting ? (
               <>
                 <Send className="mr-2 h-4 w-4 animate-pulse" />
-                发送中...
+                {t("btnTesting")}
               </>
             ) : (
               <>
                 <Send className="mr-2 h-4 w-4" />
-                发送测试消息
+                {t("btnTest")}
               </>
             )}
           </Button>
@@ -93,48 +94,48 @@ export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_ena
           <Alert>
             <InfoIcon className="h-4 w-4" />
             <AlertDescription>
-              测试消息将发送到配置的钉钉群组。请确保机器人已正确添加到目标群组中。
+              {t("alertDescription")}
             </AlertDescription>
           </Alert>
         </>
       )}
 
       <div className="rounded-lg border p-4 bg-muted/50">
-        <p className="text-sm font-medium mb-2">如何配置钉钉机器人：</p>
+        <p className="text-sm font-medium mb-2">{t("howToTitle")}</p>
         <div className="text-sm text-muted-foreground space-y-2">
           <div>
-            <p className="font-medium text-foreground">步骤 1：创建群机器人</p>
+            <p className="font-medium text-foreground">{t("step1Title")}</p>
             <ul className="list-disc list-inside ml-2">
-              <li>打开钉钉群组，点击群设置 → 智能群助手 → 添加机器人</li>
-              <li>选择&ldquo;自定义&rdquo;类型的机器人</li>
-              <li>设置机器人名称和头像</li>
+              <li>{t("step1Item1")}</li>
+              <li>{t("step1Item2")}</li>
+              <li>{t("step1Item3")}</li>
             </ul>
           </div>
           <div>
-            <p className="font-medium text-foreground">步骤 2：安全设置</p>
+            <p className="font-medium text-foreground">{t("step2Title")}</p>
             <ul className="list-disc list-inside ml-2">
-              <li>推荐选择&ldquo;加签&rdquo;方式，并保存生成的密钥</li>
-              <li>也可以选择&ldquo;自定义关键词&rdquo;或&ldquo;IP地址&rdquo;验证</li>
+              <li>{t("step2Item1")}</li>
+              <li>{t("step2Item2")}</li>
             </ul>
           </div>
           <div>
-            <p className="font-medium text-foreground">步骤 3：获取Webhook</p>
+            <p className="font-medium text-foreground">{t("step3Title")}</p>
             <ul className="list-disc list-inside ml-2">
-              <li>创建完成后复制Webhook URL</li>
-              <li>将URL和密钥（如有）填入上方配置</li>
+              <li>{t("step3Item1")}</li>
+              <li>{t("step3Item2")}</li>
             </ul>
           </div>
         </div>
       </div>
 
       <div className="rounded-lg border p-4 space-y-2">
-        <p className="text-sm font-medium">支持的通知事件：</p>
+        <p className="text-sm font-medium">{t("eventsTitle")}</p>
         <ul className="text-sm text-muted-foreground list-disc list-inside ml-2">
-          <li>服务器连接状态变更</li>
-          <li>系统安全告警</li>
-          <li>备份任务完成通知</li>
-          <li>用户登录异常提醒</li>
-          <li>系统更新和维护通知</li>
+          <li>{t("eventServerStatus")}</li>
+          <li>{t("eventSecurityAlert")}</li>
+          <li>{t("eventBackupCompleted")}</li>
+          <li>{t("eventLoginAnomaly")}</li>
+          <li>{t("eventSystemMaintenance")}</li>
         </ul>
       </div>
     </SettingsSection>

@@ -30,6 +30,7 @@ import { getErrorMessage } from "@/lib/error-utils"
 import { generateCodeVerifier, deriveCodeChallenge } from "@/lib/pkce"
 import { useAuthStore } from "@/stores/auth-store"
 import { resetUnauthorizedRedirectFlag } from "@/lib/api-client"
+import { useTranslations } from "next-intl"
 
 // 声明 Google Identity Services 全局类型（FedCM 模式）
 declare global {
@@ -76,6 +77,7 @@ export function LoginForm({
 
   // Google 登录模式（仅前端本地存储，用于调试切换）
   const [googleLoginMode, setGoogleLoginMode] = useState<GoogleLoginMode>("redirect")
+  const tAuth = useTranslations("auth")
 
   // 登录成功后的回跳路径,优先使用 /login?next=xxx 中的 next
   const getRedirectTarget = useCallback(() => {
@@ -159,8 +161,8 @@ export function LoginForm({
       if (authorizeResp.requires_2fa && authorizeResp.temp_token) {
         setTempToken(authorizeResp.temp_token)
         setRequires2FA(true)
-        toast.info("需要双因子认证", {
-          description: "请输入认证应用中的 6 位验证码",
+        toast.info(tAuth("login2faRequiredTitle"), {
+          description: tAuth("login2faRequiredDesc"),
         })
         setIsLoading(false)
         return
@@ -168,7 +170,7 @@ export function LoginForm({
 
       // 未启用 2FA：直接使用授权码换取 access_token
       if (!authorizeResp.code) {
-        throw new Error("授权码为空")
+        throw new Error("AUTH_CODE_EMPTY")
       }
 
       const tokenResp = await authApi.exchangeCodeForToken({
@@ -179,22 +181,28 @@ export function LoginForm({
       })
 
       if (!tokenResp.access_token) {
-        throw new Error("未能获取 access_token")
+        throw new Error("ACCESS_TOKEN_MISSING")
       }
 
       const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
       setToken(tokenResp.access_token, expiresIn)
 
-      toast.success("登录成功", {
-        description: "正在跳转到控制台...",
+      toast.success(tAuth("loginToastSuccessTitle"), {
+        description: tAuth("loginToastSuccessDesc"),
       })
       // 刷新全局 authStatus/system_config
       await refreshConfig()
       router.replace(getRedirectTarget())
     } catch (error: unknown) {
       console.error("Login error:", error)
-      toast.error("登录失败", {
-        description: getErrorMessage(error, "请检查输入信息并重试"),
+      const defaultDesc = tAuth("loginToastFailedDesc")
+      let desc = getErrorMessage(error, defaultDesc)
+      if (desc === "AUTH_CODE_EMPTY" || desc === "ACCESS_TOKEN_MISSING") {
+        desc = defaultDesc
+      }
+
+      toast.error(tAuth("loginToastFailedTitle"), {
+        description: desc,
       })
       setIsLoading(false)
     }
@@ -206,7 +214,7 @@ export function LoginForm({
     if (isLoading) return
 
     if (!twoFactorCode || twoFactorCode.length !== 6) {
-      toast.error("请输入 6 位验证码")
+      toast.error(tAuth("login2faToastCodeRequired"))
       return
     }
 
@@ -225,7 +233,8 @@ export function LoginForm({
       })
 
       if (!verifyResp.code) {
-        throw new Error("2FA 验证成功但未返回授权码")
+        // 内部异常，给用户看统一的失败提示
+        throw new Error("2FA verification succeeded but no authorization code was returned")
       }
 
       const tokenResp = await authApi.exchangeCodeForToken({
@@ -236,22 +245,22 @@ export function LoginForm({
       })
 
       if (!tokenResp.access_token) {
-        throw new Error("未能获取 access_token")
+        throw new Error("Missing access_token in token response")
       }
 
       const expiresIn = typeof tokenResp.expires_in === "number" ? tokenResp.expires_in : 0
       setToken(tokenResp.access_token, expiresIn)
 
-      toast.success("验证成功", {
-        description: "正在跳转到控制台...",
+      toast.success(tAuth("login2faToastSuccessTitle"), {
+        description: tAuth("login2faToastSuccessDesc"),
       })
 
       await refreshConfig()
       router.replace(getRedirectTarget())
     } catch (error: unknown) {
       console.error("2FA verification error:", error)
-      toast.error("验证失败", {
-        description: getErrorMessage(error, "验证码错误，请重试"),
+      toast.error(tAuth("login2faToastFailedTitle"), {
+        description: getErrorMessage(error, tAuth("login2faToastFailedDesc")),
       })
     } finally {
       setIsLoading(false)
@@ -269,8 +278,8 @@ export function LoginForm({
   // 启动基于重定向的 Google OAuth 登录
   const handleGoogleRedirectLogin = () => {
     if (!config?.oauth_enabled || !config?.google_client_id) {
-      toast.error("Google 登录未启用", {
-        description: "请联系管理员在系统设置中开启 Google 登录",
+      toast.error(tAuth("loginGoogleNotEnabledTitle"), {
+        description: tAuth("loginGoogleNotEnabledDesc"),
       })
       return
     }
@@ -315,8 +324,8 @@ export function LoginForm({
       window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
     } catch (error) {
       console.error("Failed to start Google OAuth login:", error)
-      toast.error("Google 登录失败", {
-        description: getErrorMessage(error, "无法跳转到 Google 登录页面"),
+      toast.error(tAuth("loginGoogleFailedTitle"), {
+        description: getErrorMessage(error, tAuth("loginGoogleFailedDesc")),
       })
     }
   }
@@ -325,8 +334,8 @@ export function LoginForm({
   const handleGoogleFedcmSuccess = useCallback(
     async (credentialResponse: any) => {
       if (!credentialResponse?.credential) {
-        toast.error("Google 登录失败", {
-          description: "未能获取凭证",
+        toast.error(tAuth("loginGoogleFailedTitle"), {
+          description: tAuth("loginGoogleCredentialMissingDesc"),
         })
         return
       }
@@ -337,22 +346,22 @@ export function LoginForm({
         const response = await authApi.verifyGoogleToken(credentialResponse.credential)
 
         if (!response.access_token) {
-          throw new Error("未能获取 access_token")
+          throw new Error("Missing access_token in Google token response")
         }
 
         const expiresIn = typeof response.expires_in === "number" ? response.expires_in : 0
         setToken(response.access_token, expiresIn)
 
-        toast.success("登录成功", {
-          description: "正在跳转到控制台...",
+        toast.success(tAuth("loginToastSuccessTitle"), {
+          description: tAuth("loginToastSuccessDesc"),
         })
 
         await refreshConfig()
         router.replace(getRedirectTarget())
       } catch (error: unknown) {
         console.error("Google FedCM login error:", error)
-        toast.error("Google 登录失败", {
-          description: getErrorMessage(error, "请重试或联系管理员"),
+        toast.error(tAuth("loginGoogleFailedTitle"), {
+          description: getErrorMessage(error, tAuth("loginGoogleRetryDesc")),
         })
       } finally {
         setIsLoading(false)
@@ -423,11 +432,13 @@ export function LoginForm({
                 </div>
                 <div className="space-y-1">
                   <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-                    {requires2FA ? "双因子认证" : `欢迎使用 ${config?.system_name || "EasySSH"}`}
+                    {requires2FA
+                      ? tAuth("login2faRequiredTitle")
+                      : tAuth("loginTitle") + " " + (config?.system_name || "EasySSH")}
                   </h1>
                   {requires2FA && (
                     <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                      请输入认证应用中的验证码
+                      {tAuth("login2faRequiredDesc")}
                     </p>
                   )}
                 </div>
@@ -443,7 +454,7 @@ export function LoginForm({
                 <FadeSlideIn delay={0.1}>
                   <Field>
                     <FieldLabel htmlFor="2fa-code" className="text-zinc-700 dark:text-zinc-200">
-                      验证码
+                    {tAuth("login2faCodePlaceholder")}
                     </FieldLabel>
                     <div className="flex justify-center">
                       <InputOTP
@@ -465,8 +476,8 @@ export function LoginForm({
                       </InputOTPGroup>
                     </InputOTP>
                   </div>
-                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs text-center">
-                    打开认证应用（如 Google Authenticator）获取验证码
+                    <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs text-center">
+                    {tAuth("login2faRequiredDesc")}
                   </FieldDescription>
                 </Field>
               </FadeSlideIn>
@@ -483,10 +494,11 @@ export function LoginForm({
                       {isLoading ? (
                         <>
                           <span className="mr-2">验证中</span>
+                          {/* spinner 文案已在上方 label 中体现 */}
                           <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
                         </>
                       ) : (
-                        "验证"
+                        tAuth("login2faSubmit")
                       )}
                     </Button>
                   </Field>
@@ -502,7 +514,7 @@ export function LoginForm({
                       className="w-full"
                       disabled={isLoading}
                     >
-                      返回登录
+                      {tAuth("login2faBack")}
                     </Button>
                   </Field>
                 </FadeSlideIn>
@@ -510,7 +522,7 @@ export function LoginForm({
                 {/* 备份码提示 */}
                 <FadeSlideIn delay={0.4}>
                   <div className="text-center text-xs text-zinc-600 dark:text-zinc-500">
-                    无法访问认证应用？使用备份码登录
+                    {tAuth("login2faBackupHint")}
                   </div>
                 </FadeSlideIn>
               </div>
@@ -521,14 +533,14 @@ export function LoginForm({
               <FadeSlideIn delay={0.1}>
                 <Field>
                   <FieldLabel htmlFor="username" className="text-zinc-700 dark:text-zinc-200">
-                    账号
+                    {tAuth("loginUsernameLabel")}
                   </FieldLabel>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="username"
                       type="text"
-                      placeholder="请输入账号"
+                      placeholder={tAuth("loginUsernamePlaceholder")}
                       name="username"
                       autoComplete="username"
                       value={username}
@@ -544,14 +556,14 @@ export function LoginForm({
               <FadeSlideIn delay={0.2}>
                 <Field>
                   <FieldLabel htmlFor="password" className="text-zinc-700 dark:text-zinc-200">
-                    密码
+                    {tAuth("loginPasswordLabel")}
                   </FieldLabel>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="请输入密码"
+                      placeholder={tAuth("loginPasswordPlaceholder")}
                       name="password"
                       autoComplete="current-password"
                       value={password}
@@ -582,12 +594,12 @@ export function LoginForm({
                     variant="link"
                     className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto no-underline hover:no-underline transition-colors"
                     onClick={() => {
-                      toast.info("忘记密码", {
-                        description: "请联系管理员重置密码",
+                      toast.info(tAuth("loginForgotPasswordToastTitle"), {
+                        description: tAuth("loginForgotPasswordToastDesc"),
                       })
                     }}
                   >
-                    忘记密码？
+                    {tAuth("loginForgotPassword")}
                   </Button>
                 </div>
               </FadeSlideIn>
@@ -602,12 +614,12 @@ export function LoginForm({
                     size="lg"
                   >
                     {isLoading ? (
-                      <>
-                        <span className="mr-2">登录中</span>
+                        <>
+                          <span className="mr-2">{tAuth("loginSubmitting")}</span>
                         <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
                       </>
-                    ) : (
-                      "登录"
+                      ) : (
+                      tAuth("loginSubmit")
                     )}
                   </Button>
                 </Field>
@@ -620,7 +632,7 @@ export function LoginForm({
                     <div className="flex items-center gap-3">
                       <div className="flex-1 border-t border-zinc-300 dark:border-zinc-700" />
                       <span className="text-xs uppercase text-zinc-500 dark:text-zinc-500">
-                        或
+                        {tAuth("loginDividerOr")}
                       </span>
                       <div className="flex-1 border-t border-zinc-300 dark:border-zinc-700" />
                     </div>
@@ -638,8 +650,8 @@ export function LoginForm({
                             if (window.google) {
                               window.google.accounts.id.prompt()
                             } else {
-                              toast.error("Google 登录失败", {
-                                description: "FedCM 组件未初始化，请刷新页面或稍后重试",
+                              toast.error(tAuth("loginGoogleFailedTitle"), {
+                                description: tAuth("loginGoogleFedcmNotReadyDesc"),
                               })
                             }
                           } else {
@@ -665,7 +677,7 @@ export function LoginForm({
                             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                           />
                         </svg>
-                        使用 Google 账号登录
+                        {tAuth("loginWithGoogle")}
                       </Button>
                     </div>
                   </FadeSlideIn>
@@ -674,7 +686,7 @@ export function LoginForm({
                   {process.env.NODE_ENV !== "production" && (
                     <FadeSlideIn delay={0.7}>
                       <div className="mt-2 text-center text-[11px] text-zinc-500 dark:text-zinc-400">
-                        Google 登录模式：
+                        {tAuth("loginOAuthModeLabel")}
                         <button
                           type="button"
                           className={cn(
@@ -685,7 +697,7 @@ export function LoginForm({
                           )}
                           onClick={() => setGoogleLoginMode("redirect")}
                         >
-                          重定向
+                          {tAuth("loginOAuthModeRedirect")}
                         </button>
                         <span className="mx-1">/</span>
                         <button
@@ -701,7 +713,7 @@ export function LoginForm({
                           FedCM
                         </button>
                         <span className="ml-1">
-                          （仅当前浏览器，数据不入库）
+                          {tAuth("loginOAuthModeNote")}
                         </span>
                       </div>
                     </FadeSlideIn>
@@ -719,7 +731,7 @@ export function LoginForm({
             {/* 注册提示 */}
             <FadeSlideIn delay={0.5}>
               <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-                还没有账号？
+                {tAuth("loginNoAccount")}
                 {config?.allow_registration ? (
                   <Button
                     type="button"
@@ -727,7 +739,7 @@ export function LoginForm({
                     className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
                     onClick={() => router.push("/register")}
                   >
-                    立即注册
+                    {tAuth("loginRegisterNow")}
                   </Button>
                 ) : (
                   <Button
@@ -735,12 +747,12 @@ export function LoginForm({
                     variant="link"
                     className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
                     onClick={() => {
-                      toast.info("申请开通账号", {
-                        description: "请联系管理员开通账号权限",
+                      toast.info(tAuth("loginApplyAccountToastTitle"), {
+                        description: tAuth("loginApplyAccountToastDesc"),
                       })
                     }}
                   >
-                    申请开通
+                    {tAuth("loginApplyAccount")}
                   </Button>
                 )}
               </div>

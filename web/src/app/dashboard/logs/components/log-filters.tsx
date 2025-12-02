@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 interface LogFiltersProps {
   searchTerm: string
@@ -35,10 +36,13 @@ export function LogFilters({
   uniqueUsers,
   actionOptions = [],
   resourceOptions = [],
-  searchPlaceholder = "搜索...",
+  searchPlaceholder = "Search...",
   showActionFilter = true,
   showResourceFilter = true,
 }: LogFiltersProps) {
+  const tAudit = useTranslations("logsAudit")
+  const tLogin = useTranslations("logsLogin")
+
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
       <div className="relative flex-1 max-w-md">
@@ -54,10 +58,10 @@ export function LogFilters({
         {showActionFilter && onActionChange && (
           <Select value={selectedAction} onValueChange={onActionChange}>
             <SelectTrigger className="w-32">
-              <SelectValue placeholder="操作类型" />
+              <SelectValue placeholder={tAudit("filterActionTitle")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">所有操作</SelectItem>
+              <SelectItem value="all">{tAudit("filterActionTitle")}</SelectItem>
               {actionOptions.map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
@@ -70,10 +74,10 @@ export function LogFilters({
         {showResourceFilter && onResourceChange && (
           <Select value={selectedResource} onValueChange={onResourceChange}>
             <SelectTrigger className="w-32">
-              <SelectValue placeholder="资源类型" />
+              <SelectValue placeholder={tAudit("columnResource")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">所有资源</SelectItem>
+              <SelectItem value="all">{tAudit("columnResource")}</SelectItem>
               {resourceOptions.map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
@@ -85,21 +89,21 @@ export function LogFilters({
 
         <Select value={selectedStatus} onValueChange={onStatusChange}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder="状态" />
+            <SelectValue placeholder={tAudit("filterStatusTitle")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">所有状态</SelectItem>
-            <SelectItem value="success">成功</SelectItem>
-            <SelectItem value="failure">失败</SelectItem>
+            <SelectItem value="all">{tAudit("filterStatusTitle")}</SelectItem>
+            <SelectItem value="success">{tAudit("filterStatusSuccessLabel")}</SelectItem>
+            <SelectItem value="failure">{tAudit("filterStatusFailureLabel")}</SelectItem>
           </SelectContent>
         </Select>
 
         <Select value={selectedUser} onValueChange={onUserChange}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder="用户" />
+            <SelectValue placeholder={tLogin("filterUserTitle")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">所有用户</SelectItem>
+            <SelectItem value="all">{tLogin("filterUserTitle")}</SelectItem>
             {uniqueUsers.map(user => (
               <SelectItem key={user} value={user}>{user}</SelectItem>
             ))}

@@ -9,8 +9,9 @@ import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
-import { auditLogColumns } from "./audit-log-columns"
+import { createAuditLogColumns } from "./audit-log-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 interface AuditLogsPageData {
   logs: AuditLog[]
@@ -31,6 +32,7 @@ interface AuditLogsClientProps {
  */
 export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   const { ready } = useAuthReady()
+  const t = useTranslations("logsAudit")
   const [logs, setLogs] = useState<AuditLog[]>(initialData?.logs || [])
   const [statistics, setStatistics] = useState<AuditLogStatisticsResponse | null>(
     initialData?.statistics || null
@@ -52,6 +54,11 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
     server_id: false, // 默认隐藏服务器列
   })
 
+  const columns = useMemo(
+    () => createAuditLogColumns(t),
+    [t],
+  )
+
   // 加载数据
   const loadData = async (currentPage: number, currentPageSize: number) => {
     try {
@@ -71,7 +78,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
       setStatistics(statsResponse)
     } catch (error: unknown) {
       console.error("操作日志加载失败:", error)
-      toast.error(getErrorMessage(error, "无法加载操作日志"))
+      toast.error(getErrorMessage(error, t("toastLoadFailed")))
     } finally {
       setLoading(false)
     }
@@ -110,8 +117,8 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
 
     return {
       status: [
-        { label: "成功", value: "success", icon: CheckCircle },
-        { label: "失败", value: "failure", icon: XCircle },
+        { label: t("filterStatusSuccessLabel"), value: "success", icon: CheckCircle },
+        { label: t("filterStatusFailureLabel"), value: "failure", icon: XCircle },
       ],
       users: uniqueUsers.map((user) => ({
         label: user,
@@ -129,10 +136,10 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   // 可见列配置
   const visibleColumns = useMemo(
     () =>
-      auditLogColumns.filter(
+      columns.filter(
         (column) => columnVisibility[column.id as keyof typeof columnVisibility] ?? true
       ),
-    [columnVisibility]
+    [columnVisibility, columns]
   )
 
   return (
@@ -141,18 +148,18 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">总操作数</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsTotalTitle")}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statistics?.total_logs || 0}</div>
-            <p className="text-xs text-muted-foreground">所有审计日志</p>
+            <p className="text-xs text-muted-foreground">{t("statsTotalDesc")}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">成功操作</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsSuccessTitle")}</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -160,7 +167,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
               {statistics?.success_count || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              成功率{" "}
+              {t("statsSuccessDescPrefix")}{" "}
               {statistics?.total_logs
                 ? Math.round((statistics.success_count / statistics.total_logs) * 100)
                 : 0}
@@ -171,27 +178,27 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">失败操作</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsFailureTitle")}</CardTitle>
             <XCircle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
               {statistics?.failure_count || 0}
             </div>
-            <p className="text-xs text-muted-foreground">需要关注</p>
+            <p className="text-xs text-muted-foreground">{t("statsFailureDesc")}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">活跃用户</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsActiveUsersTitle")}</CardTitle>
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
               {statistics?.top_users?.length || 0}
             </div>
-            <p className="text-xs text-muted-foreground">操作用户数</p>
+            <p className="text-xs text-muted-foreground">{t("statsActiveUsersDesc")}</p>
           </CardContent>
         </Card>
       </div>
@@ -200,21 +207,23 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
       <Card className="flex-1 min-h-0">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-lg">操作日志</CardTitle>
-            <CardDescription>显示 {logs.length} 条记录</CardDescription>
+            <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
+            <CardDescription>
+              {t("tableDescription", { count: logs.length })}
+            </CardDescription>
           </div>
           <div className="flex gap-2">
             <ColumnVisibility
               columns={[
-                { id: "created_at", label: "时间" },
-                { id: "username", label: "用户" },
-                { id: "action", label: "操作" },
-                { id: "resource", label: "资源" },
-                { id: "status", label: "状态" },
-                { id: "ip", label: "IP地址" },
-                { id: "details", label: "详情" },
-                { id: "duration", label: "耗时" },
-                { id: "server_id", label: "服务器" },
+                { id: "created_at", label: t("columnTime") },
+                { id: "username", label: t("columnUser") },
+                { id: "action", label: t("columnAction") },
+                { id: "resource", label: t("columnResource") },
+                { id: "status", label: t("columnStatus") },
+                { id: "ip", label: t("columnIp") },
+                { id: "details", label: t("columnDetails") },
+                { id: "duration", label: t("columnDuration") },
+                { id: "server_id", label: t("columnServer") },
               ].map((column) => ({
                 id: column.id,
                 label: column.label,
@@ -239,21 +248,21 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
             totalRows={totalRows}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
-            emptyMessage="暂无操作日志"
+            emptyMessage={t("emptyMessage")}
             toolbar={(table) => (
               <DataTableToolbar
                 table={table}
                 searchKey="username"
-                searchPlaceholder="搜索用户名或操作..."
+                searchPlaceholder={t("searchPlaceholder")}
                 filters={[
                   {
                     column: "status",
-                    title: "状态",
+                    title: t("filterStatusTitle"),
                     options: filterOptions.status,
                   },
                   {
                     column: "action",
-                    title: "操作",
+                    title: t("filterActionTitle"),
                     options: filterOptions.actions.slice(0, 10), // 限制显示前10个
                   },
                 ]}

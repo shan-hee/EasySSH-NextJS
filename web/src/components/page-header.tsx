@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { memo } from "react"
+import { useTranslations } from "next-intl"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -27,20 +28,39 @@ const BreadcrumbItemRenderer = memo<{
   item: { title: string; href?: string }
   isLast: boolean
 }>(
-  ({ item, isLast }) => (
-    <>
-      <BreadcrumbItem>
-        {item.href ? (
-          <BreadcrumbLink asChild>
-            <Link href={item.href}>{item.title}</Link>
-          </BreadcrumbLink>
-        ) : (
-          <BreadcrumbPage>{item.title}</BreadcrumbPage>
-        )}
-      </BreadcrumbItem>
-      {!isLast && <BreadcrumbSeparator className="hidden md:block" />}
-    </>
-  ),
+  ({ item, isLast }) => {
+    const tNav = useTranslations("nav")
+
+    const getTitle = () => {
+      // 约定：以 "nav." 开头的 title 表示导航命名空间的 key
+      if (item.title.startsWith("nav.")) {
+        const key = item.title.slice(4) as keyof typeof tNav
+        try {
+          return tNav(key as any)
+        } catch {
+          return item.title
+        }
+      }
+      return item.title
+    }
+
+    const title = getTitle()
+
+    return (
+      <>
+        <BreadcrumbItem>
+          {item.href ? (
+            <BreadcrumbLink asChild>
+              <Link href={item.href}>{title}</Link>
+            </BreadcrumbLink>
+          ) : (
+            <BreadcrumbPage>{title}</BreadcrumbPage>
+          )}
+        </BreadcrumbItem>
+        {!isLast && <BreadcrumbSeparator className="hidden md:block" />}
+      </>
+    )
+  },
   // 自定义比较函数：仅在 title、href 或 isLast 变化时重新渲染
   (prev, next) =>
     prev.item.title === next.item.title &&

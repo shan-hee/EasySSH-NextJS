@@ -73,12 +73,14 @@ import { twoFactorApi } from "@/lib/api/2fa"
 import { sessionsApi, type Session } from "@/lib/api/sessions"
 import { notificationsApi } from "@/lib/api/notifications"
 import * as sshKeysApi from "@/lib/api/ssh-keys"
+import { getEffectiveLocale, getEffectiveTimezone, formatInTimezone } from "@/utils/datetime"
 import { toast } from "sonner"
+import { useTranslations } from "next-intl"
 
 /**
  * 从错误对象安全提取错误消息
  */
-function getErrorMessage(error: unknown, defaultMessage = "操作失败，请重试"): string {
+function getErrorMessage(error: unknown, defaultMessage: string): string {
   if (error && typeof error === 'object') {
     // 检查 error.detail
     if ('detail' in error) {
@@ -103,25 +105,35 @@ function getErrorMessage(error: unknown, defaultMessage = "操作失败，请重
   return defaultMessage
 }
 
-const data = {
-  nav: [
-    { name: "个人信息", icon: User },
-    { name: "账户安全", icon: Lock },
-    { name: "通知偏好", icon: Bell },
-    { name: "SSH密钥", icon: Key },
-    { name: "关于", icon: Info },
-  ],
-}
+type SettingsSection = "profile" | "security" | "notifications" | "sshKeys" | "about"
+
+const settingsNavItems: { id: SettingsSection; icon: typeof User }[] = [
+  { id: "profile", icon: User },
+  { id: "security", icon: Lock },
+  { id: "notifications", icon: Bell },
+  { id: "sshKeys", icon: Key },
+  { id: "about", icon: Info },
+]
 
 export const SettingsDialog = React.memo(function SettingsDialog({ children }: { children: React.ReactNode }) {
+  const tAccount = useTranslations("accountSettings")
   const [open, setOpen] = React.useState(false)
-  const [activeSection, setActiveSection] = React.useState("个人信息")
+  const [activeSection, setActiveSection] = React.useState<SettingsSection>("profile")
 
   // 使用 ClientAuthProvider 获取用户数据（dashboard 中使用）
   const { user, refreshUser, logout } = useClientAuth()
 
   // 使用系统配置
   const { config } = useSystemConfig()
+
+  const effectiveLocale = React.useMemo(
+    () => getEffectiveLocale(user, config),
+    [user, config],
+  )
+  const effectiveTimezone = React.useMemo(
+    () => getEffectiveTimezone(user, config),
+    [user, config],
+  )
 
   // 个人信息表单状态
   const [profileForm, setProfileForm] = React.useState({
@@ -166,6 +178,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   const [notifyBrowser, setNotifyBrowser] = React.useState(true)
   const [notificationLoading, setNotificationLoading] = React.useState(false)
 
+  // 个人偏好状态（语言与时区）
+  const [preferencesForm, setPreferencesForm] = React.useState({
+    language: "",
+    timezone: "",
+  })
+  const [preferencesLoading, setPreferencesLoading] = React.useState(false)
+
   // SSH密钥管理状态
   const [sshKeys, setSshKeys] = React.useState<sshKeysApi.SSHKey[]>([])
   const [sshKeysLoading, setSshKeysLoading] = React.useState(false)
@@ -201,12 +220,17 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setNotifyEmailLogin(user.notify_email_login ?? true)
       setNotifyEmailAlert(user.notify_email_alert ?? true)
       setNotifyBrowser(user.notify_browser ?? true)
+      // 初始化个人偏好（优先使用用户配置，其次使用系统默认配置）
+      setPreferencesForm({
+        language: user.language || config?.default_language || "zh-CN",
+        timezone: user.timezone || config?.default_timezone || "Asia/Shanghai",
+      })
     }
-  }, [user])
+  }, [user, config])
 
   // 当切换到账户安全标签时加载会话数据
   React.useEffect(() => {
-    if (activeSection === "账户安全" && open) {
+    if (activeSection === "security" && open) {
       loadSessions()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,7 +238,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 当切换到SSH密钥标签时加载密钥数据
   React.useEffect(() => {
-    if (activeSection === "SSH密钥" && open) {
+    if (activeSection === "sshKeys" && open) {
       loadSSHKeys()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,13 +251,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
     // 验证文件类型
     if (!file.type.startsWith('image/')) {
-      toast.error("请选择图片文件")
+      toast.error(tAccount("avatarFileTypeError"))
       return
     }
 
     // 验证文件大小（限制 5MB）
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("图片大小不能超过 5MB")
+      toast.error(tAccount("avatarFileSizeError"))
       return
     }
 
@@ -268,13 +292,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         const dataUrl = `data:image/svg+xml;base64,${base64}`
         setAvatarPreview(dataUrl)
         setAvatarFile(null)
-        toast.success("头像已生成")
+        toast.success(tAccount("avatarGenerateSuccess"))
       })
       .catch(error => {
-        console.error("生成头像失败:", error)
-        toast.error("生成头像失败")
+        console.error("Failed to generate avatar:", error)
+        toast.error(tAccount("avatarGenerateFailed"))
       })
-  }, [])
+  }, [tAccount])
 
   // 压缩图片
   const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise<string> => {
@@ -304,11 +328,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
           canvas.width = width
           canvas.height = height
 
-          const ctx = canvas.getContext('2d')
-          if (!ctx) {
-            reject(new Error('无法获取 canvas context'))
-            return
-          }
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error("Failed to get canvas context"))
+          return
+        }
 
           // 绘制白色背景（避免透明背景转 JPEG 变黑）
           ctx.fillStyle = '#FFFFFF'
@@ -326,10 +350,10 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
             resolve(base64)
           }
         }
-        img.onerror = () => reject(new Error('图片加载失败'))
+        img.onerror = () => reject(new Error("Image load failed"))
         img.src = e.target?.result as string
       }
-      reader.onerror = () => reject(new Error('文件读取失败'))
+      reader.onerror = () => reject(new Error("File read failed"))
       reader.readAsDataURL(file)
     })
   }
@@ -340,12 +364,37 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     if (newOpen && user) {
       setAvatarPreview(user.avatar || "")
       setAvatarFile(null)
+      // 重新同步个人偏好（避免系统配置或用户信息变化后未刷新）
+      setPreferencesForm({
+        language: user.language || config?.default_language || "zh-CN",
+        timezone: user.timezone || config?.default_timezone || "Asia/Shanghai",
+      })
     }
-  }, [user])
+  }, [user, config])
 
-  const handleSectionChange = React.useCallback((section: string) => {
+  const handleSectionChange = React.useCallback((section: SettingsSection) => {
     setActiveSection(section)
   }, [])
+
+  const getSectionLabel = React.useCallback(
+    (section: SettingsSection) => {
+      switch (section) {
+        case "profile":
+          return tAccount("navProfile")
+        case "security":
+          return tAccount("navSecurity")
+        case "notifications":
+          return tAccount("navNotifications")
+        case "sshKeys":
+          return tAccount("navSSHKeys")
+        case "about":
+          return tAccount("navAbout")
+        default:
+          return ""
+      }
+    },
+    [tAccount]
+  )
 
   // 保存个人信息
   const handleSaveProfile = React.useCallback(async () => {
@@ -353,7 +402,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     // 验证邮箱格式
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (profileForm.email && !emailRegex.test(profileForm.email)) {
-      toast.error("邮箱格式不正确")
+      toast.error(tAccount("toastInvalidEmail"))
       return
     }
 
@@ -373,13 +422,39 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       })
       await refreshUser()
       setAvatarFile(null) // 清除文件选择状态
-      toast.success("个人信息已保存")
+      toast.success(tAccount("toastProfileSaved"))
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "保存失败，请重试"))
+      toast.error(getErrorMessage(error, tAccount("toastSaveFailed")))
     } finally {
       setProfileLoading(false)
     }
-  }, [profileForm, avatarFile, avatarPreview, refreshUser])
+  }, [profileForm, avatarFile, avatarPreview, refreshUser, tAccount])
+
+  // 保存个人偏好（语言与时区）
+  const handleSavePreferences = React.useCallback(async () => {
+    if (!preferencesForm.language) {
+      toast.error(tAccount("toastLanguageRequired"))
+      return
+    }
+    if (!preferencesForm.timezone) {
+      toast.error(tAccount("toastTimezoneRequired"))
+      return
+    }
+
+    setPreferencesLoading(true)
+    try {
+      await authApi.updateProfile({
+        language: preferencesForm.language,
+        timezone: preferencesForm.timezone,
+      })
+      await refreshUser()
+      toast.success(tAccount("toastPreferencesSaved"))
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, tAccount("toastSaveFailed")))
+    } finally {
+      setPreferencesLoading(false)
+    }
+  }, [preferencesForm, refreshUser, tAccount])
 
   // 修改密码
   const handleChangePassword = React.useCallback(async (e: React.FormEvent) => {
@@ -387,12 +462,12 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
     // 验证新密码
     if (passwordForm.new_password.length < 8) {
-      toast.error("新密码至少需要8位")
+      toast.error(tAccount("securityPasswordTooShort"))
       return
     }
 
     if (passwordForm.new_password !== passwordForm.confirm_password) {
-      toast.error("两次输入的新密码不一致")
+      toast.error(tAccount("securityPasswordMismatch"))
       return
     }
 
@@ -402,7 +477,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         old_password: passwordForm.old_password,
         new_password: passwordForm.new_password,
       })
-      toast.success("密码修改成功，请重新登录")
+      toast.success(tAccount("securityPasswordChanged"))
 
       // 清空表单
       setPasswordForm({
@@ -420,20 +495,20 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       }, 2000)
     } catch (error: unknown) {
       // 获取错误消息并进行特殊翻译
-      let errorMessage = getErrorMessage(error, "修改密码失败")
+      let errorMessage = getErrorMessage(error, tAccount("securityPasswordChangeFailed"))
 
       // 翻译常见的英文错误信息
       if (errorMessage === 'invalid old password') {
-        errorMessage = "当前密码错误，请检查后重试"
+        errorMessage = tAccount("securityPasswordOldIncorrect")
       } else if (errorMessage.includes('password must be at least')) {
-        errorMessage = "新密码长度不足，至少需要6位"
+        errorMessage = tAccount("securityPasswordLengthInsufficient")
       }
 
       toast.error(errorMessage)
     } finally {
       setPasswordLoading(false)
     }
-  }, [passwordForm, logout])
+  }, [passwordForm, logout, tAccount])
 
   // 生成 2FA Secret（第一步）
   const handleGenerate2FA = React.useCallback(async () => {
@@ -443,18 +518,18 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setQrCodeUrl(response.qr_code_url)
       setTotpSecret(response.secret)
       setQrCodeDialogOpen(true)
-      toast.success("请使用认证应用扫描二维码")
+      toast.success(tAccount("security2faScanQrToast"))
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "生成 2FA Secret 失败"))
+      toast.error(getErrorMessage(error, tAccount("security2faGenerateFailed")))
     } finally {
       setTwoFactorLoading(false)
     }
-  }, [])
+  }, [tAccount])
 
   // 启用 2FA（第二步：验证代码）
   const handleEnable2FA = React.useCallback(async () => {
     if (!verificationCode || verificationCode.length !== 6) {
-      toast.error("请输入 6 位验证码")
+      toast.error(tAccount("security2faVerifyCodeRequired"))
       return
     }
 
@@ -466,13 +541,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setBackupCodesDialogOpen(true)
       setVerificationCode("")
       await refreshUser()
-      toast.success("双因子认证已启用")
+      toast.success(tAccount("security2faEnabledToast"))
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "启用失败，请检查验证码"))
+      toast.error(getErrorMessage(error, tAccount("security2faEnableFailed")))
     } finally {
       setTwoFactorLoading(false)
     }
-  }, [verificationCode, refreshUser])
+  }, [verificationCode, refreshUser, tAccount])
 
   // 监听启用验证码输入，自动提交
   React.useEffect(() => {
@@ -484,7 +559,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   // 禁用 2FA
   const handleDisable2FA = React.useCallback(async () => {
     if (!disableCode || disableCode.length !== 6) {
-      toast.error("请输入 6 位验证码")
+      toast.error(tAccount("security2faVerifyCodeRequired"))
       return
     }
 
@@ -494,13 +569,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setDisableDialogOpen(false)
       setDisableCode("")
       await refreshUser()
-      toast.success("双因子认证已禁用")
+      toast.success(tAccount("security2faDisabledToast"))
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "禁用失败，请检查验证码"))
+      toast.error(getErrorMessage(error, tAccount("security2faDisableFailed")))
     } finally {
       setTwoFactorLoading(false)
     }
-  }, [disableCode, refreshUser])
+  }, [disableCode, refreshUser, tAccount])
 
   // 监听禁用验证码输入，自动提交
   React.useEffect(() => {
@@ -513,16 +588,20 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   const handleCopyCode = React.useCallback((code: string) => {
     navigator.clipboard.writeText(code)
     setCopiedCode(code)
-    toast.success("已复制到剪贴板")
+    toast.success(
+      tAccount("copyToastSuccess", { label: tAccount("security2faBackupCodeLabel") })
+    )
     setTimeout(() => setCopiedCode(null), 2000)
-  }, [])
+  }, [tAccount])
 
   // 复制所有备份码
   const handleCopyAllCodes = React.useCallback(() => {
     const allCodes = backupCodes.join("\n")
     navigator.clipboard.writeText(allCodes)
-    toast.success("已复制所有备份码")
-  }, [backupCodes])
+    toast.success(
+      tAccount("copyToastSuccess", { label: tAccount("security2faBackupAllCodesLabel") })
+    )
+  }, [backupCodes, tAccount])
 
   // 加载会话列表
   const loadSessions = React.useCallback(async () => {
@@ -531,35 +610,35 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       const response = await sessionsApi.list()
       setSessions(response.sessions || [])
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "加载会话列表失败"))
+      toast.error(getErrorMessage(error, tAccount("securitySessionsLoadFailed")))
     } finally {
       setSessionsLoading(false)
     }
-  }, [])
+  }, [tAccount])
 
   // 撤销单个会话
   const handleRevokeSession = React.useCallback(async (sessionId: string) => {
     try {
       await sessionsApi.revoke(sessionId)
-      toast.success("会话已撤销")
+      toast.success(tAccount("securitySessionsRevokeSuccess"))
       // 本地移除已撤销的会话，避免整列表重新加载
       setSessions(prev => prev.filter(session => session.id !== sessionId))
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "撤销会话失败"))
+      toast.error(getErrorMessage(error, tAccount("securitySessionsRevokeFailed")))
     }
-  }, [])
+  }, [tAccount])
 
   // 撤销所有其他会话
   const handleRevokeAllOtherSessions = React.useCallback(async () => {
     try {
       await sessionsApi.revokeAllOthers()
-      toast.success("已撤销所有其他会话")
+      toast.success(tAccount("securitySessionsRevokeAllOthersSuccess"))
       // 仅保留当前会话，其它会话本地移除
       setSessions(prev => prev.filter(session => session.is_current))
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "撤销会话失败"))
+      toast.error(getErrorMessage(error, tAccount("securitySessionsRevokeAllFailed")))
     }
-  }, [])
+  }, [tAccount])
 
   // 更新通知设置
   const handleUpdateNotification = React.useCallback(
@@ -567,11 +646,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setNotificationLoading(true)
       try {
         await notificationsApi.update({ [field]: value })
-        toast.success("通知设置已更新")
+        toast.success(tAccount("notificationsUpdateSuccess"))
         // 刷新用户数据
         await refreshUser()
       } catch (error: unknown) {
-        toast.error(getErrorMessage(error, "更新通知设置失败"))
+        toast.error(getErrorMessage(error, tAccount("notificationsUpdateFailed")))
         // 恢复原值
         if (field === "email_login") setNotifyEmailLogin(!value)
         if (field === "email_alert") setNotifyEmailAlert(!value)
@@ -580,7 +659,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         setNotificationLoading(false)
       }
     },
-    [refreshUser]
+    [refreshUser, tAccount]
   )
 
   // 加载SSH密钥列表
@@ -590,88 +669,88 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       const keys = await sshKeysApi.getSSHKeys()
       setSshKeys(keys)
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "加载SSH密钥失败"))
+      toast.error(getErrorMessage(error, tAccount("sshKeysLoadFailed")))
     } finally {
       setSshKeysLoading(false)
     }
-  }, [])
+  }, [tAccount])
 
   // 生成SSH密钥
   const handleGenerateKey = React.useCallback(async () => {
     if (!generateForm.name.trim()) {
-      toast.error("请输入密钥名称")
+      toast.error(tAccount("sshKeyToastNameRequired"))
       return
     }
 
     setGenerateLoading(true)
     try {
       const newKey = await sshKeysApi.generateSSHKey(generateForm)
-      toast.success("SSH密钥生成成功！")
+      toast.success(tAccount("sshKeyToastGenerateSuccess"))
       setSelectedKey(newKey)
       setViewKeyDialogOpen(true)
       setGenerateDialogOpen(false)
       setGenerateForm({ name: "", algorithm: "ed25519", key_size: 2048 })
       loadSSHKeys() // 刷新列表
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "生成SSH密钥失败"))
+      toast.error(getErrorMessage(error, tAccount("sshKeyToastGenerateFailed")))
     } finally {
       setGenerateLoading(false)
     }
-  }, [generateForm, loadSSHKeys])
+  }, [generateForm, loadSSHKeys, tAccount])
 
   // 导入SSH密钥
   const handleImportKey = React.useCallback(async () => {
     if (!importForm.name.trim()) {
-      toast.error("请输入密钥名称")
+      toast.error(tAccount("sshKeyToastNameRequired"))
       return
     }
     if (!importForm.private_key.trim()) {
-      toast.error("请输入私钥内容")
+      toast.error(tAccount("sshKeyToastPrivateKeyRequired"))
       return
     }
 
     setImportLoading(true)
     try {
       const newKey = await sshKeysApi.importSSHKey(importForm)
-      toast.success("SSH密钥导入成功！")
+      toast.success(tAccount("sshKeyToastImportSuccess"))
       setSelectedKey(newKey)
       setViewKeyDialogOpen(true)
       setImportDialogOpen(false)
       setImportForm({ name: "", private_key: "" })
       loadSSHKeys() // 刷新列表
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "导入SSH密钥失败"))
+      toast.error(getErrorMessage(error, tAccount("sshKeyToastImportFailed")))
     } finally {
       setImportLoading(false)
     }
-  }, [importForm, loadSSHKeys])
+  }, [importForm, loadSSHKeys, tAccount])
 
   // 删除SSH密钥
   const handleDeleteKey = React.useCallback(async (keyId: number, keyName: string) => {
-    if (!confirm(`确定要删除密钥 "${keyName}" 吗？此操作无法撤销。`)) {
+    if (!confirm(tAccount("sshKeyConfirmDelete", { name: keyName }))) {
       return
     }
 
     try {
       await sshKeysApi.deleteSSHKey(keyId)
-      toast.success("SSH密钥已删除")
+      toast.success(tAccount("sshKeyToastDeleteSuccess"))
       loadSSHKeys() // 刷新列表
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "删除SSH密钥失败"))
+      toast.error(getErrorMessage(error, tAccount("sshKeyToastDeleteFailed")))
     }
-  }, [loadSSHKeys])
+  }, [loadSSHKeys, tAccount])
 
   // 复制到剪贴板
   const handleCopyToClipboard = React.useCallback(async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast.success(`${label}已复制到剪贴板`)
+      toast.success(tAccount("copyToastSuccess", { label }))
     } catch {
-      toast.error("复制失败，请手动复制")
+      toast.error(tAccount("copyToastFailed"))
     }
-  }, [])
+  }, [tAccount])
 
-  const navItems = React.useMemo(() => data.nav, [])
+  const navItems = React.useMemo(() => settingsNavItems, [])
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -679,9 +758,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         {children}
       </DialogTrigger>
       <DialogContent className="overflow-hidden p-0 md:max-h-[600px] md:max-w-[700px] lg:max-w-[800px]">
-        <DialogTitle className="sr-only">设置</DialogTitle>
+        <DialogTitle className="sr-only">
+          {tAccount("dialogTitle")}
+        </DialogTitle>
         <DialogDescription className="sr-only">
-          在这里自定义您的设置。
+          {tAccount("dialogDescription")}
         </DialogDescription>
         <SidebarProvider>
           <Sidebar collapsible="none" className="hidden md:flex md:w-44 lg:w-48 border-r shrink-0">
@@ -690,15 +771,15 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {navItems.map((item) => (
-                      <SidebarMenuItem key={item.name}>
+                      <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
                           asChild
-                          isActive={item.name === activeSection}
-                          onClick={() => handleSectionChange(item.name)}
+                          isActive={item.id === activeSection}
+                          onClick={() => handleSectionChange(item.id)}
                         >
                           <button>
                             <item.icon />
-                            <span>{item.name}</span>
+                            <span>{getSectionLabel(item.id)}</span>
                           </button>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -711,16 +792,19 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
           <main className="flex min-h-[400px] max-h-[600px] flex-1 flex-col overflow-hidden">
             {/* 移动端导航 */}
             <div className="md:hidden border-b px-4 py-3">
-              <Select value={activeSection} onValueChange={handleSectionChange}>
+              <Select
+                value={activeSection}
+                onValueChange={(value: SettingsSection) => handleSectionChange(value)}
+              >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="选择设置" />
+                  <SelectValue placeholder={tAccount("selectPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {navItems.map((item) => (
-                    <SelectItem key={item.name} value={item.name}>
+                    <SelectItem key={item.id} value={item.id}>
                       <div className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
-                        <span>{item.name}</span>
+                        <span>{getSectionLabel(item.id)}</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -729,12 +813,18 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-custom">
               <div className="space-y-6 p-6">
-                <h3 className="text-lg font-semibold">{activeSection}</h3>
-                {activeSection === "个人信息" && (
+                <h3 className="text-lg font-semibold">
+                  {getSectionLabel(activeSection)}
+                </h3>
+                {activeSection === "profile" && (
                   <div className="space-y-4">
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">头像</h4>
-                      <p className="text-sm text-muted-foreground mb-3">点击头像上传图片，或使用下方按钮</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("avatarTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("avatarDescription")}
+                      </p>
                       <div className="flex items-center gap-4">
                         {/* 头像显示 - 可点击上传 */}
                         <div
@@ -744,7 +834,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                           {avatarPreview ? (
                             <Image
                               src={avatarPreview}
-                              alt="头像预览"
+                              alt={tAccount("avatarPreviewAlt")}
                               width={80}
                               height={80}
                               className="h-full w-full object-cover"
@@ -777,7 +867,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                                 onClick={handleRemoveAvatar}
                               >
                                 <X className="h-4 w-4 mr-1" />
-                                移除
+                                {tAccount("avatarRemove")}
                               </Button>
                             )}
                             <Button
@@ -786,35 +876,45 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                               onClick={handleGenerateDiceBearAvatar}
                             >
                               <Paintbrush className="h-4 w-4 mr-1" />
-                              生成头像
+                              {tAccount("avatarGenerate")}
                             </Button>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            支持 JPG、PNG 格式，最大 5MB
+                            {tAccount("avatarSupportHint")}
                           </p>
                         </div>
                       </div>
                     </div>
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">基本信息</h4>
-                      <p className="text-sm text-muted-foreground mb-3">修改您的个人基本信息</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("basicInfoTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("basicInfoDescription")}
+                      </p>
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label htmlFor="username">用户名</Label>
+                          <Label htmlFor="username">
+                            {tAccount("usernameLabel")}
+                          </Label>
                           <Input
                             id="username"
-                            placeholder="用户名暂不支持修改"
+                            placeholder={tAccount("usernamePlaceholder")}
                             value={profileForm.username}
                             disabled
                           />
-                          <p className="text-xs text-muted-foreground">用户名修改功能需要后端支持</p>
+                          <p className="text-xs text-muted-foreground">
+                            {tAccount("usernameHint")}
+                          </p>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="email">邮箱地址</Label>
+                          <Label htmlFor="email">
+                            {tAccount("emailLabel")}
+                          </Label>
                           <Input
                             id="email"
                             type="email"
-                            placeholder="输入邮箱地址"
+                            placeholder={tAccount("emailPlaceholder")}
                             value={profileForm.email}
                             onChange={(e) => setProfileForm(prev => ({ ...prev, email: e.target.value }))}
                           />
@@ -824,67 +924,164 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                           onClick={handleSaveProfile}
                           disabled={profileLoading}
                         >
-                          {profileLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          保存信息
+                          {profileLoading && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          {tAccount("saveProfileButton")}
                         </Button>
                       </div>
                     </div>
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">个人偏好</h4>
-                      <p className="text-sm text-muted-foreground mb-3">设置您的语言和时区偏好（功能开发中）</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("preferencesTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("preferencesDescription")}
+                      </p>
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label htmlFor="language">语言</Label>
-                          <Input id="language" placeholder="简体中文" defaultValue="简体中文" disabled />
+                          <Label htmlFor="language">
+                            {tAccount("languageLabel")}
+                          </Label>
+                          <Select
+                            value={preferencesForm.language}
+                            onValueChange={(value) =>
+                              setPreferencesForm((prev) => ({ ...prev, language: value }))
+                            }
+                          >
+                            <SelectTrigger id="language" className="w-full">
+                              <SelectValue placeholder={tAccount("languagePlaceholder")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="zh-CN">
+                                {tAccount("languageOptionZhCN")}
+                              </SelectItem>
+                              <SelectItem value="en-US">
+                                {tAccount("languageOptionEnUS")}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {tAccount("languageHint")}
+                          </p>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="timezone">时区</Label>
-                          <Input id="timezone" placeholder="Asia/Shanghai" defaultValue="Asia/Shanghai" disabled />
+                          <Label htmlFor="timezone">
+                            {tAccount("timezoneLabel")}
+                          </Label>
+                          <Select
+                            value={preferencesForm.timezone}
+                            onValueChange={(value) =>
+                              setPreferencesForm((prev) => ({ ...prev, timezone: value }))
+                            }
+                          >
+                            <SelectTrigger id="timezone" className="w-full">
+                              <SelectValue placeholder={tAccount("timezonePlaceholder")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Asia/Shanghai">
+                                {tAccount("timezoneOptionAsiaShanghai")}
+                              </SelectItem>
+                              <SelectItem value="Asia/Tokyo">
+                                {tAccount("timezoneOptionAsiaTokyo")}
+                              </SelectItem>
+                              <SelectItem value="Asia/Hong_Kong">
+                                {tAccount("timezoneOptionAsiaHongKong")}
+                              </SelectItem>
+                              <SelectItem value="America/New_York">
+                                {tAccount("timezoneOptionAmericaNewYork")}
+                              </SelectItem>
+                              <SelectItem value="America/Los_Angeles">
+                                {tAccount("timezoneOptionAmericaLosAngeles")}
+                              </SelectItem>
+                              <SelectItem value="Europe/London">
+                                {tAccount("timezoneOptionEuropeLondon")}
+                              </SelectItem>
+                              <SelectItem value="Europe/Paris">
+                                {tAccount("timezoneOptionEuropeParis")}
+                              </SelectItem>
+                              <SelectItem value="UTC">
+                                {tAccount("timezoneOptionUTC")}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {tAccount("timezoneHint")}
+                          </p>
                         </div>
+                        <Button
+                          className="mt-2"
+                          onClick={handleSavePreferences}
+                          disabled={preferencesLoading}
+                        >
+                          {preferencesLoading && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          {tAccount("savePreferencesButton")}
+                        </Button>
                       </div>
                     </div>
                   </div>
                 )}
-                {activeSection === "账户安全" && (
+                {activeSection === "security" && (
                   <div className="space-y-4">
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">修改密码</h4>
-                      <p className="text-sm text-muted-foreground mb-3">定期修改密码以保护账户安全</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("securityPasswordTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("securityPasswordDescription")}
+                      </p>
                       <form className="space-y-4" onSubmit={handleChangePassword}>
                         <div className="space-y-2">
-                          <Label htmlFor="current-password">当前密码</Label>
+                          <Label htmlFor="current-password">
+                            {tAccount("securityCurrentPasswordLabel")}
+                          </Label>
                           <Input
                             id="current-password"
                             type="password"
                             autoComplete="current-password"
-                            placeholder="输入当前密码"
+                            placeholder={tAccount("securityCurrentPasswordPlaceholder")}
                             value={passwordForm.old_password}
-                            onChange={(e) => setPasswordForm(prev => ({ ...prev, old_password: e.target.value }))}
+                            onChange={(e) =>
+                              setPasswordForm((prev) => ({ ...prev, old_password: e.target.value }))
+                            }
                             required
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="new-password">新密码</Label>
+                          <Label htmlFor="new-password">
+                            {tAccount("securityNewPasswordLabel")}
+                          </Label>
                           <Input
                             id="new-password"
                             type="password"
                             autoComplete="new-password"
-                            placeholder="输入新密码（至少8位）"
+                            placeholder={tAccount("securityNewPasswordPlaceholder")}
                             value={passwordForm.new_password}
-                            onChange={(e) => setPasswordForm(prev => ({ ...prev, new_password: e.target.value }))}
+                            onChange={(e) =>
+                              setPasswordForm((prev) => ({ ...prev, new_password: e.target.value }))
+                            }
                             required
                             minLength={8}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="confirm-password">确认新密码</Label>
+                          <Label htmlFor="confirm-password">
+                            {tAccount("securityConfirmPasswordLabel")}
+                          </Label>
                           <Input
                             id="confirm-password"
                             type="password"
                             autoComplete="new-password"
-                            placeholder="再次输入新密码"
+                            placeholder={tAccount("securityConfirmPasswordPlaceholder")}
                             value={passwordForm.confirm_password}
-                            onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm_password: e.target.value }))}
+                            onChange={(e) =>
+                              setPasswordForm((prev) => ({
+                                ...prev,
+                                confirm_password: e.target.value,
+                              }))
+                            }
                             required
                           />
                         </div>
@@ -893,20 +1090,30 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                           className="mt-4"
                           disabled={passwordLoading}
                         >
-                          {passwordLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          保存密码
+                          {passwordLoading && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          {tAccount("securitySavePasswordButton")}
                         </Button>
                       </form>
                     </div>
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">双因子认证</h4>
-                      <p className="text-sm text-muted-foreground mb-3">增强账户安全性，使用 TOTP 应用验证登录</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("security2faTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("security2faDescription")}
+                      </p>
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <Label htmlFor="2fa">双因子认证状态</Label>
+                            <Label htmlFor="2fa">
+                              {tAccount("security2faStatusLabel")}
+                            </Label>
                             <p className="text-sm text-muted-foreground">
-                              {twoFactorEnabled ? "已启用，使用认证应用验证登录" : "未启用，建议启用以增强安全"}
+                              {twoFactorEnabled
+                                ? tAccount("security2faStatusEnabled")
+                                : tAccount("security2faStatusDisabled")}
                             </p>
                           </div>
                           <Switch
@@ -924,7 +1131,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         </div>
                         {!twoFactorEnabled && (
                           <p className="text-xs text-muted-foreground">
-                            推荐使用 Google Authenticator、Microsoft Authenticator 或其他 TOTP 应用
+                            {tAccount("security2faRecommendApps")}
                           </p>
                         )}
                       </div>
@@ -932,8 +1139,12 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     <div className="bg-muted/50 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <h4 className="font-medium">活动会话</h4>
-                          <p className="text-sm text-muted-foreground">管理您的登录会话</p>
+                          <h4 className="font-medium">
+                            {tAccount("securitySessionsTitle")}
+                          </h4>
+                          <p className="text-sm text-muted-foreground">
+                            {tAccount("securitySessionsDescription")}
+                          </p>
                         </div>
                         {sessions.length > 1 && (
                           <Button
@@ -943,7 +1154,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             className="text-destructive hover:bg-destructive/10"
                           >
                             <LogOut className="h-4 w-4 mr-2" />
-                            撤销所有其他会话
+                            {tAccount("securitySessionsRevokeAllButton")}
                           </Button>
                         )}
                       </div>
@@ -954,16 +1165,17 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         </div>
                       ) : sessions.length === 0 ? (
                         <div className="text-center p-8 text-sm text-muted-foreground">
-                          暂无活跃会话
+                          {tAccount("securitySessionsEmpty")}
                         </div>
                       ) : (
                         <div className="space-y-2">
                           {sessions.map((session) => {
-                            const DeviceIcon = session.device_type === "mobile"
-                              ? Smartphone
-                              : session.device_type === "tablet"
-                              ? Tablet
-                              : Monitor
+                            const DeviceIcon =
+                              session.device_type === "mobile"
+                                ? Smartphone
+                                : session.device_type === "tablet"
+                                ? Tablet
+                                : Monitor
 
                             return (
                               <div
@@ -977,11 +1189,12 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                       <p className="text-sm font-medium truncate">
-                                        {session.device_name || "未知设备"}
+                                        {session.device_name ||
+                                          tAccount("securitySessionsUnknownDevice")}
                                       </p>
                                       {session.is_current && (
                                         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full shrink-0">
-                                          当前
+                                          {tAccount("securitySessionsCurrentTag")}
                                         </span>
                                       )}
                                     </div>
@@ -991,7 +1204,14 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                                         {session.location && ` · ${session.location}`}
                                       </p>
                                       <p>
-                                        最后活动: {session.last_activity}
+                                        {tAccount("securitySessionsLastActive", {
+                                          time: formatInTimezone(
+                                            session.last_activity,
+                                            { second: "2-digit" },
+                                            effectiveLocale,
+                                            effectiveTimezone,
+                                          ),
+                                        })}
                                       </p>
                                     </div>
                                   </div>
@@ -1014,27 +1234,39 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     </div>
                   </div>
                 )}
-                {activeSection === "通知偏好" && (
+                {activeSection === "notifications" && (
                   <div className="space-y-4">
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">通知概览</h4>
-                      <p className="text-sm text-muted-foreground mb-3">管理您的个人通知偏好和接收渠道</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("notificationsOverviewTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("notificationsOverviewDescription")}
+                      </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
                           <Mail className="h-5 w-5 text-muted-foreground" />
                           <div>
-                            <p className="text-sm font-medium">邮件通知</p>
+                            <p className="text-sm font-medium">
+                              {tAccount("notificationsEmailCardTitle")}
+                            </p>
                             <p className="text-xs text-muted-foreground">
-                              {notifyEmailLogin || notifyEmailAlert ? "部分启用" : "已禁用"}
+                              {notifyEmailLogin || notifyEmailAlert
+                                ? tAccount("notificationsStatusPartial")
+                                : tAccount("notificationsStatusDisabled")}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
                           <Bell className="h-5 w-5 text-muted-foreground" />
                           <div>
-                            <p className="text-sm font-medium">浏览器通知</p>
+                            <p className="text-sm font-medium">
+                              {tAccount("notificationsBrowserCardTitle")}
+                            </p>
                             <p className="text-xs text-muted-foreground">
-                              {notifyBrowser ? "已启用" : "已禁用"}
+                              {notifyBrowser
+                                ? tAccount("notificationsStatusEnabled")
+                                : tAccount("notificationsStatusDisabled")}
                             </p>
                           </div>
                         </div>
@@ -1042,13 +1274,21 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     </div>
 
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">邮件通知偏好</h4>
-                      <p className="text-sm text-muted-foreground mb-3">选择需要接收邮件通知的事件类型</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("notificationsEmailSectionTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("notificationsEmailSectionDescription")}
+                      </p>
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <Label htmlFor="email-login">登录通知</Label>
-                            <p className="text-sm text-muted-foreground">账户登录时发送邮件提醒</p>
+                            <Label htmlFor="email-login">
+                              {tAccount("notificationsEmailLoginLabel")}
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              {tAccount("notificationsEmailLoginDescription")}
+                            </p>
                           </div>
                           <Switch
                             id="email-login"
@@ -1062,8 +1302,12 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <Label htmlFor="email-alerts">告警通知</Label>
-                            <p className="text-sm text-muted-foreground">服务器告警时发送邮件提醒</p>
+                            <Label htmlFor="email-alerts">
+                              {tAccount("notificationsEmailAlertLabel")}
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              {tAccount("notificationsEmailAlertDescription")}
+                            </p>
                           </div>
                           <Switch
                             id="email-alerts"
@@ -1078,19 +1322,27 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       </div>
                       <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg">
                         <p className="text-xs text-blue-800 dark:text-blue-200">
-                          💡 提示：邮件服务器由系统管理员配置，您只需选择需要接收的通知类型
+                          {tAccount("notificationsEmailServerHint")}
                         </p>
                       </div>
                     </div>
 
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">浏览器通知</h4>
-                      <p className="text-sm text-muted-foreground mb-3">管理浏览器推送通知</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("notificationsBrowserSectionTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("notificationsBrowserSectionDescription")}
+                      </p>
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <Label htmlFor="browser-notifications">启用浏览器通知</Label>
-                            <p className="text-sm text-muted-foreground">接收实时浏览器推送通知</p>
+                            <Label htmlFor="browser-notifications">
+                              {tAccount("notificationsBrowserToggleLabel")}
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              {tAccount("notificationsBrowserToggleDescription")}
+                            </p>
                           </div>
                           <Switch
                             id="browser-notifications"
@@ -1106,38 +1358,50 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     </div>
 
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">其他通知渠道</h4>
-                      <p className="text-sm text-muted-foreground mb-3">系统管理员可以配置更多通知渠道</p>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("notificationsOtherChannelsTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("notificationsOtherChannelsDescription")}
+                      </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="p-3 bg-background rounded-lg border">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                            <p className="text-sm font-medium">钉钉通知</p>
+                            <p className="text-sm font-medium">
+                              {tAccount("notificationsDingtalkTitle")}
+                            </p>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            需要管理员配置钉钉机器人
+                            {tAccount("notificationsDingtalkDescription")}
                           </p>
                         </div>
                         <div className="p-3 bg-background rounded-lg border">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                            <p className="text-sm font-medium">企业微信通知</p>
+                            <p className="text-sm font-medium">
+                              {tAccount("notificationsWecomTitle")}
+                            </p>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            需要管理员配置企业微信机器人
+                            {tAccount("notificationsWecomDescription")}
                           </p>
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
-                {activeSection === "SSH密钥" && (
+                {activeSection === "sshKeys" && (
                   <div className="space-y-4">
                     <div className="bg-muted/50 rounded-xl p-4">
                       <div className="flex justify-between items-center mb-3">
                         <div>
-                          <h4 className="font-medium">我的SSH密钥</h4>
-                          <p className="text-sm text-muted-foreground">管理您的个人SSH密钥对</p>
+                          <h4 className="font-medium">
+                            {tAccount("sshSectionTitle")}
+                          </h4>
+                          <p className="text-sm text-muted-foreground">
+                            {tAccount("sshSectionDescription")}
+                          </p>
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -1145,14 +1409,14 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             size="sm"
                             onClick={() => setGenerateDialogOpen(true)}
                           >
-                            生成新密钥
+                            {tAccount("sshGenerateButton")}
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setImportDialogOpen(true)}
                           >
-                            导入密钥
+                            {tAccount("sshImportButton")}
                           </Button>
                         </div>
                       </div>
@@ -1164,8 +1428,12 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       ) : sshKeys.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
                           <Key className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                          <p className="text-sm">暂无SSH密钥</p>
-                          <p className="text-xs">点击上方按钮生成或导入密钥</p>
+                          <p className="text-sm">
+                            {tAccount("sshEmptyTitle")}
+                          </p>
+                          <p className="text-xs">
+                            {tAccount("sshEmptyDescription")}
+                          </p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -1184,14 +1452,26 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                                     {key.fingerprint}
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    创建于 {new Date(key.created_at).toLocaleDateString("zh-CN")}
+                                    {tAccount("sshCreatedAt", {
+                                      date: formatInTimezone(
+                                        key.created_at,
+                                        { year: "numeric", month: "2-digit", day: "2-digit" },
+                                        effectiveLocale,
+                                        effectiveTimezone,
+                                      ),
+                                    })}
                                   </p>
                                 </div>
                                 <div className="flex gap-1">
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleCopyToClipboard(key.public_key, "公钥")}
+                                    onClick={() =>
+                                      handleCopyToClipboard(
+                                        key.public_key,
+                                        tAccount("sshPublicKeyLabel"),
+                                      )
+                                    }
                                   >
                                     <Copy className="h-4 w-4" />
                                   </Button>
@@ -1213,22 +1493,28 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     {/* 生成密钥对话框 */}
                     <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
                       <DialogContent className="sm:max-w-md">
-                        <DialogTitle>生成SSH密钥</DialogTitle>
+                        <DialogTitle>{tAccount("sshGenerateDialogTitle")}</DialogTitle>
                         <DialogDescription>
-                          生成新的SSH密钥对用于服务器连接
+                          {tAccount("sshGenerateDialogDescription")}
                         </DialogDescription>
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="gen-name">密钥名称</Label>
+                            <Label htmlFor="gen-name">
+                              {tAccount("sshGenerateNameLabel")}
+                            </Label>
                             <Input
                               id="gen-name"
-                              placeholder="例如：生产服务器密钥"
+                              placeholder={tAccount("sshGenerateNamePlaceholder")}
                               value={generateForm.name}
-                              onChange={(e) => setGenerateForm({ ...generateForm, name: e.target.value })}
+                              onChange={(e) =>
+                                setGenerateForm({ ...generateForm, name: e.target.value })
+                              }
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="gen-algorithm">算法</Label>
+                            <Label htmlFor="gen-algorithm">
+                              {tAccount("sshGenerateAlgorithmLabel")}
+                            </Label>
                             <Select
                               value={generateForm.algorithm}
                               onValueChange={(value: "rsa" | "ed25519") =>
@@ -1239,29 +1525,42 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="ed25519">ED25519 (推荐)</SelectItem>
-                                <SelectItem value="rsa">RSA</SelectItem>
+                                <SelectItem value="ed25519">
+                                  {tAccount("sshGenerateAlgorithmOptionEd25519")}
+                                </SelectItem>
+                                <SelectItem value="rsa">
+                                  {tAccount("sshGenerateAlgorithmOptionRsa")}
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                             <p className="text-xs text-muted-foreground">
-                              ED25519更快、更安全，适合现代服务器
+                              {tAccount("sshGenerateAlgorithmEd25519Hint")}
                             </p>
                           </div>
                           {generateForm.algorithm === "rsa" && (
                             <div className="space-y-2">
-                              <Label htmlFor="gen-keysize">密钥长度</Label>
+                              <Label htmlFor="gen-keysize">
+                                {tAccount("sshGenerateKeySizeLabel")}
+                              </Label>
                               <Select
                                 value={generateForm.key_size.toString()}
                                 onValueChange={(value) =>
-                                  setGenerateForm({ ...generateForm, key_size: parseInt(value) })
+                                  setGenerateForm({
+                                    ...generateForm,
+                                    key_size: parseInt(value),
+                                  })
                                 }
                               >
                                 <SelectTrigger id="gen-keysize">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="2048">2048 位</SelectItem>
-                                  <SelectItem value="4096">4096 位 (更安全)</SelectItem>
+                                  <SelectItem value="2048">
+                                    {tAccount("sshGenerateKeySizeOption2048")}
+                                  </SelectItem>
+                                  <SelectItem value="4096">
+                                    {tAccount("sshGenerateKeySizeOption4096")}
+                                  </SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -1272,11 +1571,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                               onClick={() => setGenerateDialogOpen(false)}
                               disabled={generateLoading}
                             >
-                              取消
+                              {tAccount("sshDialogCancel")}
                             </Button>
                             <Button onClick={handleGenerateKey} disabled={generateLoading}>
-                              {generateLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              生成
+                              {generateLoading && (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              )}
+                              {tAccount("sshGenerateSubmit")}
                             </Button>
                           </div>
                         </div>
@@ -1286,31 +1587,42 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     {/* 导入密钥对话框 */}
                     <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
                       <DialogContent className="sm:max-w-md">
-                        <DialogTitle>导入SSH密钥</DialogTitle>
+                        <DialogTitle>{tAccount("sshImportDialogTitle")}</DialogTitle>
                         <DialogDescription>
-                          导入已有的SSH私钥
+                          {tAccount("sshImportDialogDescription")}
                         </DialogDescription>
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="imp-name">密钥名称</Label>
+                            <Label htmlFor="imp-name">
+                              {tAccount("sshImportNameLabel")}
+                            </Label>
                             <Input
                               id="imp-name"
-                              placeholder="例如：我的密钥"
+                              placeholder={tAccount("sshImportNamePlaceholder")}
                               value={importForm.name}
-                              onChange={(e) => setImportForm({ ...importForm, name: e.target.value })}
+                              onChange={(e) =>
+                                setImportForm({ ...importForm, name: e.target.value })
+                              }
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="imp-key">私钥内容</Label>
+                            <Label htmlFor="imp-key">
+                              {tAccount("sshImportPrivateKeyLabel")}
+                            </Label>
                             <textarea
                               id="imp-key"
                               className="w-full min-h-[200px] px-3 py-2 text-sm rounded-md border border-input bg-background font-mono"
-                              placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                              placeholder={tAccount("sshImportPrivateKeyPlaceholder")}
                               value={importForm.private_key}
-                              onChange={(e) => setImportForm({ ...importForm, private_key: e.target.value })}
+                              onChange={(e) =>
+                                setImportForm({
+                                  ...importForm,
+                                  private_key: e.target.value,
+                                })
+                              }
                             />
                             <p className="text-xs text-muted-foreground">
-                              粘贴完整的PEM格式私钥
+                              {tAccount("sshImportPrivateKeyHint")}
                             </p>
                           </div>
                           <div className="flex justify-end gap-2">
@@ -1319,11 +1631,13 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                               onClick={() => setImportDialogOpen(false)}
                               disabled={importLoading}
                             >
-                              取消
+                              {tAccount("sshDialogCancel")}
                             </Button>
                             <Button onClick={handleImportKey} disabled={importLoading}>
-                              {importLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              导入
+                              {importLoading && (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              )}
+                              {tAccount("sshImportSubmit")}
                             </Button>
                           </div>
                         </div>
@@ -1333,22 +1647,27 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     {/* 查看密钥对话框（首次生成/导入后显示） */}
                     <Dialog open={viewKeyDialogOpen} onOpenChange={setViewKeyDialogOpen}>
                       <DialogContent className="sm:max-w-2xl">
-                        <DialogTitle>SSH密钥详情</DialogTitle>
+                        <DialogTitle>{tAccount("sshViewDialogTitle")}</DialogTitle>
                         <DialogDescription>
-                          请妥善保存私钥，此窗口关闭后将无法再次查看
+                          {tAccount("sshViewDialogDescription")}
                         </DialogDescription>
                         {selectedKey && (
                           <div className="space-y-4">
                             <div className="space-y-2">
                               <div className="flex justify-between items-center">
-                                <Label>公钥</Label>
+                                <Label>{tAccount("sshViewPublicKeyLabel")}</Label>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleCopyToClipboard(selectedKey.public_key, "公钥")}
+                                  onClick={() =>
+                                    handleCopyToClipboard(
+                                      selectedKey.public_key,
+                                      tAccount("sshPublicKeyLabel"),
+                                    )
+                                  }
                                 >
                                   <Copy className="h-4 w-4 mr-1" />
-                                  复制
+                                  {tAccount("sshCopyButtonLabel")}
                                 </Button>
                               </div>
                               <textarea
@@ -1359,14 +1678,19 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             </div>
                             <div className="space-y-2">
                               <div className="flex justify-between items-center">
-                                <Label>私钥 (请妥善保存)</Label>
+                                <Label>{tAccount("sshViewPrivateKeyLabel")}</Label>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleCopyToClipboard(selectedKey.private_key, "私钥")}
+                                  onClick={() =>
+                                    handleCopyToClipboard(
+                                      selectedKey.private_key,
+                                      tAccount("sshPrivateKeyLabel"),
+                                    )
+                                  }
                                 >
                                   <Copy className="h-4 w-4 mr-1" />
-                                  复制
+                                  {tAccount("sshCopyButtonLabel")}
                                 </Button>
                               </div>
                               <textarea
@@ -1377,15 +1701,17 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             </div>
                             <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded p-3">
                               <p className="text-sm text-amber-800 dark:text-amber-200">
-                                ⚠️ 请立即保存私钥！关闭此窗口后，私钥将无法再次查看。
+                                {tAccount("sshViewPrivateKeyWarning")}
                               </p>
                             </div>
                             <div className="flex justify-end">
-                              <Button onClick={() => {
-                                setViewKeyDialogOpen(false)
-                                setSelectedKey(null)
-                              }}>
-                                我已保存
+                              <Button
+                                onClick={() => {
+                                  setViewKeyDialogOpen(false)
+                                  setSelectedKey(null)
+                                }}
+                              >
+                                {tAccount("sshViewIHaveSavedButton")}
                               </Button>
                             </div>
                           </div>
@@ -1394,7 +1720,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                     </Dialog>
                   </div>
                 )}
-                {activeSection === "关于" && (
+                {activeSection === "about" && (
                   <div className="space-y-4">
                     <div className="bg-muted/50 rounded-xl p-6 text-center">
                       <div className="mb-4">
@@ -1407,75 +1733,97 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             className="w-16 h-16"
                           />
                         </div>
-                        <h3 className="text-2xl font-bold">{config?.system_name || "EasySSH"}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">现代化 SSH 管理平台</p>
+                        <h3 className="text-2xl font-bold">
+                          {config?.system_name || "EasySSH"}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {tAccount("aboutTagline")}
+                        </p>
                       </div>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between py-2 border-b border-border/50">
-                          <span className="text-muted-foreground">版本</span>
-                          <span className="font-medium">{process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}</span>
+                          <span className="text-muted-foreground">
+                            {tAccount("aboutVersionLabel")}
+                          </span>
+                          <span className="font-medium">
+                            {process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0"}
+                          </span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-border/50">
-                          <span className="text-muted-foreground">构建日期</span>
+                          <span className="text-muted-foreground">
+                            {tAccount("aboutBuildDateLabel")}
+                          </span>
                           <span className="font-medium">
                             {(() => {
-                              const buildDateISO = process.env.NEXT_PUBLIC_BUILD_DATE;
-                              if (!buildDateISO) return "未知";
+                              const buildDateISO = process.env.NEXT_PUBLIC_BUILD_DATE
+                              if (!buildDateISO) {
+                                return tAccount("aboutBuildDateUnknown")
+                              }
 
                               try {
-                                const date = new Date(buildDateISO);
-                                const timezone = config?.default_timezone || "Asia/Shanghai";
+                                const date = new Date(buildDateISO)
+                                const timezone =
+                                  config?.default_timezone || effectiveTimezone || "UTC"
 
-                                // 使用系统配置的时区格式化日期
-                                return date.toLocaleDateString("zh-CN", {
+                                return new Intl.DateTimeFormat(effectiveLocale, {
                                   timeZone: timezone,
                                   year: "numeric",
                                   month: "2-digit",
                                   day: "2-digit",
-                                }).replace(/\//g, "-");
+                                }).format(date)
                               } catch {
-                                return "未知";
+                                return tAccount("aboutBuildDateUnknown")
                               }
                             })()}
                           </span>
                         </div>
                         <div className="flex justify-between py-2">
-                          <span className="text-muted-foreground">技术栈</span>
-                          <span className="font-medium">Next.js + Go</span>
+                          <span className="text-muted-foreground">
+                            {tAccount("aboutTechStackLabel")}
+                          </span>
+                          <span className="font-medium">
+                            {tAccount("aboutTechStackValue")}
+                          </span>
                         </div>
                       </div>
                     </div>
 
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">核心功能</h4>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("aboutFeaturesTitle")}
+                      </h4>
                       <ul className="space-y-2 text-sm text-muted-foreground">
                         <li className="flex items-start gap-2">
                           <span className="text-primary mt-0.5">•</span>
-                          <span>Web 终端：浏览器内直接访问 SSH</span>
+                          <span>{tAccount("aboutFeatureWebTerminal")}</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <span className="text-primary mt-0.5">•</span>
-                          <span>文件管理：SFTP 文件传输和管理</span>
+                          <span>{tAccount("aboutFeatureFileManager")}</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <span className="text-primary mt-0.5">•</span>
-                          <span>脚本执行：批量运维自动化</span>
+                          <span>{tAccount("aboutFeatureScriptExecution")}</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <span className="text-primary mt-0.5">•</span>
-                          <span>监控告警：实时系统资源监控</span>
+                          <span>{tAccount("aboutFeatureMonitoring")}</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <span className="text-primary mt-0.5">•</span>
-                          <span>安全审计：完整的操作日志记录</span>
+                          <span>{tAccount("aboutFeatureAudit")}</span>
                         </li>
                       </ul>
                     </div>
 
                     <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">开源信息</h4>
+                      <h4 className="font-medium mb-2">
+                        {tAccount("aboutOpenSourceTitle")}
+                      </h4>
                       <p className="text-sm text-muted-foreground mb-3">
-                        {config?.system_name || "EasySSH"} 是一个开源项目，遵循 MIT 协议
+                        {tAccount("aboutOpenSourceDescription", {
+                          name: config?.system_name || "EasySSH",
+                        })}
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -1483,28 +1831,34 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                           size="sm"
                           onClick={() => window.open("https://github.com", "_blank")}
                         >
-                          GitHub
+                          {tAccount("aboutGithubButton")}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => window.open("https://github.com", "_blank")}
                         >
-                          文档
+                          {tAccount("aboutDocsButton")}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => window.open("https://github.com", "_blank")}
                         >
-                          反馈问题
+                          {tAccount("aboutFeedbackButton")}
                         </Button>
                       </div>
                     </div>
 
                     <div className="text-center text-xs text-muted-foreground pt-2">
-                      <p>© 2025 {config?.system_name || "EasySSH"}. All rights reserved.</p>
-                      <p className="mt-1">Built with ❤️ by Claude & Developer</p>
+                      <p>
+                        {tAccount("aboutFooterCopyright", {
+                          name: config?.system_name || "EasySSH",
+                        })}
+                      </p>
+                      <p className="mt-1">
+                        {tAccount("aboutFooterBuiltBy")}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -1517,9 +1871,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       {/* QR 码扫描对话框 */}
       <Dialog open={qrCodeDialogOpen} onOpenChange={setQrCodeDialogOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogTitle className="text-center">扫描二维码</DialogTitle>
+          <DialogTitle className="text-center">
+            {tAccount("security2faQrDialogTitle")}
+          </DialogTitle>
           <DialogDescription className="text-center">
-            使用您的认证应用（如 Google Authenticator）扫描此二维码
+            {tAccount("security2faQrDialogDescription")}
           </DialogDescription>
           <div className="flex flex-col items-center space-y-6 py-4">
             {/* 二维码 */}
@@ -1535,13 +1891,17 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">或手动输入</span>
+                <span className="bg-background px-2 text-muted-foreground">
+                  {tAccount("security2faQrDialogOrManual")}
+                </span>
               </div>
             </div>
 
             {/* 手动输入密钥 */}
             <div className="w-full space-y-2">
-              <Label className="text-sm font-medium">密钥</Label>
+              <Label className="text-sm font-medium">
+                {tAccount("security2faQrSecretLabel")}
+              </Label>
               <div className="flex items-center gap-2">
                 <Input
                   value={totpSecret}
@@ -1554,7 +1914,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                   className="shrink-0"
                   onClick={() => {
                     navigator.clipboard.writeText(totpSecret)
-                    toast.success("已复制密钥")
+                    toast.success(
+                      tAccount("copyToastSuccess", {
+                        label: tAccount("security2faQrSecretLabel"),
+                      }),
+                    )
                   }}
                 >
                   <Copy className="h-4 w-4" />
@@ -1564,7 +1928,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
             {/* 验证码输入 */}
             <div className="w-full space-y-3">
-              <Label className="text-sm font-medium text-center block">输入验证码</Label>
+              <Label className="text-sm font-medium text-center block">
+                {tAccount("security2faCodeInputLabel")}
+              </Label>
               <div className="flex justify-center py-2">
                 <InputOTP
                   maxLength={6}
@@ -1586,14 +1952,14 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                 </InputOTP>
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                请输入认证应用中显示的 6 位数字
+                {tAccount("security2faCodeInputHint")}
               </p>
             </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button variant="outline" onClick={() => setQrCodeDialogOpen(false)}>
-              取消
+              {tAccount("security2faQrCancel")}
             </Button>
             <Button
               onClick={handleEnable2FA}
@@ -1601,7 +1967,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
               className="min-w-[120px]"
             >
               {twoFactorLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              验证并启用
+              {tAccount("security2faQrConfirm")}
             </Button>
           </div>
         </DialogContent>
@@ -1610,9 +1976,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       {/* 备份码对话框 */}
       <Dialog open={backupCodesDialogOpen} onOpenChange={setBackupCodesDialogOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogTitle className="text-center">保存备份码</DialogTitle>
+          <DialogTitle className="text-center">
+            {tAccount("security2faBackupDialogTitle")}
+          </DialogTitle>
           <DialogDescription className="text-center">
-            这些备份码可以在您无法使用认证应用时用于登录。每个备份码只能使用一次，请妥善保管。
+            {tAccount("security2faBackupDialogDescription")}
           </DialogDescription>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-3">
@@ -1644,17 +2012,17 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
               onClick={handleCopyAllCodes}
             >
               <Copy className="mr-2 h-4 w-4" />
-              复制所有备份码
+              {tAccount("security2faBackupCopyAllButton")}
             </Button>
             <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-3">
               <p className="text-xs text-amber-800 dark:text-amber-200 text-center">
-                ⚠️ 建议将这些备份码保存到密码管理器或打印后妥善保管
+                {tAccount("security2faBackupCopyHint")}
               </p>
             </div>
           </div>
           <div className="flex justify-end pt-4 border-t">
             <Button onClick={() => setBackupCodesDialogOpen(false)} className="min-w-[120px]">
-              我已保存
+              {tAccount("security2faBackupSavedButton")}
             </Button>
           </div>
         </DialogContent>
@@ -1679,16 +2047,16 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                 <line x1="12" y1="9" x2="12" y2="13" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
-              确认禁用双因子认证
+              {tAccount("security2faDisableDialogTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription className="pt-2">
-              禁用双因子认证将<strong className="text-foreground">降低账户的安全性</strong>。请输入认证应用中的验证码以确认此操作。
+              {tAccount("security2faDisableDialogDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="py-4 space-y-3">
             <Label className="text-sm font-medium text-center block">
-              输入验证码
+              {tAccount("security2faCodeInputLabel")}
             </Label>
             <div className="flex justify-center py-2">
               <InputOTP
@@ -1711,7 +2079,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
               </InputOTP>
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              请输入认证应用中显示的 6 位数字
+              {tAccount("security2faCodeInputHint")}
             </p>
           </div>
 
@@ -1720,7 +2088,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
               onClick={() => setDisableCode("")}
               className="min-w-[100px]"
             >
-              取消
+              {tAccount("security2faDisableDialogCancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDisable2FA}
@@ -1728,7 +2096,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90 min-w-[120px]"
             >
               {twoFactorLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              确认禁用
+              {tAccount("security2faDisableDialogConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

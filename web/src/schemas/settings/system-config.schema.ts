@@ -2,14 +2,17 @@ import { z } from "zod"
 
 // 基本信息 Schema（包含国际化设置）
 export const basicInfoSchema = z.object({
-  system_name: z.string().min(1, "系统名称不能为空").max(100, "系统名称不能超过100字符"),
-  system_logo: z.string().url("请输入有效的URL").or(z.literal("")),
-  system_favicon: z.string().url("请输入有效的URL").or(z.literal("")),
+  system_name: z
+    .string()
+    .min(1, "settingsValidation.systemNameRequired")
+    .max(100, "settingsValidation.systemNameMax"),
+  system_logo: z.string().url("settingsValidation.urlInvalid").or(z.literal("")),
+  system_favicon: z.string().url("settingsValidation.urlInvalid").or(z.literal("")),
   default_language: z.enum(["zh-CN", "en-US", "ja-JP"], {
-    message: "请选择有效的语言",
+    message: "settingsValidation.defaultLanguageInvalid",
   }),
-  default_timezone: z.string().min(1, "时区不能为空"),
-  date_format: z.string().min(1, "日期格式不能为空"),
+  default_timezone: z.string().min(1, "settingsValidation.defaultTimezoneRequired"),
+  date_format: z.string().min(1, "settingsValidation.dateFormatRequired"),
   // 注册配置
   allow_registration: z.boolean().default(false),
   // OAuth 配置
@@ -20,8 +23,8 @@ export const basicInfoSchema = z.object({
 
 // 国际化设置 Schema
 export const i18nSchema = z.object({
-  default_timezone: z.string().min(1, "时区不能为空"),
-  date_format: z.string().min(1, "日期格式不能为空"),
+  default_timezone: z.string().min(1, "settingsValidation.defaultTimezoneRequired"),
+  date_format: z.string().min(1, "settingsValidation.dateFormatRequired"),
 })
 
 // 文件传输设置 Schema（包含上传大小限制）
@@ -31,29 +34,31 @@ export const fileTransferSchema = z.object({
     "node_modules\n.git\n.svn\n.hg\n__pycache__\n.pytest_cache\n.next\n.nuxt\ndist\nbuild\ntarget\nvendor\n.DS_Store\nthumbs.db"
   ),
   // 默认下载模式
-  default_download_mode: z.enum(["fast", "compatible"], {
-    message: "请选择有效的下载模式",
-  }).default("fast"),
+  default_download_mode: z
+    .enum(["fast", "compatible"], {
+      message: "settingsValidation.downloadModeInvalid",
+    })
+    .default("fast"),
   // 上传时自动跳过排除的文件
   skip_excluded_on_upload: z.boolean().default(true),
   // 最大文件上传大小
   max_file_upload_size: z
     .number()
-    .min(1, "文件上传大小不能小于1MB")
-    .max(1024, "文件上传大小不能超过1024MB"),
+    .min(1, "settingsValidation.fileUploadSizeMin")
+    .max(1024, "settingsValidation.fileUploadSizeMax"),
 })
 
 // 性能设置 Schema（已废弃，保留用于向后兼容）
 export const performanceSchema = z.object({
   default_page_size: z
     .number()
-    .min(10, "分页大小不能小于10")
-    .max(100, "分页大小不能超过100")
+    .min(10, "settingsValidation.pageSizeMin")
+    .max(100, "settingsValidation.pageSizeMax")
     .optional(),
   max_file_upload_size: z
     .number()
-    .min(1, "文件上传大小不能小于1MB")
-    .max(1024, "文件上传大小不能超过1024MB")
+    .min(1, "settingsValidation.fileUploadSizeMin")
+    .max(1024, "settingsValidation.fileUploadSizeMax")
     .optional(),
 })
 

@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react';
+import { useTranslations } from "next-intl";
 import type { SystemInfo as SystemInfoType } from '../types/metrics';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,7 @@ const InfoRow: React.FC<{
   value: string;
   monospace?: boolean;
 }> = ({ label, value, monospace = false }) => {
+  const t = useTranslations("terminalMonitor");
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -41,7 +43,7 @@ const InfoRow: React.FC<{
         copied && "bg-green-500/10"
       )}
       onClick={handleCopy}
-      title={`点击复制: ${value}`}
+      title={t("copyTooltip", { value })}
     >
       <span className="text-muted-foreground shrink-0">{label}</span>
       <span className={cn(
@@ -50,7 +52,7 @@ const InfoRow: React.FC<{
         monospace && "font-mono text-[11px]",
         copied && "text-green-500"
       )}>
-        {copied ? '已复制!' : value}
+        {copied ? t("copyCopied") : value}
       </span>
     </div>
   );
@@ -60,21 +62,22 @@ const InfoRow: React.FC<{
  * 系统信息组件
  */
 export const SystemInfo: React.FC<SystemInfoProps> = React.memo(({ data }) => {
+  const t = useTranslations("terminalMonitor");
   return (
     <div className="space-y-1">
       {/* 模块标题 - 高度 28px */}
       <div className="h-7 flex items-center">
-        <span className="text-xs font-semibold">系统信息</span>
+        <span className="text-xs font-semibold">{t("systemInfoTitle")}</span>
       </div>
 
       {/* 信息列表 - 6行×20px = 120px */}
       <div className="space-y-0">
         <InfoRow label="OS" value={data.os} />
-        <InfoRow label="主机" value={data.hostname} monospace />
+        <InfoRow label={t("labelHost")} value={data.hostname} monospace />
         <InfoRow label="CPU" value={data.cpu} />
-        <InfoRow label="架构" value={data.arch} monospace />
-        <InfoRow label="负载" value={data.load} monospace />
-        <InfoRow label="运行" value={data.uptime} monospace />
+        <InfoRow label={t("labelArch")} value={data.arch} monospace />
+        <InfoRow label={t("labelLoad")} value={data.load} monospace />
+        <InfoRow label={t("labelUptime")} value={data.uptime} monospace />
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/shadcn-io/ai/prompt-input"
 import { cn } from "@/lib/utils"
 import { Sparkles } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 interface FloatingAiInputProps {
   isOpen: boolean
@@ -24,6 +25,7 @@ export function FloatingAiInput({ isOpen }: FloatingAiInputProps) {
   const [input, setInput] = useState("")
   const [model, setModel] = useState("auto")
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const tAI = useTranslations("aiAssistant")
 
   // 当打开时自动聚焦输入框
   useEffect(() => {
@@ -78,7 +80,7 @@ export function FloatingAiInput({ isOpen }: FloatingAiInputProps) {
                 ref={inputRef as any}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="向 AI 助手提问..."
+                placeholder={tAI("panelInputPlaceholder")}
                 className="min-h-[60px] text-base"
               />
 
@@ -107,7 +109,7 @@ export function FloatingAiInput({ isOpen }: FloatingAiInputProps) {
                 <div className="flex items-center gap-2">
                   {/* 使用率显示 */}
                   <span className="text-xs text-muted-foreground">
-                    52% used
+                    {tAI("panelHintSend")}
                   </span>
 
                   {/* 提交按钮 */}
@@ -131,15 +133,15 @@ export function FloatingAiInput({ isOpen }: FloatingAiInputProps) {
             <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
               Enter
             </kbd>{" "}
-            发送 •{" "}
+            {tAI("panelHintSend")} •{" "}
             <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
               Shift+Enter
             </kbd>{" "}
-            换行 •{" "}
+            {tAI("panelHintNewline")} •{" "}
             <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
               Esc
             </kbd>{" "}
-            关闭
+            {tAI("panelHintClose")}
           </div>
         </div>
       </div>

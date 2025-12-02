@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
@@ -11,7 +12,6 @@ import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-
 import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
 
 interface WeComNotificationTabProps {
@@ -20,6 +20,7 @@ interface WeComNotificationTabProps {
 }
 
 export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" }: WeComNotificationTabProps) {
+  const t = useTranslations("settingsIntegrationsWeCom")
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
   const enabled = form.watch(enabledFieldName)
 
@@ -32,21 +33,21 @@ export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" 
 
     await testConnection(async () => {
       await settingsApi.testWeComConnection(config)
-      toast.success("测试消息发送成功！请检查您的企业微信群组。")
+      toast.success(t("toastTestSuccess"))
     })
   }
 
   return (
     <SettingsSection
-      title="企业微信通知配置"
-      description="配置企业微信群机器人Webhook接收系统通知"
+      title={t("sectionTitle")}
+      description={t("sectionDescription")}
       icon={<MessageCircle className="h-5 w-5" />}
     >
       <FormSwitch
         form={form}
         name={enabledFieldName}
-        label="启用企业微信通知"
-        description="开启后系统将通过企业微信群机器人发送通知"
+        label={t("fieldEnabledLabel")}
+        description={t("fieldEnabledDesc")}
       />
 
       {enabled && (
@@ -54,10 +55,10 @@ export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" 
           <FormInput
             form={form}
             name="wecom_webhook_url"
-            label="Webhook URL"
-            description="企业微信群机器人的Webhook地址"
+            label={t("fieldWebhookUrlLabel")}
+            description={t("fieldWebhookUrlDesc")}
             type="url"
-            placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+            placeholder={t("fieldWebhookUrlPlaceholder")}
             required
           />
 
@@ -70,12 +71,12 @@ export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" 
             {isTesting ? (
               <>
                 <Send className="mr-2 h-4 w-4 animate-pulse" />
-                发送中...
+                {t("btnTesting")}
               </>
             ) : (
               <>
                 <Send className="mr-2 h-4 w-4" />
-                发送测试消息
+                {t("btnTest")}
               </>
             )}
           </Button>
@@ -83,59 +84,59 @@ export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" 
           <Alert>
             <InfoIcon className="h-4 w-4" />
             <AlertDescription>
-              测试消息将发送到配置的企业微信群组。请确保机器人已正确添加到目标群组中。
+              {t("alertDescription")}
             </AlertDescription>
           </Alert>
         </>
       )}
 
       <div className="rounded-lg border p-4 bg-muted/50">
-        <p className="text-sm font-medium mb-2">如何配置企业微信群机器人：</p>
+        <p className="text-sm font-medium mb-2">{t("howToTitle")}</p>
         <div className="text-sm text-muted-foreground space-y-2">
           <div>
-            <p className="font-medium text-foreground">步骤 1：创建群机器人</p>
+            <p className="font-medium text-foreground">{t("step1Title")}</p>
             <ul className="list-disc list-inside ml-2">
-              <li>打开企业微信群聊，点击右上角&ldquo;...&rdquo;→ 群机器人</li>
-              <li>点击&ldquo;添加群机器人&rdquo;</li>
-              <li>设置机器人名称和头像</li>
+              <li>{t("step1Item1")}</li>
+              <li>{t("step1Item2")}</li>
+              <li>{t("step1Item3")}</li>
             </ul>
           </div>
           <div>
-            <p className="font-medium text-foreground">步骤 2：获取Webhook</p>
+            <p className="font-medium text-foreground">{t("step2Title")}</p>
             <ul className="list-disc list-inside ml-2">
-              <li>创建完成后，系统会生成Webhook URL</li>
-              <li>复制URL（格式：https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx）</li>
-              <li>将URL填入上方配置</li>
+              <li>{t("step2Item1")}</li>
+              <li>{t("step2Item2")}</li>
+              <li>{t("step2Item3")}</li>
             </ul>
           </div>
           <div>
-            <p className="font-medium text-foreground">步骤 3：配置权限</p>
+            <p className="font-medium text-foreground">{t("step3Title")}</p>
             <ul className="list-disc list-inside ml-2">
-              <li>确保机器人有发送消息的权限</li>
-              <li>建议设置机器人的使用范围和限制</li>
+              <li>{t("step3Item1")}</li>
+              <li>{t("step3Item2")}</li>
             </ul>
           </div>
         </div>
       </div>
 
       <div className="rounded-lg border p-4 space-y-2">
-        <p className="text-sm font-medium">企业微信机器人特性：</p>
+        <p className="text-sm font-medium">{t("featuresTitle")}</p>
         <ul className="text-sm text-muted-foreground list-disc list-inside ml-2">
-          <li>支持文本、markdown、图片、文件等多种消息类型</li>
-          <li>每个机器人每分钟最多发送20条消息</li>
-          <li>支持@特定成员或@所有人</li>
-          <li>可配置消息发送频率限制</li>
+          <li>{t("featuresItem1")}</li>
+          <li>{t("featuresItem2")}</li>
+          <li>{t("featuresItem3")}</li>
+          <li>{t("featuresItem4")}</li>
         </ul>
       </div>
 
       <div className="rounded-lg border p-4 space-y-2">
-        <p className="text-sm font-medium">支持的通知事件：</p>
+        <p className="text-sm font-medium">{t("eventsTitle")}</p>
         <ul className="text-sm text-muted-foreground list-disc list-inside ml-2">
-          <li>服务器连接状态变更</li>
-          <li>系统安全告警</li>
-          <li>备份任务完成通知</li>
-          <li>用户登录异常提醒</li>
-          <li>系统更新和维护通知</li>
+          <li>{t("eventServerStatus")}</li>
+          <li>{t("eventSecurityAlert")}</li>
+          <li>{t("eventBackupCompleted")}</li>
+          <li>{t("eventLoginAnomaly")}</li>
+          <li>{t("eventSystemMaintenance")}</li>
         </ul>
       </div>
     </SettingsSection>

@@ -37,6 +37,10 @@ import {
   Search,
   X
 } from "lucide-react"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/contexts/system-config-context"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { useTranslations } from "next-intl"
 
 interface Session {
   id: string
@@ -71,6 +75,13 @@ export function SessionList({
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
 
+  const { user } = useClientAuth()
+  const { config } = useSystemConfig()
+  const effectiveLocale = getEffectiveLocale(user, config)
+  const effectiveTimezone = getEffectiveTimezone(user, config)
+  const t = useTranslations("terminalSessions")
+  const tCommon = useTranslations("common")
+
   const filteredSessions = sessions.filter(session =>
     session.serverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     session.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -80,15 +91,23 @@ export function SessionList({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "connected":
-        return <Badge variant="default" className="bg-green-500">已连接</Badge>
+        return (
+          <Badge variant="default" className="bg-green-500">
+            {t("statusActive")}
+          </Badge>
+        )
       case "disconnected":
-        return <Badge variant="secondary">已断开</Badge>
+        return <Badge variant="secondary">{t("statusClosed")}</Badge>
       case "connecting":
-        return <Badge variant="outline" className="animate-pulse">连接中</Badge>
+        return (
+          <Badge variant="outline" className="animate-pulse">
+            {t("statusConnecting")}
+          </Badge>
+        )
       case "error":
-        return <Badge variant="destructive">错误</Badge>
+        return <Badge variant="destructive">{t("statusError")}</Badge>
       default:
-        return <Badge variant="secondary">未知</Badge>
+        return <Badge variant="secondary">{t("statusUnknown")}</Badge>
     }
   }
 
@@ -109,20 +128,20 @@ export function SessionList({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />
-            活动会话 ({sessions.length})
+            {t("panelTitle", { count: sessions.length })}
           </CardTitle>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="搜索会话..."
+                placeholder={t("searchPlaceholder")}
                 className="pl-10 w-64"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <Button variant="outline" size="sm">
-              刷新
+              {tCommon("refresh")}
             </Button>
           </div>
         </div>
@@ -133,12 +152,12 @@ export function SessionList({
           <div className="text-center py-8">
             <Terminal className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">
-              {sessions.length === 0 ? "暂无活动会话" : "未找到匹配的会话"}
+              {sessions.length === 0 ? t("empty") : t("emptyNoMatchTitle")}
             </h3>
             <p className="text-muted-foreground">
               {sessions.length === 0
-                ? "当前没有活跃的SSH连接"
-                : "请尝试调整搜索条件"
+                ? t("emptyNoSessionsDescription")
+                : t("emptyNoMatchDescription")
               }
             </p>
           </div>
@@ -146,13 +165,13 @@ export function SessionList({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>状态</TableHead>
-                <TableHead>服务器</TableHead>
-                <TableHead>连接信息</TableHead>
-                <TableHead>开始时间</TableHead>
-                <TableHead>持续时间</TableHead>
-                <TableHead>活动信息</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead>{t("colStatus")}</TableHead>
+                <TableHead>{t("colServer")}</TableHead>
+                <TableHead>{t("colConnectionInfo")}</TableHead>
+                <TableHead>{t("colConnectedAt")}</TableHead>
+                <TableHead>{t("colDuration")}</TableHead>
+                <TableHead>{t("colActivity")}</TableHead>
+                <TableHead>{t("colActions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -184,8 +203,8 @@ export function SessionList({
                   </TableCell>
 
                   <TableCell>
-                    <div className="text-sm">
-                      {session.startTime}
+                    <div className="text-sm font-mono">
+                      {formatInTimezone(session.startTime, {}, effectiveLocale, effectiveTimezone)}
                     </div>
                   </TableCell>
 
@@ -197,12 +216,20 @@ export function SessionList({
 
                   <TableCell>
                     <div className="text-sm">
-                      <div>命令: {session.commandsCount}</div>
-                      <div className="text-muted-foreground">
-                        流量: {session.dataTransferred}
+                      <div>
+                        {t("fieldCommandsLabel")}: {session.commandsCount}
                       </div>
                       <div className="text-muted-foreground">
-                        最后活动: {session.lastActivity}
+                        {t("fieldDataTransferredLabel")}: {session.dataTransferred}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {t("fieldLastActivityLabel")}:{" "}
+                        {formatInTimezone(
+                          session.lastActivity,
+                          {},
+                          effectiveLocale,
+                          effectiveTimezone,
+                        )}
                       </div>
                     </div>
                   </TableCell>
@@ -216,21 +243,21 @@ export function SessionList({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => onViewDetails(session.id)}>
-                          查看详情
+                          {t("actionViewDetails")}
                         </DropdownMenuItem>
 
                         {session.status === "connected" && (
                           <>
                             <DropdownMenuItem onClick={() => onDisconnect(session.id)}>
                               <Unplug className="h-4 w-4 mr-2" />
-                              断开连接
+                              {t("actionDisconnect")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => onForceDisconnect(session.id)}
                               className="text-destructive"
                             >
-                              强制断开
+                              {t("actionForceDisconnect")}
                             </DropdownMenuItem>
                           </>
                         )}
@@ -238,7 +265,7 @@ export function SessionList({
                         {session.status === "disconnected" && (
                           <DropdownMenuItem onClick={() => onReconnect(session.id)}>
                             <RefreshCw className="h-4 w-4 mr-2" />
-                            重新连接
+                            {t("actionReconnect")}
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -255,9 +282,10 @@ export function SessionList({
       <Dialog open={!!selectedSession} onOpenChange={() => setSelectedSession(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>会话详情</DialogTitle>
+            <DialogTitle>{t("dialogTitle")}</DialogTitle>
             <DialogDescription>
-              会话 {selectedSession?.id} 的详细信息
+              {selectedSession &&
+                t("dialogDescription", { id: selectedSession.id })}
             </DialogDescription>
           </DialogHeader>
 
@@ -265,23 +293,62 @@ export function SessionList({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h4 className="font-medium mb-2">连接信息</h4>
+                  <h4 className="font-medium mb-2">
+                    {t("sectionConnectionInfoTitle")}
+                  </h4>
                   <div className="space-y-1 text-sm">
-                    <div>服务器: {selectedSession.serverName}</div>
-                    <div>地址: {selectedSession.host}:{selectedSession.port}</div>
-                    <div>用户: {selectedSession.username}</div>
-                    <div>状态: {getStatusBadge(selectedSession.status)}</div>
+                    <div>
+                      {t("fieldServer")}: {selectedSession.serverName}
+                    </div>
+                    <div>
+                      {t("fieldAddress")}: {selectedSession.host}:{selectedSession.port}
+                    </div>
+                    <div>
+                      {t("fieldUser")}: {selectedSession.username}
+                    </div>
+                    <div>
+                      {t("fieldStatus")}: {getStatusBadge(selectedSession.status)}
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="font-medium mb-2">会话统计</h4>
+                  <h4 className="font-medium mb-2">
+                    {t("sectionStatsTitle")}
+                  </h4>
                   <div className="space-y-1 text-sm">
-                    <div>开始时间: {selectedSession.startTime}</div>
-                    <div>持续时间: {selectedSession.duration}</div>
-                    <div>命令数量: {selectedSession.commandsCount}</div>
-                    <div>数据传输: {selectedSession.dataTransferred}</div>
-                    <div>最后活动: {selectedSession.lastActivity}</div>
+                    <div>
+                      {t("fieldStartTime")}:{" "}
+                      {formatInTimezone(
+                        selectedSession.startTime,
+                        {},
+                        effectiveLocale,
+                        effectiveTimezone,
+                      )}
+                    </div>
+                    <div>
+                      {t("fieldDuration")}: {selectedSession.duration}
+                    </div>
+                    <div>
+                      {t("fieldCommands")}: {selectedSession.commandsCount}
+                    </div>
+                    <div>
+                      {t("fieldDataTransferred")}: {selectedSession.dataTransferred}
+                    </div>
+                    <div>
+                      {t("fieldLastActivity")}:{" "}
+                      {formatInTimezone(
+                        selectedSession.lastActivity,
+                        {},
+                        effectiveLocale,
+                        effectiveTimezone,
+                      )}
+                    </div>
+                    {selectedSession.exitCode != null && (
+                      <div>
+                        {t("fieldExitCode")}: {selectedSession.exitCode}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import React from 'react';
+import { useTranslations } from "next-intl";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import type { NetworkData } from '../types/metrics';
@@ -27,15 +28,15 @@ function formatSpeed(kbps: number): string {
 }
 
 /**
- * 图表配置
+ * 图表配置（颜色由主题提供，标签使用 i18n）
  */
 const chartConfig = {
   download: {
-    label: "下载",
+    label: "download",
     color: "var(--chart-3)",
   },
   upload: {
-    label: "上传",
+    label: "upload",
     color: "var(--chart-5)",
   },
 } satisfies ChartConfig;
@@ -50,6 +51,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
   currentDownload,
   currentUpload,
 }) => {
+  const t = useTranslations("terminalMonitor");
   // 转换数据格式为图表需要的格式
   const chartData = React.useMemo(
     () =>
@@ -130,7 +132,10 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           const lines = list
             .map((p: any) => {
               const value = typeof p.data === "number" ? p.data : p.data?.value ?? 0;
-              const name = p.seriesName === "download" ? "下载" : "上传";
+              const name =
+                p.seriesName === "download"
+                  ? t("downloadLabel")
+                  : t("uploadLabel");
               const color = p.color || (p.seriesName === "download" ? downloadColor : uploadColor);
               return `
                 <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
@@ -145,7 +150,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
             .join("");
           return `
             <div style="font-size:11px;">
-              <div style="margin-bottom:4px;">时间: ${label}</div>
+              <div style="margin-bottom:4px;">${t("tooltipTimeLabel")}: ${label}</div>
               ${lines}
             </div>
           `;
@@ -180,7 +185,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
       },
       series: [
         {
-          name: "下载",
+          name: t("downloadLabel"),
           type: "line",
           smooth: true,
           smoothMonotone: "x",
@@ -209,7 +214,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           data: downloadValues,
         },
         {
-          name: "上传",
+          name: t("uploadLabel"),
           type: "line",
           smooth: true,
           smoothMonotone: "x",
@@ -243,7 +248,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-semibold">网络</span>
+        <span className="text-xs font-semibold">{t("networkLabel")}</span>
         <div className="text-xs font-mono font-semibold tabular-nums flex items-center gap-2">
           <span style={{ color: 'var(--chart-3)' }}>↓ {formatSpeed(currentDownload)}</span>
           <span style={{ color: 'var(--chart-5)' }}>↑ {formatSpeed(currentUpload)}</span>
@@ -264,7 +269,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         {/* 当数据为空时显示提示 */}
         {chartData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
-            等待数据...
+            {t("waitingData")}
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">

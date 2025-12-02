@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { useTranslations } from "next-intl";
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -161,6 +162,7 @@ const BarChartSkeleton: React.FC = () => (
  * 监控面板完整骨架屏
  */
 export const MonitorSkeleton: React.FC = () => {
+  const t = useTranslations("terminalMonitor");
   return (
     <div className="w-full py-1.5 px-3 space-y-1.5">
       {/* 系统信息骨架 - 148px */}
@@ -170,7 +172,7 @@ export const MonitorSkeleton: React.FC = () => {
 
       {/* CPU 曲线图骨架 - 134px */}
       <div className="min-h-[134px]">
-        <LineChartSkeleton title="CPU" showPercentage={true} />
+        <LineChartSkeleton title={t("cpuLabel")} showPercentage={true} />
       </div>
 
       {/* 内存 径向图骨架 - 134px */}
@@ -180,7 +182,7 @@ export const MonitorSkeleton: React.FC = () => {
 
       {/* 网络 曲线图骨架 - 134px */}
       <div className="min-h-[134px]">
-        <LineChartSkeleton title="网络" showPercentage={false} />
+        <LineChartSkeleton title={t("networkLabel")} showPercentage={false} />
       </div>
 
       {/* 磁盘 柱状图骨架 - 134px */}

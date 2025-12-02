@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter"
 import { RefreshCw, Download } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 interface DataTableToolbarProps<TData> {
   table: Table<TData>
@@ -32,7 +33,7 @@ interface DataTableToolbarProps<TData> {
 export function DataTableToolbar<TData>({
   table,
   searchKey,
-  searchPlaceholder = "搜索...",
+  searchPlaceholder,
   filters = [],
   onRefresh,
   onExport,
@@ -41,6 +42,10 @@ export function DataTableToolbar<TData>({
   isRefreshing = false,
   children,
 }: DataTableToolbarProps<TData>) {
+  const tCommon = useTranslations("common")
+  const effectiveSearchPlaceholder =
+    searchPlaceholder ?? tCommon("tableSearchPlaceholder")
+
   const isFiltered = table.getState().columnFilters.length > 0
 
   return (
@@ -49,7 +54,7 @@ export function DataTableToolbar<TData>({
         {/* 搜索框 */}
         {searchKey && (
           <Input
-            placeholder={searchPlaceholder}
+            placeholder={effectiveSearchPlaceholder}
             value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ""}
             onChange={(event) =>
               table.getColumn(searchKey)?.setFilterValue(event.target.value)
@@ -78,7 +83,7 @@ export function DataTableToolbar<TData>({
             onClick={() => table.resetColumnFilters()}
             className="h-8 px-2 lg:px-3"
           >
-            清除筛选
+            {tCommon("tableClearFilters")}
             <Cross2Icon className="ml-2 h-4 w-4" />
           </Button>
         )}
@@ -99,7 +104,7 @@ export function DataTableToolbar<TData>({
             className="h-8"
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-            刷新
+            {tCommon("tableRefresh")}
           </Button>
         )}
 

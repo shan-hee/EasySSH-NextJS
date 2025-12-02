@@ -3,6 +3,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Clock, Loader2 } from "lucide-react"
 import { AuditLog } from "@/lib/api/audit-logs"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { useTranslations } from "next-intl"
 
 interface LogTableProps {
   logs: AuditLog[]
@@ -26,22 +30,19 @@ interface LogTableProps {
   }>
 }
 
-// 格式化时间
-function formatTimestamp(timestamp: string): { date: string; time: string } {
-  const date = new Date(timestamp)
-  return {
-    date: date.toLocaleDateString('zh-CN'),
-    time: date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  }
-}
-
 // 格式化时长
-function formatDuration(seconds: number | undefined): string {
-  if (!seconds) return '-'
-  if (seconds < 60) return `${seconds}秒`
+function formatDuration(
+  t: (key: string, values?: Record<string, unknown>) => string,
+  seconds: number | undefined,
+): string {
+  if (!seconds) return "-"
+  if (seconds < 60) return t("durationSeconds", { seconds })
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
-  return `${minutes}分${remainingSeconds}秒`
+  return t("durationMinutesSeconds", {
+    minutes,
+    seconds: remainingSeconds,
+  })
 }
 
 export function LogTable({
@@ -63,6 +64,12 @@ export function LogTable({
   actionColors = {},
   customColumns = [],
 }: LogTableProps) {
+  const { user } = useClientAuth()
+  const { data: systemConfig } = useSystemConfig()
+  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+  const t = useTranslations("logsAudit")
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -74,7 +81,7 @@ export function LogTable({
   if (logs.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        暂无日志记录
+        {t("emptyMessage")}
       </div>
     )
   }
@@ -85,15 +92,15 @@ export function LogTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>时间</TableHead>
-              <TableHead>用户</TableHead>
-              {showActions && <TableHead>操作</TableHead>}
-              <TableHead>资源</TableHead>
-              <TableHead>状态</TableHead>
-              {showServer && <TableHead>服务器</TableHead>}
-              <TableHead>IP地址</TableHead>
-              <TableHead>详情</TableHead>
-              {showDuration && <TableHead>耗时</TableHead>}
+              <TableHead>{t("columnTime")}</TableHead>
+              <TableHead>{t("columnUser")}</TableHead>
+              {showActions && <TableHead>{t("columnAction")}</TableHead>}
+              <TableHead>{t("columnResource")}</TableHead>
+              <TableHead>{t("columnStatus")}</TableHead>
+              {showServer && <TableHead>{t("columnServer")}</TableHead>}
+              <TableHead>{t("columnIp")}</TableHead>
+              <TableHead>{t("columnDetails")}</TableHead>
+              {showDuration && <TableHead>{t("columnDuration")}</TableHead>}
               {customColumns.map(col => (
                 <TableHead key={col.key}>{col.label}</TableHead>
               ))}
@@ -101,7 +108,13 @@ export function LogTable({
           </TableHeader>
           <TableBody>
             {filteredLogs.map(log => {
-              const { date, time } = formatTimestamp(log.created_at)
+              const full = formatInTimezone(
+                log.created_at,
+                {},
+                effectiveLocale,
+                effectiveTimezone,
+              )
+              const [date, time] = full.split(" ")
               return (
                 <TableRow key={log.id}>
                   <TableCell className="font-mono text-sm">
@@ -128,7 +141,9 @@ export function LogTable({
                   </TableCell>
                   <TableCell>
                     <Badge className={statusColors[log.status]}>
-                      {log.status === "success" ? "成功" : "失败"}
+                      {log.status === "success"
+                        ? t("filterStatusSuccessLabel")
+                        : t("filterStatusFailureLabel")}
                     </Badge>
                   </TableCell>
                   {showServer && (
@@ -151,7 +166,7 @@ export function LogTable({
                   </TableCell>
                   {showDuration && (
                     <TableCell className="font-mono text-sm">
-                      {formatDuration(log.duration)}
+                      {formatDuration(t, log.duration)}
                     </TableCell>
                   )}
                   {customColumns.map(col => (
@@ -167,10 +182,11 @@ export function LogTable({
       </div>
 
       {/* 分页 */}
-      {totalPages > 1 && (
+          {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <div className="text-sm text-muted-foreground">
-            第 {page} 页，共 {totalPages} 页
+            {/* 简单分页文案，可按需进一步抽到 i18n */}
+            {page} / {totalPages}
           </div>
           <div className="flex gap-2">
             <Button
@@ -179,7 +195,7 @@ export function LogTable({
               onClick={() => onPageChange(Math.max(1, page - 1))}
               disabled={page === 1}
             >
-              上一页
+              {"<"}
             </Button>
             <Button
               variant="outline"
@@ -187,7 +203,7 @@ export function LogTable({
               onClick={() => onPageChange(Math.min(totalPages, page + 1))}
               disabled={page === totalPages}
             >
-              下一页
+              {">"}
             </Button>
           </div>
         </div>

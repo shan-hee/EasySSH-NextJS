@@ -720,7 +720,10 @@ export function WebTerminal({
   if (!isClient) {
     return (
       <div className="h-full w-full bg-background flex items-center justify-center">
-        <ConnectionLoader serverName={serverName} message="正在初始化" />
+        <ConnectionLoader
+          serverName={serverName}
+          message={t("connectionLoaderInitializing")}
+        />
       </div>
     )
   }

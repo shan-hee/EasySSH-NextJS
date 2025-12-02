@@ -33,6 +33,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { useTranslations } from "next-intl"
 
 interface SessionTabBarProps {
   sessions: TerminalSession[]
@@ -80,6 +81,7 @@ function SortableTab({
   onAuxClick,
   onDoubleClick,
 }: SortableTabProps) {
+  const tTerminal = useTranslations("terminal")
   const {
     attributes,
     listeners,
@@ -141,7 +143,7 @@ function SortableTab({
         <button
           className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-red-500/20 hover:text-red-400 opacity-0 scale-90 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
           onClick={(e) => { e.stopPropagation(); onCloseSession(s.id) }}
-          aria-label="关闭"
+          aria-label={tTerminal("ariaCloseTab")}
         >
           <X className="h-3 w-3" />
         </button>
@@ -167,6 +169,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
   } = props
 
   const { config } = useSystemConfig()
+  const tTerminal = useTranslations("terminal")
   const [menu, setMenu] = useState<MenuState>({ open: false, x: 0, y: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -315,27 +318,33 @@ export function SessionTabBar(props: SessionTabBarProps) {
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
                   <BreadcrumbLink asChild>
-                    <Link href="/dashboard">{config?.system_name || "EasySSH"} 控制台</Link>
+                    <Link href="/dashboard">
+                      {config?.system_name || "EasySSH"}
+                    </Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>快速连接</BreadcrumbPage>
-                </BreadcrumbItem>
-                {activeSession && activeSession.type !== 'quick' && (
+                {activeSession && (
                   <>
                     <BreadcrumbSeparator className="hidden md:block" />
-                    {activeSession.group && (
+                    {activeSession.type === "quick" ? (
+                      <BreadcrumbItem>
+                        <BreadcrumbPage>{tTerminal("quickConnectTabName")}</BreadcrumbPage>
+                      </BreadcrumbItem>
+                    ) : (
                       <>
-                        <BreadcrumbItem className="hidden md:block">
-                          <BreadcrumbPage>{activeSession.group}</BreadcrumbPage>
+                        {activeSession.group && (
+                          <>
+                            <BreadcrumbItem className="hidden md:block">
+                              <BreadcrumbPage>{activeSession.group}</BreadcrumbPage>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator className="hidden md:block" />
+                          </>
+                        )}
+                        <BreadcrumbItem>
+                          <BreadcrumbPage>{activeSession.serverName}</BreadcrumbPage>
                         </BreadcrumbItem>
-                        <BreadcrumbSeparator className="hidden md:block" />
                       </>
                     )}
-                    <BreadcrumbItem>
-                      <BreadcrumbPage>{activeSession.serverName}</BreadcrumbPage>
-                    </BreadcrumbItem>
                   </>
                 )}
               </BreadcrumbList>
@@ -396,7 +405,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                           "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
                         )}
                         onClick={onNewSession}
-                        aria-label="新建会话"
+                        aria-label={tTerminal("ariaNewSession")}
                       >
                         <Plus className="h-4 w-4" />
                       </Button>
@@ -478,7 +487,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                         <button
                           className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-red-500/20 hover:text-red-400 opacity-0 scale-90 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
                           onClick={(e) => { e.stopPropagation(); onCloseSession(s.id) }}
-                          aria-label="关闭"
+                          aria-label={tTerminal("ariaCloseTab")}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -495,7 +504,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                       "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
                     )}
                     onClick={onNewSession}
-                    aria-label="新建会话"
+                    aria-label={tTerminal("ariaNewSession")}
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -514,7 +523,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                   "h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
                 )}
                 onClick={onNewSession}
-                aria-label="新建会话"
+                aria-label={tTerminal("ariaNewSession")}
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -530,8 +539,8 @@ export function SessionTabBar(props: SessionTabBarProps) {
                   "h-8 w-8 rounded-lg hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:text-gray-400 dark:hover:text-white",
                 )}
                 onClick={onOpenSettings}
-                aria-label="设置"
-                title="设置"
+                aria-label={tTerminal("ariaSettings")}
+                title={tTerminal("ariaSettings")}
               >
                 <Settings className="h-4 w-4" />
               </Button>
@@ -551,7 +560,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
         >
           <div className={cn(
             "text-[10px] px-3 py-1.5 uppercase font-semibold tracking-wider text-zinc-600 dark:text-zinc-500",
-          )}>页签操作</div>
+          )}>{tTerminal("tabMenuTitle")}</div>
           <div className={cn(
             "h-px bg-gradient-to-r from-transparent to-transparent my-1 via-zinc-300 dark:via-zinc-800",
           )} />
@@ -567,7 +576,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
           >
             <span className={cn(
               "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
-            )}>复制会话</span>
+            )}>{tTerminal("tabMenuDuplicate")}</span>
           </button>
 
           <button
@@ -581,7 +590,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
           >
             <span className={cn(
               "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
-            )}>关闭其他</span>
+            )}>{tTerminal("tabMenuCloseOthers")}</span>
           </button>
 
           <button
@@ -590,7 +599,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
             )}
             onClick={() => { onCloseAll(); setMenu(m => ({ ...m, open: false })) }}
           >
-            全部关闭
+            {tTerminal("tabMenuCloseAll")}
           </button>
 
           <div className={cn(
@@ -606,7 +615,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
               setMenu(m => ({ ...m, open: false }))
             }}
           >
-            固定/取消固定
+            {tTerminal("tabMenuTogglePin")}
           </button>
         </div>
       )}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import {
   Bot,
@@ -23,30 +24,31 @@ import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupCon
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function IntegrationsPage() {
-  const [activeSection, setActiveSection] = useState("AI服务")
+  const t = useTranslations("settingsIntegrations")
+  const [activeSection, setActiveSection] = useState("ai")
   const [isLoading] = useState(false)
 
   // 这里简化处理，实际应根据用户角色判断
   const isAdmin = true
 
   const navItems = [
-    { name: "AI服务", icon: Bot },
-    { name: "模型参数", icon: Sliders },
-    { name: "隐私设置", icon: Shield },
-    { name: "邮件通知", icon: Mail },
-    { name: "钉钉通知", icon: MessageSquare },
-    { name: "企微通知", icon: MessageCircle },
-    { name: "Webhook", icon: Webhook },
+    { id: "ai", icon: Bot, labelKey: "navAiService" },
+    { id: "modelParams", icon: Sliders, labelKey: "navModelParams" },
+    { id: "privacy", icon: Shield, labelKey: "navPrivacy" },
+    { id: "email", icon: Mail, labelKey: "navEmail" },
+    { id: "dingtalk", icon: MessageSquare, labelKey: "navDingtalk" },
+    { id: "wecom", icon: MessageCircle, labelKey: "navWecom" },
+    { id: "webhook", icon: Webhook, labelKey: "navWebhook" },
   ]
 
-  const handleSectionChange = (section: string) => {
-    setActiveSection(section)
+  const handleSectionChange = (sectionId: string) => {
+    setActiveSection(sectionId)
   }
 
   if (isLoading) {
     return (
       <>
-        <PageHeader title="集成服务" />
+        <PageHeader title={t("pageTitle")} />
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
           <SkeletonCard showHeader lines={8} className="flex-1" />
         </div>
@@ -56,7 +58,7 @@ export default function IntegrationsPage() {
 
   return (
     <>
-      <PageHeader title="集成服务" />
+      <PageHeader title={t("pageTitle")} />
 
       <div className="flex flex-1 overflow-hidden">
         <SidebarProvider>
@@ -67,15 +69,15 @@ export default function IntegrationsPage() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {navItems.map((item) => (
-                      <SidebarMenuItem key={item.name}>
+                      <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
                           asChild
-                          isActive={item.name === activeSection}
-                          onClick={() => handleSectionChange(item.name)}
+                          isActive={item.id === activeSection}
+                          onClick={() => handleSectionChange(item.id)}
                         >
                           <button>
                             <item.icon />
-                            <span>{item.name}</span>
+                            <span>{t(item.labelKey)}</span>
                           </button>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -92,14 +94,14 @@ export default function IntegrationsPage() {
             <div className="md:hidden border-b px-4 py-3">
               <Select value={activeSection} onValueChange={handleSectionChange}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="选择设置" />
+                  <SelectValue placeholder={t("selectPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {navItems.map((item) => (
-                    <SelectItem key={item.name} value={item.name}>
+                    <SelectItem key={item.id} value={item.id}>
                       <div className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
-                        <span>{item.name}</span>
+                        <span>{t(item.labelKey)}</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -110,13 +112,15 @@ export default function IntegrationsPage() {
             {/* 内容滚动区域 */}
             <div className="flex-1 overflow-y-auto scrollbar-custom">
               <div className="space-y-4 p-4">
-                {activeSection === "AI服务" && <AIProviderWrapper isAdmin={isAdmin} />}
-                {activeSection === "模型参数" && <AIModelParamsWrapper />}
-                {activeSection === "隐私设置" && <AIPrivacyWrapper />}
-                {activeSection === "邮件通知" && <EmailNotificationWrapper />}
-                {activeSection === "钉钉通知" && <DingTalkNotificationWrapper />}
-                {activeSection === "企微通知" && <WeComNotificationWrapper />}
-                {activeSection === "Webhook" && <WebhookNotificationWrapper />}
+                {activeSection === "ai" && (
+                  <AIProviderWrapper isAdmin={isAdmin} />
+                )}
+                {activeSection === "modelParams" && <AIModelParamsWrapper />}
+                {activeSection === "privacy" && <AIPrivacyWrapper />}
+                {activeSection === "email" && <EmailNotificationWrapper />}
+                {activeSection === "dingtalk" && <DingTalkNotificationWrapper />}
+                {activeSection === "wecom" && <WeComNotificationWrapper />}
+                {activeSection === "webhook" && <WebhookNotificationWrapper />}
               </div>
             </div>
           </main>

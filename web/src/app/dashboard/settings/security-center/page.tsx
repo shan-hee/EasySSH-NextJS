@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import {
   Shield,
@@ -14,24 +15,27 @@ import { SkeletonCard } from "@/components/ui/loading"
 import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+type SectionId = "access-control" | "session" | "network"
+
 export default function SecurityCenterPage() {
-  const [activeSection, setActiveSection] = useState("访问控制")
+  const t = useTranslations("settingsSecurity")
+  const [activeSection, setActiveSection] = useState<SectionId>("access-control")
   const [isLoading] = useState(false)
 
   const navItems = [
-    { name: "访问控制", icon: Shield },
-    { name: "会话管理", icon: Clock },
-    { name: "网络安全", icon: Globe },
+    { id: "access-control" as SectionId, labelKey: "navAccessControl", icon: Shield },
+    { id: "session" as SectionId, labelKey: "navSessionManagement", icon: Clock },
+    { id: "network" as SectionId, labelKey: "navNetworkSecurity", icon: Globe },
   ]
 
   const handleSectionChange = (section: string) => {
-    setActiveSection(section)
+    setActiveSection(section as SectionId)
   }
 
   if (isLoading) {
     return (
       <>
-        <PageHeader title="安全中心" />
+        <PageHeader title={t("pageTitle")} />
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
           <SkeletonCard showHeader lines={8} className="flex-1" />
         </div>
@@ -41,7 +45,7 @@ export default function SecurityCenterPage() {
 
   return (
     <>
-      <PageHeader title="安全中心" />
+      <PageHeader title={t("pageTitle")} />
 
       <div className="flex flex-1 overflow-hidden">
         <SidebarProvider>
@@ -52,15 +56,15 @@ export default function SecurityCenterPage() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {navItems.map((item) => (
-                      <SidebarMenuItem key={item.name}>
+                      <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
                           asChild
-                          isActive={item.name === activeSection}
-                          onClick={() => handleSectionChange(item.name)}
+                          isActive={item.id === activeSection}
+                          onClick={() => handleSectionChange(item.id)}
                         >
                           <button>
                             <item.icon />
-                            <span>{item.name}</span>
+                            <span>{t(item.labelKey)}</span>
                           </button>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -77,14 +81,14 @@ export default function SecurityCenterPage() {
             <div className="md:hidden border-b px-4 py-3">
               <Select value={activeSection} onValueChange={handleSectionChange}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="选择设置" />
+                  <SelectValue placeholder={t("mobileSelectPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {navItems.map((item) => (
-                    <SelectItem key={item.name} value={item.name}>
+                    <SelectItem key={item.id} value={item.id}>
                       <div className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
-                        <span>{item.name}</span>
+                        <span>{t(item.labelKey)}</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -95,9 +99,9 @@ export default function SecurityCenterPage() {
             {/* 内容滚动区域 */}
             <div className="flex-1 overflow-y-auto scrollbar-custom">
               <div className="space-y-4 p-4">
-                {activeSection === "访问控制" && <AccessControlTab />}
-                {activeSection === "会话管理" && <SessionManagementTab />}
-                {activeSection === "网络安全" && <NetworkSecurityTab />}
+                {activeSection === "access-control" && <AccessControlTab />}
+                {activeSection === "session" && <SessionManagementTab />}
+                {activeSection === "network" && <NetworkSecurityTab />}
               </div>
             </div>
           </main>

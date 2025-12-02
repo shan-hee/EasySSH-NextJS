@@ -1,12 +1,14 @@
-"use client"
+ "use client"
 
 import { useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "@/components/ui/sonner"
+import { useTranslations } from "next-intl"
 import { authApi } from "@/lib/api/auth"
 import { useAuthStore } from "@/stores/auth-store"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { getErrorMessage } from "@/lib/error-utils"
+import { AuthI18nProvider } from "@/providers/auth-i18n-provider"
 
 // 解析 state 中携带的 next 信息
 function parseNextFromState(stateParam: string | null): string | null {
@@ -30,7 +32,8 @@ function parseNextFromState(stateParam: string | null): string | null {
   }
 }
 
-export default function GoogleAuthCallbackPage() {
+function GoogleAuthCallbackInner() {
+  const t = useTranslations("auth")
   const router = useRouter()
   const searchParams = useSearchParams()
   const setToken = useAuthStore((state) => state.setToken)
@@ -60,16 +63,16 @@ export default function GoogleAuthCallbackPage() {
     }
 
     if (error) {
-      toast.error("Google 登录失败", {
-        description: `Google 返回错误：${error}`,
+      toast.error(t("loginGoogleFailedTitle"), {
+        description: t("loginGoogleFailedDesc"),
       })
       redirectBackToLogin()
       return
     }
 
     if (!idToken) {
-      toast.error("Google 登录失败", {
-        description: "回调中未找到 ID Token，请重试",
+      toast.error(t("loginGoogleFailedTitle"), {
+        description: t("loginGoogleCredentialMissingDesc"),
       })
       redirectBackToLogin()
       return
@@ -79,15 +82,15 @@ export default function GoogleAuthCallbackPage() {
       try {
         const response = await authApi.verifyGoogleToken(idToken)
         if (!response.access_token) {
-          throw new Error("未能获取 access_token")
+          throw new Error("Missing access_token in Google callback response")
         }
 
         const expiresIn =
           typeof response.expires_in === "number" ? response.expires_in : 0
         setToken(response.access_token, expiresIn)
 
-        toast.success("登录成功", {
-          description: "正在跳转到控制台...",
+        toast.success(t("loginToastSuccessTitle"), {
+          description: t("loginToastSuccessDesc"),
         })
 
         await refreshConfig()
@@ -99,8 +102,8 @@ export default function GoogleAuthCallbackPage() {
         }
       } catch (err) {
         console.error("Google callback login error:", err)
-        toast.error("Google 登录失败", {
-          description: getErrorMessage(err, "请重试或联系管理员"),
+        toast.error(t("loginGoogleFailedTitle"), {
+          description: getErrorMessage(err, t("loginGoogleRetryDesc")),
         })
         redirectBackToLogin()
       }
@@ -112,9 +115,18 @@ export default function GoogleAuthCallbackPage() {
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-        <p className="text-muted-foreground">正在通过 Google 登录...</p>
+        <p className="text-muted-foreground">
+          {t("loginGoogleCallbackLoading")}
+        </p>
       </div>
     </div>
   )
 }
 
+export default function GoogleAuthCallbackPage() {
+  return (
+    <AuthI18nProvider>
+      <GoogleAuthCallbackInner />
+    </AuthI18nProvider>
+  )
+}

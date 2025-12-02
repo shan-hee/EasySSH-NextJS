@@ -1,4 +1,5 @@
 "use client"
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,8 @@ interface EmailNotificationTabProps {
 }
 
 export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: EmailNotificationTabProps) {
+  const t = useTranslations("settingsIntegrationsEmail")
+  const tCommon = useTranslations("common")
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
   const enabled = form.watch(enabledFieldName)
 
@@ -37,21 +40,21 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
 
     await testConnection(async () => {
       await settingsApi.testSMTPConnection(config)
-      toast.success("测试邮件发送成功！请检查您的邮箱。")
+      toast.success(t("toastTestSuccess"))
     })
   }
 
   return (
     <SettingsSection
-      title="邮件通知配置"
-      description="配置SMTP服务器以发送邮件通知"
+      title={t("sectionTitle")}
+      description={t("sectionDescription")}
       icon={<Mail className="h-5 w-5" />}
     >
       <FormSwitch
         form={form}
         name={enabledFieldName}
-        label="启用邮件通知"
-        description="开启后系统将通过邮件发送重要通知"
+        label={t("fieldEnabledLabel")}
+        description={t("fieldEnabledDesc")}
       />
 
       {enabled && (
@@ -60,17 +63,17 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
             <FormInput
               form={form}
               name="host"
-              label="SMTP服务器地址"
-              placeholder="smtp.gmail.com"
+              label={t("fieldHostLabel")}
+              placeholder={t("fieldHostPlaceholder")}
               required
             />
 
             <FormInput
               form={form}
               name="port"
-              label="端口号"
+              label={t("fieldPortLabel")}
               type="number"
-              placeholder="587"
+              placeholder={t("fieldPortPlaceholder")}
               min={1}
               max={65535}
               required
@@ -80,25 +83,25 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
           <FormSwitch
             form={form}
             name="use_tls"
-            label="使用TLS/SSL加密"
-            description="推荐开启以确保邮件传输安全"
+            label={t("fieldUseTlsLabel")}
+            description={t("fieldUseTlsDesc")}
           />
 
           <div className="grid gap-4 md:grid-cols-2">
             <FormInput
               form={form}
               name="username"
-              label="用户名"
-              placeholder="your-email@example.com"
+              label={t("fieldUsernameLabel")}
+              placeholder={t("fieldUsernamePlaceholder")}
               required
             />
 
             <FormInput
               form={form}
               name="password"
-              label="密码/应用专用密码"
+              label={t("fieldPasswordLabel")}
               type="password"
-              placeholder="••••••••"
+              placeholder={t("fieldPasswordPlaceholder")}
               required
             />
           </div>
@@ -107,36 +110,31 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
             <FormInput
               form={form}
               name="from_email"
-              label="发件人邮箱"
+              label={t("fieldFromEmailLabel")}
               type="email"
-              placeholder="noreply@example.com"
+              placeholder={t("fieldFromEmailPlaceholder")}
               required
             />
 
             <FormInput
               form={form}
               name="from_name"
-              label="发件人名称"
-              placeholder="EasySSH System"
+              label={t("fieldFromNameLabel")}
+              placeholder={t("fieldFromNamePlaceholder")}
               required
             />
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleTestEmail}
-            disabled={isTesting}
-          >
+          <Button type="button" variant="outline" onClick={handleTestEmail} disabled={isTesting}>
             {isTesting ? (
               <>
                 <Send className="mr-2 h-4 w-4 animate-pulse" />
-                发送中...
+                {t("btnTesting")}
               </>
             ) : (
               <>
                 <Send className="mr-2 h-4 w-4" />
-                发送测试邮件
+                {t("btnTest")}
               </>
             )}
           </Button>
@@ -144,31 +142,30 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
           <Alert>
             <InfoIcon className="h-4 w-4" />
             <AlertDescription>
-              测试邮件将发送到配置的发件人邮箱。如果使用Gmail，请确保已启用&ldquo;两步验证&rdquo;并生成&ldquo;应用专用密码&rdquo;。
+              {t("alertDescription")}
             </AlertDescription>
           </Alert>
         </>
       )}
 
       <div className="rounded-lg border p-4 bg-muted/50">
-        <p className="text-sm font-medium mb-2">常用SMTP服务器配置：</p>
+        <p className="text-sm font-medium mb-2">{t("commonConfigsTitle")}</p>
         <div className="text-sm text-muted-foreground space-y-2">
           <div>
-            <p className="font-medium text-foreground">Gmail:</p>
-            <p>• 服务器：smtp.gmail.com，端口：587（TLS）或 465（SSL）</p>
-            <p>• 需要启用两步验证并生成应用专用密码</p>
+            <p className="font-medium text-foreground">{t("configGmailTitle")}</p>
+            <p>{t("configGmailContent")}</p>
           </div>
           <div>
-            <p className="font-medium text-foreground">腾讯企业邮箱:</p>
-            <p>• 服务器：smtp.exmail.qq.com，端口：587 或 465</p>
+            <p className="font-medium text-foreground">{t("configTencentTitle")}</p>
+            <p>{t("configTencentContent")}</p>
           </div>
           <div>
-            <p className="font-medium text-foreground">阿里云邮件推送:</p>
-            <p>• 服务器：smtpdm.aliyun.com，端口：25 或 465</p>
+            <p className="font-medium text-foreground">{t("configAliyunTitle")}</p>
+            <p>{t("configAliyunContent")}</p>
           </div>
           <div>
-            <p className="font-medium text-foreground">Microsoft 365:</p>
-            <p>• 服务器：smtp.office365.com，端口：587</p>
+            <p className="font-medium text-foreground">{t("configM365Title")}</p>
+            <p>{t("configM365Content")}</p>
           </div>
         </div>
       </div>

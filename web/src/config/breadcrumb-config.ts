@@ -18,7 +18,7 @@ export interface BreadcrumbItem {
 export interface BreadcrumbConfig {
   // 不显示标题作为面包屑项（用于首页和列表页）
   showTitle?: boolean
-  // 自定义面包屑路径（不包含根级 "EasySSH 控制台"）
+  // 自定义面包屑路径（不包含根级系统名称）
   breadcrumbs?: BreadcrumbItem[]
 }
 
@@ -30,18 +30,20 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // 工作台
   // ===================
   '/dashboard': {
-    showTitle: false,
+    // 仪表盘：显示系统名称 + 当前页面标题（Dashboard/仪表盘）
+    showTitle: true,
   },
 
   // ===================
   // 连接管理
   // ===================
   '/dashboard/servers': {
-    showTitle: false,
+    // 连接配置首页：仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/servers/history': {
     breadcrumbs: [
-      { title: '连接管理', href: '/dashboard/servers' },
+      { title: 'nav.connections', href: '/dashboard/servers' },
     ],
   },
 
@@ -54,7 +56,7 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   },
   '/dashboard/terminal/sessions': {
     breadcrumbs: [
-      { title: '终端', href: '/dashboard/terminal' },
+      { title: 'nav.terminal', href: '/dashboard/terminal' },
     ],
   },
 
@@ -63,22 +65,22 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   '/dashboard/scripts': {
     breadcrumbs: [
-      { title: '自动化' }, // 无父级聚合页，不可点击
+      { title: 'nav.automation' }, // 无父级聚合页，不可点击
     ],
   },
   '/dashboard/automation/schedules': {
     breadcrumbs: [
-      { title: '自动化' },
+      { title: 'nav.automation' },
     ],
   },
   '/dashboard/automation/history': {
     breadcrumbs: [
-      { title: '自动化' },
+      { title: 'nav.automation' },
     ],
   },
   '/dashboard/automation/batch': {
     breadcrumbs: [
-      { title: '自动化' },
+      { title: 'nav.automation' },
     ],
   },
 
@@ -90,12 +92,12 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   },
   '/dashboard/transfers/history': {
     breadcrumbs: [
-      { title: '文件传输', href: '/dashboard/sftp' },
+      { title: 'nav.file', href: '/dashboard/sftp' },
     ],
   },
   '/dashboard/storage': {
     breadcrumbs: [
-      { title: '文件管理' }, // 无明确的父级页面
+      { title: 'nav.file' }, // 无明确的父级页面
     ],
   },
 
@@ -104,17 +106,17 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   '/dashboard/monitoring/resources': {
     breadcrumbs: [
-      { title: '监控告警' }, // 统一使用侧边栏名称
+      { title: 'nav.monitoring' }, // 统一使用侧边栏名称
     ],
   },
   '/dashboard/monitoring/alerts': {
     breadcrumbs: [
-      { title: '监控告警' },
+      { title: 'nav.monitoring' },
     ],
   },
   '/dashboard/monitoring/health': {
     breadcrumbs: [
-      { title: '监控告警' },
+      { title: 'nav.monitoring' },
     ],
   },
 
@@ -123,22 +125,22 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   '/dashboard/logs': {
     breadcrumbs: [
-      { title: '日志审计' }, // 统一命名
+      { title: 'nav.logs' }, // 统一命名
     ],
   },
   '/dashboard/logs/login': {
     breadcrumbs: [
-      { title: '日志审计', href: '/dashboard/logs' },
+      { title: 'nav.logs', href: '/dashboard/logs' },
     ],
   },
   '/dashboard/logs/commands': {
     breadcrumbs: [
-      { title: '日志审计', href: '/dashboard/logs' },
+      { title: 'nav.logs', href: '/dashboard/logs' },
     ],
   },
   '/dashboard/logs/files': {
     breadcrumbs: [
-      { title: '日志审计', href: '/dashboard/logs' },
+      { title: 'nav.logs', href: '/dashboard/logs' },
     ],
   },
 
@@ -147,22 +149,22 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   '/dashboard/settings/system-config': {
     breadcrumbs: [
-      { title: '系统与组织' },
+      { title: 'nav.systemOrg' },
     ],
   },
   '/dashboard/settings/security-center': {
     breadcrumbs: [
-      { title: '系统与组织' },
+      { title: 'nav.systemOrg' },
     ],
   },
   '/dashboard/settings/integrations': {
     breadcrumbs: [
-      { title: '系统与组织' },
+      { title: 'nav.systemOrg' },
     ],
   },
   '/dashboard/settings/management': {
     breadcrumbs: [
-      { title: '系统与组织' },
+      { title: 'nav.systemOrg' },
     ],
   },
 
@@ -171,7 +173,7 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   '/dashboard/users': {
     breadcrumbs: [
-      { title: '系统与组织' },
+      { title: 'nav.systemOrg' },
     ],
   },
 
@@ -179,7 +181,8 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // AI 助手
   // ===================
   '/dashboard/ai-assistant': {
-    showTitle: false, // AI 助手直接显示在工作台下，不需要额外层级
+    // 显示系统名称 + AI 助手页面标题
+    showTitle: true,
   },
 }
 
@@ -204,13 +207,13 @@ export function generateBreadcrumbs(
   const config = getBreadcrumbConfig(pathname)
   const items: BreadcrumbItem[] = []
 
-  // 添加根级
+  // 添加根级（“系统名称 + nav.workbench” 由页面上的 i18n 控制，这里仅保留系统名称）
   items.push({
-    title: `${systemName} 控制台`,
+    title: systemName,
     href: pathname === '/dashboard' ? undefined : '/dashboard',
   })
 
-  // 添加配置的面包屑层级
+  // 添加配置的面包屑层级（这些标题由侧边栏的 i18n 负责，避免在此重复硬编码）
   if (config.breadcrumbs) {
     items.push(...config.breadcrumbs)
   }

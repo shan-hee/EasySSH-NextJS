@@ -4,9 +4,11 @@ import Link from "next/link"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { useTranslations } from "next-intl"
 
 export function PagePlaceholder({ title, description }: { title: string; description?: string }) {
   const { config } = useSystemConfig()
+  const t = useTranslations("pagePlaceholder")
 
   return (
     <>
@@ -16,7 +18,9 @@ export function PagePlaceholder({ title, description }: { title: string; descrip
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
                 <BreadcrumbLink asChild>
-                  <Link href="/dashboard">{config?.system_name || "EasySSH"} 控制台</Link>
+                  <Link href="/dashboard">
+                    {config?.system_name || "EasySSH"} {t("breadcrumbConsole")}
+                  </Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />
@@ -35,7 +39,7 @@ export function PagePlaceholder({ title, description }: { title: string; descrip
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              这是一个占位页面，功能开发中。
+              {t("defaultDescription")}
               {description ? ` ${description}` : null}
             </p>
           </CardContent>

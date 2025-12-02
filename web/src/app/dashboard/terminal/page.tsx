@@ -11,6 +11,7 @@ import { serversApi, type Server } from "@/lib/api"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { useTabUIStore } from "@/stores/tab-ui-store"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 // 性能优化：将 lastActivity 从 sessions 状态中分离，避免每次命令触发整个组件树重渲染
 const lastActivityMap = new Map<string, number>()
@@ -19,6 +20,8 @@ function TerminalPageContent() {
  const router = useRouter()
  const searchParams = useSearchParams()
  const { ready } = useAuthReady()
+ const t = useTranslations("terminal")
+ const quickConnectName = t("quickConnectTabName")
  const [servers, setServers] = useState<QuickServer[]>([])
  const [loading, setLoading] = useState(true)
 
@@ -52,7 +55,7 @@ function TerminalPageContent() {
  {
  id: "quick-initial",
  serverId: 0,
- serverName: "快速连接",
+ serverName: quickConnectName,
  host: "",
  port: undefined,
  username: "",
@@ -117,16 +120,16 @@ function TerminalPageContent() {
  } else {
  // 服务器不存在或离线，回退到快速连接
  if (!server) {
- toast.error("服务器不存在")
+ toast.error(t("errorServerNotFound"))
  } else {
- toast.error("服务器离线，无法连接")
+ toast.error(t("errorServerOffline"))
  }
 
  const now = Date.now()
  setSessions([{
  id: "quick-initial",
  serverId: 0,
- serverName: "快速连接",
+ serverName: quickConnectName,
  host: "",
  port: undefined,
  username: "",
@@ -177,10 +180,10 @@ function TerminalPageContent() {
  })
  } catch (error: unknown) {
  console.error("Failed to load servers:", error)
- toast.error(getErrorMessage(error, "加载服务器列表失败"))
+ toast.error(getErrorMessage(error, t("errorLoadServers")))
  setLoading(false)
  }
- }, [])
+ }, [t])
 
  useEffect(() => {
    if (!ready) return
@@ -207,19 +210,19 @@ function TerminalPageContent() {
  }, [])
 
  // 创建"快速连接"页签
- const handleNewSession = (): string | void => {
- // 最大页签数限制
- if (sessions.length >= maxTabs) {
- toast.error(`已达到最大页签数限制 (${maxTabs})`)
- return
- }
+  const handleNewSession = (): string | void => {
+  // 最大页签数限制
+  if (sessions.length >= maxTabs) {
+  toast.error(t("errorMaxTabsReached", { max: maxTabs }))
+  return
+  }
 
  const now = Date.now()
  const id = `quick-${now}`
  const newTab: TerminalSession = {
  id,
  serverId: 0,
- serverName: "快速连接",
+ serverName: quickConnectName,
  host: "",
  username: "",
  isConnected: false,
@@ -318,13 +321,13 @@ function TerminalPageContent() {
  setSessions(prev => prev.filter(s => s.id !== sessionId))
  }, [sessions, activeSessionId, router])
 
- const handleDuplicateSession = (sessionId: string) => {
+  const handleDuplicateSession = (sessionId: string) => {
  const src = sessions.find(s => s.id === sessionId)
- if (!src) return
- if (sessions.length >= maxTabs) {
- toast.error(`已达到最大页签数限制 (${maxTabs})`)
- return
- }
+  if (!src) return
+  if (sessions.length >= maxTabs) {
+  toast.error(t("errorMaxTabsReached", { max: maxTabs }))
+  return
+  }
  const now = Date.now()
  const dup: TerminalSession = { ...src, id: `session-${now}`, lastActivity: now, pinned: false }
  setSessions(prev => [...prev, dup])
@@ -375,25 +378,25 @@ function TerminalPageContent() {
  sessionsRef.current = sessions
  }, [sessions])
 
- useEffect(() => {
- const t = setInterval(() => {
- const now = Date.now()
- const threshold = inactiveMinutes * 60 * 1000
- sessionsRef.current.forEach(s => {
- if (!s) return
- // 从 lastActivityMap 获取最后活动时间，如果不存在则使用 session 的初始值
- const lastActivity = lastActivityMap.get(s.id) ?? s.lastActivity
- if (now - lastActivity >= threshold && !inactivityNotifiedRef.current.has(s.id)) {
- inactivityNotifiedRef.current.add(s.id)
- toast(`会话"${s.serverName}"长时间未活动`, {
- description: `已超过 ${inactiveMinutes} 分钟未活动，是否断开？`,
- action: { label: "断开", onClick: () => handleCloseSession(s.id) },
- })
- }
- })
- }, 60 * 1000)
- return () => clearInterval(t)
- }, [inactiveMinutes, handleCloseSession]) // 移除 sessions 依赖，避免频繁重建定时器
+  useEffect(() => {
+  const timer = setInterval(() => {
+  const now = Date.now()
+  const threshold = inactiveMinutes * 60 * 1000
+  sessionsRef.current.forEach(s => {
+  if (!s) return
+  // 从 lastActivityMap 获取最后活动时间，如果不存在则使用 session 的初始值
+  const lastActivity = lastActivityMap.get(s.id) ?? s.lastActivity
+  if (now - lastActivity >= threshold && !inactivityNotifiedRef.current.has(s.id)) {
+  inactivityNotifiedRef.current.add(s.id)
+  toast(t("inactiveToastTitle", { name: s.serverName }), {
+  description: t("inactiveToastDescription", { minutes: inactiveMinutes }),
+  action: { label: t("inactiveToastActionLabel"), onClick: () => handleCloseSession(s.id) },
+  })
+  }
+  })
+  }, 60 * 1000)
+  return () => clearInterval(timer)
+  }, [inactiveMinutes, handleCloseSession, t]) // 移除 sessions 依赖，避免频繁重建定时器
 
  // 会话初始化中（等待 sessions 被设置）
  // 现在始终有初始会话，不需要这个检查了
@@ -421,8 +424,9 @@ function TerminalPageContent() {
 }
 
 export default function TerminalPage() {
+ const tCommon = useTranslations("common")
  return (
- <Suspense fallback={<div className="flex flex-1 items-center justify-center">加载中...</div>}>
+ <Suspense fallback={<div className="flex flex-1 items-center justify-center">{tCommon("loading")}</div>}>
  <TerminalPageContent />
  </Suspense>
  )

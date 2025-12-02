@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import { SessionsClient } from "./components/sessions-client"
 
@@ -8,9 +9,10 @@ import { SessionsClient } from "./components/sessions-client"
  * 数据在客户端获取
  */
 export default function ServersHistoryPage() {
+  const t = useTranslations("connectionHistory")
   return (
     <>
-      <PageHeader title="连接历史" />
+      <PageHeader title={t("pageTitle")} />
       <SessionsClient />
     </>
   )

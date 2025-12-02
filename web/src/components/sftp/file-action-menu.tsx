@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import {
   Download,
   Trash2,
@@ -53,6 +54,7 @@ export function FileActionMenu({
   selectedFilesCount = 0,
   onAction,
 }: FileActionMenuProps) {
+  const t = useTranslations("sftp")
   const isContext = mode === "context"
   const isMultiSelect = selectedFilesCount > 1
   const isSingleSelect = selectedFilesCount === 1
@@ -91,7 +93,7 @@ export function FileActionMenu({
       <span className={cn(
         "text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary",
       )}>
-        推荐
+        Recommended
       </span>
     )
   }
@@ -124,7 +126,9 @@ export function FileActionMenu({
         onClick={() => onAction("open")}
       >
         <Eye className="h-4 w-4 mr-2" />
-        <span className="flex-1">{file.type === "directory" ? "打开" : "编辑"}</span>
+        <span className="flex-1">
+          {file.type === "directory" ? t("contextOpen") : t("contextEdit")}
+        </span>
         <KeyboardShortcut>⏎</KeyboardShortcut>
       </MenuItem>
 
@@ -136,32 +140,34 @@ export function FileActionMenu({
           onClick={() => onAction("download")}
         >
           <Download className="h-4 w-4 mr-2" />
-          <span className="flex-1">下载</span>
+          <span className="flex-1">{t("actionDownload")}</span>
           <KeyboardShortcut>⌘D</KeyboardShortcut>
         </MenuItem>
       ) : (
         /* 文件夹下载 - 双选项 */
         <>
           {/* 快速下载 */}
-          <DownloadTooltip content="远程 tar/zip 压缩，智能排除常见大目录，速度快 10-50 倍（需服务器支持 tar）">
+          <DownloadTooltip content={t("actionDownloadFastTooltip")}>
             <MenuItem
               className={itemClassName}
               onClick={() => onAction("download-fast")}
             >
               <Zap className="h-4 w-4 mr-2 text-yellow-500" />
-              <span className="flex-1">快速下载</span>
+              <span className="flex-1">{t("actionDownloadFast")}</span>
               <RecommendedBadge />
             </MenuItem>
           </DownloadTooltip>
 
           {/* 兼容下载 */}
-          <DownloadTooltip content="SFTP 逐文件传输，兼容所有服务器，自动跳过排除目录">
+          <DownloadTooltip content={t("actionDownloadCompatibleTooltip")}>
             <MenuItem
               className={itemClassName}
               onClick={() => onAction("download-compatible")}
             >
               <Download className="h-4 w-4 mr-2" />
-              <span className="flex-1">兼容下载</span>
+              <span className="flex-1">
+                {t("actionDownloadCompatible")}
+              </span>
               <KeyboardShortcut>⌘D</KeyboardShortcut>
             </MenuItem>
           </DownloadTooltip>
@@ -177,7 +183,7 @@ export function FileActionMenu({
           onClick={() => onAction("rename")}
         >
           <Edit className="h-4 w-4 mr-2" />
-          <span className="flex-1">重命名</span>
+          <span className="flex-1">{t("actionRename")}</span>
           <KeyboardShortcut>F2</KeyboardShortcut>
         </MenuItem>
       )}
@@ -189,7 +195,7 @@ export function FileActionMenu({
           onClick={() => onAction("chmod")}
         >
           <FileText className="h-4 w-4 mr-2" />
-          <span className="flex-1">修改权限</span>
+          <span className="flex-1">{t("actionChangePermissions")}</span>
         </MenuItem>
       )}
 
@@ -202,7 +208,9 @@ export function FileActionMenu({
       >
         <Trash2 className="h-4 w-4 mr-2" />
         <span className="flex-1">
-          {isMultiSelect ? `删除 ${selectedFilesCount} 项` : "删除"}
+          {isMultiSelect
+            ? t("actionDeleteMulti", { count: selectedFilesCount })
+            : t("actionDeleteSingle")}
         </span>
         <KeyboardShortcut>⌫</KeyboardShortcut>
       </MenuItem>

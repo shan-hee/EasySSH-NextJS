@@ -12,6 +12,7 @@ import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 const statusColors = {
   active: "bg-green-100 text-green-800",
@@ -28,26 +29,44 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
-// 格式化时长
-function formatDuration(seconds: number | undefined): string {
-  if (!seconds) return '-'
-  if (seconds < 60) return `${seconds}秒`
+// 格式化时长（使用 i18n 文案）
+function formatDuration(
+  seconds: number | undefined,
+  t: (key: string, values?: Record<string, number>) => string
+): string {
+  if (!seconds) return "-"
+
+  if (seconds < 60) {
+    return t("durationSeconds", { seconds })
+  }
+
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
+
   if (minutes < 60) {
-    return remainingSeconds > 0 ? `${minutes}分${remainingSeconds}秒` : `${minutes}分钟`
+    return remainingSeconds > 0
+      ? t("durationMinutesSeconds", { minutes, seconds: remainingSeconds })
+      : t("durationMinutes", { minutes })
   }
+
   const hours = Math.floor(minutes / 60)
   const remainingMinutes = minutes % 60
-  return remainingMinutes > 0 ? `${hours}小时${remainingMinutes}分钟` : `${hours}小时`
+
+  return remainingMinutes > 0
+    ? t("durationHoursMinutes", { hours, minutes: remainingMinutes })
+    : t("durationHours", { hours })
 }
 
 // 格式化时间
-function formatTimestamp(timestamp: string): { date: string; time: string } {
+function formatTimestamp(timestamp: string, locale: string): { date: string; time: string } {
   const date = new Date(timestamp)
   return {
-    date: date.toLocaleDateString('zh-CN'),
-    time: date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    date: date.toLocaleDateString(locale),
+    time: date.toLocaleTimeString(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
   }
 }
 
@@ -57,6 +76,8 @@ export default function TerminalSessionsPage() {
   const [statistics, setStatistics] = useState<SSHSessionStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const t = useTranslations("terminalSessions")
+  const locale = t.locale ?? "zh-CN"
 
   // 加载数据
   const loadData = async () => {
@@ -75,7 +96,7 @@ export default function TerminalSessionsPage() {
       setSessions(sessionsResponse.data || [])
       setStatistics(statsResponse)
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "无法加载活动会话"))
+      toast.error(getErrorMessage(error, t("loadFailed")))
     } finally {
       setLoading(false)
     }
@@ -102,19 +123,19 @@ export default function TerminalSessionsPage() {
   const handleDelete = async (id: string) => {
     try {
       await sshSessionsApi.delete(id)
-      toast.success("会话记录已删除")
+      toast.success(t("deleteSuccess"))
       loadData()
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "无法删除会话记录"))
+      toast.error(getErrorMessage(error, t("deleteFailed")))
     }
   }
 
   return (
     <>
-      <PageHeader title="活动会话">
+      <PageHeader title={t("pageTitle")}>
         <Button variant="outline" size="sm" onClick={() => loadData()}>
           <RefreshCw className="mr-2 h-4 w-4" />
-          刷新
+          {t("refresh")}
         </Button>
       </PageHeader>
 
@@ -123,7 +144,7 @@ export default function TerminalSessionsPage() {
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">活动会话</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("statsActive")}</CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -131,14 +152,14 @@ export default function TerminalSessionsPage() {
                 {statistics?.active_sessions || 0}
               </div>
               <p className="text-xs text-muted-foreground">
-                当前在线
+                {t("statsActiveDesc")}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总会话</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("statsTotal")}</CardTitle>
               <Server className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -146,34 +167,34 @@ export default function TerminalSessionsPage() {
                 {statistics?.total_sessions || 0}
               </div>
               <p className="text-xs text-muted-foreground">
-                历史总数
+                {t("statsTotalDesc")}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">上传流量</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("statsUpload")}</CardTitle>
               <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
                 {formatBytes(statistics?.total_bytes_sent || 0)}
               </div>
-              <p className="text-xs text-muted-foreground">总计发送</p>
+              <p className="text-xs text-muted-foreground">{t("statsUploadDesc")}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">下载流量</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("statsDownload")}</CardTitle>
               <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
                 {formatBytes(statistics?.total_bytes_received || 0)}
               </div>
-              <p className="text-xs text-muted-foreground">总计接收</p>
+              <p className="text-xs text-muted-foreground">{t("statsDownloadDesc")}</p>
             </CardContent>
           </Card>
         </div>
@@ -181,13 +202,13 @@ export default function TerminalSessionsPage() {
         {/* 搜索栏 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">搜索</CardTitle>
+            <CardTitle className="text-lg">{t("searchTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="搜索会话ID、客户端IP或终端类型..."
+                placeholder={t("searchPlaceholder")}
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -198,12 +219,15 @@ export default function TerminalSessionsPage() {
 
         {/* 活动会话表格 */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">活动会话列表</CardTitle>
-            <CardDescription>
-              显示 {filteredSessions.length} 个活动会话，共 {sessions.length} 个
-            </CardDescription>
-          </CardHeader>
+            <CardHeader>
+              <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
+              <CardDescription>
+                {t("tableDescription", {
+                  current: filteredSessions.length,
+                  total: sessions.length,
+                })}
+              </CardDescription>
+            </CardHeader>
           <CardContent>
             {loading ? (
               <div className="flex items-center justify-center py-8">
@@ -211,27 +235,27 @@ export default function TerminalSessionsPage() {
               </div>
             ) : sessions.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                暂无活动会话
+                {t("empty")}
               </div>
             ) : (
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>会话ID</TableHead>
-                      <TableHead>客户端信息</TableHead>
-                      <TableHead>终端类型</TableHead>
-                      <TableHead>连接时间</TableHead>
-                      <TableHead>持续时长</TableHead>
-                      <TableHead>数据传输</TableHead>
-                      <TableHead>命令数</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>操作</TableHead>
+                      <TableHead>{t("colSessionId")}</TableHead>
+                      <TableHead>{t("colClientInfo")}</TableHead>
+                      <TableHead>{t("colTerminalType")}</TableHead>
+                      <TableHead>{t("colConnectedAt")}</TableHead>
+                      <TableHead>{t("colDuration")}</TableHead>
+                      <TableHead>{t("colTraffic")}</TableHead>
+                      <TableHead>{t("colCommands")}</TableHead>
+                      <TableHead>{t("colStatus")}</TableHead>
+                      <TableHead>{t("colActions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredSessions.map(session => {
-                      const { date, time } = formatTimestamp(session.connected_at)
+                      const { date, time } = formatTimestamp(session.connected_at, locale)
                       const duration = session.duration || 0
                       return (
                         <TableRow key={session.id}>
@@ -256,7 +280,7 @@ export default function TerminalSessionsPage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-sm">
-                            {formatDuration(duration)}
+                            {formatDuration(duration, t)}
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
@@ -275,8 +299,11 @@ export default function TerminalSessionsPage() {
                           </TableCell>
                           <TableCell>
                             <Badge className={statusColors[session.status as keyof typeof statusColors]}>
-                              {session.status === "active" ? "活动" :
-                                session.status === "closed" ? "已关闭" : "超时"}
+                              {session.status === "active"
+                                ? t("statusActive")
+                                : session.status === "closed"
+                                ? t("statusClosed")
+                                : t("statusTimeout")}
                             </Badge>
                           </TableCell>
                           <TableCell>

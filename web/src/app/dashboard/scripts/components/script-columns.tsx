@@ -17,9 +17,15 @@ interface Handlers {
   onExecute: (id: string) => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
+  t: (key: string) => string
 }
 
-export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): ColumnDef<Script>[] {
+export function createScriptColumns({
+  onExecute,
+  onEdit,
+  onDelete,
+  t,
+}: Handlers): ColumnDef<Script>[] {
   const columns: ColumnDef<Script>[] = [
     {
       id: "name",
@@ -32,7 +38,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
         >
           <div className="flex items-center gap-2">
             <Code2 className="h-4 w-4" />
-            脚本名称
+            {t("colName")}
           </div>
           {column.getIsSorted() === "asc" ? (
             <ArrowUp className="ml-2 h-4 w-4" />
@@ -65,7 +71,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
     {
       id: "description",
       accessorKey: "description",
-      header: "描述",
+      header: t("colDescription"),
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground line-clamp-2">
           {row.original.description}
@@ -76,7 +82,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
     {
       id: "content",
       accessorKey: "content",
-      header: "脚本内容",
+      header: t("colContent"),
       cell: ({ row }) => (
         <div className="bg-muted rounded-md px-3 py-2 max-w-[420px]">
           <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap line-clamp-3">
@@ -89,7 +95,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
     {
       id: "tags",
       accessorKey: "tags",
-      header: "标签",
+      header: t("colTags"),
       cell: ({ row }) => {
         const tags = row.original.tags || []
         return (
@@ -124,7 +130,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
         >
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
-            作者
+            {t("colAuthor")}
           </div>
           {column.getIsSorted() === "asc" ? (
             <ArrowUp className="ml-2 h-4 w-4" />
@@ -155,7 +161,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
         >
           <div className="flex items-center gap-2">
             <CalendarClock className="h-4 w-4" />
-            更新时间
+            {t("colUpdatedAt")}
           </div>
           {column.getIsSorted() === "asc" ? (
             <ArrowUp className="ml-2 h-4 w-4" />
@@ -188,7 +194,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
         >
           <div className="flex items-center gap-2">
             <Hash className="h-4 w-4" />
-            执行次数
+            {t("colExecutions")}
           </div>
           {column.getIsSorted() === "asc" ? (
             <ArrowUp className="ml-2 h-4 w-4" />
@@ -205,7 +211,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
     },
     {
       id: "actions",
-      header: "操作",
+      header: t("colActions"),
       cell: ({ row }) => {
         const script = row.original
         return (
@@ -214,7 +220,7 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0"
-              title="执行脚本"
+              title={t("actionExecuteTitle")}
               onClick={() => onExecute(script.id)}
             >
               <Play className="h-4 w-4" />
@@ -228,12 +234,12 @@ export function createScriptColumns({ onExecute, onEdit, onDelete }: Handlers): 
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => onEdit(script.id)}>
                   <Edit className="mr-2 h-4 w-4" />
-                  编辑
+                  {t("actionEdit")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onDelete(script.id)} className="text-destructive">
                   <Trash2 className="mr-2 h-4 w-4" />
-                  删除
+                  {t("actionDelete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

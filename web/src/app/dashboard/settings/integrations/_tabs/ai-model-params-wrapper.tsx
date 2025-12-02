@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { aiModelParamsSchema } from "@/schemas/settings/integrations.schema"
 import { settingsApi } from "@/lib/api/settings"
@@ -10,6 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Sliders, Save, Loader2, RotateCcw } from "lucide-react"
 
 export function AIModelParamsWrapper() {
+  const tAI = useTranslations("settingsIntegrationsAI")
+  const tCommon = useTranslations("common")
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: aiModelParamsSchema,
     loadFn: async () => {
@@ -27,8 +30,8 @@ export function AIModelParamsWrapper() {
   return (
     <div className="space-y-4">
       <SettingsSection
-        title="模型参数"
-        description="调整AI模型的生成参数"
+        title={tAI("paramsSectionTitle")}
+        description={tAI("paramsSectionDescription")}
         icon={<Sliders className="h-5 w-5" />}
       >
         <FormInput form={form} name="temperature" label="Temperature" type="number" step={0.1} min={0} max={2} />
@@ -41,18 +44,18 @@ export function AIModelParamsWrapper() {
       <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
-          重置
+          {tCommon("reset")}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
+              {tCommon("saving")}
             </>
           ) : (
             <>
               <Save className="mr-2 h-4 w-4" />
-              保存
+              {tCommon("save")}
             </>
           )}
         </Button>

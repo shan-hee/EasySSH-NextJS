@@ -93,7 +93,7 @@ export const SmartAvatar = React.forwardRef<HTMLDivElement, SmartAvatarProps>(
       <Avatar ref={ref} className={cn(className)} {...props}>
         <AvatarImage
           src={src || undefined}
-          alt={displayName || username || "用户头像"}
+          alt={displayName || username || "User avatar"}
           onError={handleError}
           onLoad={handleLoad}
         />

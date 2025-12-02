@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 
 type LoaderState = "entering" | "loading" | "exiting"
 
@@ -12,11 +13,12 @@ interface ConnectionLoaderProps {
 }
 
 export function ConnectionLoader({
-  serverName = "服务器",
-  message = "正在连接",
+  serverName,
+  message,
   state = "loading",
   onAnimationComplete
 }: ConnectionLoaderProps) {
+  const t = useTranslations("terminal")
   const [animationState, setAnimationState] = useState<LoaderState>(state)
   const isEnteringRef = useRef(false)  // 标记是否正在播放进入动画
   const pendingExitRef = useRef(false) // 缓存待执行的退出请求
@@ -115,10 +117,12 @@ export function ConnectionLoader({
       {/* 文字信息 - 绝对定位，固定在中间 */}
       <div className="text-wrapper">
         <h1 className={"text-sm font-semibold uppercase tracking-wider text-zinc-900 dark:text-white"}>
-          {animationState === "exiting" ? "连接成功" : message}
+          {animationState === "exiting"
+            ? t("connectionLoaderSuccess")
+            : message ?? t("connectionLoaderConnecting")}
         </h1>
         <p className={"text-xs font-mono text-zinc-600 dark:text-zinc-500"}>
-          {serverName}
+          {serverName ?? t("connectionLoaderServerFallback")}
         </p>
       </div>
 

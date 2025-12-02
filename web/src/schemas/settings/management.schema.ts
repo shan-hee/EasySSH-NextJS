@@ -4,7 +4,10 @@ import { z } from "zod"
 export const backupConfigSchema = z.object({
   enabled: z.boolean(),
   frequency: z.enum(["hourly", "daily", "weekly", "monthly"]),
-  retention_days: z.number().min(1, "保留天数不能小于1").max(365, "保留天数不能超过365"),
+  retention_days: z
+    .number()
+    .min(1, "settingsValidation.backupRetentionMin")
+    .max(365, "settingsValidation.backupRetentionMax"),
   backup_items: z.object({
     database: z.boolean(),
     config: z.boolean(),
@@ -12,7 +15,7 @@ export const backupConfigSchema = z.object({
     logs: z.boolean(),
     recordings: z.boolean(),
   }),
-  storage_location: z.string().min(1, "存储位置不能为空"),
+  storage_location: z.string().min(1, "settingsValidation.storageLocationRequired"),
 })
 
 // 远程备份配置 Schema
@@ -27,7 +30,10 @@ export const remoteBackupSchema = z.object({
 
 // 手动备份 Schema
 export const manualBackupSchema = z.object({
-  description: z.string().max(200, "描述不能超过200字符").optional(),
+  description: z
+    .string()
+    .max(200, "settingsValidation.manualBackupDescriptionMax")
+    .optional(),
   backup_items: z.object({
     database: z.boolean(),
     config: z.boolean(),
@@ -39,7 +45,7 @@ export const manualBackupSchema = z.object({
 
 // 数据恢复 Schema
 export const dataRestoreSchema = z.object({
-  backup_file: z.string().min(1, "请选择备份文件"),
+  backup_file: z.string().min(1, "settingsValidation.restoreBackupFileRequired"),
   restore_options: z.object({
     overwrite: z.boolean(),
     validate: z.boolean(),

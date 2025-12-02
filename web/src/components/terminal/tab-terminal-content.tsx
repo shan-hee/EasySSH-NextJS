@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { useTabUIStore } from '@/stores/tab-ui-store'
 import type { TerminalSession } from './types'
 import type { TerminalSettings } from './terminal-settings-dialog'
+import { useTranslations } from "next-intl"
 
 // 工具栏固定高度常量 (py-1.5 + h-7 按钮 + border-b)
 const TOOLBAR_HEIGHT = 44 // px
@@ -81,6 +82,7 @@ export function TabTerminalContent({
     ? String(session.serverId)
     : ''
   const monitorEnabled = !!(session.type !== 'quick' && session.isConnected)
+  const tTerminal = useTranslations("terminal")
 
   return (
     <MonitorWebSocketProvider
@@ -95,7 +97,7 @@ export function TabTerminalContent({
           <div className="absolute inset-0 z-[60]">
             <ConnectionLoader
               serverName={`${session.username}@${session.host}`}
-              message="正在连接"
+              message={tTerminal("connectionLoaderConnecting")}
               state={loaderState}
               onAnimationComplete={onAnimationComplete}
             />
@@ -117,8 +119,8 @@ export function TabTerminalContent({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                aria-label="文件管理器"
-                title="文件管理器 (Ctrl+E)"
+                aria-label={tTerminal("ariaFileManager")}
+                title={tTerminal("titleFileManagerWithShortcut")}
                 onClick={() => setTabState(session.id, { isFileManagerOpen: !isFileManagerOpen })}
               >
                 <FolderOpen className="h-3.5 w-3.5" />
@@ -130,8 +132,8 @@ export function TabTerminalContent({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                aria-label="监控"
-                title="系统监控"
+                aria-label={tTerminal("ariaMonitor")}
+                title={tTerminal("titleMonitor")}
                 onClick={() => setTabState(session.id, { isMonitorOpen: !isMonitorOpen })}
               >
                 <Activity className="h-3.5 w-3.5" />
@@ -141,8 +143,8 @@ export function TabTerminalContent({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                aria-label="AI 助手"
-                title="AI 助手 (Ctrl+K)"
+                aria-label={tTerminal("ariaAiAssistant")}
+                title={tTerminal("titleAiAssistantWithShortcut")}
                 onClick={() => setTabState(session.id, { isAiInputOpen: !isAiInputOpen })}
               >
                 <Bot className="h-3.5 w-3.5" />
@@ -156,7 +158,11 @@ export function TabTerminalContent({
                 size="icon"
                 className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                 onClick={onToggleFullscreen}
-                title={isFullscreen ? '退出全屏' : '全屏'}
+                title={
+                  isFullscreen
+                    ? tTerminal("titleExitFullscreen")
+                    : tTerminal("titleEnterFullscreen")
+                }
               >
                 {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </Button>
@@ -165,7 +171,7 @@ export function TabTerminalContent({
                 size="icon"
                 className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
                 onClick={onToggleSettings}
-                title="设置"
+                title={tTerminal("titleSettings")}
               >
                 <Settings className="h-3.5 w-3.5" />
               </Button>

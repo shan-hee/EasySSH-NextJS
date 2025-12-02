@@ -219,8 +219,10 @@ type ChangePasswordRequest struct {
 
 // UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
-	Email  string  `json:"email,omitempty"`
-	Avatar *string `json:"avatar"` // 使用指针类型区分"未提供"和"空字符串"
+	Email    string  `json:"email,omitempty"`
+	Avatar   *string `json:"avatar"`             // 使用指针类型区分"未提供"和"空字符串"
+	Language string  `json:"language,omitempty"` // 用户界面语言偏好，如 zh-CN、en-US
+	Timezone string  `json:"timezone,omitempty"` // 用户时区偏好，如 Asia/Shanghai
 }
 
 // AuthResponse 认证响应
@@ -655,7 +657,14 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	// 更新资料
-	if err := h.authService.UpdateProfile(c.Request.Context(), parsedUID, req.Email, avatarValue); err != nil {
+	if err := h.authService.UpdateProfile(
+		c.Request.Context(),
+		parsedUID,
+		req.Email,
+		avatarValue,
+		req.Language,
+		req.Timezone,
+	); err != nil {
 		RespondError(c, http.StatusInternalServerError, "update_failed", "Failed to update profile")
 		return
 	}

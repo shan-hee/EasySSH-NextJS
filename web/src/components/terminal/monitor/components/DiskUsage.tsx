@@ -1,6 +1,7 @@
 "use client"
 
 import React from 'react';
+import { useTranslations } from "next-intl";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import type { DiskData } from '../types/metrics';
@@ -16,15 +17,15 @@ interface DiskUsageProps {
 }
 
 /**
- * 图表配置
+ * 图表配置（颜色由主题提供，标签使用 i18n）
  */
 const chartConfig = {
   used: {
-    label: "已使用",
+    label: "used",
     color: "var(--chart-1)",
   },
   free: {
-    label: "剩余",
+    label: "free",
     color: "var(--chart-2)",
   },
 } satisfies ChartConfig;
@@ -35,6 +36,7 @@ const chartConfig = {
  * 固定高度 142px
  */
 export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPercent }) => {
+  const t = useTranslations("terminalMonitor");
   // 转换数据格式为图表需要的格式
   const chartData = React.useMemo(
     () =>
@@ -111,17 +113,17 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
 
           return `
             <div style="font-size:11px;">
-              <div style="margin-bottom:4px;">总容量: ${total} ${totalUnit}</div>
+              <div style="margin-bottom:4px;">${t("diskTooltipTotal")}: ${total} ${totalUnit}</div>
               <div style="margin-bottom:2px;display:flex;align-items:center;gap:6px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${usedColor};"></span>
-                <span>已使用:</span>
+                <span>${t("diskTooltipUsed")}:</span>
                 <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
                   ${used} ${unit}
                 </span>
               </div>
               <div style="margin-bottom:2px;display:flex;align-items:center;gap:6px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${freeColor};"></span>
-                <span>剩余:</span>
+                <span>${t("diskTooltipFree")}:</span>
                 <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
                   ${freeDisplay} ${unit}
                 </span>
@@ -216,7 +218,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-semibold">磁盘</span>
+        <span className="text-xs font-semibold">{t("diskLabel")}</span>
         <span className={`text-xs font-mono font-semibold tabular-nums transition-colors duration-500 ${
           totalPercent > 90 ? 'text-red-500' : totalPercent > 80 ? 'text-yellow-500' : 'text-muted-foreground'
         }`}>

@@ -35,10 +35,12 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createUserColumns } from "@/app/dashboard/users/components/user-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 // 提取自 /dashboard/users/page.tsx 的用户管理内容
 // 去掉了 PageHeader，作为 Tab 内容使用
 export function UserManagementContent() {
+  const t = useTranslations("users")
   const { ready } = useAuthReady()
   // 数据状态
   const [users, setUsers] = useState<UserDetail[]>([])
@@ -102,7 +104,7 @@ export function UserManagementContent() {
     } catch (error: unknown) {
       console.error("加载用户列表失败:", error)
       setUsers([])
-      toast.error(getErrorMessage(error, "加载用户列表失败"))
+      toast.error(getErrorMessage(error, t("toastLoadFailed")))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -124,18 +126,18 @@ export function UserManagementContent() {
   // 创建用户
   const handleCreateUser = async () => {
     if (!newUser.username || !newUser.email || !newUser.password) {
-      toast.error("请填写完整的用户信息")
+      toast.error(t("toastFormIncomplete"))
       return
     }
 
     try {
       await usersApi.create(newUser)
-      toast.success("用户创建成功")
+      toast.success(t("toastCreateSuccess"))
       setIsCreateDialogOpen(false)
       setNewUser({ username: "", email: "", password: "", role: "user" })
       await loadUsers()
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "创建用户失败"))
+      toast.error(getErrorMessage(error, t("toastCreateFailed")))
     }
   }
 
@@ -154,18 +156,18 @@ export function UserManagementContent() {
   const handleUpdateUser = async () => {
     if (!editingUserId) return
     if (!editUser.username || !editUser.email) {
-      toast.error("请填写完整的用户信息")
+      toast.error(t("toastFormIncomplete"))
       return
     }
 
     try {
       await usersApi.update(editingUserId, editUser)
-      toast.success("用户更新成功")
+      toast.success(t("toastUpdateSuccess"))
       setIsEditDialogOpen(false)
       setEditingUserId(null)
       await loadUsers()
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "更新用户失败"))
+      toast.error(getErrorMessage(error, t("toastUpdateFailed")))
     }
   }
 
@@ -179,40 +181,40 @@ export function UserManagementContent() {
   // 修改密码
   const handleChangePassword = async () => {
     if (!passwordUserId) return
-    if (!newPassword) {
-      toast.error("请输入新密码")
+    if (!newPassword || newPassword.length < 6) {
+      toast.error(t("toastPasswordTooShort"))
       return
     }
 
     try {
       await usersApi.changePassword(passwordUserId, { new_password: newPassword })
-      toast.success("密码修改成功")
+      toast.success(t("toastPasswordChangeSuccess"))
       setIsPasswordDialogOpen(false)
       setPasswordUserId(null)
       setNewPassword("")
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "修改密码失败"))
+      toast.error(getErrorMessage(error, t("toastPasswordChangeFailed")))
     }
   }
 
   // 删除用户
   const handleDeleteUser = async (userId: string, username: string) => {
-    if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复。`)) {
+    if (!confirm(t("confirmDeleteSingle", { username }))) {
       return
     }
 
     try {
       await usersApi.delete(userId)
-      toast.success("用户删除成功")
+      toast.success(t("toastDeleteSuccess"))
       await loadUsers()
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "删除用户失败"))
+      toast.error(getErrorMessage(error, t("toastDeleteFailed")))
     }
   }
 
   // 批量删除
   const handleBatchDelete = async (userIds: string[]) => {
-    if (!confirm(`确定要删除选中的 ${userIds.length} 个用户吗？此操作不可恢复。`)) {
+    if (!confirm(t("confirmDeleteBatch", { count: userIds.length }))) {
       return
     }
 
@@ -220,10 +222,10 @@ export function UserManagementContent() {
       await Promise.all(
         userIds.map((id) => usersApi.delete(id))
       )
-      toast.success(`成功删除 ${userIds.length} 个用户`)
+      toast.success(t("toastBatchDeleteSuccess", { count: userIds.length }))
       await loadUsers()
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "批量删除失败"))
+      toast.error(getErrorMessage(error, t("toastDeleteFailed")))
     }
   }
 
@@ -253,41 +255,61 @@ export function UserManagementContent() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">总用户数</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsTotalUsers")}
+            </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statistics.totalUsers}</div>
+            <p className="text-xs text-muted-foreground">
+              {t("statsTotalUsersDesc")}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">管理员</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsAdmins")}
+            </CardTitle>
             <Shield className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statistics.adminUsers}</div>
+            <p className="text-xs text-muted-foreground">
+              {t("statsAdminsDesc")}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">普通用户</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsNormalUsers")}
+            </CardTitle>
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statistics.normalUsers}</div>
+            <p className="text-xs text-muted-foreground">
+              {t("statsNormalUsersDesc")}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">只读用户</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("statsViewers")}
+            </CardTitle>
             <Eye className="h-4 w-4 text-gray-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statistics.viewerUsers}</div>
+            <p className="text-xs text-muted-foreground">
+              {t("statsViewersDesc")}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -296,12 +318,14 @@ export function UserManagementContent() {
       <Card className="flex-1 min-h-0">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-lg">用户管理</CardTitle>
-            <CardDescription>显示 {users.length} 位用户</CardDescription>
+            <CardTitle className="text-lg">{t("pageTitle")}</CardTitle>
+            <CardDescription>
+              {t("tableDescription", { count: users.length })}
+            </CardDescription>
           </div>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            新建用户
+            {t("btnNewUser")}
           </Button>
         </CardHeader>
         <CardContent className="flex-1 min-h-0 p-4 pt-0">
@@ -313,15 +337,15 @@ export function UserManagementContent() {
               <DataTableToolbar
                 table={table}
                 searchKey="username"
-                searchPlaceholder="搜索用户名或邮箱..."
+                searchPlaceholder={t("searchPlaceholder")}
                 filters={[
                   {
                     column: "role",
-                    title: "角色",
+                    title: t("filterRoleTitle"),
                     options: [
-                      { label: "管理员", value: "admin", icon: Shield },
-                      { label: "普通用户", value: "user", icon: Users },
-                      { label: "只读用户", value: "viewer", icon: Eye },
+                      { label: t("filterRoleAdmin"), value: "admin", icon: Shield },
+                      { label: t("filterRoleUser"), value: "user", icon: Users },
+                      { label: t("filterRoleViewer"), value: "viewer", icon: Eye },
                     ],
                   },
                 ]}
@@ -341,7 +365,7 @@ export function UserManagementContent() {
                 className="h-7"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                批量删除
+                {t("batchDelete")}
               </Button>
             )}
           />
@@ -352,41 +376,49 @@ export function UserManagementContent() {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>创建用户</DialogTitle>
-            <DialogDescription>添加新的系统用户账户</DialogDescription>
+            <DialogTitle>{t("dialogCreateTitle")}</DialogTitle>
+            <DialogDescription>{t("dialogCreateDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="create-username">用户名 *</Label>
+              <Label htmlFor="create-username">
+                {t("fieldUsername")} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="create-username"
                 value={newUser.username}
                 onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                placeholder="请输入用户名"
+                placeholder={t("placeholderUsername")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-email">邮箱 *</Label>
+              <Label htmlFor="create-email">
+                {t("fieldEmail")} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="create-email"
                 type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                placeholder="请输入邮箱地址"
+                placeholder={t("placeholderEmail")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-password">密码 *</Label>
+              <Label htmlFor="create-password">
+                {t("fieldPassword")} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="create-password"
                 type="password"
                 value={newUser.password}
                 onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                placeholder="请输入密码"
+                placeholder={t("placeholderPassword")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-role">角色 *</Label>
+              <Label htmlFor="create-role">
+                {t("fieldRole")} <span className="text-destructive">*</span>
+              </Label>
               <Select
                 value={newUser.role}
                 onValueChange={(value: UserRole) => setNewUser({ ...newUser, role: value })}
@@ -395,18 +427,18 @@ export function UserManagementContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">管理员</SelectItem>
-                  <SelectItem value="user">普通用户</SelectItem>
-                  <SelectItem value="viewer">只读用户</SelectItem>
+                  <SelectItem value="admin">{t("roleAdminFull")}</SelectItem>
+                  <SelectItem value="user">{t("roleUserFull")}</SelectItem>
+                  <SelectItem value="viewer">{t("roleViewerFull")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              取消
+              {t("dialogCancel")}
             </Button>
-            <Button onClick={handleCreateUser}>创建</Button>
+            <Button onClick={handleCreateUser}>{t("dialogCreateSubmit")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -415,12 +447,14 @@ export function UserManagementContent() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>编辑用户</DialogTitle>
-            <DialogDescription>修改用户信息和权限</DialogDescription>
+            <DialogTitle>{t("dialogEditTitle")}</DialogTitle>
+            <DialogDescription>{t("dialogEditDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-username">用户名 *</Label>
+              <Label htmlFor="edit-username">
+                {t("fieldUsername")} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="edit-username"
                 value={editUser.username}
@@ -428,7 +462,9 @@ export function UserManagementContent() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-email">邮箱 *</Label>
+              <Label htmlFor="edit-email">
+                {t("fieldEmail")} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="edit-email"
                 type="email"
@@ -437,7 +473,9 @@ export function UserManagementContent() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-role">角色 *</Label>
+              <Label htmlFor="edit-role">
+                {t("fieldRole")} <span className="text-destructive">*</span>
+              </Label>
               <Select
                 value={editUser.role}
                 onValueChange={(value: UserRole) => setEditUser({ ...editUser, role: value })}
@@ -446,18 +484,18 @@ export function UserManagementContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">管理员</SelectItem>
-                  <SelectItem value="user">普通用户</SelectItem>
-                  <SelectItem value="viewer">只读用户</SelectItem>
+                  <SelectItem value="admin">{t("roleAdminFull")}</SelectItem>
+                  <SelectItem value="user">{t("roleUserFull")}</SelectItem>
+                  <SelectItem value="viewer">{t("roleViewerFull")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              取消
+              {t("dialogCancel")}
             </Button>
-            <Button onClick={handleUpdateUser}>保存</Button>
+            <Button onClick={handleUpdateUser}>{t("dialogEditSubmit")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -466,26 +504,28 @@ export function UserManagementContent() {
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>修改密码</DialogTitle>
-            <DialogDescription>为用户设置新密码</DialogDescription>
+            <DialogTitle>{t("dialogPasswordTitle")}</DialogTitle>
+            <DialogDescription>{t("dialogPasswordDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="new-password">新密码 *</Label>
+              <Label htmlFor="new-password">
+                {t("fieldNewPassword")} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="new-password"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="请输入新密码"
+                placeholder={t("placeholderNewPassword")}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)}>
-              取消
+              {t("dialogCancel")}
             </Button>
-            <Button onClick={handleChangePassword}>确定</Button>
+            <Button onClick={handleChangePassword}>{t("dialogPasswordSubmit")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

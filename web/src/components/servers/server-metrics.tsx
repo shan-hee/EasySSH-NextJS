@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -12,7 +13,7 @@ import {
   Network,
   Clock,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
 } from "lucide-react"
 
 interface SystemMetrics {
@@ -45,6 +46,7 @@ interface ServerMetricsProps {
 
 export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
   const [refreshing, setRefreshing] = useState(false)
+  const t = useTranslations("serverMetrics")
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -61,21 +63,25 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
   }
 
   const getUsageStatus = (usage: number) => {
-    if (usage < 60) return { text: "正常", color: "text-green-600" }
-    if (usage < 80) return { text: "警告", color: "text-yellow-600" }
-    return { text: "危险", color: "text-red-600" }
+    if (usage < 60)
+      return { text: t("statusNormal"), color: "text-green-600" }
+    if (usage < 80)
+      return { text: t("statusWarning"), color: "text-yellow-600" }
+    return { text: t("statusDanger"), color: "text-red-600" }
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">{serverName} - 系统监控</h3>
+        <h3 className="text-lg font-semibold">
+          {t("sectionTitle", { name: serverName })}
+        </h3>
         <button
           onClick={handleRefresh}
           disabled={refreshing}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
-          {refreshing ? "刷新中..." : "刷新数据"}
+          {refreshing ? t("refreshing") : t("refresh")}
         </button>
       </div>
 
@@ -83,7 +89,9 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
         {/* CPU 使用率 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">CPU 使用率</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("cardCpuTitle")}
+            </CardTitle>
             <Cpu className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -99,7 +107,10 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {metrics.cpu.cores} 核心 | 负载: {metrics.cpu.load.join(", ")}
+              {t("cpuCoresAndLoad", {
+                cores: metrics.cpu.cores,
+                load: metrics.cpu.load.join(", "),
+              })}
             </p>
           </CardContent>
         </Card>
@@ -107,7 +118,9 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
         {/* 内存使用率 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">内存使用</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("cardMemoryTitle")}
+            </CardTitle>
             <MemoryStick className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -131,7 +144,9 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
         {/* 磁盘使用率 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">磁盘使用</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("cardDiskTitle")}
+            </CardTitle>
             <HardDrive className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -155,17 +170,21 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
         {/* 运行时间 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">运行时间</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("cardUptimeTitle")}
+            </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-lg font-bold">{metrics.uptime}</div>
             <div className="flex items-center gap-1 mt-2">
               <TrendingUp className="h-3 w-3 text-green-500" />
-              <span className="text-xs text-green-600">稳定运行</span>
+              <span className="text-xs text-green-600">
+                {t("uptimeStableLabel")}
+              </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              自上次重启以来
+              {t("uptimeSinceLastReboot")}
             </p>
           </CardContent>
         </Card>
@@ -176,7 +195,7 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Network className="h-5 w-5" />
-            网络统计
+            {t("cardNetworkTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -184,14 +203,18 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-2">
                 <TrendingDown className="h-4 w-4 text-blue-500" />
-                <span className="text-sm font-medium">下载流量</span>
+                <span className="text-sm font-medium">
+                  {t("networkDownloadLabel")}
+                </span>
               </div>
               <span className="font-bold">{metrics.network.rxBytes}</span>
             </div>
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-green-500" />
-                <span className="text-sm font-medium">上传流量</span>
+                <span className="text-sm font-medium">
+                  {t("networkUploadLabel")}
+                </span>
               </div>
               <span className="font-bold">{metrics.network.txBytes}</span>
             </div>
@@ -204,12 +227,14 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
-            实时性能图表
+            {t("cardRealtimeTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-48 bg-muted rounded-lg flex items-center justify-center">
-            <p className="text-muted-foreground">性能图表将在此处显示</p>
+            <p className="text-muted-foreground">
+              {t("realtimePlaceholder")}
+            </p>
           </div>
         </CardContent>
       </Card>

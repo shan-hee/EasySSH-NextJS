@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { Command, Package, Database, Save, Loader2, RotateCcw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -14,6 +15,8 @@ import { settingsApi } from "@/lib/api/settings"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 
 export function CompletionTab() {
+  const t = useTranslations("settingsSystemCompletion")
+  const tCommon = useTranslations("common")
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: completionSchema,
     loadFn: async () => {
@@ -47,16 +50,14 @@ export function CompletionTab() {
     <div className="space-y-4">
       {/* 补全功能总开关 */}
       <SettingsSection
-        title="补全功能"
-        description="配置终端命令补全的全局行为"
+        title={t("sectionMainTitle")}
+        description={t("sectionMainDescription")}
         icon={<Command className="h-5 w-5" />}
       >
         <div className="flex items-center justify-between">
           <div>
-            <Label htmlFor="completion_enabled">启用命令补全</Label>
-            <p className="text-sm text-muted-foreground">
-              全局启用或禁用终端命令补全功能
-            </p>
+            <Label htmlFor="completion_enabled">{t("fieldEnabledLabel")}</Label>
+            <p className="text-sm text-muted-foreground">{t("fieldEnabledDesc")}</p>
           </div>
           <Switch
             id="completion_enabled"
@@ -69,7 +70,7 @@ export function CompletionTab() {
           <Alert>
             <InfoIcon className="h-4 w-4" />
             <AlertDescription>
-              补全功能已禁用。启用后,用户可以在终端中使用 Tab 键触发命令补全。
+              {t("disabledAlert")}
             </AlertDescription>
           </Alert>
         )}
@@ -78,8 +79,8 @@ export function CompletionTab() {
       {/* 补全提供者和配额配置 */}
       {completionEnabled && (
         <SettingsSection
-          title="补全提供者与配额"
-          description="配置补全数据来源及其在结果中的数量限制"
+          title={t("sectionProvidersTitle")}
+          description={t("sectionProvidersDescription")}
           icon={<Package className="h-5 w-5" />}
         >
           <div className="space-y-4">
@@ -87,9 +88,11 @@ export function CompletionTab() {
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <Label htmlFor="provider_local" className="text-base font-medium">本地命令库</Label>
+                  <Label htmlFor="provider_local" className="text-base font-medium">
+                    {t("providerLocalTitle")}
+                  </Label>
                   <p className="text-sm text-muted-foreground mt-1">
-                    内置 200+ 常用 Linux/Unix 命令和子命令
+                    {t("providerLocalDesc")}
                   </p>
                 </div>
                 <Switch
@@ -103,7 +106,7 @@ export function CompletionTab() {
               {providers?.local && (
                 <div className="space-y-2 pt-2 border-t">
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground w-16">最少</span>
+                    <span className="text-sm text-muted-foreground w-16">{t("labelMin")}</span>
                     <Slider
                       min={0}
                       max={10}
@@ -119,7 +122,7 @@ export function CompletionTab() {
                     </span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground w-16">最多</span>
+                    <span className="text-sm text-muted-foreground w-16">{t("labelMax")}</span>
                     <Slider
                       min={1}
                       max={10}
@@ -142,9 +145,11 @@ export function CompletionTab() {
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <Label htmlFor="provider_script" className="text-base font-medium">脚本库</Label>
+                  <Label htmlFor="provider_script" className="text-base font-medium">
+                    {t("providerScriptTitle")}
+                  </Label>
                   <p className="text-sm text-muted-foreground mt-1">
-                    从用户保存的脚本库中提供补全建议
+                    {t("providerScriptDesc")}
                   </p>
                 </div>
                 <Switch
@@ -158,7 +163,7 @@ export function CompletionTab() {
               {providers?.script && (
                 <div className="space-y-2 pt-2 border-t">
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground w-16">最少</span>
+                    <span className="text-sm text-muted-foreground w-16">{t("labelMin")}</span>
                     <Slider
                       min={0}
                       max={10}
@@ -174,7 +179,7 @@ export function CompletionTab() {
                     </span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground w-16">最多</span>
+                    <span className="text-sm text-muted-foreground w-16">{t("labelMax")}</span>
                     <Slider
                       min={0}
                       max={10}
@@ -197,9 +202,11 @@ export function CompletionTab() {
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <Label htmlFor="provider_session" className="text-base font-medium">会话历史</Label>
+                  <Label htmlFor="provider_session" className="text-base font-medium">
+                    {t("providerSessionTitle")}
+                  </Label>
                   <p className="text-sm text-muted-foreground mt-1">
-                    从当前会话的命令历史中提供补全建议
+                    {t("providerSessionDesc")}
                   </p>
                 </div>
                 <Switch
@@ -213,7 +220,7 @@ export function CompletionTab() {
               {providers?.session && (
                 <div className="space-y-2 pt-2 border-t">
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground w-16">最少</span>
+                    <span className="text-sm text-muted-foreground w-16">{t("labelMin")}</span>
                     <Slider
                       min={0}
                       max={10}
@@ -229,7 +236,7 @@ export function CompletionTab() {
                     </span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground w-16">最多</span>
+                    <span className="text-sm text-muted-foreground w-16">{t("labelMax")}</span>
                     <Slider
                       min={0}
                       max={10}
@@ -252,9 +259,11 @@ export function CompletionTab() {
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <Label htmlFor="provider_remote_history" className="text-base font-medium">远端历史命令</Label>
+                  <Label htmlFor="provider_remote_history" className="text-base font-medium">
+                    {t("providerRemoteHistoryTitle")}
+                  </Label>
                   <p className="text-sm text-muted-foreground mt-1">
-                    从服务器的 Shell 历史文件中获取补全建议
+                    {t("providerRemoteHistoryDesc")}
                   </p>
                 </div>
                 <Switch
@@ -269,9 +278,11 @@ export function CompletionTab() {
                 <div className="space-y-3 pt-2 border-t">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="remote_history_unlimited" className="text-sm">无限制模式</Label>
+                      <Label htmlFor="remote_history_unlimited" className="text-sm">
+                        {t("labelUnlimitedMode")}
+                      </Label>
                       <p className="text-xs text-muted-foreground">
-                        允许填充剩余的补全位置
+                        {t("labelUnlimitedModeDesc")}
                       </p>
                     </div>
                     <Switch
@@ -284,7 +295,9 @@ export function CompletionTab() {
                   </div>
                   {quotas?.remote_history_unlimited && (
                     <div className="flex items-center gap-4">
-                      <span className="text-sm text-muted-foreground w-16">软上限</span>
+                      <span className="text-sm text-muted-foreground w-16">
+                        {t("labelSoftLimit")}
+                      </span>
                       <Slider
                         min={1}
                         max={20}
@@ -307,7 +320,7 @@ export function CompletionTab() {
             <Alert>
               <InfoIcon className="h-4 w-4" />
               <AlertDescription>
-                配额分配确保不同来源的补全结果均衡显示。“最少”保证该来源至少显示的数量，“最多”限制该来源最多显示的数量。
+                {t("quotaHint")}
               </AlertDescription>
             </Alert>
           </div>
@@ -317,13 +330,13 @@ export function CompletionTab() {
       {/* 缓存设置 */}
       {completionEnabled && (
         <SettingsSection
-          title="缓存设置"
-          description="配置补全结果的缓存策略以提升性能"
+          title={t("sectionCacheTitle")}
+          description={t("sectionCacheDescription")}
           icon={<Database className="h-5 w-5" />}
         >
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cache_ttl">缓存有效期</Label>
+              <Label htmlFor="cache_ttl">{t("fieldCacheTtl")}</Label>
               <div className="flex items-center gap-4">
                 <Slider
                   id="cache_ttl"
@@ -337,16 +350,17 @@ export function CompletionTab() {
                   className="flex-1"
                 />
                 <span className="w-16 text-sm text-muted-foreground">
-                  {cache?.ttl_minutes ?? 5} 分钟
+                  {cache?.ttl_minutes ?? 5}
+                  {t("fieldCacheTtlSuffix")}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                补全结果在缓存中保留的时间
+                {t("fieldCacheTtlDesc")}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cache_max">最大缓存数</Label>
+              <Label htmlFor="cache_max">{t("fieldCacheMax")}</Label>
               <div className="flex items-center gap-4">
                 <Slider
                   id="cache_max"
@@ -360,11 +374,12 @@ export function CompletionTab() {
                   className="flex-1"
                 />
                 <span className="w-16 text-sm text-muted-foreground">
-                  {cache?.max_entries ?? 100} 条
+                  {cache?.max_entries ?? 100}
+                  {t("fieldCacheMaxSuffix")}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                最多缓存的补全结果数量,超出后使用 LRU 策略淘汰
+                {t("fieldCacheMaxDesc")}
               </p>
             </div>
           </div>
@@ -374,7 +389,7 @@ export function CompletionTab() {
       <Alert>
         <InfoIcon className="h-4 w-4" />
         <AlertDescription>
-          这些是全局补全配置。用户可以在终端设置中进一步自定义触发方式、显示数量等个性化选项。
+          {t("finalAlert")}
         </AlertDescription>
       </Alert>
 
@@ -382,18 +397,18 @@ export function CompletionTab() {
       <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
-          重置
+          {tCommon("reset")}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
+              {tCommon("saving")}
             </>
           ) : (
             <>
               <Save className="mr-2 h-4 w-4" />
-              保存
+              {tCommon("save")}
             </>
           )}
         </Button>

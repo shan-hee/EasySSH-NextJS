@@ -10,6 +10,8 @@ export interface User {
   email: string
   role: string  // 基础类型使用string,UserDetail中会强化为UserRole
   avatar?: string
+  language?: string
+  timezone?: string
   two_factor_enabled?: boolean
   notify_email_login?: boolean
   notify_email_alert?: boolean

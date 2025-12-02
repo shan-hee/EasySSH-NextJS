@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useTransition, useOptimistic } from "react"
+import React, { useState, useCallback, useTransition, useOptimistic, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown } from "lucide-react"
 import { fileTransfersApi, type FileTransfer, type FileTransferStatistics } from "@/lib/api/file-transfers"
@@ -10,6 +10,7 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createTransferColumns } from "./transfer-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 // 定义页面数据类型
 interface FileTransfersPageData {
@@ -56,6 +57,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
   const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
   const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
   const [totalCount, setTotalCount] = useState(initialData?.totalCount || 0)
+  const t = useTranslations("transfers")
 
   // 乐观更新：立即从 UI 中移除删除的项目
   const [optimisticTransfers, setOptimisticTransfers] = useOptimistic(
@@ -83,7 +85,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
         setTotalCount(transfersResponse.total || 0)
         setStatistics(statsResponse)
       } catch (error: unknown) {
-        toast.error(getErrorMessage(error, "无法加载传输记录"))
+        toast.error(getErrorMessage(error, t("loadFailed")))
       } finally {
         setRefreshing(false)
       }
@@ -125,7 +127,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
   // 删除传输记录（使用 API + 乐观更新）
   const handleDelete = async (id: string) => {
-    if (!confirm("确定要删除这条传输记录吗？")) {
+    if (!confirm(t("confirmDelete"))) {
       return
     }
 
@@ -135,40 +137,44 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     startTransition(async () => {
       try {
         await fileTransfersApi.delete(id)
-        toast.success("传输记录已删除")
+        toast.success(t("deleteSuccess"))
         // 刷新数据
         await loadData(page, pageSize)
       } catch (error: unknown) {
-        toast.error(getErrorMessage(error, "删除失败"))
+        toast.error(getErrorMessage(error, t("deleteFailed")))
         // 恢复数据
         await loadData(page, pageSize)
       }
     })
   }
 
-  // 创建列定义
-  const columns = createTransferColumns({
-    onDelete: handleDelete,
-  })
+  // 创建列定义（依赖 t 和删除回调）
+  const columns = useMemo(
+    () =>
+      createTransferColumns(t, {
+        onDelete: handleDelete,
+      }),
+    [t, handleDelete],
+  )
 
   // 筛选选项
   const filters = [
     {
       column: "transfer_type",
-      title: "类型",
+      title: t("type"),
       options: [
-        { label: "上传", value: "upload", icon: UploadIcon },
-        { label: "下载", value: "download", icon: DownloadIcon },
+        { label: t("typeUpload"), value: "upload", icon: UploadIcon },
+        { label: t("typeDownload"), value: "download", icon: DownloadIcon },
       ],
     },
     {
       column: "status",
-      title: "状态",
+      title: t("status"),
       options: [
-        { label: "已完成", value: "completed" },
-        { label: "进行中", value: "transferring" },
-        { label: "失败", value: "failed" },
-        { label: "等待中", value: "pending" },
+        { label: t("statusCompleted"), value: "completed" },
+        { label: t("statusTransferring"), value: "transferring" },
+        { label: t("statusFailed"), value: "failed" },
+        { label: t("statusPending"), value: "pending" },
       ],
     },
   ]
@@ -179,20 +185,22 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
       <div className="grid gap-4 md:grid-cols-4 shrink-0">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">总传输</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsTotal")}</CardTitle>
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statistics?.total_transfers || 0}</div>
             <p className="text-xs text-muted-foreground">
-              成功 {statistics?.completed_transfers || 0} 次
+              {t("statsTotalDesc", {
+                completed: statistics?.completed_transfers || 0,
+              })}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">上传</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsUpload")}</CardTitle>
             <UploadIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -207,7 +215,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">下载</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsDownload")}</CardTitle>
             <DownloadIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -222,14 +230,14 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">失败传输</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsFailed")}</CardTitle>
             <XCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
               {statistics?.failed_transfers || 0}
             </div>
-            <p className="text-xs text-muted-foreground">需要重试</p>
+            <p className="text-xs text-muted-foreground">{t("statsFailedDesc")}</p>
           </CardContent>
         </Card>
       </div>
@@ -244,12 +252,12 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
         totalRows={totalCount}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
-        emptyMessage="暂无传输记录"
+        emptyMessage={t("empty")}
         toolbar={(table) => (
           <DataTableToolbar
             table={table}
             searchKey="file_name"
-            searchPlaceholder="搜索文件名或路径..."
+            searchPlaceholder={t("searchPlaceholder")}
             filters={filters}
             onRefresh={handleRefresh}
             showRefresh={true}

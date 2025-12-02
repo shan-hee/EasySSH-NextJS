@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Settings2 } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 interface ColumnVisibilityProps {
   columns: Array<{
@@ -20,16 +21,18 @@ interface ColumnVisibilityProps {
 }
 
 export function ColumnVisibility({ columns }: ColumnVisibilityProps) {
+  const tCommon = useTranslations("common")
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="ml-auto">
           <Settings2 className="h-4 w-4" />
-          列设置
+          {tCommon("tableColumns")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[150px]">
-        <DropdownMenuLabel>显示列</DropdownMenuLabel>
+        <DropdownMenuLabel>{tCommon("tableColumnsLabel")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {columns.map((column) => (
           <DropdownMenuCheckboxItem

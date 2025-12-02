@@ -52,7 +52,7 @@ export const TeamSwitcher = React.memo(function TeamSwitcher({
           <SidebarMenuButton
             size="lg"
             className="flex-1 group-data-[collapsible=icon]:hover:bg-sidebar-accent group relative group-data-[collapsible=icon]:cursor-ew-resize group-data-[state=expanded]:cursor-pointer group-data-[state=expanded]:hover:bg-sidebar-accent"
-            aria-label={state === "expanded" ? "返回主页" : "展开侧边栏"}
+            aria-label={state === "expanded" ? "Go to home" : "Expand sidebar"}
             onClick={handleLogoClick}
           >
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg relative">
@@ -76,7 +76,7 @@ export const TeamSwitcher = React.memo(function TeamSwitcher({
           <button
             onClick={handleToggleSidebar}
             className="flex items-center justify-center size-8 rounded hover:bg-sidebar-accent ml-1 group-data-[collapsible=icon]:hidden cursor-ew-resize"
-            aria-label="折叠侧边栏"
+            aria-label="Collapse sidebar"
           >
             <PanelLeft className="size-4" />
           </button>

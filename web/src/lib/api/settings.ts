@@ -72,7 +72,7 @@ export interface SystemConfig {
   system_favicon: string
 
   // 国际化设置
-  default_language: "zh-CN" | "en-US" | "ja-JP"
+  default_language: "zh-CN" | "en-US"
   default_timezone: string
   date_format: string
 

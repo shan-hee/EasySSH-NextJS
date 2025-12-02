@@ -13,13 +13,6 @@ const statusColors = {
   timeout: "bg-red-100 text-red-800 border-red-200",
 }
 
-// 状态标签映射
-const statusLabels = {
-  active: "活动",
-  closed: "已关闭",
-  timeout: "超时",
-}
-
 // 格式化数据传输量
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -27,20 +20,6 @@ function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
-}
-
-// 格式化时长
-function formatDuration(seconds: number | undefined): string {
-  if (!seconds) return '-'
-  if (seconds < 60) return `${seconds}秒`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  if (minutes < 60) {
-    return remainingSeconds > 0 ? `${minutes}分${remainingSeconds}秒` : `${minutes}分钟`
-  }
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return remainingMinutes > 0 ? `${hours}小时${remainingMinutes}分钟` : `${hours}小时`
 }
 
 // 格式化时间
@@ -52,20 +31,42 @@ function formatTimestamp(timestamp: string): { date: string; time: string } {
   }
 }
 
-// 格式化客户端IP
-function formatClientIP(ip: string) {
-  if (ip === '::1' || ip === '127.0.0.1') {
-    return '本地连接'
-  }
-  return ip
-}
-
 interface SessionColumnsOptions {
   onExport?: (session: SSHSessionDetail) => void
   onDelete?: (sessionId: string) => void
 }
 
-export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef<SSHSessionDetail>[] {
+export function createSessionColumns(
+  options: SessionColumnsOptions | undefined,
+  t: (key: string, values?: Record<string, number | string>) => string
+): ColumnDef<SSHSessionDetail>[] {
+  const formatDuration = (seconds: number | undefined): string => {
+    if (!seconds) return "-"
+    if (seconds < 60) return t("durationSeconds", { seconds })
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    if (minutes < 60) {
+      return remainingSeconds > 0
+        ? t("durationMinutesSeconds", {
+            minutes,
+            seconds: remainingSeconds,
+          })
+        : t("durationMinutes", { minutes })
+    }
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    return remainingMinutes > 0
+      ? t("durationHoursMinutes", { hours, minutes: remainingMinutes })
+      : t("durationHours", { hours })
+  }
+
+  const formatClientIP = (ip: string) => {
+    if (ip === "::1" || ip === "127.0.0.1") {
+      return t("clientLocal")
+    }
+    return ip
+  }
+
   return [
     // 服务器信息列
     {
@@ -78,7 +79,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
             className="-ml-3 h-8"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            服务器
+            {t("colServer")}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -97,7 +98,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
     // 会话ID列
     {
       accessorKey: "session_id",
-      header: "会话ID",
+      header: t("colSessionId"),
       cell: ({ row }) => {
         const sessionId = row.getValue("session_id") as string
         return (
@@ -109,7 +110,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
     // 客户端信息列
     {
       accessorKey: "client_ip",
-      header: "客户端",
+      header: t("colClient"),
       cell: ({ row }) => {
         const session = row.original
         return (
@@ -117,7 +118,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
             <div className="font-medium">{formatClientIP(session.client_ip)}</div>
             {session.client_port > 0 && (
               <div className="text-xs text-muted-foreground">
-                端口: {session.client_port}
+                Port: {session.client_port}
               </div>
             )}
           </div>
@@ -139,7 +140,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
             className="-ml-3 h-8"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            连接时间
+            {t("colConnectedAt")}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -158,7 +159,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
     // 断开时间列
     {
       accessorKey: "disconnected_at",
-      header: "断开时间",
+      header: t("colDisconnectedAt"),
       cell: ({ row }) => {
         const disconnectedAt = row.getValue("disconnected_at") as string | null
         if (!disconnectedAt) {
@@ -185,7 +186,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
             className="-ml-3 h-8"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            时长
+            {t("colDuration")}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -200,7 +201,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
     // 数据传输列
     {
       id: "data_transfer",
-      header: "数据传输",
+      header: t("colTraffic"),
       cell: ({ row }) => {
         const session = row.original
         return (
@@ -221,14 +222,19 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
     // 状态列
     {
       accessorKey: "status",
-      header: "状态",
+      header: t("colStatus"),
       cell: ({ row }) => {
         const session = row.original
         const status = session.status as keyof typeof statusColors
+        const statusLabelMap: Record<string, string> = {
+          active: t("statusActive"),
+          closed: t("statusClosed"),
+          timeout: t("statusTimeout"),
+        }
         return (
           <div>
             <Badge className={statusColors[status]}>
-              {statusLabels[status]}
+              {statusLabelMap[status] ?? status}
             </Badge>
             {session.error_message && (
               <div className="text-xs text-red-600 mt-1">{session.error_message}</div>
@@ -244,7 +250,7 @@ export function createSessionColumns(options?: SessionColumnsOptions): ColumnDef
     // 操作列
     {
       id: "actions",
-      header: () => <div className="text-right">操作</div>,
+      header: () => <div className="text-right">{t("colActions")}</div>,
       cell: ({ row }) => {
         const session = row.original
         return (

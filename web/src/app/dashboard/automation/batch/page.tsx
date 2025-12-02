@@ -59,9 +59,18 @@ import {
 } from "lucide-react"
 import { batchTasksApi, scriptsApi, serversApi, type BatchTask, type Script, type Server } from "@/lib/api"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { useTranslations } from "next-intl"
 
 export default function AutomationBatchPage() {
  const { ready } = useAuthReady()
+ const { user } = useClientAuth()
+ const { data: systemConfig } = useSystemConfig()
+ const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+ const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+ const t = useTranslations("automationBatch")
  // 数据状态
  const [tasks, setTasks] = useState<BatchTask[]>([])
  const [servers, setServers] = useState<Server[]>([])
@@ -161,7 +170,7 @@ export default function AutomationBatchPage() {
  const toggleServer = (serverId: string) => {
  const server = servers.find(s => s.id === serverId)
  if (server && server.status !== "online") {
- toast.warning("只能选择在线的服务器")
+ toast.warning(t("toastOnlyOnlineServers"))
  return
  }
 
@@ -185,15 +194,15 @@ export default function AutomationBatchPage() {
  // 执行批量命令
  const handleExecuteCommand = async () => {
  if (selectedServers.length === 0) {
- toast.error("请选择至少一个服务器")
+ toast.error(t("toastSelectAtLeastOneServer"))
  return
  }
  if (!command.trim()) {
- toast.error("请输入要执行的命令")
+ toast.error(t("fieldCommandPlaceholder"))
  return
  }
  if (!taskName.trim()) {
- toast.error("请输入任务名称")
+ toast.error(t("toastTaskNameRequired"))
  return
  }
 
@@ -207,7 +216,7 @@ export default function AutomationBatchPage() {
  execution_mode: executionMode,
  })
 
- toast.success("批量命令任务已创建")
+ toast.success(t("toastCommandTaskCreated"))
 
  // 重置表单
  setCommand("")
@@ -218,7 +227,7 @@ export default function AutomationBatchPage() {
  await loadData()
  } catch (error: unknown) {
  console.error("创建任务失败:", error)
- toast.error(getErrorMessage(error, "创建任务失败"))
+ toast.error(getErrorMessage(error, t("toastCreateTaskFailed")))
  } finally {
  setIsExecuting(false)
  }
@@ -227,15 +236,15 @@ export default function AutomationBatchPage() {
  // 执行批量脚本
  const handleExecuteScript = async () => {
  if (selectedServers.length === 0) {
- toast.error("请选择至少一个服务器")
+ toast.error(t("toastSelectAtLeastOneServer"))
  return
  }
  if (!scriptContent.trim() && !selectedScriptId) {
- toast.error("请输入脚本内容或选择脚本库中的脚本")
+ toast.error(t("toastEnterCommandOrScript"))
  return
  }
  if (!taskName.trim()) {
- toast.error("请输入任务名称")
+ toast.error(t("toastTaskNameRequired"))
  return
  }
 
@@ -250,7 +259,7 @@ export default function AutomationBatchPage() {
  execution_mode: executionMode,
  })
 
- toast.success("批量脚本任务已创建")
+ toast.success(t("toastScriptTaskCreated"))
 
  // 重置表单
  setScriptContent("")
@@ -262,7 +271,7 @@ export default function AutomationBatchPage() {
  await loadData()
  } catch (error: unknown) {
  console.error("创建任务失败:", error)
- toast.error(getErrorMessage(error, "创建任务失败"))
+ toast.error(getErrorMessage(error, t("toastCreateTaskFailed")))
  } finally {
  setIsExecuting(false)
  }
@@ -271,15 +280,15 @@ export default function AutomationBatchPage() {
  // 执行文件分发
  const handleDistributeFile = async () => {
  if (selectedServers.length === 0) {
- toast.error("请选择至少一个服务器")
+ toast.error(t("toastSelectAtLeastOneServer"))
  return
  }
  if (!filePath.trim() || !targetPath.trim()) {
- toast.error("请输入源文件路径和目标路径")
+ toast.error(t("toastEnterFilePaths"))
  return
  }
  if (!taskName.trim()) {
- toast.error("请输入任务名称")
+ toast.error(t("toastTaskNameRequired"))
  return
  }
 
@@ -293,7 +302,7 @@ export default function AutomationBatchPage() {
  execution_mode: executionMode,
  })
 
- toast.success("文件分发任务已创建")
+ toast.success(t("toastFileTaskCreated"))
 
  // 重置表单
  setFilePath("")
@@ -305,7 +314,7 @@ export default function AutomationBatchPage() {
  await loadData()
  } catch (error: unknown) {
  console.error("创建任务失败:", error)
- toast.error(getErrorMessage(error, "创建任务失败"))
+ toast.error(getErrorMessage(error, t("toastCreateTaskFailed")))
  } finally {
  setIsExecuting(false)
  }
@@ -319,19 +328,19 @@ export default function AutomationBatchPage() {
  setScriptSearchTerm("")
  }
 
- // 删除任务
+// 删除任务
  const handleDeleteTask = async (taskId: string) => {
- if (!confirm("确定要删除这个任务吗？")) {
+ if (!confirm(t("toastDeleteConfirm"))) {
  return
  }
 
  try {
  await batchTasksApi.delete(taskId)
- toast.success("任务删除成功")
+ toast.success(t("toastDeleteSuccess"))
  await loadData()
  } catch (error: unknown) {
  console.error("删除任务失败:", error)
- toast.error(getErrorMessage(error, "删除任务失败"))
+ toast.error(getErrorMessage(error, t("toastDeleteFailed")))
  }
  }
 
@@ -339,24 +348,24 @@ export default function AutomationBatchPage() {
  const handleStartTask = async (taskId: string) => {
  try {
  await batchTasksApi.start(taskId)
- toast.success("任务已启动")
+ toast.success(t("toastStartSuccess"))
  await loadData()
  } catch (error: unknown) {
  console.error("启动任务失败:", error)
- toast.error(getErrorMessage(error, "启动任务失败"))
+ toast.error(getErrorMessage(error, t("toastStartFailed")))
  }
  }
 
- const getStatusBadge = (status: string) => {
+const getStatusBadge = (status: string) => {
  switch (status) {
  case "completed":
- return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">已完成</Badge>
+ return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">{t("statusCompleted")}</Badge>
  case "running":
- return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">执行中</Badge>
+ return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">{t("statusRunning")}</Badge>
  case "failed":
- return <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100">失败</Badge>
+ return <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100">{t("statusFailed")}</Badge>
  case "pending":
- return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">等待中</Badge>
+ return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">{t("statusPending")}</Badge>
  default:
  return <Badge variant="secondary">{status}</Badge>
  }
@@ -376,35 +385,45 @@ export default function AutomationBatchPage() {
  }
 
  const formatDate = (dateString: string | undefined) => {
- if (!dateString) return "-"
- try {
- return new Date(dateString).toLocaleString("zh-CN")
- } catch {
- return dateString
- }
+   if (!dateString) return "-"
+   return formatInTimezone(
+     dateString,
+     {},
+     effectiveLocale,
+     effectiveTimezone,
+   )
  }
 
  const formatDuration = (started: string | undefined, completed: string | undefined) => {
- if (!started) return "-"
- if (!completed) return "进行中"
+   if (!started) return "-"
+   if (!completed) return t("durationInProgress")
 
- try {
- const start = new Date(started).getTime()
- const end = new Date(completed).getTime()
- const seconds = Math.floor((end - start) / 1000)
+   try {
+     const start = new Date(started).getTime()
+     const end = new Date(completed).getTime()
+     const seconds = Math.floor((end - start) / 1000)
 
- if (seconds < 60) return `${seconds}秒`
- if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`
- return `${Math.floor(seconds / 3600)}小时${Math.floor((seconds % 3600) / 60)}分`
- } catch {
- return "-"
+     if (seconds < 60) return t("durationSeconds", { seconds })
+     if (seconds < 3600) {
+       const minutes = Math.floor(seconds / 60)
+       const remainingSeconds = seconds % 60
+       return t("durationMinutesSeconds", {
+         minutes,
+         seconds: remainingSeconds,
+       })
+     }
+     const hours = Math.floor(seconds / 3600)
+     const minutes = Math.floor((seconds % 3600) / 60)
+     return t("durationHoursMinutes", { hours, minutes })
+   } catch {
+     return "-"
+   }
  }
- }
 
- if (loading) {
+if (loading) {
  return (
  <>
- <PageHeader title="批量操作" />
+ <PageHeader title={t("pageTitle")} />
  <div className="flex flex-1 items-center justify-center">
  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
  </div>
@@ -414,7 +433,7 @@ export default function AutomationBatchPage() {
 
  return (
  <>
- <PageHeader title="批量操作">
+ <PageHeader title={t("pageTitle")}>
  <div className="flex items-center gap-2">
  <Button
  variant="outline"
@@ -423,15 +442,15 @@ export default function AutomationBatchPage() {
  disabled={refreshing}
  >
  <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
- 刷新
+ {t("refresh")}
  </Button>
  <Button
  variant="outline"
  size="sm"
- onClick={() => toast.info("导出功能即将推出")}
+ onClick={() => toast.info(t("exportComingSoon"))}
  >
  <Download className="mr-2 h-4 w-4" />
- 导出报告
+ {t("exportReport")}
  </Button>
  </div>
  </PageHeader>
@@ -439,94 +458,94 @@ export default function AutomationBatchPage() {
  <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
  {/* 统计卡片 */}
  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">总任务数</CardTitle>
+<Card>
+<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+ <CardTitle className="text-sm font-medium">{t("statsTotalTasks")}</CardTitle>
  <ServerIcon className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold">{statistics.total}</div>
- <p className="text-xs text-muted-foreground">历史执行任务总数</p>
+<CardContent>
+<div className="text-2xl font-bold">{statistics.total}</div>
+ <p className="text-xs text-muted-foreground">{t("statsTotalTasksDesc")}</p>
  </CardContent>
  </Card>
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">执行中</CardTitle>
+<Card>
+<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+ <CardTitle className="text-sm font-medium">{t("statsRunning")}</CardTitle>
  <Clock className="h-4 w-4 text-blue-600" />
  </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold text-blue-600">{statistics.running}</div>
- <p className="text-xs text-muted-foreground">正在执行的任务</p>
+<CardContent>
+<div className="text-2xl font-bold text-blue-600">{statistics.running}</div>
+ <p className="text-xs text-muted-foreground">{t("statsRunningDesc")}</p>
  </CardContent>
  </Card>
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">已完成</CardTitle>
+<Card>
+<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+ <CardTitle className="text-sm font-medium">{t("statsCompleted")}</CardTitle>
  <CheckCircle className="h-4 w-4 text-green-600" />
  </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold text-green-600">{statistics.completed}</div>
- <p className="text-xs text-muted-foreground">成功完成的任务</p>
+<CardContent>
+<div className="text-2xl font-bold text-green-600">{statistics.completed}</div>
+ <p className="text-xs text-muted-foreground">{t("statsCompletedDesc")}</p>
  </CardContent>
  </Card>
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">失败</CardTitle>
+<Card>
+<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+ <CardTitle className="text-sm font-medium">{t("statsFailed")}</CardTitle>
  <AlertTriangle className="h-4 w-4 text-red-600" />
  </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold text-red-600">{statistics.failed}</div>
- <p className="text-xs text-muted-foreground">执行失败的任务</p>
+<CardContent>
+<div className="text-2xl font-bold text-red-600">{statistics.failed}</div>
+ <p className="text-xs text-muted-foreground">{t("statsFailedDesc")}</p>
  </CardContent>
  </Card>
  </div>
 
  {/* 主要内容区域 */}
- <Tabs defaultValue="command" className="flex-1">
- <TabsList className="grid w-full grid-cols-3">
- <TabsTrigger value="command">
- <Terminal className="mr-2 h-4 w-4" />
- 批量命令
- </TabsTrigger>
- <TabsTrigger value="script">
- <Code2 className="mr-2 h-4 w-4" />
- 批量脚本
- </TabsTrigger>
- <TabsTrigger value="file">
- <FileText className="mr-2 h-4 w-4" />
- 文件分发
- </TabsTrigger>
+<Tabs defaultValue="command" className="flex-1">
+<TabsList className="grid w-full grid-cols-3">
+<TabsTrigger value="command">
+<Terminal className="mr-2 h-4 w-4" />
+ {t("tabCommand")}
+</TabsTrigger>
+<TabsTrigger value="script">
+<Code2 className="mr-2 h-4 w-4" />
+ {t("tabScript")}
+</TabsTrigger>
+<TabsTrigger value="file">
+<FileText className="mr-2 h-4 w-4" />
+ {t("tabFile")}
+</TabsTrigger>
  </TabsList>
 
- {/* 批量命令Tab */}
- <TabsContent value="command" className="space-y-4">
- <Card>
- <CardHeader>
- <CardTitle>批量执行命令</CardTitle>
+{/* 批量命令Tab */}
+<TabsContent value="command" className="space-y-4">
+<Card>
+<CardHeader>
+ <CardTitle>{t("sectionCommandTitle")}</CardTitle>
  <CardDescription>
- 在多台服务器上同时执行Shell命令
+ {t("sectionCommandDesc")}
  </CardDescription>
  </CardHeader>
  <CardContent className="space-y-4">
- <div className="space-y-2">
- <Label htmlFor="task-name-cmd">
- 任务名称 <span className="text-destructive">*</span>
- </Label>
- <Input
- id="task-name-cmd"
- placeholder="例如：系统更新"
+<div className="space-y-2">
+<Label htmlFor="task-name-cmd">
+ {t("fieldTaskName")} <span className="text-destructive">*</span>
+</Label>
+<Input
+id="task-name-cmd"
+ placeholder={t("fieldTaskNamePlaceholderExampleUpdate")}
  value={taskName}
  onChange={(e) => setTaskName(e.target.value)}
  />
  </div>
 
- <div className="space-y-2">
- <Label htmlFor="command">
- 命令内容 <span className="text-destructive">*</span>
- </Label>
- <Textarea
- id="command"
- placeholder="输入要执行的Shell命令，例如：apt-get update && apt-get upgrade -y"
+<div className="space-y-2">
+<Label htmlFor="command">
+ {t("fieldCommandContent")} <span className="text-destructive">*</span>
+</Label>
+<Textarea
+id="command"
+ placeholder={t("fieldCommandPlaceholder")}
  className="font-mono"
  rows={4}
  value={command}
@@ -534,46 +553,51 @@ export default function AutomationBatchPage() {
  />
  </div>
 
- <div className="space-y-2">
- <Label>执行模式</Label>
+<div className="space-y-2">
+ <Label>{t("fieldExecutionMode")}</Label>
  <Select value={executionMode} onValueChange={(value: "parallel" | "sequential") => setExecutionMode(value)}>
  <SelectTrigger>
  <SelectValue />
  </SelectTrigger>
- <SelectContent>
- <SelectItem value="parallel">并行执行（同时执行）</SelectItem>
- <SelectItem value="sequential">顺序执行（逐个执行）</SelectItem>
+<SelectContent>
+ <SelectItem value="parallel">{t("executionModeParallel")}</SelectItem>
+ <SelectItem value="sequential">{t("executionModeSequential")}</SelectItem>
  </SelectContent>
  </Select>
  </div>
 
- <div className="space-y-2">
- <div className="flex items-center justify-between">
- <Label>选择目标服务器</Label>
+<div className="space-y-2">
+<div className="flex items-center justify-between">
+ <Label>{t("fieldSelectServers")}</Label>
  <div className="text-sm text-muted-foreground">
- 已选择 {selectedServers.length} / {filteredServers.filter(s => s.status === "online").length} 台在线服务器
+ {t("selectedServersSummary", {
+   selected: selectedServers.length,
+   online: filteredServers.filter(s => s.status === "online").length,
+ })}
  </div>
  </div>
 
  <div className="flex items-center gap-2">
  <div className="relative flex-1">
- <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
- <Input
- placeholder="搜索服务器..."
+<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+<Input
+ placeholder={t("searchServersPlaceholder")}
  className="pl-10"
  value={searchTerm}
  onChange={(e) => setSearchTerm(e.target.value)}
  />
  </div>
- <Button variant="outline" size="sm" onClick={toggleSelectAll}>
- {selectedServers.length === filteredServers.filter(s => s.status === "online").length ? "取消全选" : "全选"}
+<Button variant="outline" size="sm" onClick={toggleSelectAll}>
+ {selectedServers.length === filteredServers.filter(s => s.status === "online").length
+   ? t("unselectAll")
+   : t("selectAll")}
  </Button>
  </div>
 
  <div className="border rounded-md max-h-[200px] overflow-y-auto">
- {filteredServers.length === 0 ? (
- <div className="p-4 text-center text-sm text-muted-foreground">
- 没有找到服务器
+{filteredServers.length === 0 ? (
+<div className="p-4 text-center text-sm text-muted-foreground">
+ {t("noServersFound")}
  </div>
  ) : (
  <div className="p-2 space-y-1">
@@ -599,8 +623,8 @@ export default function AutomationBatchPage() {
  <div className="font-medium">{server.name || server.host}</div>
  <div className="text-sm text-muted-foreground">{server.host}</div>
  </div>
- <Badge variant={server.status === "online" ? "default" : "secondary"}>
- {server.status === "online" ? "在线" : "离线"}
+<Badge variant={server.status === "online" ? "default" : "secondary"}>
+ {server.status === "online" ? t("badgeOnline") : t("badgeOffline")}
  </Badge>
  </label>
  </div>
@@ -615,15 +639,15 @@ export default function AutomationBatchPage() {
  disabled={isExecuting || selectedServers.length === 0 || !command.trim() || !taskName.trim()}
  className="w-full"
  >
- {isExecuting ? (
- <>
- <Loader2 className="mr-2 h-4 w-4 animate-spin" />
- 创建中...
+{isExecuting ? (
+<>
+<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+ {t("btnCreating")}
  </>
  ) : (
- <>
- <Play className="mr-2 h-4 w-4" />
- 创建任务
+<>
+<Play className="mr-2 h-4 w-4" />
+ {t("btnCreateTask")}
  </>
  )}
  </Button>
@@ -631,23 +655,23 @@ export default function AutomationBatchPage() {
  </Card>
  </TabsContent>
 
- {/* 批量脚本Tab */}
- <TabsContent value="script" className="space-y-4">
- <Card>
- <CardHeader>
- <CardTitle>批量执行脚本</CardTitle>
+{/* 批量脚本Tab */}
+<TabsContent value="script" className="space-y-4">
+<Card>
+<CardHeader>
+ <CardTitle>{t("sectionScriptTitle")}</CardTitle>
  <CardDescription>
- 在多台服务器上执行自定义脚本
+ {t("sectionScriptDesc")}
  </CardDescription>
  </CardHeader>
  <CardContent className="space-y-4">
- <div className="space-y-2">
- <Label htmlFor="task-name-script">
- 任务名称 <span className="text-destructive">*</span>
+<div className="space-y-2">
+<Label htmlFor="task-name-script">
+ {t("fieldTaskName")} <span className="text-destructive">*</span>
  </Label>
  <Input
- id="task-name-script"
- placeholder="例如：部署应用"
+id="task-name-script"
+ placeholder={t("fieldTaskNamePlaceholderExampleDeploy")}
  value={taskName}
  onChange={(e) => setTaskName(e.target.value)}
  />
@@ -656,7 +680,7 @@ export default function AutomationBatchPage() {
  <div className="space-y-2">
  <div className="flex items-center justify-between">
  <Label htmlFor="script-content">
- 脚本内容 <span className="text-destructive">*</span>
+ {t("fieldScriptContent")} <span className="text-destructive">*</span>
  </Label>
  <Button
  variant="outline"
@@ -664,12 +688,12 @@ export default function AutomationBatchPage() {
  onClick={() => setIsScriptLibraryOpen(true)}
  >
  <Library className="mr-2 h-4 w-4" />
- 从脚本库选择
+ {t("scriptLibraryTitle")}
  </Button>
  </div>
  <Textarea
- id="script-content"
- placeholder="输入脚本内容或从脚本库选择..."
+id="script-content"
+ placeholder={t("fieldScriptPlaceholder")}
  className="font-mono"
  rows={8}
  value={scriptContent}
@@ -678,23 +702,26 @@ export default function AutomationBatchPage() {
  </div>
 
  <div className="space-y-2">
- <Label>执行模式</Label>
+ <Label>{t("fieldExecutionMode")}</Label>
  <Select value={executionMode} onValueChange={(value: "parallel" | "sequential") => setExecutionMode(value)}>
  <SelectTrigger>
  <SelectValue />
  </SelectTrigger>
  <SelectContent>
- <SelectItem value="parallel">并行执行（同时执行）</SelectItem>
- <SelectItem value="sequential">顺序执行（逐个执行）</SelectItem>
+ <SelectItem value="parallel">{t("executionModeParallel")}</SelectItem>
+ <SelectItem value="sequential">{t("executionModeSequential")}</SelectItem>
  </SelectContent>
  </Select>
  </div>
 
  <div className="space-y-2">
  <div className="flex items-center justify-between">
- <Label>选择目标服务器</Label>
+ <Label>{t("fieldSelectServers")}</Label>
  <div className="text-sm text-muted-foreground">
- 已选择 {selectedServers.length} / {filteredServers.filter(s => s.status === "online").length} 台在线服务器
+ {t("selectedServersSummary", {
+   selected: selectedServers.length,
+   online: filteredServers.filter(s => s.status === "online").length,
+ })}
  </div>
  </div>
 
@@ -702,21 +729,23 @@ export default function AutomationBatchPage() {
  <div className="relative flex-1">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
- placeholder="搜索服务器..."
+ placeholder={t("searchServersPlaceholder")}
  className="pl-10"
  value={searchTerm}
  onChange={(e) => setSearchTerm(e.target.value)}
  />
  </div>
  <Button variant="outline" size="sm" onClick={toggleSelectAll}>
- {selectedServers.length === filteredServers.filter(s => s.status === "online").length ? "取消全选" : "全选"}
+ {selectedServers.length === filteredServers.filter(s => s.status === "online").length
+   ? t("unselectAll")
+   : t("selectAll")}
  </Button>
  </div>
 
  <div className="border rounded-md max-h-[200px] overflow-y-auto">
  {filteredServers.length === 0 ? (
  <div className="p-4 text-center text-sm text-muted-foreground">
- 没有找到服务器
+ {t("noServersFound")}
  </div>
  ) : (
  <div className="p-2 space-y-1">
@@ -743,7 +772,7 @@ export default function AutomationBatchPage() {
  <div className="text-sm text-muted-foreground">{server.host}</div>
  </div>
  <Badge variant={server.status === "online" ? "default" : "secondary"}>
- {server.status === "online" ? "在线" : "离线"}
+ {server.status === "online" ? t("badgeOnline") : t("badgeOffline")}
  </Badge>
  </label>
  </div>
@@ -761,12 +790,12 @@ export default function AutomationBatchPage() {
  {isExecuting ? (
  <>
  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
- 创建中...
+ {t("btnCreating")}
  </>
  ) : (
  <>
  <Play className="mr-2 h-4 w-4" />
- 创建任务
+ {t("btnCreateTask")}
  </>
  )}
  </Button>
@@ -774,47 +803,47 @@ export default function AutomationBatchPage() {
  </Card>
  </TabsContent>
 
- {/* 文件分发Tab */}
- <TabsContent value="file" className="space-y-4">
- <Card>
- <CardHeader>
- <CardTitle>文件分发</CardTitle>
+{/* 文件分发Tab */}
+<TabsContent value="file" className="space-y-4">
+<Card>
+<CardHeader>
+ <CardTitle>{t("sectionFileTitle")}</CardTitle>
  <CardDescription>
- 向多台服务器分发文件
+ {t("sectionFileDesc")}
  </CardDescription>
  </CardHeader>
  <CardContent className="space-y-4">
- <div className="space-y-2">
- <Label htmlFor="task-name-file">
- 任务名称 <span className="text-destructive">*</span>
+<div className="space-y-2">
+<Label htmlFor="task-name-file">
+ {t("fieldTaskName")} <span className="text-destructive">*</span>
  </Label>
  <Input
- id="task-name-file"
- placeholder="例如：配置文件分发"
+id="task-name-file"
+ placeholder={t("fieldTaskNamePlaceholderExampleDistribute")}
  value={taskName}
  onChange={(e) => setTaskName(e.target.value)}
  />
  </div>
 
- <div className="space-y-2">
- <Label htmlFor="file-path">
- 源文件路径 <span className="text-destructive">*</span>
+<div className="space-y-2">
+<Label htmlFor="file-path">
+ {t("fieldFilePath")} <span className="text-destructive">*</span>
  </Label>
  <Input
- id="file-path"
- placeholder="/path/to/local/file"
+id="file-path"
+ placeholder={t("fieldFilePathPlaceholder")}
  value={filePath}
  onChange={(e) => setFilePath(e.target.value)}
  />
  </div>
 
- <div className="space-y-2">
- <Label htmlFor="target-path">
- 目标路径 <span className="text-destructive">*</span>
+<div className="space-y-2">
+<Label htmlFor="target-path">
+ {t("fieldTargetPath")} <span className="text-destructive">*</span>
  </Label>
  <Input
- id="target-path"
- placeholder="/path/to/remote/destination"
+id="target-path"
+ placeholder={t("fieldTargetPathPlaceholder")}
  value={targetPath}
  onChange={(e) => setTargetPath(e.target.value)}
  />
@@ -822,9 +851,12 @@ export default function AutomationBatchPage() {
 
  <div className="space-y-2">
  <div className="flex items-center justify-between">
- <Label>选择目标服务器</Label>
+ <Label>{t("fieldSelectServers")}</Label>
  <div className="text-sm text-muted-foreground">
- 已选择 {selectedServers.length} / {filteredServers.filter(s => s.status === "online").length} 台在线服务器
+ {t("selectedServersSummary", {
+   selected: selectedServers.length,
+   online: filteredServers.filter(s => s.status === "online").length,
+ })}
  </div>
  </div>
 
@@ -832,21 +864,23 @@ export default function AutomationBatchPage() {
  <div className="relative flex-1">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
- placeholder="搜索服务器..."
+ placeholder={t("searchServersPlaceholder")}
  className="pl-10"
  value={searchTerm}
  onChange={(e) => setSearchTerm(e.target.value)}
  />
  </div>
  <Button variant="outline" size="sm" onClick={toggleSelectAll}>
- {selectedServers.length === filteredServers.filter(s => s.status === "online").length ? "取消全选" : "全选"}
+ {selectedServers.length === filteredServers.filter(s => s.status === "online").length
+   ? t("unselectAll")
+   : t("selectAll")}
  </Button>
  </div>
 
  <div className="border rounded-md max-h-[200px] overflow-y-auto">
  {filteredServers.length === 0 ? (
  <div className="p-4 text-center text-sm text-muted-foreground">
- 没有找到服务器
+ {t("noServersFound")}
  </div>
  ) : (
  <div className="p-2 space-y-1">
@@ -873,7 +907,7 @@ export default function AutomationBatchPage() {
  <div className="text-sm text-muted-foreground">{server.host}</div>
  </div>
  <Badge variant={server.status === "online" ? "default" : "secondary"}>
- {server.status === "online" ? "在线" : "离线"}
+ {server.status === "online" ? t("badgeOnline") : t("badgeOffline")}
  </Badge>
  </label>
  </div>
@@ -891,12 +925,12 @@ export default function AutomationBatchPage() {
  {isExecuting ? (
  <>
  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
- 创建中...
+ {t("btnCreating")}
  </>
  ) : (
  <>
  <Play className="mr-2 h-4 w-4" />
- 创建任务
+ {t("btnCreateTask")}
  </>
  )}
  </Button>
@@ -905,26 +939,26 @@ export default function AutomationBatchPage() {
  </TabsContent>
  </Tabs>
 
- {/* 执行历史 */}
- <Card>
- <CardHeader>
- <CardTitle>执行历史</CardTitle>
+{/* 执行历史 */}
+<Card>
+<CardHeader>
+ <CardTitle>{t("historyTitle")}</CardTitle>
  <CardDescription>
- 查看所有批量任务的执行历史和状态
+ {t("historyDesc")}
  </CardDescription>
  </CardHeader>
  <CardContent>
  <Table>
  <TableHeader>
  <TableRow>
- <TableHead className="w-[200px]">任务名称</TableHead>
- <TableHead className="w-[100px]">类型</TableHead>
- <TableHead className="w-[100px]">服务器数</TableHead>
- <TableHead className="w-[120px]">状态</TableHead>
- <TableHead className="w-[100px]">成功/失败</TableHead>
- <TableHead className="w-[180px]">开始时间</TableHead>
- <TableHead className="w-[120px]">耗时</TableHead>
- <TableHead className="w-[100px] text-right">操作</TableHead>
+<TableHead className="w-[200px]">{t("colTaskName")}</TableHead>
+ <TableHead className="w-[100px]">{t("colType")}</TableHead>
+ <TableHead className="w-[100px]">{t("colServerCount")}</TableHead>
+ <TableHead className="w-[120px]">{t("colStatus")}</TableHead>
+ <TableHead className="w-[100px]">{t("colSuccessFailed")}</TableHead>
+ <TableHead className="w-[180px]">{t("colStartedAt")}</TableHead>
+ <TableHead className="w-[120px]">{t("colDuration")}</TableHead>
+ <TableHead className="w-[100px] text-right">{t("colActions")}</TableHead>
  </TableRow>
  </TableHeader>
  <TableBody>
@@ -933,7 +967,8 @@ export default function AutomationBatchPage() {
  <TableCell colSpan={8} className="h-32 text-center">
  <div className="flex flex-col items-center justify-center text-muted-foreground">
  <ServerIcon className="h-8 w-8 mb-2" />
- <p className="text-sm">暂无执行历史</p>
+<p className="text-sm">{t("historyEmpty")}</p>
+ <p className="text-sm">{t("historyEmpty")}</p>
  </div>
  </TableCell>
  </TableRow>
@@ -968,7 +1003,7 @@ export default function AutomationBatchPage() {
  size="sm"
  onClick={() => handleStartTask(task.id)}
  className="h-8 w-8 p-0"
- title="启动任务">
+ title={t("tooltipStartTask")}>
  <Play className="h-4 w-4" />
  </Button>
  )}
@@ -977,7 +1012,7 @@ export default function AutomationBatchPage() {
  size="sm"
  onClick={() => handleDeleteTask(task.id)}
  className="h-8 w-8 p-0 text-destructive"
- title="删除任务">
+ title={t("tooltipDeleteTask")}>
  <Trash2 className="h-4 w-4" />
  </Button>
  </div>
@@ -995,9 +1030,9 @@ export default function AutomationBatchPage() {
  <Dialog open={isScriptLibraryOpen} onOpenChange={setIsScriptLibraryOpen}>
  <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
  <DialogHeader className="shrink-0">
- <DialogTitle>脚本库</DialogTitle>
+<DialogTitle>{t("scriptLibraryTitle")}</DialogTitle>
  <DialogDescription>
- 从已保存的脚本中选择一个
+ {t("scriptLibraryDesc")}
  </DialogDescription>
  </DialogHeader>
 
@@ -1005,7 +1040,7 @@ export default function AutomationBatchPage() {
  <div className="relative">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
- placeholder="搜索脚本..."
+ placeholder={t("searchScriptsPlaceholder")}
  className="pl-10"
  value={scriptSearchTerm}
  onChange={(e) => setScriptSearchTerm(e.target.value)}
@@ -1016,7 +1051,7 @@ export default function AutomationBatchPage() {
  {filteredScripts.length === 0 ? (
  <div className="p-8 text-center text-muted-foreground">
  <FileText className="h-8 w-8 mx-auto mb-2" />
- <p className="text-sm">没有找到脚本</p>
+ <p className="text-sm">{t("noScriptsFound")}</p>
  </div>
  ) : (
  filteredScripts.map((script) => (
@@ -1045,15 +1080,15 @@ export default function AutomationBatchPage() {
  </div>
  </CardHeader>
  <CardContent>
- <div className="bg-muted rounded-md p-3">
- <pre className="text-xs font-mono whitespace-pre-wrap line-clamp-3">
- {script.content}
- </pre>
- </div>
- <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
- <span>执行次数: {script.executions}</span>
- <span>{script.language}</span>
- </div>
+  <div className="bg-muted rounded-md p-3">
+  <pre className="text-xs font-mono whitespace-pre-wrap line-clamp-3">
+  {script.content}
+  </pre>
+  </div>
+  <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+  <span>{t("scriptExecutionsLabel", { count: script.executions })}</span>
+  <span>{script.language}</span>
+  </div>
  </CardContent>
  </Card>
  ))
@@ -1063,7 +1098,7 @@ export default function AutomationBatchPage() {
 
  <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsScriptLibraryOpen(false)}>
- 取消
+ {t("dialogCancel")}
  </Button>
  </DialogFooter>
  </DialogContent>

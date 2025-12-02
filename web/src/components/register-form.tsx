@@ -19,6 +19,7 @@ import { authApi } from "@/lib/api/auth"
 import { FadeSlideIn } from "@/components/ui/fade-slide-in"
 import { getErrorMessage } from "@/lib/error-utils"
 import { useAuthStore } from "@/stores/auth-store"
+import { useTranslations } from "next-intl"
 
 export function RegisterForm({
   className,
@@ -27,6 +28,7 @@ export function RegisterForm({
   const router = useRouter()
   const { config, refreshConfig } = useSystemConfig()
   const setToken = useAuthStore((state) => state.setToken)
+  const tAuth = useTranslations("auth")
 
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -44,24 +46,24 @@ export function RegisterForm({
 
     // 验证密码匹配
     if (password !== confirmPassword) {
-      toast.error("密码不匹配", {
-        description: "两次输入的密码不一致，请重新输入",
+      toast.error(tAuth("registerToastPasswordMismatchTitle"), {
+        description: tAuth("registerToastPasswordMismatchDesc"),
       })
       return
     }
 
     // 验证密码长度
     if (password.length < 6) {
-      toast.error("密码太短", {
-        description: "密码至少需要 6 个字符",
+      toast.error(tAuth("registerToastPasswordTooShortTitle"), {
+        description: tAuth("registerToastPasswordTooShortDesc"),
       })
       return
     }
 
     // 验证用户名长度
     if (username.length < 3 || username.length > 50) {
-      toast.error("用户名长度不符", {
-        description: "用户名长度需要在 3-50 个字符之间",
+      toast.error(tAuth("registerToastUsernameInvalidTitle"), {
+        description: tAuth("registerToastUsernameInvalidDesc"),
       })
       return
     }
@@ -76,8 +78,8 @@ export function RegisterForm({
         password,
       })
 
-      toast.success("注册成功", {
-        description: "正在跳转到登录页面...",
+      toast.success(tAuth("registerToastSuccessTitle"), {
+        description: tAuth("registerToastSuccessDesc"),
       })
 
       // 刷新系统配置
@@ -89,8 +91,8 @@ export function RegisterForm({
       }, 1000)
     } catch (error: unknown) {
       console.error("Register error:", error)
-      toast.error("注册失败", {
-        description: getErrorMessage(error, "请检查输入信息并重试"),
+      toast.error(tAuth("registerToastFailedTitle"), {
+        description: getErrorMessage(error, tAuth("registerToastFailedDesc")),
       })
       setIsLoading(false)
     }
@@ -121,10 +123,12 @@ export function RegisterForm({
                 </div>
                 <div className="space-y-1">
                   <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-                    注册 {config?.system_name || "EasySSH"} 账号
+                    {tAuth("registerTitle", {
+                      systemName: config?.system_name || "EasySSH",
+                    })}
                   </h1>
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    创建您的账号以开始使用
+                    {tAuth("registerSubtitle")}
                   </p>
                 </div>
               </div>
@@ -138,14 +142,14 @@ export function RegisterForm({
               <FadeSlideIn delay={0.1}>
                 <Field>
                   <FieldLabel htmlFor="username" className="text-zinc-700 dark:text-zinc-200">
-                    用户名
+                    {tAuth("registerUsernameLabel")}
                   </FieldLabel>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="username"
                       type="text"
-                      placeholder="请输入用户名（3-50个字符）"
+                      placeholder={tAuth("registerUsernamePlaceholder")}
                       name="username"
                       autoComplete="username"
                       value={username}
@@ -157,7 +161,7 @@ export function RegisterForm({
                     />
                   </div>
                   <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    用户名将用于登录系统
+                    {tAuth("registerUsernameHint")}
                   </FieldDescription>
                 </Field>
               </FadeSlideIn>
@@ -166,14 +170,14 @@ export function RegisterForm({
               <FadeSlideIn delay={0.2}>
                 <Field>
                   <FieldLabel htmlFor="email" className="text-zinc-700 dark:text-zinc-200">
-                    邮箱
+                    {tAuth("registerEmailLabel")}
                   </FieldLabel>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="email"
                       type="email"
-                      placeholder="请输入邮箱地址"
+                      placeholder={tAuth("registerEmailPlaceholder")}
                       name="email"
                       autoComplete="email"
                       value={email}
@@ -183,7 +187,7 @@ export function RegisterForm({
                     />
                   </div>
                   <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    用于接收系统通知和找回密码
+                    {tAuth("registerEmailHint")}
                   </FieldDescription>
                 </Field>
               </FadeSlideIn>
@@ -192,14 +196,14 @@ export function RegisterForm({
               <FadeSlideIn delay={0.3}>
                 <Field>
                   <FieldLabel htmlFor="password" className="text-zinc-700 dark:text-zinc-200">
-                    密码
+                    {tAuth("registerPasswordLabel")}
                   </FieldLabel>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="请输入密码（至少6个字符）"
+                      placeholder={tAuth("registerPasswordPlaceholder")}
                       name="password"
                       autoComplete="new-password"
                       value={password}
@@ -227,14 +231,14 @@ export function RegisterForm({
               <FadeSlideIn delay={0.4}>
                 <Field>
                   <FieldLabel htmlFor="confirmPassword" className="text-zinc-700 dark:text-zinc-200">
-                    确认密码
+                    {tAuth("registerConfirmPasswordLabel")}
                   </FieldLabel>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
                       id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
-                      placeholder="请再次输入密码"
+                      placeholder={tAuth("registerConfirmPasswordPlaceholder")}
                       name="confirmPassword"
                       autoComplete="new-password"
                       value={confirmPassword}
@@ -269,11 +273,11 @@ export function RegisterForm({
                   >
                     {isLoading ? (
                       <>
-                        <span className="mr-2">注册中</span>
+                        <span className="mr-2">{tAuth("registerSubmitting")}</span>
                         <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
                       </>
                     ) : (
-                      "注册"
+                      tAuth("registerSubmit")
                     )}
                   </Button>
                 </Field>
@@ -286,14 +290,14 @@ export function RegisterForm({
             {/* 登录提示 */}
             <FadeSlideIn delay={0.6}>
               <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-                已有账号？
+                {tAuth("registerHaveAccount")}
                 <Button
                   type="button"
                   variant="link"
                   className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto ml-1 no-underline hover:no-underline transition-colors"
                   onClick={() => router.push("/login")}
                 >
-                  立即登录
+                  {tAuth("registerGoLogin")}
                 </Button>
               </div>
             </FadeSlideIn>

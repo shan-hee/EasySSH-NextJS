@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -56,6 +57,7 @@ export function ServerFilters({
   onViewModeChange,
   viewMode: externalViewMode = 'grid'
 }: ServerFiltersProps) {
+  const t = useTranslations("servers")
   const [filters, setFilters] = useState<FilterOptions>({
     status: 'all',
     tag: 'all',
@@ -160,7 +162,7 @@ export function ServerFilters({
             className="h-8"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />
-            在线 ({statusCounts.online})
+            {t("filterStatusOnlineLabel")} ({statusCounts.online})
           </Button>
           <Button
             variant={filters.status === 'offline' ? 'outline' : 'outline'}
@@ -169,7 +171,7 @@ export function ServerFilters({
             className="h-8"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 mr-1.5" />
-            离线 ({statusCounts.offline})
+            {t("filterStatusOfflineLabel")} ({statusCounts.offline})
           </Button>
           {statusCounts.warning > 0 && (
             <Button
@@ -179,7 +181,7 @@ export function ServerFilters({
               className="h-8"
             >
               <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" />
-              警告 ({statusCounts.warning})
+              {t("filterStatusWarningLabel")} ({statusCounts.warning})
             </Button>
           )}
         </div>
@@ -192,16 +194,20 @@ export function ServerFilters({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {uniqueTags.length > 0 && (
                 <div className="space-y-1.5">
-                  <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>按标签筛选</label>
+                  <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>
+                    {t("filterTagLabel")}
+                  </label>
                   <Select
                     value={filters.tag}
                     onValueChange={(value) => handleFilterChange('tag', value)}
                   >
                     <SelectTrigger className="h-8">
-                      <SelectValue placeholder="选择标签" />
+                      <SelectValue placeholder={t("filterTagPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">所有标签</SelectItem>
+                      <SelectItem value="all">
+                        {t("filterTagAll")}
+                      </SelectItem>
                       {uniqueTags.map((tag) => (
                         <SelectItem key={tag} value={tag}>
                           {tag}
@@ -214,16 +220,20 @@ export function ServerFilters({
 
               {uniqueOS.length > 0 && (
                 <div className="space-y-1.5">
-                  <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>按系统筛选</label>
+                  <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>
+                    {t("filterOsLabel")}
+                  </label>
                   <Select
                     value={filters.os}
                     onValueChange={(value) => handleFilterChange('os', value)}
                   >
                     <SelectTrigger className="h-8">
-                      <SelectValue placeholder="选择操作系统" />
+                      <SelectValue placeholder={t("filterOsPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">所有系统</SelectItem>
+                      <SelectItem value="all">
+                        {t("filterOsAll")}
+                      </SelectItem>
                       {uniqueOS.map((os) => (
                         <SelectItem key={os} value={os}>
                           {os}
@@ -235,7 +245,9 @@ export function ServerFilters({
               )}
 
               <div className="space-y-1.5">
-                <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>排序方式</label>
+                <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>
+                  {t("filterSortLabel")}
+                </label>
                 <div className="flex gap-2">
                   <Select
                     value={filters.sortBy}
@@ -245,9 +257,15 @@ export function ServerFilters({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="name">名称</SelectItem>
-                      <SelectItem value="host">主机地址</SelectItem>
-                      <SelectItem value="status">状态</SelectItem>
+                      <SelectItem value="name">
+                        {t("filterSortOptionName")}
+                      </SelectItem>
+                      <SelectItem value="host">
+                        {t("filterSortOptionHost")}
+                      </SelectItem>
+                      <SelectItem value="status">
+                        {t("filterSortOptionStatus")}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -274,7 +292,7 @@ export function ServerFilters({
             <div className="flex justify-between items-center">
               <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8">
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                重置筛选
+                {t("filterResetButton")}
               </Button>
             </div>
           </>

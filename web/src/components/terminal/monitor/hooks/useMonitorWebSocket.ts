@@ -395,7 +395,7 @@ export function useMonitorWebSocket({
 
               // 处理错误消息
               if (msg && msg.type === 'error') {
-                const error = new Error(msg.message || '监控连接失败');
+                const error = new Error(msg.message || 'Monitoring connection failed');
                 onError?.(error);
                 setStatus(WSStatus.ERROR);
                 onStatusChange?.(WSStatus.ERROR);
@@ -519,7 +519,7 @@ export function useMonitorWebSocket({
         setStatus(WSStatus.ERROR);
         onStatusChange?.(WSStatus.ERROR);
         updateStatus(serverId, WSStatus.ERROR); // 更新 Store 状态
-        onError?.(new Error('WebSocket 连接错误'));
+        onError?.(new Error('WebSocket connection error'));
       };
 
       // wsRef.current 已在上方（创建 WebSocket 后）立即设置，这里不需要重复设置

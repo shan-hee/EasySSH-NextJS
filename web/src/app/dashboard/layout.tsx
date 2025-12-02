@@ -9,6 +9,7 @@ import { ClientAuthProvider } from "@/components/client-auth-provider"
 import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
 import { CompletionConfigProvider } from "@/contexts/completion-config-context"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { DashboardI18nProvider } from "@/providers/dashboard-i18n-provider"
 import type { User } from "@/lib/api/auth"
 
 /**
@@ -54,19 +55,21 @@ export default function DashboardLayout({
   // 如果验证失败，会自动跳转到登录页
   return (
     <ClientAuthProvider initialUser={initialUser}>
-      <CompletionConfigProvider>
-        <BreadcrumbProvider>
-          <SidebarProviderServer>
-            <AppSidebar />
-            <SidebarInset>
-              {/* 添加淡入动画，使界面显示更平滑 */}
-              <div className="animate-in fade-in duration-300 flex flex-1 flex-col min-h-0">
-                {children}
-              </div>
-            </SidebarInset>
-          </SidebarProviderServer>
-        </BreadcrumbProvider>
-      </CompletionConfigProvider>
+      <DashboardI18nProvider>
+        <CompletionConfigProvider>
+          <BreadcrumbProvider>
+            <SidebarProviderServer>
+              <AppSidebar />
+              <SidebarInset>
+                {/* 添加淡入动画，使界面显示更平滑 */}
+                <div className="animate-in fade-in duration-300 flex flex-1 flex-col min-h-0">
+                  {children}
+                </div>
+              </SidebarInset>
+            </SidebarProviderServer>
+          </BreadcrumbProvider>
+        </CompletionConfigProvider>
+      </DashboardI18nProvider>
     </ClientAuthProvider>
   )
 }

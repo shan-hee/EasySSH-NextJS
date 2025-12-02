@@ -66,9 +66,18 @@ import {
  type Server
 } from "@/lib/api"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { useTranslations } from "next-intl"
 
 export default function AutomationSchedulesPage() {
  const { ready } = useAuthReady()
+ const { user } = useClientAuth()
+ const { data: systemConfig } = useSystemConfig()
+ const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+ const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+ const t = useTranslations("automationSchedules")
  // 数据状态
  const [tasks, setTasks] = useState<ScheduledTask[]>([])
  const [servers, setServers] = useState<Server[]>([])
@@ -208,7 +217,7 @@ export default function AutomationSchedulesPage() {
  const toggleServer = (serverId: string) => {
  const server = servers.find((s) => s.id === serverId)
  if (server && server.status !== "online") {
- toast.warning("只能选择在线的服务器")
+ toast.warning(t("toastOnlyOnline"))
  return
  }
 
@@ -224,7 +233,7 @@ export default function AutomationSchedulesPage() {
  const toggleEditServer = (serverId: string) => {
  const server = servers.find((s) => s.id === serverId)
  if (server && server.status !== "online") {
- toast.warning("只能选择在线的服务器")
+ toast.warning(t("toastOnlyOnline"))
  return
  }
 
@@ -271,22 +280,22 @@ export default function AutomationSchedulesPage() {
  // 创建定时任务
  const handleCreateTask = async () => {
  if (!newTask.task_name || !newTask.cron_expression) {
- toast.error("请填写任务名称和Cron表达式")
+ toast.error(t("toastMustNameCron"))
  return
  }
 
  if (newTask.task_type === "command" && !newTask.command) {
- toast.error("请输入命令内容")
+ toast.error(t("toastCmdRequired"))
  return
  }
 
  if (newTask.task_type === "script" && !newTask.script_id && !newTask.command) {
- toast.error("请选择脚本或输入脚本内容")
+ toast.error(t("toastScriptRequired"))
  return
  }
 
  if (newTask.server_ids.length === 0) {
- toast.error("请选择至少一个服务器")
+ toast.error(t("toastSelectServer"))
  return
  }
 
@@ -305,7 +314,7 @@ export default function AutomationSchedulesPage() {
  description: newTask.description || undefined,
  })
 
- toast.success("定时任务创建成功")
+ toast.success(t("toastCreateSuccess"))
  setIsDialogOpen(false)
 
  // 重置表单
@@ -325,7 +334,7 @@ export default function AutomationSchedulesPage() {
  await loadData()
  } catch (error: unknown) {
  console.error("创建定时任务失败:", error)
- toast.error(getErrorMessage(error, "创建定时任务失败"))
+ toast.error(getErrorMessage(error, t("toastCreateFailed")))
  }
  }
 
@@ -347,7 +356,7 @@ export default function AutomationSchedulesPage() {
  // 更新定时任务
  const handleUpdateTask = async () => {
  if (!editTask.task_name || !editTask.cron_expression) {
- toast.error("请填写任务名称和Cron表达式")
+ toast.error(t("toastMustNameCron"))
  return
  }
 
@@ -366,7 +375,7 @@ export default function AutomationSchedulesPage() {
  description: editTask.description || undefined,
  })
 
- toast.success("定时任务更新成功")
+ toast.success(t("toastUpdateSuccess"))
  setIsEditDialogOpen(false)
  setEditingTaskId(null)
 
@@ -385,13 +394,13 @@ export default function AutomationSchedulesPage() {
  await loadData()
  } catch (error: unknown) {
  console.error("更新定时任务失败:", error)
- toast.error(getErrorMessage(error, "更新定时任务失败"))
+ toast.error(getErrorMessage(error, t("toastUpdateFailed")))
  }
  }
 
  // 删除任务
  const handleDelete = async (taskId: string) => {
- if (!confirm("确定要删除这个定时任务吗？")) {
+ if (!confirm(t("toastDeleteConfirm"))) {
  return
  }
 
@@ -399,11 +408,11 @@ export default function AutomationSchedulesPage() {
  // 认证基于 HttpOnly Cookie
 
  await scheduledTasksApi.delete(taskId)
- toast.success("定时任务删除成功")
+ toast.success(t("toastDeleteSuccess"))
  await loadData()
  } catch (error: unknown) {
  console.error("删除定时任务失败:", error)
- toast.error(getErrorMessage(error, "删除定时任务失败"))
+ toast.error(getErrorMessage(error, t("toastDeleteFailed")))
  }
  }
 
@@ -413,11 +422,11 @@ export default function AutomationSchedulesPage() {
  // 认证基于 HttpOnly Cookie
 
  await scheduledTasksApi.toggle(taskId, !enabled)
- toast.success(enabled ? "任务已禁用" : "任务已启用")
+ toast.success(enabled ? t("toastToggleDisabled") : t("toastToggleEnabled"))
  await loadData()
  } catch (error: unknown) {
  console.error("切换任务状态失败:", error)
- toast.error(getErrorMessage(error, "切换任务状态失败"))
+ toast.error(getErrorMessage(error, t("toastToggleFailed")))
  }
  }
 
@@ -427,24 +436,23 @@ export default function AutomationSchedulesPage() {
  // 认证基于 HttpOnly Cookie
 
  await scheduledTasksApi.trigger(taskId)
- toast.success("任务已手动触发")
+ toast.success(t("toastTriggerSuccess"))
  await loadData()
  } catch (error: unknown) {
  console.error("触发任务失败:", error)
- toast.error(getErrorMessage(error, "触发任务失败"))
+ toast.error(getErrorMessage(error, t("toastTriggerFailed")))
  }
  }
 
- // 格式化日期
+ // 格式化日期（按用户/系统时区）
  const formatDate = (dateString: string | undefined) => {
- if (!dateString) return "-"
- return new Date(dateString).toLocaleString("zh-CN", {
- year: "numeric",
- month: "2-digit",
- day: "2-digit",
- hour: "2-digit",
- minute: "2-digit",
- })
+   if (!dateString) return "-"
+   return formatInTimezone(
+     dateString,
+     { second: undefined },
+     effectiveLocale,
+     effectiveTimezone,
+   )
  }
 
  // 计算成功率
@@ -472,11 +480,11 @@ export default function AutomationSchedulesPage() {
  const getTypeName = (type: string) => {
  switch (type) {
  case "command":
- return "命令"
+ return t("typeCommand")
  case "script":
- return "脚本"
+ return t("typeScript")
  case "batch":
- return "批量任务"
+ return t("typeBatch")
  default:
  return type
  }
@@ -485,22 +493,22 @@ export default function AutomationSchedulesPage() {
  // 获取状态Badge
  const getStatusBadge = (task: ScheduledTask) => {
  if (!task.enabled) {
- return <Badge variant="secondary">已禁用</Badge>
+ return <Badge variant="secondary">{t("statusDisabled")}</Badge>
  }
 
  if (task.last_status === "success") {
- return <Badge className="bg-green-100 text-green-800">运行中</Badge>
+ return <Badge className="bg-green-100 text-green-800">{t("statusRunning")}</Badge>
  } else if (task.last_status === "failed") {
- return <Badge className="bg-red-100 text-red-800">失败</Badge>
+ return <Badge className="bg-red-100 text-red-800">{t("statusFailed")}</Badge>
  }
 
- return <Badge className="bg-blue-100 text-blue-800">待执行</Badge>
+ return <Badge className="bg-blue-100 text-blue-800">{t("statusPending")}</Badge>
  }
 
  return (
  <>
  <PageHeader
- title="定时任务">
+ title={t("pageTitle")}>
  <div className="flex items-center gap-2">
  <Button
  variant="outline"
@@ -509,11 +517,11 @@ export default function AutomationSchedulesPage() {
  disabled={refreshing}
  >
  <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
- 刷新
+ {t("refresh")}
  </Button>
  <Button onClick={() => setIsDialogOpen(true)}>
  <Plus className="mr-2 h-4 w-4" />
- 新建任务
+ {t("newTask")}
  </Button>
  </div>
  </PageHeader>
@@ -528,45 +536,45 @@ export default function AutomationSchedulesPage() {
  <div className="grid gap-4 md:grid-cols-4">
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">总任务数</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsTotalTasks")}</CardTitle>
  <Calendar className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold">{statistics.total}</div>
- <p className="text-xs text-muted-foreground">已创建的定时任务</p>
+ <p className="text-xs text-muted-foreground">{t("statsTotalTasksDesc")}</p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">启用中</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsEnabled")}</CardTitle>
  <CheckCircle className="h-4 w-4 text-green-600" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold">{statistics.enabled}</div>
- <p className="text-xs text-muted-foreground">正在运行的任务</p>
+ <p className="text-xs text-muted-foreground">{t("statsEnabledDesc")}</p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">已禁用</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsDisabled")}</CardTitle>
  <Pause className="h-4 w-4 text-muted-foreground" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold">{statistics.disabled}</div>
- <p className="text-xs text-muted-foreground">暂停的任务</p>
+ <p className="text-xs text-muted-foreground">{t("statsDisabledDesc")}</p>
  </CardContent>
  </Card>
 
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">总执行次数</CardTitle>
+ <CardTitle className="text-sm font-medium">{t("statsTotalRuns")}</CardTitle>
  <Zap className="h-4 w-4 text-yellow-600" />
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold">{statistics.totalRuns}</div>
- <p className="text-xs text-muted-foreground">累计执行次数</p>
+ <p className="text-xs text-muted-foreground">{t("statsTotalRunsDesc")}</p>
  </CardContent>
  </Card>
  </div>
@@ -574,36 +582,36 @@ export default function AutomationSchedulesPage() {
  {/* 搜索和筛选 */}
  <div className="flex flex-col gap-4">
  <div className="flex items-center gap-4">
- <div className="relative flex-1 max-w-md">
- <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
- <Input
- placeholder="搜索定时任务..."
+<div className="relative flex-1 max-w-md">
+<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+<Input
+ placeholder={t("searchPlaceholder")}
  className="pl-10"
  value={searchTerm}
  onChange={(e) => setSearchTerm(e.target.value)}
  />
  </div>
 
- <Select value={selectedStatus} onValueChange={setSelectedStatus}>
- <SelectTrigger className="w-[150px]">
- <SelectValue placeholder="状态筛选" />
- </SelectTrigger>
- <SelectContent>
- <SelectItem value="all">全部状态</SelectItem>
- <SelectItem value="enabled">启用中</SelectItem>
- <SelectItem value="disabled">已禁用</SelectItem>
+<Select value={selectedStatus} onValueChange={setSelectedStatus}>
+<SelectTrigger className="w-[150px]">
+ <SelectValue placeholder={t("statusFilterPlaceholder")} />
+</SelectTrigger>
+<SelectContent>
+ <SelectItem value="all">{t("statusFilterAll")}</SelectItem>
+ <SelectItem value="enabled">{t("statusFilterEnabled")}</SelectItem>
+ <SelectItem value="disabled">{t("statusFilterDisabled")}</SelectItem>
  </SelectContent>
  </Select>
 
- <Select value={selectedType} onValueChange={setSelectedType}>
- <SelectTrigger className="w-[150px]">
- <SelectValue placeholder="类型筛选" />
- </SelectTrigger>
- <SelectContent>
- <SelectItem value="all">全部类型</SelectItem>
- <SelectItem value="command">命令</SelectItem>
- <SelectItem value="script">脚本</SelectItem>
- <SelectItem value="batch">批量任务</SelectItem>
+<Select value={selectedType} onValueChange={setSelectedType}>
+<SelectTrigger className="w-[150px]">
+ <SelectValue placeholder={t("typeFilterPlaceholder")} />
+</SelectTrigger>
+<SelectContent>
+ <SelectItem value="all">{t("typeFilterAll")}</SelectItem>
+ <SelectItem value="command">{t("typeCommand")}</SelectItem>
+ <SelectItem value="script">{t("typeScript")}</SelectItem>
+ <SelectItem value="batch">{t("typeBatch")}</SelectItem>
  </SelectContent>
  </Select>
  </div>
@@ -614,15 +622,15 @@ export default function AutomationSchedulesPage() {
  <Table>
  <TableHeader>
  <TableRow>
- <TableHead className="w-[200px]">任务名称</TableHead>
- <TableHead className="w-[100px]">类型</TableHead>
- <TableHead className="w-[120px]">Cron表达式</TableHead>
- <TableHead className="w-[100px]">状态</TableHead>
- <TableHead className="w-[150px]">上次执行</TableHead>
- <TableHead className="w-[150px]">下次执行</TableHead>
- <TableHead className="w-[80px] text-center">执行次数</TableHead>
- <TableHead className="w-[80px] text-center">成功率</TableHead>
- <TableHead className="w-[120px] text-right">操作</TableHead>
+ <TableHead className="w-[200px]">{t("tableColTaskName")}</TableHead>
+ <TableHead className="w-[100px]">{t("tableColType")}</TableHead>
+ <TableHead className="w-[120px]">{t("tableColCron")}</TableHead>
+ <TableHead className="w-[100px]">{t("tableColStatus")}</TableHead>
+ <TableHead className="w-[150px]">{t("tableColLastRun")}</TableHead>
+ <TableHead className="w-[150px]">{t("tableColNextRun")}</TableHead>
+ <TableHead className="w-[80px] text-center">{t("tableColRunCount")}</TableHead>
+ <TableHead className="w-[80px] text-center">{t("tableColSuccessRate")}</TableHead>
+ <TableHead className="w-[120px] text-right">{t("tableColActions")}</TableHead>
  </TableRow>
  </TableHeader>
  <TableBody>
@@ -633,8 +641,8 @@ export default function AutomationSchedulesPage() {
  <Calendar className="h-8 w-8 mb-2" />
  <p className="text-sm">
  {searchTerm || selectedStatus !== "all" || selectedType !== "all"
- ? "暂无匹配的定时任务"
- : "暂无定时任务"}
+ ? t("emptyFiltered")
+ : t("emptyAll")}
  </p>
  </div>
  </TableCell>
@@ -675,7 +683,7 @@ export default function AutomationSchedulesPage() {
  <XCircle className="h-3 w-3 text-red-600" />
  )}
  <span className="text-xs text-muted-foreground">
- {task.last_status === "success" ? "成功" : "失败"}
+ {task.last_status === "success" ? t("lastStatusSuccess") : t("lastStatusFailed")}
  </span>
  </div>
  )}
@@ -697,7 +705,7 @@ export default function AutomationSchedulesPage() {
  size="sm"
  onClick={() => handleToggle(task.id, task.enabled)}
  className="h-8 w-8 p-0"
- title={task.enabled ? "禁用任务" : "启用任务"}
+ title={task.enabled ? t("tooltipToggleDisable") : t("tooltipToggleEnable")}
  >
  {task.enabled ? (
  <Pause className="h-4 w-4" />
@@ -714,18 +722,18 @@ export default function AutomationSchedulesPage() {
  <DropdownMenuContent align="end">
  <DropdownMenuItem onClick={() => handleTrigger(task.id)}>
  <Zap className="mr-2 h-4 w-4" />
- 立即执行
+ {t("actionImmediateRun")}
  </DropdownMenuItem>
  <DropdownMenuItem onClick={() => handleEdit(task)}>
  <Edit className="mr-2 h-4 w-4" />
- 编辑
+ {t("actionEdit")}
  </DropdownMenuItem>
  <DropdownMenuItem
  onClick={() => handleDelete(task.id)}
  className="text-destructive"
  >
  <Trash2 className="mr-2 h-4 w-4" />
- 删除
+ {t("actionDelete")}
  </DropdownMenuItem>
  </DropdownMenuContent>
  </DropdownMenu>
@@ -744,19 +752,19 @@ export default function AutomationSchedulesPage() {
  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
  <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
  <DialogHeader className="shrink-0">
- <DialogTitle>新建定时任务</DialogTitle>
- <DialogDescription>创建一个新的定时任务，按照Cron表达式定时执行</DialogDescription>
+ <DialogTitle>{t("dialogCreateTitle")}</DialogTitle>
+ <DialogDescription>{t("dialogCreateDescription")}</DialogDescription>
  </DialogHeader>
 
  <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  {/* 任务名称 */}
  <div className="space-y-2">
  <Label htmlFor="task-name">
- 任务名称 <span className="text-destructive">*</span>
+ {t("fieldTaskName")} <span className="text-destructive">*</span>
  </Label>
  <Input
  id="task-name"
- placeholder="例如：数据库备份"
+ placeholder={t("fieldTaskNamePlaceholder")}
  value={newTask.task_name}
  onChange={(e) => setNewTask({ ...newTask, task_name: e.target.value })}
  />
@@ -764,10 +772,10 @@ export default function AutomationSchedulesPage() {
 
  {/* 任务描述 */}
  <div className="space-y-2">
- <Label htmlFor="task-description">任务描述</Label>
+ <Label htmlFor="task-description">{t("fieldTaskDescription")}</Label>
  <Input
  id="task-description"
- placeholder="简要描述任务的功能"
+ placeholder={t("fieldTaskDescriptionPlaceholder")}
  value={newTask.description}
  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
  />
@@ -776,7 +784,7 @@ export default function AutomationSchedulesPage() {
  {/* 任务类型 */}
  <div className="space-y-2">
  <Label htmlFor="task-type">
- 任务类型 <span className="text-destructive">*</span>
+ {t("fieldTaskType")} <span className="text-destructive">*</span>
  </Label>
  <Select
  value={newTask.task_type}
@@ -788,9 +796,9 @@ export default function AutomationSchedulesPage() {
  <SelectValue />
  </SelectTrigger>
  <SelectContent>
- <SelectItem value="command">执行命令</SelectItem>
- <SelectItem value="script">执行脚本</SelectItem>
- <SelectItem value="batch">批量任务</SelectItem>
+ <SelectItem value="command">{t("typeCommand")}</SelectItem>
+ <SelectItem value="script">{t("typeScript")}</SelectItem>
+ <SelectItem value="batch">{t("typeBatch")}</SelectItem>
  </SelectContent>
  </Select>
  </div>
@@ -799,7 +807,7 @@ export default function AutomationSchedulesPage() {
  {newTask.task_type !== "batch" && (
  <div className="space-y-2">
  <Label htmlFor="task-command">
- {newTask.task_type === "command" ? "命令内容" : "脚本内容"}{" "}
+ {newTask.task_type === "command" ? t("fieldCommandLabel") : t("fieldScriptLabel")}{" "}
  <span className="text-destructive">*</span>
  </Label>
  <div className="flex gap-2">
@@ -807,8 +815,8 @@ export default function AutomationSchedulesPage() {
  id="task-command"
  placeholder={
  newTask.task_type === "command"
- ? "输入要执行的命令..."
- : "输入脚本内容或从脚本库选择..."
+ ? t("fieldCommandPlaceholder")
+ : t("fieldScriptPlaceholder")
  }
  className="font-mono min-h-[100px]"
  value={newTask.command}
@@ -820,7 +828,7 @@ export default function AutomationSchedulesPage() {
  variant="outline"
  onClick={() => setIsScriptLibraryOpen(true)}
  >
- 脚本库
+ {t("scriptLibraryButton")}
  </Button>
  )}
  </div>
@@ -828,19 +836,19 @@ export default function AutomationSchedulesPage() {
  )}
 
  {/* 服务器选择 */}
- <div className="space-y-2">
- <Label>
- 目标服务器 <span className="text-destructive">*</span>
- </Label>
- <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto">
- <div className="flex items-center justify-between mb-2">
- <span className="text-sm text-muted-foreground">
- 已选择 {newTask.server_ids.length} 台服务器
- </span>
+    <div className="space-y-2">
+    <Label>
+    {t("fieldTargetServers")} <span className="text-destructive">*</span>
+    </Label>
+    <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto">
+    <div className="flex items-center justify-between mb-2">
+    <span className="text-sm text-muted-foreground">
+    {t("selectedServersCount", { selected: newTask.server_ids.length })}
+    </span>
  <Button variant="ghost" size="sm" onClick={toggleSelectAll}>
  {newTask.server_ids.length === servers.filter((s) => s.status === "online").length
- ? "取消全选"
- : "全选"}
+ ? t("unselectAll")
+ : t("selectAll")}
  </Button>
  </div>
  <div className="space-y-1">
@@ -876,23 +884,23 @@ export default function AutomationSchedulesPage() {
  {/* Cron表达式 */}
  <div className="space-y-2">
  <Label htmlFor="cron-expression">
- Cron表达式 <span className="text-destructive">*</span>
+ {t("fieldCronExpression")} <span className="text-destructive">*</span>
  </Label>
  <Input
  id="cron-expression"
- placeholder="例如：0 2 * * * (每天凌晨2点)"
+ placeholder={t("fieldCronPlaceholder")}
  value={newTask.cron_expression}
  onChange={(e) => setNewTask({ ...newTask, cron_expression: e.target.value })}
  className="font-mono"
  />
  <p className="text-xs text-muted-foreground">
- 格式：秒 分 时 日 月 周。示例：0 0 * * * (每小时), 0 2 * * * (每天2点), 0 0 * * 0 (每周日)
+ {t("fieldCronHelp")}
  </p>
  </div>
 
  {/* 时区 */}
  <div className="space-y-2">
- <Label htmlFor="timezone">时区</Label>
+ <Label htmlFor="timezone">{t("fieldTimezone")}</Label>
  <Select
  value={newTask.timezone}
  onValueChange={(value) => setNewTask({ ...newTask, timezone: value })}
@@ -901,10 +909,10 @@ export default function AutomationSchedulesPage() {
  <SelectValue />
  </SelectTrigger>
  <SelectContent>
- <SelectItem value="Asia/Shanghai">中国标准时间 (UTC+8)</SelectItem>
- <SelectItem value="UTC">UTC (UTC+0)</SelectItem>
- <SelectItem value="America/New_York">美东时间 (UTC-5)</SelectItem>
- <SelectItem value="Europe/London">伦敦时间 (UTC+0)</SelectItem>
+ <SelectItem value="Asia/Shanghai">{t("timezoneAsiaShanghai")}</SelectItem>
+ <SelectItem value="UTC">{t("timezoneUTC")}</SelectItem>
+ <SelectItem value="America/New_York">{t("timezoneAmericaNewYork")}</SelectItem>
+ <SelectItem value="Europe/London">{t("timezoneEuropeLondon")}</SelectItem>
  </SelectContent>
  </Select>
  </div>
@@ -919,16 +927,16 @@ export default function AutomationSchedulesPage() {
  className="cursor-pointer"
  />
  <Label htmlFor="task-enabled" className="cursor-pointer">
- 创建后立即启用
+ {t("fieldEnableOnCreate")}
  </Label>
  </div>
  </div>
 
  <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
- 取消
+ {t("dialogCancel")}
  </Button>
- <Button onClick={handleCreateTask}>创建任务</Button>
+ <Button onClick={handleCreateTask}>{t("dialogCreateSubmit")}</Button>
  </DialogFooter>
  </DialogContent>
  </Dialog>
@@ -937,19 +945,19 @@ export default function AutomationSchedulesPage() {
  <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
  <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
  <DialogHeader className="shrink-0">
- <DialogTitle>编辑定时任务</DialogTitle>
- <DialogDescription>修改定时任务的配置</DialogDescription>
+ <DialogTitle>{t("dialogEditTitle")}</DialogTitle>
+ <DialogDescription>{t("dialogEditDescription")}</DialogDescription>
  </DialogHeader>
 
  <div className="space-y-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
  {/* 任务名称 */}
  <div className="space-y-2">
  <Label htmlFor="edit-task-name">
- 任务名称 <span className="text-destructive">*</span>
+ {t("fieldTaskName")} <span className="text-destructive">*</span>
  </Label>
  <Input
  id="edit-task-name"
- placeholder="例如：数据库备份"
+ placeholder={t("fieldTaskNamePlaceholder")}
  value={editTask.task_name}
  onChange={(e) => setEditTask({ ...editTask, task_name: e.target.value })}
  />
@@ -957,10 +965,10 @@ export default function AutomationSchedulesPage() {
 
  {/* 任务描述 */}
  <div className="space-y-2">
- <Label htmlFor="edit-task-description">任务描述</Label>
+ <Label htmlFor="edit-task-description">{t("fieldTaskDescription")}</Label>
  <Input
  id="edit-task-description"
- placeholder="简要描述任务的功能"
+ placeholder={t("fieldTaskDescriptionPlaceholder")}
  value={editTask.description}
  onChange={(e) => setEditTask({ ...editTask, description: e.target.value })}
  />
@@ -968,10 +976,10 @@ export default function AutomationSchedulesPage() {
 
  {/* 命令内容 */}
  <div className="space-y-2">
- <Label htmlFor="edit-task-command">命令/脚本内容</Label>
+ <Label htmlFor="edit-task-command">{t("fieldCommandScriptLabel")}</Label>
  <Textarea
  id="edit-task-command"
- placeholder="输入要执行的命令或脚本..."
+ placeholder={t("fieldCommandScriptPlaceholder")}
  className="font-mono min-h-[100px]"
  value={editTask.command}
  onChange={(e) => setEditTask({ ...editTask, command: e.target.value })}
@@ -979,17 +987,17 @@ export default function AutomationSchedulesPage() {
  </div>
 
  {/* 服务器选择 */}
- <div className="space-y-2">
- <Label>目标服务器</Label>
- <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto">
- <div className="flex items-center justify-between mb-2">
- <span className="text-sm text-muted-foreground">
- 已选择 {editTask.server_ids.length} 台服务器
- </span>
+    <div className="space-y-2">
+    <Label>{t("fieldTargetServers")}</Label>
+    <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto">
+    <div className="flex items-center justify-between mb-2">
+    <span className="text-sm text-muted-foreground">
+    {t("selectedServersCount", { selected: editTask.server_ids.length })}
+    </span>
  <Button variant="ghost" size="sm" onClick={toggleEditSelectAll}>
  {editTask.server_ids.length === servers.filter((s) => s.status === "online").length
- ? "取消全选"
- : "全选"}
+ ? t("unselectAll")
+ : t("selectAll")}
  </Button>
  </div>
  <div className="space-y-1">
@@ -1025,11 +1033,11 @@ export default function AutomationSchedulesPage() {
  {/* Cron表达式 */}
  <div className="space-y-2">
  <Label htmlFor="edit-cron-expression">
- Cron表达式 <span className="text-destructive">*</span>
+ {t("fieldCronExpression")} <span className="text-destructive">*</span>
  </Label>
  <Input
  id="edit-cron-expression"
- placeholder="例如：0 2 * * * (每天凌晨2点)"
+ placeholder={t("fieldCronPlaceholder")}
  value={editTask.cron_expression}
  onChange={(e) => setEditTask({ ...editTask, cron_expression: e.target.value })}
  className="font-mono"
@@ -1038,7 +1046,7 @@ export default function AutomationSchedulesPage() {
 
  {/* 时区 */}
  <div className="space-y-2">
- <Label htmlFor="edit-timezone">时区</Label>
+ <Label htmlFor="edit-timezone">{t("fieldTimezone")}</Label>
  <Select
  value={editTask.timezone}
  onValueChange={(value) => setEditTask({ ...editTask, timezone: value })}
@@ -1047,10 +1055,10 @@ export default function AutomationSchedulesPage() {
  <SelectValue />
  </SelectTrigger>
  <SelectContent>
- <SelectItem value="Asia/Shanghai">中国标准时间 (UTC+8)</SelectItem>
- <SelectItem value="UTC">UTC (UTC+0)</SelectItem>
- <SelectItem value="America/New_York">美东时间 (UTC-5)</SelectItem>
- <SelectItem value="Europe/London">伦敦时间 (UTC+0)</SelectItem>
+ <SelectItem value="Asia/Shanghai">{t("timezoneAsiaShanghai")}</SelectItem>
+ <SelectItem value="UTC">{t("timezoneUTC")}</SelectItem>
+ <SelectItem value="America/New_York">{t("timezoneAmericaNewYork")}</SelectItem>
+ <SelectItem value="Europe/London">{t("timezoneEuropeLondon")}</SelectItem>
  </SelectContent>
  </Select>
  </div>
@@ -1065,16 +1073,16 @@ export default function AutomationSchedulesPage() {
  className="cursor-pointer"
  />
  <Label htmlFor="edit-task-enabled" className="cursor-pointer">
- 启用任务
+ {t("fieldEnableTask")}
  </Label>
  </div>
  </div>
 
  <DialogFooter className="shrink-0">
  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
- 取消
+ {t("dialogCancel")}
  </Button>
- <Button onClick={handleUpdateTask}>保存修改</Button>
+ <Button onClick={handleUpdateTask}>{t("dialogEditSubmit")}</Button>
  </DialogFooter>
  </DialogContent>
  </Dialog>
@@ -1083,15 +1091,15 @@ export default function AutomationSchedulesPage() {
  <Dialog open={isScriptLibraryOpen} onOpenChange={setIsScriptLibraryOpen}>
  <DialogContent className="max-w-2xl max-h-[80vh]">
  <DialogHeader>
- <DialogTitle>选择脚本</DialogTitle>
- <DialogDescription>从脚本库中选择一个脚本作为任务内容</DialogDescription>
+ <DialogTitle>{t("scriptLibraryTitle")}</DialogTitle>
+ <DialogDescription>{t("scriptLibraryDescription")}</DialogDescription>
  </DialogHeader>
 
  <div className="space-y-4">
  <div className="relative">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
- placeholder="搜索脚本..."
+ placeholder={t("scriptLibrarySearchPlaceholder")}
  className="pl-10"
  value={scriptSearchTerm}
  onChange={(e) => setScriptSearchTerm(e.target.value)}
@@ -1102,7 +1110,7 @@ export default function AutomationSchedulesPage() {
  {filteredScripts.length === 0 ? (
  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
  <FileText className="h-8 w-8 mb-2" />
- <p className="text-sm">暂无脚本</p>
+ <p className="text-sm">{t("scriptLibraryEmpty")}</p>
  </div>
  ) : (
  <div className="divide-y">

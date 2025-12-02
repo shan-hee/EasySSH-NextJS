@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Activity,
 } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -29,97 +30,104 @@ import {
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/contexts/system-config-context"
 
-// 导航数据 - 静态部分
-const navMainData = [
-  {
-    title: "控制台",
-    url: "/dashboard",
-    icon: Monitor,
-    isActive: true,
-    // 无子级,点击即进入控制台概览
-  },
-  // 移除工作台中的"AI 助手"入口，仅保留快速访问中的 AI 助手
-  {
-    title: "连接管理",
-    url: "#",
-    icon: Server,
-    items: [
-      { title: "连接配置", url: "/dashboard/servers" },
-      { title: "历史连接", url: "/dashboard/servers/history" },
-    ],
-  },
-  {
-    title: "自动化",
-    url: "#",
-    icon: Terminal,
-    items: [
-      { title: "脚本库", url: "/dashboard/scripts" },
-      { title: "任务调度", url: "/dashboard/automation/schedules" },
-      { title: "执行记录", url: "/dashboard/automation/history" },
-      { title: "批量操作", url: "/dashboard/automation/batch" },
-    ],
-  },
-  {
-    title: "文件管理",
-    url: "#",
-    icon: FolderOpen,
-    items: [
-      { title: "文件管理器", url: "/dashboard/sftp" },
-      { title: "传输记录", url: "/dashboard/transfers/history" },
-      { title: "存储空间", url: "/dashboard/storage" },
-    ],
-  },
-  {
-    title: "监控告警",
-    url: "#",
-    icon: Activity,
-    items: [
-      { title: "资源监控", url: "/dashboard/monitoring/resources" },
-      { title: "告警规则", url: "/dashboard/monitoring/alerts" },
-      { title: "健康检查", url: "/dashboard/monitoring/health" },
-    ],
-  },
-  {
-    title: "日志审计",
-    url: "#",
-    icon: FileText,
-    items: [
-      { title: "操作日志", url: "/dashboard/logs" },
-      { title: "登录日志", url: "/dashboard/logs/login" },
-    ],
-  },
-  {
-    title: "系统设置",
-    url: "/dashboard/settings",
-    icon: Settings2,
-    // 无子级,直接进入统一的系统设置页面
-  },
-]
-
 export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user } = useClientAuth()
   const { config } = useSystemConfig()
+  const tNav = useTranslations("nav")
+
+  // 导航数据 - 根据当前语言动态构建
+  const navMainData = React.useMemo(
+    () => [
+      {
+        title: tNav("console"),
+        url: "/dashboard",
+        icon: Monitor,
+        isActive: true,
+      },
+      {
+        title: tNav("connections"),
+        url: "#",
+        icon: Server,
+        items: [
+          { title: tNav("connectionConfigs"), url: "/dashboard/servers" },
+          { title: tNav("connectionHistory"), url: "/dashboard/servers/history" },
+        ],
+      },
+      {
+        title: tNav("automation"),
+        url: "#",
+        icon: Terminal,
+        items: [
+          { title: tNav("scripts"), url: "/dashboard/scripts" },
+          { title: tNav("schedules"), url: "/dashboard/automation/schedules" },
+          { title: tNav("executions"), url: "/dashboard/automation/history" },
+          { title: tNav("batch"), url: "/dashboard/automation/batch" },
+        ],
+      },
+      {
+        title: tNav("file"),
+        url: "#",
+        icon: FolderOpen,
+        items: [
+          { title: tNav("fileManager"), url: "/dashboard/sftp" },
+          { title: tNav("transferHistory"), url: "/dashboard/transfers/history" },
+          { title: tNav("storage"), url: "/dashboard/storage" },
+        ],
+      },
+      {
+        title: tNav("monitoring"),
+        url: "#",
+        icon: Activity,
+        items: [
+          { title: tNav("monitoringResources"), url: "/dashboard/monitoring/resources" },
+          { title: tNav("monitoringAlerts"), url: "/dashboard/monitoring/alerts" },
+          { title: tNav("monitoringHealth"), url: "/dashboard/monitoring/health" },
+        ],
+      },
+      {
+        title: tNav("logs"),
+        url: "#",
+        icon: FileText,
+        items: [
+          { title: tNav("logsOperations"), url: "/dashboard/logs" },
+          { title: tNav("logsLogin"), url: "/dashboard/logs/login" },
+        ],
+      },
+      {
+        title: tNav("systemSettings"),
+        url: "/dashboard/settings",
+        icon: Settings2,
+      },
+    ],
+    [tNav],
+  )
 
   // 动态构建 teams 数据
   const teamsData = React.useMemo(() => [{
     name: config?.system_name || "EasySSH",
     logo: Server,
-    plan: "专业版",
-  }], [config?.system_name])
+    plan: tNav("planPro"),
+  }], [config?.system_name, tNav])
 
   const all = navMainData
 
   // 基于标题分组：工作台 / 核心功能 / 可观测与审计 / 平台设置
-  const groupWorkbench = React.useMemo(() => all.filter((i) => ["控制台"].includes(i.title)), [all])
+  const groupWorkbench = React.useMemo(
+    () => all.filter((i) => i.url === "/dashboard"),
+    [all],
+  )
   const groupCore = React.useMemo(
-    () => all.filter((i) => ["连接管理", "自动化", "文件管理"].includes(i.title)),
+    () => all.filter((i) => [tNav("connections"), tNav("automation"), tNav("file")].includes(i.title)),
     [all]
   )
   const groupObserveAudit = React.useMemo(
-    () => all.filter((i) => ["监控告警", "日志审计"].includes(i.title)),
-    [all]
+    () => all.filter((i) => [tNav("monitoring"), tNav("logs")].includes(i.title)),
+    [all, tNav]
   )
-  const groupSettings = React.useMemo(() => all.filter((i) => i.title === "系统设置"), [all])
+  const groupSettings = React.useMemo(
+    () => all.filter((i) => i.title === tNav("systemSettings")),
+    [all, tNav],
+  )
 
   // 构建真实用户数据
   const userData = React.useMemo(() => {
@@ -140,10 +148,10 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       </SidebarHeader>
       <SidebarContent>
         <QuickAccess />
-        {groupWorkbench.length > 0 && <NavMain label="工作台" items={groupWorkbench} />}
-        {groupCore.length > 0 && <NavMain label="服务器管理" items={groupCore} />}
-        {groupObserveAudit.length > 0 && <NavMain label="监控与审计" items={groupObserveAudit} />}
-        {groupSettings.length > 0 && <NavMain label="系统设置" items={groupSettings} />}
+        {groupWorkbench.length > 0 && <NavMain label={tNav("workbench")} items={groupWorkbench} />}
+        {groupCore.length > 0 && <NavMain label={tNav("coreServers")} items={groupCore} />}
+        {groupObserveAudit.length > 0 && <NavMain label={tNav("observeAudit")} items={groupObserveAudit} />}
+        {groupSettings.length > 0 && <NavMain label={tNav("settings")} items={groupSettings} />}
       </SidebarContent>
       <SidebarFooter>
         <NavExtra />

@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormTextarea, FormSelect, FormSwitch, FormInput } from "@/components/settings/form-field"
 import { Download, Upload, Filter, Save, Loader2, RotateCcw } from "lucide-react"
@@ -12,6 +13,8 @@ import { settingsApi } from "@/lib/api/settings"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 
 export function FileTransferTab() {
+  const t = useTranslations("settingsSystemFileTransfer")
+  const tCommon = useTranslations("common")
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: fileTransferSchema,
     loadFn: async () => {
@@ -45,18 +48,18 @@ export function FileTransferTab() {
     <div className="space-y-4">
       {/* 下载设置 */}
       <SettingsSection
-        title="下载设置"
-        description="配置文件下载的默认行为和排除规则"
+        title={t("sectionDownloadTitle")}
+        description={t("sectionDownloadDescription")}
         icon={<Download className="h-5 w-5" />}
       >
         <FormSelect
           form={form}
           name="default_download_mode"
-          label="默认下载模式"
-          description="右键下载文件夹时的默认模式"
+          label={t("fieldDefaultDownloadMode")}
+          description={t("fieldDefaultDownloadModeDesc")}
           options={[
-            { label: "⚡ 快速下载 (推荐) - 使用远程 tar 压缩", value: "fast" },
-            { label: "🔧 兼容下载 - 使用 SFTP 逐文件传输", value: "compatible" },
+            { label: t("optionDownloadModeFast"), value: "fast" },
+            { label: t("optionDownloadModeCompatible"), value: "compatible" },
           ]}
           required
         />
@@ -65,10 +68,10 @@ export function FileTransferTab() {
           <FormTextarea
             form={form}
             name="download_exclude_patterns"
-            label={`排除规则 (${patternCount} 个)`}
-            description="下载文件夹时自动跳过的目录/文件，每行一个"
+          label={t("fieldExcludePatternsLabel", { count: patternCount })}
+            description={t("fieldExcludePatternsDesc")}
             rows={12}
-            placeholder="node_modules&#10;.git&#10;dist&#10;build"
+            placeholder={t("fieldExcludePatternsPlaceholder")}
             required
           />
 
@@ -76,13 +79,27 @@ export function FileTransferTab() {
             <InfoIcon className="h-4 w-4" />
             <AlertDescription className="text-sm">
               <div className="space-y-1">
-                <p className="font-medium">常见排除规则示例：</p>
+                <p className="font-medium">{t("alertExamplesTitle")}</p>
                 <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
-                  <li><code className="text-xs bg-muted px-1 rounded">node_modules</code> - Node.js 依赖</li>
-                  <li><code className="text-xs bg-muted px-1 rounded">.git</code> - Git 仓库</li>
-                  <li><code className="text-xs bg-muted px-1 rounded">dist / build / target</code> - 构建产物</li>
-                  <li><code className="text-xs bg-muted px-1 rounded">__pycache__</code> - Python 缓存</li>
-                  <li><code className="text-xs bg-muted px-1 rounded">vendor</code> - Go/PHP 依赖</li>
+                  <li>
+                    <code className="text-xs bg-muted px-1 rounded">node_modules</code> -{" "}
+                    {t("alertExampleNodeModules")}
+                  </li>
+                  <li>
+                    <code className="text-xs bg-muted px-1 rounded">.git</code> - {t("alertExampleGitRepo")}
+                  </li>
+                  <li>
+                    <code className="text-xs bg-muted px-1 rounded">dist / build / target</code> -{" "}
+                    {t("alertExampleBuildOutputs")}
+                  </li>
+                  <li>
+                    <code className="text-xs bg-muted px-1 rounded">__pycache__</code> -{" "}
+                    {t("alertExamplePycache")}
+                  </li>
+                  <li>
+                    <code className="text-xs bg-muted px-1 rounded">vendor</code> -{" "}
+                    {t("alertExampleVendor")}
+                  </li>
                 </ul>
               </div>
             </AlertDescription>
@@ -92,15 +109,15 @@ export function FileTransferTab() {
 
       {/* 上传设置 */}
       <SettingsSection
-        title="上传设置"
-        description="配置文件上传时的过滤行为和大小限制"
+        title={t("sectionUploadTitle")}
+        description={t("sectionUploadDescription")}
         icon={<Upload className="h-5 w-5" />}
       >
         <FormInput
           form={form}
           name="max_file_upload_size"
-          label="最大文件上传大小 (MB)"
-          description="允许上传的单个文件最大大小 (1-1024 MB)"
+          label={t("fieldMaxUploadSize")}
+          description={t("fieldMaxUploadSizeDesc")}
           type="number"
           min={1}
           max={1024}
@@ -111,8 +128,8 @@ export function FileTransferTab() {
         <FormSwitch
           form={form}
           name="skip_excluded_on_upload"
-          label="上传时跳过排除的文件"
-          description="上传文件夹时，自动跳过上述排除规则中的文件和目录"
+          label={t("fieldSkipExcludedOnUpload")}
+          description={t("fieldSkipExcludedOnUploadDesc")}
         />
       </SettingsSection>
 
@@ -121,11 +138,20 @@ export function FileTransferTab() {
         <Filter className="h-4 w-4" />
         <AlertDescription className="text-sm">
           <div className="space-y-2">
-            <p className="font-medium">性能提示：</p>
+            <p className="font-medium">{t("performanceHintTitle")}</p>
             <ul className="list-disc list-inside text-muted-foreground space-y-1">
-              <li><strong>快速下载模式：</strong>速度提升 10-50 倍，但需要服务器安装 <code className="text-xs bg-muted px-1 rounded">tar</code> 工具</li>
-              <li><strong>兼容下载模式：</strong>兼容所有服务器，但速度较慢</li>
-              <li><strong>排除规则：</strong>可大幅减少下载时间和文件大小（如 node_modules 通常占用数百 MB）</li>
+              <li>
+                <strong>快速下载模式：</strong>
+                {t("performanceHintFastMode")}
+              </li>
+              <li>
+                <strong>兼容下载模式：</strong>
+                {t("performanceHintCompatibleMode")}
+              </li>
+              <li>
+                <strong>排除规则：</strong>
+                {t("performanceHintExcludeRules")}
+              </li>
             </ul>
           </div>
         </AlertDescription>
@@ -135,18 +161,18 @@ export function FileTransferTab() {
       <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
-          重置
+          {tCommon("reset")}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
+              {tCommon("saving")}
             </>
           ) : (
             <>
               <Save className="mr-2 h-4 w-4" />
-              保存
+              {tCommon("save")}
             </>
           )}
         </Button>

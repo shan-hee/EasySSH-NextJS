@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { useFormValidation, validationRules } from "@/hooks/use-form-validation"
 import { X, Plus, Save, TestTube } from "lucide-react"
 import { PrivateKeyInput } from "@/components/servers/private-key-input"
+import { useTranslations } from "next-intl"
 
 interface ServerFormData {
   name: string
@@ -55,6 +56,7 @@ const defaultValues: ServerFormData = {
 export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: ServerFormProps) {
   const [newTag, setNewTag] = useState("")
   const [isConnecting, setIsConnecting] = useState(false)
+  const tServers = useTranslations("servers")
 
   const {
     values,
@@ -69,19 +71,29 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
       host: {
         required: true,
         validate: (value: unknown) => {
-          if (typeof value !== 'string') return "请输入有效的IP地址或域名"
+          if (typeof value !== "string") {
+            return tServers("formHostInvalid")
+          }
           // 验证IP地址或域名
-          const ipPattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-          const domainPattern = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$/
-          return ipPattern.test(value) || domainPattern.test(value) || "请输入有效的IP地址或域名"
-        }
+          const ipPattern =
+            /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+          const domainPattern =
+            /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$/ 
+          return (
+            ipPattern.test(value) ||
+            domainPattern.test(value) ||
+            tServers("formHostInvalid")
+          )
+        },
       },
       port: {
         required: true,
         validate: (value: unknown) => {
-          const numValue = typeof value === 'number' ? value : Number(value)
-          return (numValue >= 1 && numValue <= 65535) || "端口号必须在1-65535之间"
-        }
+          const numValue = typeof value === "number" ? value : Number(value)
+          return (
+            numValue >= 1 && numValue <= 65535 || tServers("formPortInvalid")
+          )
+        },
       },
       username: validationRules.required,
     }
@@ -131,18 +143,18 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
       {/* 基本信息 */}
       <Card>
         <CardHeader>
-          <CardTitle>基本信息</CardTitle>
-          <CardDescription>配置服务器的基本连接参数</CardDescription>
+          <CardTitle>{tServers("formBasicTitle")}</CardTitle>
+          <CardDescription>{tServers("formBasicDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">服务器名称 *</Label>
+              <Label htmlFor="name">{tServers("formNameLabel")} *</Label>
               <Input
                 id="name"
                 value={values.name}
                 onChange={(e) => setValue("name", e.target.value)}
-                placeholder="输入服务器名称"
+                placeholder={tServers("formNamePlaceholder")}
                 className={errors.name ? "border-red-500" : ""}
               />
               {errors.name && (
@@ -151,12 +163,12 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="host">主机地址 *</Label>
+              <Label htmlFor="host">{tServers("formHostLabel")} *</Label>
               <Input
                 id="host"
                 value={values.host}
                 onChange={(e) => setValue("host", e.target.value)}
-                placeholder="IP地址或域名"
+                placeholder={tServers("formHostPlaceholder")}
                 className={errors.host ? "border-red-500" : ""}
               />
               {errors.host && (
@@ -165,7 +177,7 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="port">端口 *</Label>
+              <Label htmlFor="port">{tServers("formPortLabel")} *</Label>
               <Input
                 id="port"
                 type="number"
@@ -182,12 +194,12 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="username">用户名 *</Label>
+              <Label htmlFor="username">{tServers("formUsernameLabel")} *</Label>
               <Input
                 id="username"
                 value={values.username}
                 onChange={(e) => setValue("username", e.target.value)}
-                placeholder="登录用户名"
+                placeholder={tServers("formUsernamePlaceholder")}
                 className={errors.username ? "border-red-500" : ""}
               />
               {errors.username && (
@@ -197,12 +209,12 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">描述</Label>
+            <Label htmlFor="description">{tServers("formDescriptionLabel")}</Label>
             <Textarea
               id="description"
               value={values.description}
               onChange={(e) => setValue("description", e.target.value)}
-              placeholder="服务器描述信息"
+              placeholder={tServers("formDescriptionPlaceholder")}
               rows={3}
             />
           </div>
@@ -212,12 +224,12 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
       {/* 认证信息 */}
       <Card>
         <CardHeader>
-          <CardTitle>认证信息</CardTitle>
-          <CardDescription>选择认证方式并配置相应的认证信息</CardDescription>
+          <CardTitle>{tServers("formAuthTitle")}</CardTitle>
+          <CardDescription>{tServers("formAuthDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>认证方式</Label>
+            <Label>{tServers("formAuthMethodLabel")}</Label>
             <Select
               value={values.authMethod}
               onValueChange={(value: "password" | "privateKey") => setValue("authMethod", value)}
@@ -226,22 +238,28 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="password">密码认证</SelectItem>
-                <SelectItem value="privateKey">私钥认证</SelectItem>
+                <SelectItem value="password">
+                  {tServers("formAuthMethodPassword")}
+                </SelectItem>
+                <SelectItem value="privateKey">
+                  {tServers("formAuthMethodPrivateKey")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {values.authMethod === "password" ? (
             <div className="space-y-2">
-              <Label htmlFor="password">密码 *</Label>
+              <Label htmlFor="password">
+                {tServers("formPasswordLabel")} *
+              </Label>
               <Input
                 id="password"
                 type="password"
                 autoComplete="new-password"
                 value={values.password}
                 onChange={(e) => setValue("password", e.target.value)}
-                placeholder="登录密码"
+                placeholder={tServers("formPasswordPlaceholder")}
                 className={errors.password ? "border-red-500" : ""}
               />
               {errors.password && (
@@ -251,11 +269,11 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
           ) : (
             <PrivateKeyInput
               id="privateKey"
-              label="私钥"
+              label={tServers("formPrivateKeyLabel")}
               required
               value={values.privateKey}
               onChange={(v) => setValue("privateKey", v)}
-              placeholder="粘贴或从文件导入私钥内容"
+              placeholder={tServers("formPrivateKeyPlaceholder")}
               errorText={errors.privateKey as string | undefined}
             />
           )}
@@ -265,13 +283,13 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
       {/* 高级设置 */}
       <Card>
         <CardHeader>
-          <CardTitle>高级设置</CardTitle>
-          <CardDescription>配置标签、跳板机和连接选项</CardDescription>
+          <CardTitle>{tServers("formAdvancedTitle")}</CardTitle>
+          <CardDescription>{tServers("formAdvancedDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* 标签管理 */}
           <div className="space-y-2">
-            <Label>标签</Label>
+            <Label>{tServers("formTagsLabel")}</Label>
             <div className="flex flex-wrap gap-2 mb-2">
               {values.tags.map((tag) => (
                 <Badge key={tag} variant="secondary" className="flex items-center gap-1">
@@ -292,7 +310,7 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
               <Input
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
-                placeholder="添加标签"
+                placeholder={tServers("formTagsPlaceholder")}
                 onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
               />
               <Button type="button" variant="outline" onClick={handleAddTag}>
@@ -302,16 +320,20 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="jumpServer">跳板机</Label>
-            <Select
+            <Label htmlFor="jumpServer">{tServers("formJumpServerLabel")}</Label>
+              <Select
               value={values.jumpServer}
               onValueChange={(value) => setValue("jumpServer", value)}
-            >
+              >
               <SelectTrigger>
-                <SelectValue placeholder="选择跳板机（可选）" />
+                <SelectValue
+                  placeholder={tServers("formJumpServerPlaceholder")}
+                />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">无</SelectItem>
+                <SelectItem value="none">
+                  {tServers("formJumpServerNone")}
+                </SelectItem>
                 <SelectItem value="jump-01">跳板机01 (192.168.1.10)</SelectItem>
                 <SelectItem value="jump-02">跳板机02 (192.168.1.11)</SelectItem>
               </SelectContent>
@@ -323,9 +345,9 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>自动连接</Label>
+                <Label>{tServers("formAutoConnectLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  在服务器列表中自动建立连接
+                  {tServers("formAutoConnectDescription")}
                 </p>
               </div>
               <Switch
@@ -336,9 +358,9 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>保持连接</Label>
+                <Label>{tServers("formKeepAliveLabel")}</Label>
                 <p className="text-sm text-muted-foreground">
-                  启用TCP Keep-Alive保持连接活跃
+                  {tServers("formKeepAliveDescription")}
                 </p>
               </div>
               <Switch
@@ -359,18 +381,22 @@ export function ServerForm({ initialData, onSubmit, onCancel, isLoading }: Serve
           disabled={isConnecting}
         >
           <TestTube className="mr-2 h-4 w-4" />
-          {isConnecting ? "测试中..." : "测试连接"}
+          {isConnecting
+            ? tServers("formTestConnectionTesting")
+            : tServers("formTestConnection")}
         </Button>
 
         <div className="flex gap-2">
           {onCancel && (
             <Button type="button" variant="outline" onClick={onCancel}>
-              取消
+              {tServers("formCancelButton")}
             </Button>
           )}
           <Button type="submit" disabled={isLoading}>
             <Save className="mr-2 h-4 w-4" />
-            {isLoading ? "保存中..." : "保存"}
+            {isLoading
+              ? tServers("formSaveButtonLoading")
+              : tServers("formSaveButton")}
           </Button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
@@ -19,14 +20,9 @@ interface AIProviderTabProps {
   isAdmin?: boolean
 }
 
-const providerOptions = [
-  { label: "OpenAI", value: "openai" },
-  { label: "Anthropic (Claude)", value: "anthropic" },
-  { label: "Azure OpenAI", value: "azure" },
-  { label: "自定义", value: "custom" },
-]
-
 export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
+  const tAI = useTranslations("settingsIntegrationsAI")
+  const tCommon = useTranslations("common")
   const [showApiKey, setShowApiKey] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const useSystemConfig = form.watch("use_system_config")
@@ -37,9 +33,16 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
     // 模拟测试连接
     setTimeout(() => {
       setIsTesting(false)
-      alert("连接测试成功！")
+      alert(tAI("btnTestConnection"))
     }, 1500)
   }
+
+  const providerOptions = [
+    { label: tAI("providerOpenAI"), value: "openai" },
+    { label: tAI("providerAnthropic"), value: "anthropic" },
+    { label: tAI("providerAzure"), value: "azure" },
+    { label: tAI("providerCustom"), value: "custom" },
+  ]
 
   return (
     <div className="space-y-4">
@@ -47,27 +50,27 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
       {isAdmin && (
         <>
           <SettingsSection
-            title="系统配置（管理员）"
-            description="配置全局AI服务，供所有用户使用"
+            title={tAI("sectionTitle")}
+            description={tAI("sectionDescription")}
             icon={<Bot className="h-5 w-5" />}
           >
             <FormSwitch
               form={form}
               name="system_enabled"
-              label="启用系统AI服务"
-              description="开启后，所有用户可使用系统配置的AI服务"
+              label={tAI("fieldSystemEnabledLabel")}
+              description={tAI("fieldSystemEnabledDesc")}
             />
 
             {form.watch("system_enabled") && (
               <>
                 <div className="space-y-2">
-                  <Label>AI服务提供商</Label>
+                  <Label>{tAI("fieldProviderLabel")}</Label>
                   <Select
                     value={form.watch("system_provider")}
                     onValueChange={(val) => form.setValue("system_provider", val as "openai" | "anthropic" | "azure" | "custom")}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="选择提供商" />
+                      <SelectValue placeholder={tAI("fieldProviderPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {providerOptions.map((opt) => (
@@ -82,8 +85,8 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
                 <FormInput
                   form={form}
                   name="system_api_endpoint"
-                  label="API端点"
-                  description="AI服务的API地址"
+                  label={tAI("fieldApiEndpointLabel")}
+                  description={tAI("fieldApiEndpointDesc")}
                   type="url"
                   placeholder="https://api.openai.com/v1"
                 />
@@ -91,14 +94,14 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
                 <FormInput
                   form={form}
                   name="system_default_model"
-                  label="默认模型"
+                  label={tAI("fieldDefaultModelLabel")}
                   placeholder="gpt-4"
                 />
 
                 <FormInput
                   form={form}
                   name="system_rate_limit"
-                  label="速率限制（请求/分钟）"
+                  label={tAI("fieldRateLimitLabel")}
                   type="number"
                   min={1}
                   max={1000}
@@ -113,29 +116,31 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
 
       {/* 个人API配置 */}
       <SettingsSection
-        title="个人API配置"
-        description="配置您自己的AI服务API密钥"
+        title={tAI("personalSectionTitle")}
+        description={tAI("personalSectionDescription")}
         icon={<Zap className="h-5 w-5" />}
       >
         {isAdmin && (
           <FormSwitch
             form={form}
             name="use_system_config"
-            label="使用系统配置"
-            description="开启后将使用管理员配置的系统AI服务"
+            label={tAI("fieldUseSystemConfigLabel")}
+            description={tAI("fieldUseSystemConfigDesc")}
           />
         )}
 
         {!useSystemConfig && (
           <>
             <div className="space-y-2">
-              <Label>AI服务提供商 *</Label>
+              <Label>{tAI("fieldPersonalProviderLabel")}</Label>
               <Select
                 value={provider}
                 onValueChange={(val) => form.setValue("provider", val as "openai" | "anthropic" | "azure" | "custom")}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择提供商" />
+                  <SelectValue
+                    placeholder={tAI("fieldPersonalProviderPlaceholder")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {providerOptions.map((opt) => (
@@ -148,12 +153,14 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="api_key">API密钥 *</Label>
+              <Label htmlFor="api_key">
+                {tAI("fieldPersonalApiKeyLabel")}
+              </Label>
               <div className="flex gap-2">
                 <Input
                   id="api_key"
                   type={showApiKey ? "text" : "password"}
-                  placeholder="sk-..."
+                  placeholder={tAI("fieldPersonalApiKeyPlaceholder")}
                   {...form.register("api_key")}
                 />
                 <Button
@@ -179,8 +186,8 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
             <FormInput
               form={form}
               name="api_endpoint"
-              label="API端点"
-              description="自定义API地址（可选）"
+              label={tAI("fieldPersonalApiEndpointLabel")}
+              description={tAI("fieldPersonalApiEndpointDesc")}
               type="url"
               placeholder={
                 provider === "openai"
@@ -194,8 +201,8 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
             <FormInput
               form={form}
               name="preferred_model"
-              label="偏好模型"
-              description="您希望使用的AI模型"
+              label={tAI("fieldPreferredModelLabel")}
+              description={tAI("fieldPreferredModelDesc")}
               placeholder={
                 provider === "openai"
                   ? "gpt-4, gpt-3.5-turbo"
@@ -215,12 +222,12 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
               {isTesting ? (
                 <>
                   <Zap className="mr-2 h-4 w-4 animate-spin" />
-                  测试中...
+                  {tAI("btnTestConnectionTesting")}
                 </>
               ) : (
                 <>
                   <Zap className="mr-2 h-4 w-4" />
-                  测试连接
+                  {tAI("btnTestConnection")}
                 </>
               )}
             </Button>
@@ -231,22 +238,33 @@ export function AIProviderTab({ form, isAdmin = false }: AIProviderTabProps) {
           <InfoIcon className="h-4 w-4" />
           <AlertDescription>
             {useSystemConfig ? (
-              <span>您正在使用系统配置的AI服务。如需使用自己的API，请关闭&ldquo;使用系统配置&rdquo;选项。</span>
+              <span>{tAI("alertUsingSystemConfig")}</span>
             ) : (
               <span>
-                API密钥将加密存储。不同的AI服务提供商有不同的定价策略，请根据您的需求选择合适的服务。
+                {tAI("alertUsingPersonalConfig")}
               </span>
             )}
           </AlertDescription>
         </Alert>
 
         <div className="rounded-lg border p-4 bg-muted/50">
-          <p className="text-sm font-medium mb-2">提供商说明：</p>
+          <p className="text-sm font-medium mb-2">
+            {tAI("providerHelpTitle")}
+          </p>
           <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• <strong>OpenAI:</strong> GPT-4, GPT-3.5 等模型</li>
-            <li>• <strong>Anthropic:</strong> Claude 3 系列模型</li>
-            <li>• <strong>Azure OpenAI:</strong> 微软Azure托管的OpenAI服务</li>
-            <li>• <strong>自定义:</strong> 兼容OpenAI API格式的第三方服务</li>
+            <li>
+              • <strong>OpenAI:</strong> {tAI("providerHelpOpenAI")}
+            </li>
+            <li>
+              • <strong>Anthropic:</strong> {tAI("providerHelpAnthropic")}
+            </li>
+            <li>
+              • <strong>Azure OpenAI:</strong> {tAI("providerHelpAzure")}
+            </li>
+            <li>
+              • <strong>{tAI("providerCustom")}:</strong>{" "}
+              {tAI("providerHelpCustom")}
+            </li>
           </ul>
         </div>
       </SettingsSection>

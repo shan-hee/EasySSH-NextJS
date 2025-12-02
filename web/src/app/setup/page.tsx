@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { authApi } from "@/lib/api/auth"
@@ -10,10 +11,12 @@ import { Input } from "@/components/ui/input"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { User, Mail, Lock, Check, Loader2, Settings, Rocket, Play, Code, Server } from "lucide-react"
 import LightRays from "@/components/LightRays"
+import { AuthI18nProvider } from "@/providers/auth-i18n-provider"
 
 type RunMode = "demo" | "development" | "production"
 
-export default function SetupPage() {
+function SetupPageInner() {
+  const tSetup = useTranslations("setup")
   const router = useRouter()
   const { authStatus, isLoading, refreshConfig } = useSystemConfig()
   const [step, setStep] = useState<"checking" | "welcome" | "mode-selection" | "create-admin" | "completed">("checking")
@@ -34,7 +37,7 @@ export default function SetupPage() {
 
     if (!authStatus) {
       console.error("Auth status is unavailable during setup check")
-      setError("无法连接到服务器,请检查后端服务是否运行")
+      setError(tSetup("checkingError"))
       return
     }
 
@@ -62,17 +65,17 @@ export default function SetupPage() {
 
     // 表单验证
     if (!username || !email || !password) {
-      setError("请填写所有必填字段")
+      setError(tSetup("validateRequired"))
       return
     }
 
     if (password !== confirmPassword) {
-      setError("两次输入的密码不一致")
+      setError(tSetup("validatePasswordMismatch"))
       return
     }
 
     if (password.length < 6) {
-      setError("密码长度至少为6个字符")
+      setError(tSetup("validatePasswordTooShort"))
       return
     }
 
@@ -100,9 +103,13 @@ export default function SetupPage() {
     } catch (error: unknown) {
       console.error("Failed to initialize admin:", error)
       if (error && typeof error === "object" && "detail" in error) {
-        setError(`初始化失败: ${JSON.stringify(error.detail)}`)
+        setError(
+          tSetup("initFailedWithDetail", {
+            detail: JSON.stringify((error as any).detail),
+          }),
+        )
       } else {
-        setError("初始化失败,请重试")
+        setError(tSetup("initFailedGeneric"))
       }
     } finally {
       setIsSubmitting(false)
@@ -134,7 +141,7 @@ export default function SetupPage() {
         <div className="relative z-10 w-full max-w-md">
           <div className="flex flex-col items-center justify-center gap-4 text-center">
             <Loader2 className="h-12 w-12 animate-spin text-zinc-400" />
-            <p className="text-lg text-zinc-300">正在检查系统状态...</p>
+            <p className="text-lg text-zinc-300">{tSetup("checkingTitle")}</p>
             {error && (
               <div className="mt-4 rounded-lg bg-red-950/50 border border-red-800 px-4 py-3 text-sm text-red-400">
                 {error}
@@ -183,10 +190,10 @@ export default function SetupPage() {
                 />
               </div>
               <div className="space-y-2">
-                <h1 className="text-3xl font-bold text-zinc-50">欢迎使用 EasySSH</h1>
-                <p className="text-zinc-400">
-                  感谢您选择 EasySSH!在开始使用之前,我们需要完成系统初始化设置。
-                </p>
+                <h1 className="text-3xl font-bold text-zinc-50">
+                  {tSetup("welcomeTitle")}
+                </h1>
+                <p className="text-zinc-400">{tSetup("welcomeDescription")}</p>
               </div>
             </div>
 
@@ -196,24 +203,36 @@ export default function SetupPage() {
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-800">
                   <User className="h-6 w-6 text-zinc-400" />
                 </div>
-                <h3 className="font-semibold text-zinc-200 mb-2">创建管理员</h3>
-                <p className="text-sm text-zinc-500">设置超级管理员账户</p>
+                <h3 className="font-semibold text-zinc-200 mb-2">
+                  {tSetup("welcomeStepCreateAdminTitle")}
+                </h3>
+                <p className="text-sm text-zinc-500">
+                  {tSetup("welcomeStepCreateAdminDesc")}
+                </p>
               </div>
 
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-800">
                   <Settings className="h-6 w-6 text-zinc-400" />
                 </div>
-                <h3 className="font-semibold text-zinc-200 mb-2">选择模式</h3>
-                <p className="text-sm text-zinc-500">配置运行环境模式</p>
+                <h3 className="font-semibold text-zinc-200 mb-2">
+                  {tSetup("welcomeStepSelectModeTitle")}
+                </h3>
+                <p className="text-sm text-zinc-500">
+                  {tSetup("welcomeStepSelectModeDesc")}
+                </p>
               </div>
 
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-800">
                   <Rocket className="h-6 w-6 text-zinc-400" />
                 </div>
-                <h3 className="font-semibold text-zinc-200 mb-2">开始使用</h3>
-                <p className="text-sm text-zinc-500">准备就绪,立即开始</p>
+                <h3 className="font-semibold text-zinc-200 mb-2">
+                  {tSetup("welcomeStepStartTitle")}
+                </h3>
+                <p className="text-sm text-zinc-500">
+                  {tSetup("welcomeStepStartDesc")}
+                </p>
               </div>
             </div>
 
@@ -222,7 +241,7 @@ export default function SetupPage() {
               className="w-full"
               size="lg"
             >
-              开始初始化设置
+              {tSetup("welcomeStartButton")}
             </Button>
           </div>
         </div>
@@ -235,24 +254,36 @@ export default function SetupPage() {
     const modes = [
       {
         id: "demo" as RunMode,
-        name: "演示模式",
+        name: tSetup("modeDemoName"),
         icon: Play,
-        description: "用于演示和展示功能,包含示例数据",
-        features: ["预置演示数据", "功能完整展示", "适合快速体验"],
+        description: tSetup("modeDemoDesc"),
+        features: [
+          tSetup("modeDemoFeature1"),
+          tSetup("modeDemoFeature2"),
+          tSetup("modeDemoFeature3"),
+        ],
       },
       {
         id: "development" as RunMode,
-        name: "开发模式",
+        name: tSetup("modeDevName"),
         icon: Code,
-        description: "用于开发和测试,包含调试工具",
-        features: ["详细日志输出", "调试工具可用", "热重载支持"],
+        description: tSetup("modeDevDesc"),
+        features: [
+          tSetup("modeDevFeature1"),
+          tSetup("modeDevFeature2"),
+          tSetup("modeDevFeature3"),
+        ],
       },
       {
         id: "production" as RunMode,
-        name: "生产模式",
+        name: tSetup("modeProdName"),
         icon: Server,
-        description: "用于正式环境,性能和安全性优化",
-        features: ["性能优化", "增强安全性", "生产级配置"],
+        description: tSetup("modeProdDesc"),
+        features: [
+          tSetup("modeProdFeature1"),
+          tSetup("modeProdFeature2"),
+          tSetup("modeProdFeature3"),
+        ],
       },
     ]
 
@@ -279,8 +310,10 @@ export default function SetupPage() {
         <div className="relative z-10 w-full max-w-4xl">
           <div className="flex flex-col gap-6">
             <div className="text-center">
-              <h1 className="text-2xl font-bold text-zinc-50 mb-2">选择运行模式</h1>
-              <p className="text-zinc-400">根据您的使用场景选择合适的运行模式</p>
+              <h1 className="text-2xl font-bold text-zinc-50 mb-2">
+                {tSetup("modeTitle")}
+              </h1>
+              <p className="text-zinc-400">{tSetup("modeSubtitle")}</p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -328,13 +361,13 @@ export default function SetupPage() {
                 onClick={() => setStep("welcome")}
                 className="flex-1"
               >
-                返回
+                {tSetup("modeBackButton")}
               </Button>
               <Button
                 onClick={() => handleModeSelect(runMode)}
                 className="flex-1"
               >
-                下一步
+                {tSetup("modeNextButton")}
               </Button>
             </div>
           </div>
@@ -368,24 +401,34 @@ export default function SetupPage() {
         <div className="relative z-10 w-full max-w-md">
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             <div className="text-center">
-              <h1 className="text-2xl font-bold text-zinc-50 mb-2">创建管理员账户</h1>
-              <p className="text-zinc-400">请设置您的管理员账户信息</p>
+              <h1 className="text-2xl font-bold text-zinc-50 mb-2">
+                {tSetup("createAdminTitle")}
+              </h1>
+              <p className="text-zinc-400">
+                {tSetup("createAdminSubtitle")}
+              </p>
             </div>
 
             {/* 显示选择的模式 */}
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-zinc-400">运行模式:</span>
+                <span className="text-zinc-400">
+                  {tSetup("createAdminRunModeLabel")}
+                </span>
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-zinc-200">
-                    {runMode === "demo" ? "演示模式" : runMode === "development" ? "开发模式" : "生产模式"}
+                    {runMode === "demo"
+                      ? tSetup("modeDemoName")
+                      : runMode === "development"
+                      ? tSetup("modeDevName")
+                      : tSetup("modeProdName")}
                   </span>
                   <button
                     type="button"
                     onClick={() => setStep("mode-selection")}
                     className="text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
-                    更改
+                    {tSetup("createAdminChangeMode")}
                   </button>
                 </div>
               </div>
@@ -394,14 +437,14 @@ export default function SetupPage() {
             <div className="space-y-4">
               <Field>
                 <FieldLabel htmlFor="username" className="text-zinc-200">
-                  用户名 *
+                  {tSetup("createAdminUsernameLabel")}
                 </FieldLabel>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
                     id="username"
                     type="text"
-                    placeholder="admin"
+                    placeholder={tSetup("createAdminUsernamePlaceholder")}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600"
@@ -413,14 +456,14 @@ export default function SetupPage() {
 
               <Field>
                 <FieldLabel htmlFor="email" className="text-zinc-200">
-                  邮箱地址 *
+                  {tSetup("createAdminEmailLabel")}
                 </FieldLabel>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
                     id="email"
                     type="email"
-                    placeholder="admin@example.com"
+                    placeholder={tSetup("createAdminEmailPlaceholder")}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600"
@@ -431,14 +474,14 @@ export default function SetupPage() {
 
               <Field>
                 <FieldLabel htmlFor="password" className="text-zinc-200">
-                  密码 *
+                  {tSetup("createAdminPasswordLabel")}
                 </FieldLabel>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
                     id="password"
                     type="password"
-                    placeholder="至少6个字符"
+                    placeholder={tSetup("createAdminPasswordPlaceholder")}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600"
@@ -450,14 +493,14 @@ export default function SetupPage() {
 
               <Field>
                 <FieldLabel htmlFor="confirmPassword" className="text-zinc-200">
-                  确认密码 *
+                  {tSetup("createAdminConfirmPasswordLabel")}
                 </FieldLabel>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
                     id="confirmPassword"
                     type="password"
-                    placeholder="再次输入密码"
+                    placeholder={tSetup("createAdminConfirmPasswordPlaceholder")}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="pl-10 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-600"
@@ -482,7 +525,7 @@ export default function SetupPage() {
                 disabled={isSubmitting}
                 className="flex-1"
               >
-                返回
+                {tSetup("createAdminBackButton")}
               </Button>
               <Button
                 type="submit"
@@ -492,10 +535,10 @@ export default function SetupPage() {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    创建中...
+                    {tSetup("createAdminSubmitting")}
                   </>
                 ) : (
-                  "创建管理员"
+                  tSetup("createAdminSubmit")
                 )}
               </Button>
             </div>
@@ -533,11 +576,15 @@ export default function SetupPage() {
               <Check className="h-10 w-10 text-green-500" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-3xl font-bold text-zinc-50">初始化完成!</h2>
+              <h2 className="text-3xl font-bold text-zinc-50">
+                {tSetup("completedTitle")}
+              </h2>
               <p className="text-zinc-400">
-                管理员账户已成功创建
+                {tSetup("completedDescriptionLine1")}
                 <br />
-                <span className="text-sm">即将跳转到仪表板...</span>
+                <span className="text-sm">
+                  {tSetup("completedDescriptionLine2")}
+                </span>
               </p>
             </div>
             <div className="w-full max-w-xs">
@@ -552,4 +599,12 @@ export default function SetupPage() {
   }
 
   return null
+}
+
+export default function SetupPage() {
+  return (
+    <AuthI18nProvider>
+      <SetupPageInner />
+    </AuthI18nProvider>
+  )
 }

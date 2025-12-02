@@ -6,6 +6,7 @@ import {
   LogOut,
   Settings,
 } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 import { SmartAvatar } from "@/components/ui/smart-avatar"
 import {
@@ -36,6 +37,8 @@ export const NavUser = React.memo(function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const { logout } = useClientAuth()
+  const tCommon = useTranslations("common")
+  const tAccount = useTranslations("accountSettings")
 
   const handleSettingsSelect = React.useCallback((e: Event) => {
     e.preventDefault()
@@ -98,13 +101,13 @@ export const NavUser = React.memo(function NavUser({
             <SettingsDialog>
               <DropdownMenuItem onSelect={handleSettingsSelect}>
                 <Settings />
-                设置
+                {tAccount("dialogTitle")}
               </DropdownMenuItem>
             </SettingsDialog>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <LogOut />
-              退出登录
+              {tCommon("logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

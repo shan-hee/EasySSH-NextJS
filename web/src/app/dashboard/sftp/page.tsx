@@ -41,6 +41,10 @@ import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { useFileTransfer } from "@/hooks/useFileTransfer"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { useTranslations } from "next-intl"
 
 // 将后端FileInfo转换为组件使用的文件格式
 type ComponentFile = {
@@ -62,7 +66,7 @@ function formatFileSize(bytes: number): string {
 // 权限转换缓存(避免重复计算)
 const permissionCache = new Map<string, string>()
 
-// 优化的权限格式化函数
+// 优化的权限格式化函数（与语言/时区无关）
 function formatMode(mode: number, isDir: boolean): string {
   const cacheKey = `${mode}-${isDir}`
   if (permissionCache.has(cacheKey)) {
@@ -70,59 +74,24 @@ function formatMode(mode: number, isDir: boolean): string {
   }
 
   if (!mode && mode !== 0) {
-    return '---------'
+    return "---------"
   }
 
   // 使用位运算直接构建字符串(比数组 join 更快)
   const perms =
-    (mode & 0o400 ? 'r' : '-') +
-    (mode & 0o200 ? 'w' : '-') +
-    (mode & 0o100 ? 'x' : '-') +
-    (mode & 0o040 ? 'r' : '-') +
-    (mode & 0o020 ? 'w' : '-') +
-    (mode & 0o010 ? 'x' : '-') +
-    (mode & 0o004 ? 'r' : '-') +
-    (mode & 0o002 ? 'w' : '-') +
-    (mode & 0o001 ? 'x' : '-')
+    (mode & 0o400 ? "r" : "-") +
+    (mode & 0o200 ? "w" : "-") +
+    (mode & 0o100 ? "x" : "-") +
+    (mode & 0o040 ? "r" : "-") +
+    (mode & 0o020 ? "w" : "-") +
+    (mode & 0o010 ? "x" : "-") +
+    (mode & 0o004 ? "r" : "-") +
+    (mode & 0o002 ? "w" : "-") +
+    (mode & 0o001 ? "x" : "-")
 
-  const result = (isDir ? 'd' : '-') + perms
+  const result = (isDir ? "d" : "-") + perms
   permissionCache.set(cacheKey, result)
   return result
-}
-
-// 优化的日期格式化函数(使用 toLocaleString 更快)
-function formatModTime(modTime: string): string {
-  if (!modTime) return '-'
-  try {
-    const date = new Date(modTime)
-    if (isNaN(date.getTime())) return '-'
-
-    // 使用 toLocaleString 比手动拼接更快
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).replace(/\//g, '-')
-  } catch {
-    return '-'
-  }
-}
-
-function convertFileInfo(file: FileInfo): ComponentFile {
-  // 优先使用 permission 字段，否则从 mode 数字转换
-  const permissions = file.permission || formatMode(file.mode, file.is_dir)
-
-  return {
-    name: file.name,
-    type: file.is_dir ? "directory" : "file",
-    size: file.is_dir ? "-" : formatFileSize(file.size),
-    modified: formatModTime(file.mod_time),
- permissions,
- }
 }
 
 // 定义连接会话接口
@@ -277,6 +246,58 @@ SortableSession.displayName = "SortableSession"
 
 export default function SftpPage() {
  const { ready } = useAuthReady()
+ const { user } = useClientAuth()
+ const { data: systemConfig } = useSystemConfig()
+ const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+ const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+ const tCommon = useTranslations("common")
+ const tSftp = useTranslations("sftp")
+ const tTerminal = useTranslations("terminal")
+
+ // 按用户/系统语言和时区格式化修改时间
+ const formatModTime = useCallback(
+   (modTime: string): string => {
+     if (!modTime) return "-"
+     try {
+       const date = new Date(modTime)
+       if (isNaN(date.getTime())) return "-"
+
+       return formatInTimezone(
+         date,
+         {
+           year: "numeric",
+           month: "2-digit",
+           day: "2-digit",
+           hour: "2-digit",
+           minute: "2-digit",
+           second: "2-digit",
+           hour12: false,
+         },
+         effectiveLocale,
+         effectiveTimezone,
+       ).replace(/\//g, "-")
+     } catch {
+       return "-"
+     }
+   },
+   [effectiveLocale, effectiveTimezone],
+ )
+
+ const convertFileInfo = useCallback(
+   (file: FileInfo): ComponentFile => {
+     // 优先使用 permission 字段，否则从 mode 数字转换
+     const permissions = file.permission || formatMode(file.mode, file.is_dir)
+
+     return {
+       name: file.name,
+       type: file.is_dir ? "directory" : "file",
+       size: file.is_dir ? "-" : formatFileSize(file.size),
+       modified: formatModTime(file.mod_time),
+       permissions,
+     }
+   },
+   [formatModTime],
+ )
  const [servers, setServers] = useState<ApiServer[]>([])
  const [loading, setLoading] = useState(true)
  // 认证改为基于 HttpOnly Cookie，不再需要前端 token
@@ -319,11 +340,11 @@ export default function SftpPage() {
  } catch (error: unknown) {
  console.error("Failed to load servers:", error)
 
- toast.error(getErrorMessage(error, "加载服务器列表失败"))
+ toast.error(getErrorMessage(error, tTerminal("errorLoadServers")))
  } finally {
  setLoading(false)
  }
- }, [])
+ }, [tTerminal])
 
  useEffect(() => {
    if (!ready) return
@@ -410,7 +431,7 @@ export default function SftpPage() {
  if (!server) return
 
  if (server.status !== "online") {
- toast.error("服务器离线，无法连接")
+ toast.error(tTerminal("errorServerOffline"))
  return
  }
 
@@ -462,7 +483,7 @@ export default function SftpPage() {
  )
  } catch (error: unknown) {
  console.error("Failed to load directory:", error)
- toast.error(getErrorMessage(error, "加载目录失败"))
+ toast.error(getErrorMessage(error, tSftp("toastLoadDirectoryFailed")))
 
  // 连接失败，移除会话
  setSessions(prev => prev.filter(s => s.id !== sessionId))
@@ -503,13 +524,13 @@ export default function SftpPage() {
    )
  })
 
- toast.success("刷新成功")
+ toast.success(tSftp("toastRefreshSuccess"))
  } catch (error: unknown) {
  console.error("Failed to refresh:", error)
  setSessions(prev =>
  prev.map(s => (s.id === sessionId ? { ...s, isLoading: false } : s))
  )
- toast.error(getErrorMessage(error, "刷新失败"))
+ toast.error(getErrorMessage(error, tSftp("toastRefreshFailed")))
  }
  }
 
@@ -569,8 +590,8 @@ export default function SftpPage() {
  setSessions(prev =>
  prev.map(s => (s.id === sessionId ? { ...s, isLoading: false } : s))
  )
- toast.error(getErrorMessage(error, "打开目录失败"))
- }
+ toast.error(getErrorMessage(error, tSftp("toastLoadDirectoryFailed")))
+}
  }
 
  // 上传文件（接入统一上传任务 UI）
@@ -586,7 +607,7 @@ export default function SftpPage() {
    let successCount = 0
    let failCount = 0
 
-   for (const file of files) {
+  for (const file of files) {
      try {
        await uploadFile(
          session.serverId,
@@ -603,18 +624,18 @@ export default function SftpPage() {
      } catch (error: unknown) {
        console.error(`Failed to upload ${file.name}:`, error)
        failCount++
-     }
    }
+  }
 
-   if (successCount > 0) {
-     toast.success(`成功上传 ${successCount} 个文件`)
+  if (successCount > 0) {
+    toast.success(tSftp("toastUploadSuccess", { count: successCount }))
      // 刷新文件列表
      await handleRefreshSession(sessionId)
-   }
+  }
 
-   if (failCount > 0) {
-     toast.error(`${failCount} 个文件上传失败`)
-   }
+  if (failCount > 0) {
+    toast.error(tSftp("toastUploadFailed", { count: failCount }))
+  }
  }
 
  // 下载文件
@@ -626,10 +647,10 @@ export default function SftpPage() {
 
  try {
    await sftpApi.downloadFile(session.serverId, filePath, fileName)
-   toast.success(`开始下载: ${fileName}`)
+   toast.success(tSftp("toastDownloadStartSingle", { file: fileName }))
  } catch (error: unknown) {
    console.error("Failed to download:", error)
-   toast.error(getErrorMessage(error, "下载失败"))
+   toast.error(getErrorMessage(error, tSftp("toastDownloadFailed")))
  }
  }
 
@@ -642,13 +663,13 @@ export default function SftpPage() {
 
  try {
  await sftpApi.delete(session.serverId, filePath)
- toast.success(`删除成功: ${fileName}`)
+ toast.success(tSftp("toastDeleteSuccessSingle", { file: fileName }))
 
  // 刷新文件列表
  await handleRefreshSession(sessionId)
  } catch (error: unknown) {
  console.error("Failed to delete:", error)
- toast.error(getErrorMessage(error, "删除失败"))
+ toast.error(getErrorMessage(error, tSftp("toastDeleteFailed")))
  }
  }
 
@@ -661,13 +682,13 @@ export default function SftpPage() {
 
  try {
  await sftpApi.createDirectory(session.serverId, folderPath)
- toast.success(`创建文件夹成功: ${name}`)
+ toast.success(tSftp("toastCreateFolderSuccess", { name }))
 
  // 刷新文件列表
  await handleRefreshSession(sessionId)
  } catch (error: unknown) {
  console.error("Failed to create folder:", error)
- toast.error(getErrorMessage(error, "创建文件夹失败"))
+ toast.error(getErrorMessage(error, tSftp("toastCreateFolderFailed")))
  }
  }
 
@@ -681,13 +702,13 @@ export default function SftpPage() {
 
  try {
  await sftpApi.rename(session.serverId, oldPath, newPath)
- toast.success(`重命名成功: ${oldName} → ${newName}`)
+ toast.success(tSftp("toastRenameSuccess", { oldName, newName }))
 
  // 刷新文件列表
  await handleRefreshSession(sessionId)
  } catch (error: unknown) {
  console.error("Failed to rename:", error)
- toast.error(getErrorMessage(error, "重命名失败"))
+ toast.error(getErrorMessage(error, tSftp("toastRenameFailed")))
  }
  }
 
@@ -695,7 +716,7 @@ export default function SftpPage() {
  const handleReadFile = async (sessionId: string, fileName: string): Promise<string> => {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) {
- throw new Error("会话未连接")
+ throw new Error("SFTP session is not connected")
  }
 
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
@@ -705,7 +726,7 @@ export default function SftpPage() {
  return content
  } catch (error: unknown) {
  console.error("Failed to read file:", error)
- toast.error(getErrorMessage(error, "读取文件失败"))
+ toast.error(getErrorMessage(error, tSftp("toastReadFileFailed")))
  throw error
  }
  }
@@ -714,20 +735,20 @@ export default function SftpPage() {
  const handleSaveFile = async (sessionId: string, fileName: string, content: string): Promise<void> => {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) {
- throw new Error("会话未连接")
+ throw new Error("SFTP session is not connected")
  }
 
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
  try {
  await sftpApi.writeFile(session.serverId, filePath, content)
- toast.success(`保存成功: ${fileName}`)
+ toast.success(tSftp("toastSaveFileSuccess", { file: fileName }))
 
  // 刷新文件列表（文件大小可能变化）
  await handleRefreshSession(sessionId)
  } catch (error: unknown) {
  console.error("Failed to save file:", error)
- toast.error(getErrorMessage(error, "保存文件失败"))
+ toast.error(getErrorMessage(error, tSftp("toastSaveFileFailed")))
  throw error
  }
  }
@@ -736,7 +757,7 @@ export default function SftpPage() {
  const handleBatchDelete = async (sessionId: string, fileNames: string[]) => {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) {
- throw new Error("会话未连接")
+ throw new Error("SFTP session is not connected")
  }
 
  // 构建完整路径
@@ -749,12 +770,17 @@ export default function SftpPage() {
 
  // 显示结果
  if (result.success.length > 0) {
- toast.success(`成功删除 ${result.success.length} 个文件`)
+ toast.success(tSftp("toastBatchDeleteSuccess", { count: result.success.length }))
  }
 
  if (result.failed.length > 0) {
  const failedNames = result.failed.map(f => f.path.split('/').pop()).join(', ')
- toast.error(`${result.failed.length} 个文件删除失败: ${failedNames}`)
+ toast.error(
+   tSftp("toastBatchDeletePartialFailed", {
+     count: result.failed.length,
+     names: failedNames,
+   }),
+ )
  }
 
  // 刷新文件列表
@@ -763,7 +789,7 @@ export default function SftpPage() {
  return result
  } catch (error: unknown) {
  console.error("Failed to batch delete:", error)
- toast.error(getErrorMessage(error, "批量删除失败"))
+ toast.error(getErrorMessage(error, tSftp("toastBatchDeleteFailed")))
  throw error
  }
  }
@@ -777,7 +803,7 @@ export default function SftpPage() {
  ) => {
    const session = sessions.find(s => s.id === sessionId)
    if (!session || !session.isConnected) {
-     throw new Error("会话未连接")
+     throw new Error("SFTP session is not connected")
    }
 
    // 构建完整路径
@@ -786,16 +812,16 @@ export default function SftpPage() {
    )
 
    try {
-     console.log('[handleBatchDownload] 开始批量下载:', { serverId: session.serverId, filePaths, mode })
+     console.log('[handleBatchDownload] start batch download:', { serverId: session.serverId, filePaths, mode })
      await sftpApi.batchDownload(session.serverId, filePaths, mode, excludePatterns)
-     console.log('[handleBatchDownload] 批量下载触发完成')
-     toast.success(`开始下载 ${fileNames.length} 个文件 (${mode === "fast" ? "快速模式" : "兼容模式"})`)
+     console.log('[handleBatchDownload] batch download triggered')
+     toast.success(tSftp("toastBatchDownloadStart", { count: fileNames.length }))
    } catch (error: unknown) {
      console.error("Failed to batch download:", error)
-     toast.error(getErrorMessage(error, "批量下载失败"))
+     toast.error(getErrorMessage(error, tSftp("toastBatchDownloadFailed")))
      throw error
    }
- }, [sessions])
+ }, [sessions, tSftp])
 
  // 获取网格布局类名
  const getGridLayout = (count: number) => {
@@ -831,8 +857,8 @@ export default function SftpPage() {
  <Server className="h-6 w-6 text-blue-500 animate-pulse" />
  </div>
  <div className="space-y-1">
- <p className="text-sm font-medium">正在连接...</p>
- <p className="text-xs text-muted-foreground">请稍候</p>
+ <p className="text-sm font-medium">{tSftp("connecting")}</p>
+ <p className="text-xs text-muted-foreground">{tCommon("loading")}</p>
  </div>
  </div>
  </div>
@@ -841,29 +867,31 @@ export default function SftpPage() {
 
  // 加载状态 - 使用列表骨架屏
  if (loading) {
- return (
- <>
- <PageHeader title="文件传输" />
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
- <div className="flex items-center justify-between mb-4">
- <h3 className="text-lg font-semibold">可用服务器</h3>
- </div>
- <SkeletonList items={6} showIcon iconShape="square" showSubtitle />
- </div>
- </>
- )
+   return (
+     <>
+       <PageHeader title={tSftp("title")} />
+       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+         <div className="flex items-center justify-between mb-4">
+           <h3 className="text-lg font-semibold">
+             {tSftp("availableServers")}
+           </h3>
+         </div>
+         <SkeletonList items={6} showIcon iconShape="square" showSubtitle />
+       </div>
+     </>
+   )
  }
 
  return (
  <>
- <PageHeader title="文件传输">
+ <PageHeader title={tSftp("title")}>
  {/* 新建连接下拉菜单 - 仅在有会话时显示 */}
  {sessions.length > 0 && (
  <DropdownMenu>
  <DropdownMenuTrigger asChild>
  <Button size="sm" className="gap-2">
  <Plus className="h-4 w-4" />
- 新建连接
+ {tSftp("newConnection")}
  <ChevronDown className="h-3.5 w-3.5 opacity-50" />
  </Button>
  </DropdownMenuTrigger>
@@ -873,7 +901,7 @@ export default function SftpPage() {
  <>
  <DropdownMenuLabel className="flex items-center gap-2 text-xs">
  <div className="w-2 h-2 rounded-full bg-green-500" />
- 在线服务器
+ {tSftp("onlineServers")}
  </DropdownMenuLabel>
  {onlineServers.map(server => (
  <DropdownMenuItem
@@ -899,7 +927,7 @@ export default function SftpPage() {
  {onlineServers.length > 0 && <DropdownMenuSeparator />}
  <DropdownMenuLabel className="flex items-center gap-2 text-xs">
  <div className="w-2 h-2 rounded-full bg-zinc-400" />
- 离线服务器
+ {tSftp("offlineServers")}
  </DropdownMenuLabel>
  {offlineServers.map(server => (
  <DropdownMenuItem
@@ -922,7 +950,7 @@ export default function SftpPage() {
  {/* 无服务器提示 */}
  {onlineServers.length === 0 && offlineServers.length === 0 && (
  <div className="px-2 py-6 text-center text-sm text-muted-foreground">
- 暂无可用服务器
+ {tSftp("noServers")}
  </div>
  )}
  </DropdownMenuContent>
@@ -939,9 +967,9 @@ export default function SftpPage() {
  <FolderOpen className="h-8 w-8 text-blue-500" />
  </div>
  <div className="space-y-2">
- <h1 className="text-2xl font-semibold">文件传输</h1>
+ <h1 className="text-2xl font-semibold">{tSftp("title")}</h1>
  <p className="text-sm text-muted-foreground">
- 通过 SFTP 协议安全管理服务器文件
+ {tSftp("emptyDescription")}
  </p>
  </div>
  </div>
@@ -956,7 +984,7 @@ export default function SftpPage() {
  <div className="flex items-center gap-2 px-2">
  <div className="w-2 h-2 rounded-full bg-green-500" />
  <h2 className="text-sm font-medium text-muted-foreground">
- 在线服务器 ({onlineServers.length})
+ {tSftp("onlineServers")} ({onlineServers.length})
  </h2>
  </div>
  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
@@ -979,7 +1007,9 @@ export default function SftpPage() {
  </div>
  <div className="flex items-center gap-1 text-[10px]">
  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
- <span className="text-green-600 dark:text-green-400">在线</span>
+ <span className="text-green-600 dark:text-green-400">
+ {tSftp("statusOnline")}
+ </span>
  </div>
  </div>
  ))}
@@ -993,7 +1023,7 @@ export default function SftpPage() {
  <div className="flex items-center gap-2 px-2">
  <div className="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-600" />
  <h2 className="text-sm font-medium text-muted-foreground">
- 离线服务器 ({offlineServers.length})
+ {tSftp("offlineServers")} ({offlineServers.length})
  </h2>
  </div>
  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
@@ -1015,7 +1045,9 @@ export default function SftpPage() {
  </div>
  <div className="flex items-center gap-1 text-[10px]">
  <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-600" />
- <span className="text-zinc-500 dark:text-zinc-600">离线</span>
+ <span className="text-zinc-500 dark:text-zinc-600">
+ {tSftp("statusOffline")}
+ </span>
  </div>
  </div>
  ))}

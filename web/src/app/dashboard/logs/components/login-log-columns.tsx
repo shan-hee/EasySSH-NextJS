@@ -1,4 +1,3 @@
-import React from "react"
 import { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,7 +9,12 @@ import {
   parseUserAgent
 } from "@/components/ui/data-table"
 
-export const loginLogColumns: ColumnDef<AuditLog>[] = [
+/**
+ * 根据传入的多语言函数创建登录日志表格列定义。
+ * 调用方组件负责调用 `useTranslations("logsLogin")` 并传入 `t`。
+ */
+export function createLoginLogColumns(t: (key: string) => string): ColumnDef<AuditLog>[] {
+  return [
   // 时间列
   {
     id: "created_at",
@@ -24,7 +28,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
         >
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            时间
+            {t("columnTime")}
           </div>
           {column.getIsSorted() === "asc" ? (
             <ArrowUp className="ml-2 h-4 w-4" />
@@ -65,7 +69,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
       >
         <div className="flex items-center gap-2">
           <User className="h-4 w-4" />
-          用户
+          {t("columnUser")}
         </div>
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
@@ -97,7 +101,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         className="px-2"
       >
-        状态
+        {t("columnStatus")}
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
         ) : column.getIsSorted() === "desc" ? (
@@ -124,7 +128,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
                 : "bg-red-100 text-red-800 border-red-200"
             }
           >
-            {isSuccess ? "成功" : "失败"}
+            {isSuccess ? t("statusSuccess") : t("statusFailure")}
           </Badge>
         </div>
       )
@@ -146,7 +150,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
       >
         <div className="flex items-center gap-2">
           <Globe className="h-4 w-4" />
-          IP地址
+          {t("columnIp")}
         </div>
         {column.getIsSorted() === "asc" ? (
           <ArrowUp className="ml-2 h-4 w-4" />
@@ -167,7 +171,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
           </div>
           {!isInternal && (
             <Badge variant="outline" className="text-xs text-orange-600 border-orange-200">
-              外网
+              {t("badgeExternalIp")}
             </Badge>
           )}
         </div>
@@ -179,7 +183,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
   {
     id: "location",
     accessorKey: "location",
-    header: "位置",
+    header: t("columnLocation"),
     cell: ({ row }) => {
       const ip = row.getValue("ip") as string
       const isInternal = isInternalIP(ip)
@@ -194,7 +198,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
                 : "bg-orange-50 text-orange-700 border-orange-200"
             }
           >
-            {isInternal ? "内部网络" : "外部网络"}
+            {isInternal ? t("locationInternal") : t("locationExternal")}
           </Badge>
         </div>
       )
@@ -206,7 +210,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
   {
     id: "user_agent",
     accessorKey: "user_agent",
-    header: "浏览器",
+    header: t("columnBrowser"),
     cell: ({ row }) => {
       const userAgent = row.getValue("user_agent") as string
       const browser = parseUserAgent(userAgent)
@@ -224,7 +228,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
   {
     id: "details",
     accessorKey: "details",
-    header: "详情",
+    header: t("columnDetails"),
     cell: ({ row }) => {
       const log = row.original
       return (
@@ -238,7 +242,7 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
               {log.details}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">-</div>
+            <div className="text-sm text-muted-foreground">{t("detailsEmpty")}</div>
           )}
           {log.user_agent && (
             <div
@@ -253,3 +257,4 @@ export const loginLogColumns: ColumnDef<AuditLog>[] = [
     },
   },
 ]
+}

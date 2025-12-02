@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { useTranslations } from "next-intl"
 
 export type TableDensity = "compact" | "standard" | "comfortable"
 
@@ -49,25 +50,27 @@ interface DataTableProps<TData, TValue = unknown> {
   batchActions?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode
 }
 
-// 格式化时间
 export function formatTimestamp(timestamp: string): { date: string; time: string } {
   const date = new Date(timestamp)
   return {
-    date: date.toLocaleDateString('zh-CN'),
-    time: date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    // 使用运行环境默认 locale，避免写死为中文
+    date: date.toLocaleDateString(),
+    time: date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
   }
 }
 
-// 格式化时长
 export function formatDuration(seconds: number | undefined): string {
-  if (!seconds) return '-'
-  if (seconds < 60) return `${seconds}秒`
+  if (!seconds) return "-"
+  if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
-  return `${minutes}分${remainingSeconds}秒`
+  return `${minutes}m ${remainingSeconds}s`
 }
 
-// 获取操作类型的颜色
 export function getActionColor(action: string): string {
   const colorMap: Record<string, string> = {
     login: "bg-green-100 text-green-800 border-green-200",
@@ -83,35 +86,6 @@ export function getActionColor(action: string): string {
   return colorMap[action] || "bg-gray-100 text-gray-800 border-gray-200"
 }
 
-// 获取操作类型的中文名称
-export function getActionLabel(action: string): string {
-  const labelMap: Record<string, string> = {
-    login: "登录",
-    logout: "登出",
-    connect: "连接",
-    disconnect: "断开连接",
-    upload: "上传",
-    download: "下载",
-    delete: "删除",
-    create: "创建",
-    update: "更新",
-  }
-  return labelMap[action] || action
-}
-
-// 获取资源类型的中文名称
-export function getResourceLabel(resource: string): string {
-  const labelMap: Record<string, string> = {
-    server: "服务器",
-    file: "文件",
-    user: "用户",
-    system: "系统",
-    session: "会话",
-  }
-  return labelMap[resource] || resource
-}
-
-// 解析用户代理，获取浏览器信息
 export function parseUserAgent(userAgent: string): string {
   if (!userAgent) return "-"
 
@@ -124,10 +98,9 @@ export function parseUserAgent(userAgent: string): string {
   if (userAgent.includes("Safari") && !userAgent.includes("Chrome")) return "Safari"
   if (userAgent.includes("Opera") || userAgent.includes("OPR")) return "Opera"
 
-  return "其他"
+  return "Other"
 }
 
-// 判断是否为内网IP
 export function isInternalIP(ip: string): boolean {
   if (!ip) return false
 
@@ -173,13 +146,14 @@ export function DataTable<TData, TValue = unknown>({
   pageSize = 20,
   totalRows,
   onPageSizeChange,
-  emptyMessage = "暂无数据",
+  emptyMessage,
   className,
   enableRowSelection = false,
   toolbar,
   density = "standard",
   batchActions,
 }: DataTableProps<TData, TValue>) {
+  const tCommon = useTranslations("common")
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
@@ -247,6 +221,7 @@ export function DataTable<TData, TValue = unknown>({
   }
 
   const totalPages = pageCount || Math.ceil((totalRows || data.length) / pageSize)
+  const effectiveEmptyMessage = emptyMessage ?? tCommon("tableEmpty")
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col gap-4", className)}>
@@ -254,13 +229,14 @@ export function DataTable<TData, TValue = unknown>({
         {/* 工具栏区域 */}
         {toolbar && toolbar(table)}
 
-        {/* 批量操作工具栏 */}
         {enableRowSelection && batchActions && table.getFilteredSelectedRowModel().rows.length > 0 && (
           <div className="border-b bg-muted/50 px-4 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
-                  已选择 {table.getFilteredSelectedRowModel().rows.length} 项
+                  {tCommon("tableBulkSelected", {
+                    count: table.getFilteredSelectedRowModel().rows.length,
+                  })}
                 </span>
                 <Button
                   variant="ghost"
@@ -268,7 +244,7 @@ export function DataTable<TData, TValue = unknown>({
                   onClick={() => table.toggleAllPageRowsSelected(false)}
                   className="h-7 text-xs"
                 >
-                  取消选择
+                  {tCommon("tableBulkClearSelection")}
                 </Button>
               </div>
               <div className="flex items-center gap-2">
@@ -338,7 +314,7 @@ export function DataTable<TData, TValue = unknown>({
                     colSpan={columns.length}
                     className={cn("h-24 text-center", densityClasses.cell)}
                   >
-                    {emptyMessage}
+                    {effectiveEmptyMessage}
                   </TableCell>
                 </TableRow>
               )}
@@ -366,19 +342,28 @@ export function DataTable<TData, TValue = unknown>({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div>
-            第 {Math.min((currentPage - 1) * pageSize + 1, totalRows || data.length)} - {Math.min(currentPage * pageSize, totalRows || data.length)} 项，
-            共 {totalRows || data.length} 项
+            {tCommon("tableRange", {
+              from: Math.min((currentPage - 1) * pageSize + 1, totalRows || data.length),
+              to: Math.min(currentPage * pageSize, totalRows || data.length),
+              total: totalRows || data.length,
+            })}
           </div>
           {enableRowSelection && table.getFilteredSelectedRowModel().rows.length > 0 && (
             <div className="flex items-center gap-1">
-              <span>已选择 {table.getFilteredSelectedRowModel().rows.length} 行</span>
+              <span>
+                {tCommon("tableSelectedRows", {
+                  count: table.getFilteredSelectedRowModel().rows.length,
+                })}
+              </span>
             </div>
           )}
         </div>
         <div className="flex items-center gap-4">
           {/* 每页显示数量 */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">每页</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
+              {tCommon("tablePerPage")}
+            </span>
             <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(Number(value))}>
               <SelectTrigger className="w-[70px] h-8">
                 <SelectValue />
@@ -390,7 +375,9 @@ export function DataTable<TData, TValue = unknown>({
                 <SelectItem value="100">100</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-sm text-muted-foreground whitespace-nowrap">条</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
+              {tCommon("tableItems")}
+            </span>
           </div>
 
           {/* 分页导航 */}
@@ -401,7 +388,7 @@ export function DataTable<TData, TValue = unknown>({
               onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage === 1}
             >
-              上一页
+              {tCommon("tablePrevPage")}
             </Button>
 
             {/* 页码显示 */}
@@ -469,14 +456,16 @@ export function DataTable<TData, TValue = unknown>({
               onClick={() => handlePageChange(currentPage + 1)}
               disabled={currentPage === totalPages || totalPages === 0}
             >
-              下一页
+              {tCommon("tableNextPage")}
             </Button>
           </div>
 
           {/* 页面跳转 */}
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">跳转至</span>
+              <span className="text-sm text-muted-foreground">
+                {tCommon("tableJumpTo")}
+              </span>
               <Input
                 type="number"
                 min={1}
@@ -491,9 +480,11 @@ export function DataTable<TData, TValue = unknown>({
                   }
                 }}
               />
-              <span className="text-sm text-muted-foreground">页</span>
+              <span className="text-sm text-muted-foreground">
+                {tCommon("tablePage")}
+              </span>
               <Button size="sm" onClick={handleJumpToPage} className="h-8">
-                跳转
+                {tCommon("tableJumpButton")}
               </Button>
             </div>
           )}

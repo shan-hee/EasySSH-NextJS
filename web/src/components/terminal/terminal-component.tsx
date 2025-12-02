@@ -23,6 +23,7 @@ import {
 import { TabTerminalContent } from "./tab-terminal-content"
 import { useTabUIStore } from "@/stores/tab-ui-store"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { useTranslations } from "next-intl"
 
 interface TerminalComponentProps {
   sessions: TerminalSession[]
@@ -59,6 +60,7 @@ export function TerminalComponent({
   externalActiveSessionId,
 }: TerminalComponentProps) {
   const { config } = useSystemConfig()
+  const tTerminal = useTranslations("terminal")
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
   const [isFullscreen, setIsFullscreen] = useState(false)
   // ==================== 方案A：多页签并发加载状态管理 ====================
@@ -321,14 +323,35 @@ export function TerminalComponent({
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
                   <BreadcrumbLink asChild>
-                    <Link href="/dashboard">{config?.system_name || "EasySSH"} 控制台</Link>
+                    <Link href="/dashboard">
+                      {config?.system_name || "EasySSH"}
+                    </Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>快速连接</BreadcrumbPage>
-                </BreadcrumbItem>
-                {/* 根据需求：终端内操作不再把服务器名称或标签加入面包屑，仅保留到"快速连接" */}
+                {active && (
+                  <>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    {active.type === "quick" ? (
+                      <BreadcrumbItem>
+                        <BreadcrumbPage>{tTerminal("quickConnectTabName")}</BreadcrumbPage>
+                      </BreadcrumbItem>
+                    ) : (
+                      <>
+                        {active.group && (
+                          <>
+                            <BreadcrumbItem className="hidden md:block">
+                              <BreadcrumbPage>{active.group}</BreadcrumbPage>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator className="hidden md:block" />
+                          </>
+                        )}
+                        <BreadcrumbItem>
+                          <BreadcrumbPage>{active.serverName}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                      </>
+                    )}
+                  </>
+                )}
               </BreadcrumbList>
             </Breadcrumb>
           </div>

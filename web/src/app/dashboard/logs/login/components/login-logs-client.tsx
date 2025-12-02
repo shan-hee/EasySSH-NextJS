@@ -9,8 +9,9 @@ import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
-import { loginLogColumns } from "../../components/login-log-columns"
+import { createLoginLogColumns } from "../../components/login-log-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 interface LoginStats {
   total: number
@@ -38,6 +39,7 @@ interface LoginLogsClientProps {
  */
 export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
   const { ready } = useAuthReady()
+  const t = useTranslations("logsLogin")
   const [logs, setLogs] = useState<AuditLog[]>(initialData?.logs || [])
   const [loginStats, setLoginStats] = useState(initialData?.loginStats || {
     total: 0,
@@ -59,6 +61,11 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
     user_agent: true,
     details: true,
   })
+
+  const columns = useMemo(
+    () => createLoginLogColumns(t),
+    [t],
+  )
 
 
   // 检测异常IP（简单的内网IP检测）
@@ -99,7 +106,7 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
       })
     } catch (error: unknown) {
       console.error("登录日志加载失败:", error)
-      toast.error(getErrorMessage(error, "无法加载登录日志"))
+      toast.error(getErrorMessage(error, t("toastLoadFailed")))
     } finally {
       setLoading(false)
     }
@@ -137,8 +144,8 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
 
     return {
       status: [
-        { label: "成功", value: "success", icon: CheckCircle },
-        { label: "失败", value: "failure", icon: XCircle },
+        { label: t("filterStatusSuccessLabel"), value: "success", icon: CheckCircle },
+        { label: t("filterStatusFailureLabel"), value: "failure", icon: XCircle },
       ],
       users: uniqueUsers.map((user) => ({
         label: user,
@@ -151,10 +158,10 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
   // 可见列配置
   const visibleColumns = useMemo(
     () =>
-      loginLogColumns.filter(
+      columns.filter(
         (column) => columnVisibility[column.id as keyof typeof columnVisibility] ?? true
       ),
-    [columnVisibility]
+    [columnVisibility, columns]
   )
 
   return (
@@ -163,24 +170,24 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">总登录次数</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsTotalTitle")}</CardTitle>
             <Shield className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{loginStats.total}</div>
-            <p className="text-xs text-muted-foreground">记录所有登录尝试</p>
+            <p className="text-xs text-muted-foreground">{t("statsTotalDesc")}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">成功登录</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsSuccessTitle")}</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{loginStats.success}</div>
             <p className="text-xs text-muted-foreground">
-              成功率{" "}
+              {t("statsSuccessDescPrefix")}{" "}
               {loginStats.total ? Math.round((loginStats.success / loginStats.total) * 100) : 0}%
             </p>
           </CardContent>
@@ -188,23 +195,23 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">失败登录</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsFailureTitle")}</CardTitle>
             <XCircle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{loginStats.failure}</div>
-            <p className="text-xs text-muted-foreground">需要关注的异常</p>
+            <p className="text-xs text-muted-foreground">{t("statsFailureDesc")}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">异常IP</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("statsAbnormalIpTitle")}</CardTitle>
             <AlertTriangle className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{loginStats.abnormalIP}</div>
-            <p className="text-xs text-muted-foreground">外网IP登录</p>
+            <p className="text-xs text-muted-foreground">{t("statsAbnormalIpDesc")}</p>
           </CardContent>
         </Card>
       </div>
@@ -213,19 +220,21 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
       <Card className="flex-1 min-h-0">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-lg">登录日志</CardTitle>
-            <CardDescription>显示 {logs.length} 条记录</CardDescription>
+            <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
+            <CardDescription>
+              {t("tableDescription", { count: logs.length })}
+            </CardDescription>
           </div>
           <div className="flex gap-2">
             <ColumnVisibility
               columns={[
-                { id: "created_at", label: "时间" },
-                { id: "username", label: "用户" },
-                { id: "status", label: "状态" },
-                { id: "ip", label: "IP地址" },
-                { id: "location", label: "位置" },
-                { id: "user_agent", label: "浏览器" },
-                { id: "details", label: "详情" },
+                { id: "created_at", label: t("columnTime") },
+                { id: "username", label: t("columnUser") },
+                { id: "status", label: t("columnStatus") },
+                { id: "ip", label: t("columnIp") },
+                { id: "location", label: t("columnLocation") },
+                { id: "user_agent", label: t("columnBrowser") },
+                { id: "details", label: t("columnDetails") },
               ].map((column) => ({
                 id: column.id,
                 label: column.label,
@@ -250,16 +259,16 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
             totalRows={totalRows}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
-            emptyMessage="暂无登录日志"
+            emptyMessage={t("emptyMessage")}
             toolbar={(table) => (
               <DataTableToolbar
                 table={table}
                 searchKey="username"
-                searchPlaceholder="搜索用户名..."
+                searchPlaceholder={t("searchPlaceholder")}
                 filters={[
                   {
                     column: "status",
-                    title: "状态",
+                    title: t("filterStatusTitle"),
                     options: filterOptions.status,
                   },
                 ]}

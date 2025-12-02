@@ -10,6 +10,7 @@ import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { isApiError } from "@/lib/api-client"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 /**
  * 统计卡片骨架屏 - 精确匹配真实卡片的高度和布局
@@ -43,6 +44,7 @@ function StatsCardSkeleton() {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const { ready } = useAuthReady()
+  const tDashboard = useTranslations("dashboard")
 
   useEffect(() => {
     if (!ready) {
@@ -67,7 +69,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="仪表盘" />
+      <PageHeader title={tDashboard("title")} />
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         {/* 统计卡片 - 乐观渲染：先显示骨架屏，数据加载后替换 */}
         <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
@@ -83,58 +85,84 @@ export default function DashboardPage() {
             <>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">服务器总数</CardTitle>
+                  <CardTitle className="text-sm font-medium">
+                    {tDashboard("statsTotalServers")}
+                  </CardTitle>
                   <Server className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats?.totalServers || 0}</div>
-                  <p className="text-xs text-muted-foreground">已配置的服务器</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">在线服务器</CardTitle>
-                  <Server className="h-4 w-4 text-green-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">{stats?.onlineServers || 0}</div>
                   <p className="text-xs text-muted-foreground">
-                    在线率 {stats && stats.totalServers > 0 ? Math.round((stats.onlineServers / stats.totalServers) * 100) : 0}%
+                    {tDashboard("statsTotalServersDesc")}
                   </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">离线服务器</CardTitle>
-                  <ServerOff className="h-4 w-4 text-red-600" />
+                  <CardTitle className="text-sm font-medium">
+                    {tDashboard("statsOnlineServers")}
+                  </CardTitle>
+                  <Server className="h-4 w-4 text-green-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-red-600">{stats?.offlineServers || 0}</div>
-                  <p className="text-xs text-muted-foreground">需要检查</p>
+                  <div className="text-2xl font-bold text-green-600">
+                    {stats?.onlineServers || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {tDashboard("statsOnlineRate")}{" "}
+                    {stats && stats.totalServers > 0
+                      ? Math.round((stats.onlineServers / stats.totalServers) * 100)
+                      : 0}
+                    %
+                  </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">今日连接</CardTitle>
+                  <CardTitle className="text-sm font-medium">
+                    {tDashboard("statsOfflineServers")}
+                  </CardTitle>
+                  <ServerOff className="h-4 w-4 text-red-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">
+                    {stats?.offlineServers || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {tDashboard("statsOfflineServersDesc")}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {tDashboard("statsTodayConnections")}
+                  </CardTitle>
                   <Activity className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats?.todayConnections || 0}</div>
-                  <p className="text-xs text-muted-foreground">今日操作次数</p>
+                  <p className="text-xs text-muted-foreground">
+                    {tDashboard("statsTodayConnectionsDesc")}
+                  </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">最近日志</CardTitle>
+                  <CardTitle className="text-sm font-medium">
+                    {tDashboard("statsRecentLogs")}
+                  </CardTitle>
                   <FileText className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats?.recentLogsCount || 0}</div>
-                  <p className="text-xs text-muted-foreground">审计日志总数</p>
+                  <p className="text-xs text-muted-foreground">
+                    {tDashboard("statsRecentLogsDesc")}
+                  </p>
                 </CardContent>
               </Card>
             </>

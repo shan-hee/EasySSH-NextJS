@@ -26,6 +26,7 @@ import {
  Check
 } from "lucide-react"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 interface Message {
  id: string
@@ -42,35 +43,11 @@ interface Conversation {
  updatedAt: number // 使用时间戳而不是 Date 对象
 }
 
-// 快捷模板
-const quickTemplates = [
- {
- icon: Terminal,
- title: "执行Shell命令",
- description: "帮我在服务器上执行命令",
- prompt: "请帮我在服务器上执行以下命令并解释结果：",
- },
- {
- icon: Code,
- title: "编写脚本",
- description: "生成自动化脚本",
- prompt: "请帮我编写一个脚本来实现以下功能：",
- },
- {
- icon: FileText,
- title: "日志分析",
- description: "分析日志文件",
- prompt: "请帮我分析以下日志内容，找出潜在问题：",
- },
- {
- icon: Zap,
- title: "性能优化",
- description: "优化服务器性能",
- prompt: "我的服务器性能遇到问题，请帮我分析并提供优化建议：",
- },
-]
+// 快捷模板（文案从 i18n 获取）
+const quickTemplateIcons = [Terminal, Code, FileText, Zap] as const
 
 export default function AIAssistantPage() {
+ const t = useTranslations("aiAssistant")
  const [conversations, setConversations] = useState<Conversation[]>([])
  const [currentConversationId, setCurrentConversationId] = useState("")
  const [inputMessage, setInputMessage] = useState("")
@@ -82,11 +59,11 @@ export default function AIAssistantPage() {
  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
  // 在客户端挂载后初始化对话
- useEffect(() => {
+useEffect(() => {
  setMounted(true)
  const initialConv: Conversation = {
  id: "1",
- title: "新对话",
+ title: t("newConversation"),
  messages: [],
  createdAt: Date.now(),
  updatedAt: Date.now(),
@@ -157,11 +134,11 @@ export default function AIAssistantPage() {
  }, 1000 + Math.random() * 1000)
  }
 
- const generateMockResponse = (prompt: string): string => {
+const generateMockResponse = (prompt: string): string => {
  const responses = [
- `我理解你的需求："${prompt.slice(0, 50)}..."。\n\n这是一个很好的问题。让我为你提供详细的解答：\n\n1. 首先，我建议检查当前系统状态\n2. 然后执行相应的操作\n3. 最后验证结果\n\n需要我进一步解释吗？`,
- `关于"${prompt.slice(0, 50)}..."，我可以帮你：\n\n\`\`\`bash\n# 这是一个示例脚本\n#!/bin/bash\necho "执行操作"\nsystemctl status nginx\n\`\`\`\n\n这个脚本会帮你完成任务。是否需要我解释每个步骤？`,
- `好的，让我分析一下你的问题。\n\n根据我的理解，你需要：\n- 配置服务器环境\n- 优化性能参数\n- 监控系统状态\n\n我建议采用以下方案...`,
+ `I see your request: "${prompt.slice(0, 50)}...".\n\n这是一个示例回复占位符，实际环境中应由后端 AI 服务返回内容。`,
+ `Here is a sample script based on "${prompt.slice(0, 50)}...":\n\n\`\`\`bash\n#!/bin/bash\necho "run something"\n\`\`\`\n\n请根据实际需要调整脚本。`,
+ `Let me think about "${prompt.slice(0, 50)}...".\n\n下面是一个示意性的分析流程，真实逻辑请接入后端 AI。`,
  ]
  return responses[Math.floor(Math.random() * responses.length)]
  }
@@ -169,7 +146,7 @@ export default function AIAssistantPage() {
  const handleNewConversation = () => {
  const newConv: Conversation = {
  id: Date.now().toString(),
- title: "新对话",
+ title: t("newConversation"),
  messages: [],
  createdAt: Date.now(),
  updatedAt: Date.now(),
@@ -202,7 +179,7 @@ export default function AIAssistantPage() {
  const handleExportConversation = () => {
  if (!currentConversation) return
  const content = currentConversation.messages
- .map(msg => `${msg.role === "user" ? "用户" : "AI助手"} (${new Date(msg.timestamp).toLocaleString()}):\n${msg.content}\n`)
+ .map(msg => `${msg.role === "user" ? t("exportRoleUser") : t("exportRoleAssistant")} (${new Date(msg.timestamp).toLocaleString()}):\n${msg.content}\n`)
  .join("\n---\n\n")
 
  const blob = new Blob([content], { type: "text/plain" })
@@ -228,15 +205,15 @@ export default function AIAssistantPage() {
 
  return (
  <>
- <PageHeader title="AI 助手">
+ <PageHeader title={t("pageTitle")}>
  <div className="flex items-center gap-2">
  <Button variant="outline" size="sm" onClick={handleExportConversation}>
  <Download className="mr-2 h-4 w-4" />
- 导出对话
+ {t("exportConversation")}
  </Button>
  <Button size="sm" onClick={handleNewConversation}>
  <Plus className="mr-2 h-4 w-4" />
- 新建对话
+ {t("newConversation")}
  </Button>
  </div>
  </PageHeader>
@@ -244,15 +221,15 @@ export default function AIAssistantPage() {
  <div className="flex flex-1 gap-4 p-4 pt-0 overflow-hidden">
  {/* 对话历史侧边栏 */}
  <Card className="w-80 flex flex-col">
- <CardHeader>
- <CardTitle className="text-lg flex items-center gap-2">
- <MessageSquare className="h-5 w-5" />
- 对话历史
- </CardTitle>
- <CardDescription>
- 共 {conversations.length} 个对话
- </CardDescription>
- </CardHeader>
+        <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+        <MessageSquare className="h-5 w-5" />
+        {t("sidebarTitle")}
+        </CardTitle>
+        <CardDescription>
+        {t("sidebarDescription", { count: conversations.length })}
+        </CardDescription>
+        </CardHeader>
  <CardContent className="flex-1 p-0">
  <ScrollArea className="h-full px-4">
  <div className="space-y-2 pb-4">
@@ -273,9 +250,9 @@ export default function AIAssistantPage() {
  <h4 className="font-medium text-sm truncate">
  {conv.title}
  </h4>
- <p className="text-xs text-muted-foreground mt-1">
- {conv.messages.length} 条消息
- </p>
+        <p className="text-xs text-muted-foreground mt-1">
+        {t("sidebarMessageCount", { count: conv.messages.length })}
+        </p>
  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
  <Clock className="h-3 w-3" />
  {new Date(conv.updatedAt).toLocaleString()}
@@ -310,27 +287,40 @@ export default function AIAssistantPage() {
  <CardHeader>
  <CardTitle className="text-lg flex items-center gap-2">
  <Sparkles className="h-5 w-5" />
- 快捷模板
+ {t("quickTemplatesTitle")}
  </CardTitle>
  <CardDescription>
- 选择一个模板快速开始对话
+ {t("quickTemplatesDescription")}
  </CardDescription>
  </CardHeader>
  <CardContent>
  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
- {quickTemplates.map((template, index) => (
+ {quickTemplateIcons.map((Icon, index) => {
+   const keyBase =
+     index === 0
+       ? "templateRunCommand"
+       : index === 1
+       ? "templateScript"
+       : index === 2
+       ? "templateLogs"
+       : "templatePerf"
+   const titleKey = `${keyBase}Title` as const
+   const descKey = `${keyBase}Desc` as const
+   const promptKey = `${keyBase}Prompt` as const
+   return (
  <button
- key={index}
- className="p-4 rounded-lg border hover:border-primary hover:bg-accent transition-colors text-left"
- onClick={() => handleUseTemplate(template.prompt)}
+key={index}
+className="p-4 rounded-lg border hover:border-primary hover:bg-accent transition-colors text-left"
+ onClick={() => handleUseTemplate(t(promptKey))}
  >
- <template.icon className="h-8 w-8 mb-2 text-primary" />
- <h4 className="font-medium text-sm mb-1">{template.title}</h4>
+ <Icon className="h-8 w-8 mb-2 text-primary" />
+ <h4 className="font-medium text-sm mb-1">{t(titleKey)}</h4>
  <p className="text-xs text-muted-foreground">
- {template.description}
+ {t(descKey)}
  </p>
  </button>
- ))}
+ )
+ })}
  </div>
  </CardContent>
  </Card>
@@ -343,15 +333,15 @@ export default function AIAssistantPage() {
  <div className="flex items-center gap-3">
  <Bot className="h-6 w-6 text-primary" />
  <div>
- <CardTitle className="text-lg">AI 智能助手</CardTitle>
+ <CardTitle className="text-lg">{t("cardTitle")}</CardTitle>
  <CardDescription>
- 我可以帮助你管理服务器、编写脚本和分析问题
+ {t("cardDescription")}
  </CardDescription>
  </div>
  </div>
  <Badge variant="secondary" className="flex items-center gap-1">
  <div className="h-2 w-2 rounded-full bg-green-500" />
- 在线
+ {t("statusOnline")}
  </Badge>
  </div>
  </CardHeader>
@@ -363,10 +353,11 @@ export default function AIAssistantPage() {
  {currentConversation?.messages.length === 0 ? (
  <div className="flex flex-col items-center justify-center h-full text-center py-12">
  <Bot className="h-16 w-16 text-muted-foreground mb-4" />
- <h3 className="text-lg font-semibold mb-2">开始新的对话</h3>
+ <h3 className="text-lg font-semibold mb-2">{t("emptyTitle")}</h3>
  <p className="text-muted-foreground max-w-md">
- 你好！我是AI助手，可以帮助你管理服务器、编写脚本、分析日志等。
- 请在下方输入你的问题或选择快捷模板开始。
+ {t("emptyDescriptionIntro")}
+ <br />
+ {t("emptyDescriptionGuide")}
  </p>
  </div>
  ) : (
@@ -453,7 +444,7 @@ export default function AIAssistantPage() {
  <div className="flex gap-2">
  <Textarea
  ref={textareaRef}
- placeholder="输入你的问题... (Shift+Enter 换行, Enter 发送)"
+ placeholder={t("inputPlaceholder")}
  value={inputMessage}
  onChange={(e) => setInputMessage(e.target.value)}
  onKeyDown={handleKeyDown}
@@ -469,7 +460,7 @@ export default function AIAssistantPage() {
  </Button>
  </div>
  <p className="text-xs text-muted-foreground mt-2">
- AI助手可能会产生错误，请谨慎使用生成的命令和脚本
+ {t("safetyNotice")}
  </p>
  </div>
  </Card>

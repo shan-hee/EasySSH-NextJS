@@ -1,6 +1,7 @@
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
+import { useTranslations } from "next-intl"
 import { UserDetail, UserRole } from "@/lib/api/users"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,44 +23,9 @@ import {
   Users,
   Eye,
 } from "lucide-react"
-
-// 角色显示组件
-function RoleBadge({ role }: { role: UserRole }) {
-  switch (role) {
-    case "admin":
-      return (
-        <Badge className="bg-purple-100 text-purple-800 border-purple-200">
-          <Shield className="mr-1 h-3 w-3" />
-          管理员
-        </Badge>
-      )
-    case "user":
-      return (
-        <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-          <Users className="mr-1 h-3 w-3" />
-          普通用户
-        </Badge>
-      )
-    case "viewer":
-      return (
-        <Badge className="bg-gray-100 text-gray-800 border-gray-200">
-          <Eye className="mr-1 h-3 w-3" />
-          访客
-        </Badge>
-      )
-  }
-}
-
-// 格式化日期
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 
 interface UserColumnsOptions {
   onEdit?: (user: UserDetail) => void
@@ -68,6 +34,42 @@ interface UserColumnsOptions {
 }
 
 export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserDetail, unknown>[] {
+  const { user } = useClientAuth()
+  const { data: systemConfig } = useSystemConfig()
+  const t = useTranslations("users")
+  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+
+  const formatDate = (value: string) =>
+    formatInTimezone(value, { second: undefined }, effectiveLocale, effectiveTimezone)
+
+  // 角色显示组件
+  const RoleBadge = ({ role }: { role: UserRole }) => {
+    switch (role) {
+      case "admin":
+        return (
+          <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+            <Shield className="mr-1 h-3 w-3" />
+            {t("filterRoleAdmin")}
+          </Badge>
+        )
+      case "user":
+        return (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+            <Users className="mr-1 h-3 w-3" />
+            {t("filterRoleUser")}
+          </Badge>
+        )
+      case "viewer":
+        return (
+          <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+            <Eye className="mr-1 h-3 w-3" />
+            {t("filterRoleViewer")}
+          </Badge>
+        )
+    }
+  }
+
   return [
     // 多选列
     {
@@ -79,14 +81,14 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
             (table.getIsSomePageRowsSelected() && "indeterminate")
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="全选"
+          aria-label="select all"
         />
       ),
       cell: ({ row }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="选择行"
+          aria-label="select row"
         />
       ),
       enableSorting: false,
@@ -104,7 +106,7 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
             className="-ml-3 h-8 data-[state=open]:bg-accent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            用户
+            {t("fieldUsername")}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -147,7 +149,7 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
             className="-ml-3 h-8 data-[state=open]:bg-accent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            角色
+            {t("fieldRole")}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -208,7 +210,9 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
     // 操作列
     {
       id: "actions",
-      header: () => <div className="text-right">操作</div>,
+      header: () => (
+        <div className="text-right">{t("colActions")}</div>
+      ),
       cell: ({ row }) => {
         const user = row.original
 
@@ -223,18 +227,18 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => options?.onEdit?.(user)}>
                   <Edit className="mr-2 h-4 w-4" />
-                  编辑
+                  {t("colActionEdit")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => options?.onChangePassword?.(user.id)}>
                   <Key className="mr-2 h-4 w-4" />
-                  修改密码
+                  {t("colActionChangePassword")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => options?.onDelete?.(user.id, user.username)}
                   className="text-destructive"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  删除
+                  {t("colActionDelete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

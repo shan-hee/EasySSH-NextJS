@@ -23,7 +23,7 @@ import {
 
 export function NavMain({
   items,
-  label = "核心功能",
+  label = "Core",
 }: {
   label?: string
   items: {

@@ -1,6 +1,7 @@
 "use client"
 
 import React from 'react';
+import { useTranslations } from "next-intl";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import type { CPUData } from '../types/metrics';
@@ -31,6 +32,7 @@ const chartConfig = {
  * 固定高度 142px
  */
 export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsage }) => {
+  const t = useTranslations("terminalMonitor");
   // 转换数据格式为图表需要的格式
   const chartData = React.useMemo(
     () =>
@@ -113,12 +115,12 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
           const label = p.axisValue ?? "";
           return `
             <div style="font-size:11px;">
-              <div style="margin-bottom:4px;">时间: ${label}</div>
+              <div style="margin-bottom:4px;">${t("tooltipTimeLabel")}: ${label}</div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <span
                   style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${usageColor};"
                 ></span>
-                <span>CPU: </span>
+                <span>${t("tooltipMetricLabel")}: </span>
                 <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
                   ${value}%
                 </span>
@@ -202,7 +204,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
     <div className="space-y-1">
       {/* 标题栏 - 高度 28px */}
       <div className="flex justify-between items-center h-7">
-        <span className="text-xs font-semibold">CPU</span>
+        <span className="text-xs font-semibold">{t("cpuLabel")}</span>
         <span className={`text-xs font-mono font-semibold tabular-nums transition-colors duration-500 ${
           currentUsage > 80 ? 'text-red-500' : currentUsage > 60 ? 'text-yellow-500' : 'text-muted-foreground'
         }`}>
@@ -224,7 +226,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         {/* 当数据为空时显示提示 */}
         {chartData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
-            等待数据...
+            {t("waitingData")}
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">

@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useTranslations } from "next-intl"
 
 interface KeyboardShortcutInputProps {
   value: string
@@ -15,12 +16,13 @@ interface KeyboardShortcutInputProps {
 export function KeyboardShortcutInput({
   value,
   onChange,
-  placeholder = "按下快捷键...",
+  placeholder,
   id,
 }: KeyboardShortcutInputProps) {
   const [isFocused, setIsFocused] = useState(false)
   const [recordedKeys, setRecordedKeys] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+  const tTerminalSettings = useTranslations("terminalSettings")
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isFocused) return
@@ -92,7 +94,11 @@ export function KeyboardShortcutInput({
         onKeyDown={handleKeyDown}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        placeholder={isFocused ? "按下任意键组合..." : placeholder}
+        placeholder={
+          isFocused
+            ? tTerminalSettings("shortcutsRecordPlaceholder")
+            : placeholder ?? tTerminalSettings("shortcutsPlaceholder")
+        }
         className="pr-8 cursor-text"
       />
       {value && (

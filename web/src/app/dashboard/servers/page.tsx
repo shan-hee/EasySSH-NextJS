@@ -45,6 +45,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { AnimatedList } from "@/components/ui/animated-list"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useTranslations } from "next-intl"
 
 // 可排序的服务器项组件
 function SortableServerItem({
@@ -73,6 +74,8 @@ function SortableServerItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  const t = useTranslations("servers")
+
   return (
     <div
       ref={setNodeRef}
@@ -98,7 +101,7 @@ function SortableServerItem({
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    <p>离线</p>
+                    <p>{t("tooltipOffline")}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -138,7 +141,7 @@ function SortableServerItem({
           size="sm"
           className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           onClick={() => onConnect(server.id)}
-          title="连接终端">
+          title={t("tooltipConnect")}>
           <Terminal className="h-4 w-4" />
         </Button>
         <Button
@@ -146,7 +149,7 @@ function SortableServerItem({
           size="sm"
           className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           onClick={() => onEdit(server)}
-          title="编辑配置">
+          title={t("tooltipEdit")}>
           <Edit className="h-4 w-4" />
         </Button>
         <Button
@@ -154,7 +157,7 @@ function SortableServerItem({
           size="sm"
           className="h-8 w-8 p-0 text-destructive hover:bg-red-50 dark:hover:bg-red-950/20"
           onClick={() => onDelete(server.id)}
-          title="删除服务器">
+          title={t("tooltipDelete")}>
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
@@ -165,6 +168,7 @@ function SortableServerItem({
 export default function ServersPage() {
  const router = useRouter()
  const { ready } = useAuthReady()
+ const t = useTranslations("servers")
  const [servers, setServers] = useState<Server[]>([])
  const [filteredServers, setFilteredServers] = useState<Server[]>([])
  const [searchTerm, setSearchTerm] = useState("")
@@ -249,7 +253,7 @@ export default function ServersPage() {
  setFilteredServers(serverList)
  } catch (error: unknown) {
  console.error("Failed to load servers:", error)
- toast.error(getErrorMessage(error, "加载服务器列表失败"))
+ toast.error(getErrorMessage(error, t("toastLoadFailed")))
  } finally {
  setLoading(false)
  }
@@ -280,7 +284,7 @@ export default function ServersPage() {
 
 
  const handleDelete = async (serverId: string) => {
- if (!confirm("确定要删除这台服务器吗？此操作不可恢复。")) {
+ if (!confirm(t("confirmDelete"))) {
  return
  }
 
@@ -288,7 +292,7 @@ export default function ServersPage() {
  // 认证基于 HttpOnly Cookie
 
  await serversApi.delete(serverId)
- toast.success("服务器已删除")
+ toast.success(t("toastDeleteSuccess"))
 
  // 乐观更新：直接从本地列表移除，避免整个页面刷新
  setServers(prev => prev.filter(s => s.id !== serverId))
@@ -297,7 +301,7 @@ export default function ServersPage() {
  await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to delete server:", error)
- toast.error(getErrorMessage(error, "删除失败"))
+ toast.error(getErrorMessage(error, t("toastDeleteFailed")))
  }
  }
 
@@ -329,10 +333,10 @@ export default function ServersPage() {
 
  const serverIds = newOrder.map(s => s.id)
  await serversApi.reorder(serverIds)
- toast.success("排序已保存")
+ toast.success(t("toastSortSaved"))
  } catch (error: unknown) {
  console.error("Failed to save server order:", error)
- toast.error(getErrorMessage(error, "保存排序失败"))
+ toast.error(getErrorMessage(error, t("toastSortSaveFailed")))
  // 错误时重新加载服务器列表
  await loadServers()
  }
@@ -369,7 +373,7 @@ export default function ServersPage() {
 
  const newServer = await serversApi.create(serverData)
 
- toast.success("服务器添加成功")
+ toast.success(t("toastCreateSuccess"))
  setIsAddDialogOpen(false)
 
  // 乐观更新：直接添加到本地列表，避免整个页面刷新
@@ -379,7 +383,7 @@ export default function ServersPage() {
  await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to add server:", error)
- toast.error(getErrorMessage(error, "添加服务器失败"))
+ toast.error(getErrorMessage(error, t("toastCreateFailed")))
  }
  }
 
@@ -388,7 +392,7 @@ export default function ServersPage() {
  // 认证基于 HttpOnly Cookie
 
  if (!editingServer) {
- toast.error("未找到要编辑的服务器")
+ toast.error(t("toastEditNotFound"))
  return
  }
 
@@ -426,7 +430,7 @@ export default function ServersPage() {
 
  const updatedServer = await serversApi.update(editingServer.id, updateData)
 
- toast.success("服务器更新成功")
+ toast.success(t("toastUpdateSuccess"))
  setIsEditDialogOpen(false)
  setEditingServer(null)
 
@@ -439,13 +443,13 @@ export default function ServersPage() {
  await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to update server:", error)
- toast.error(getErrorMessage(error, "更新服务器失败"))
+ toast.error(getErrorMessage(error, t("toastUpdateFailed")))
  }
  }
 
  return (
  <>
- <PageHeader title="连接配置" />
+ <PageHeader title={t("pageTitle")} />
 
  <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-white dark:bg-black"}>
  <div className={"absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent to-transparent via-black/5 dark:via-white/5"} />
@@ -460,7 +464,7 @@ export default function ServersPage() {
  <div className="relative flex-1 max-w-md">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 dark:text-zinc-600 h-4 w-4" />
  <Input
- placeholder="搜索服务器名称、地址或用户名..."
+ placeholder={t("searchPlaceholder")}
  className={"pl-10 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}
  value={searchTerm}
  onChange={(e) => setSearchTerm(e.target.value)}
@@ -470,7 +474,7 @@ export default function ServersPage() {
  {/* 右侧：添加按钮 */}
  <Button onClick={() => setIsAddDialogOpen(true)} className="shadow-sm flex-shrink-0">
  <Plus className="mr-2 h-4 w-4" />
- 添加服务器
+ {t("addServer")}
  </Button>
  </div>
 
@@ -482,7 +486,7 @@ export default function ServersPage() {
  onClick={() => setActiveTab('all')}
  className="h-8"
  >
- 全部 ({statistics.total})
+ {t("tabAll")} ({statistics.total})
  </Button>
  <Button
  variant={activeTab === 'online' ? 'default' : 'outline'}
@@ -491,7 +495,7 @@ export default function ServersPage() {
  className="h-8"
  >
  <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />
- 在线 ({statistics.online})
+ {t("tabOnline")} ({statistics.online})
  </Button>
  <Button
  variant={activeTab === 'offline' ? 'default' : 'outline'}
@@ -500,7 +504,7 @@ export default function ServersPage() {
  className="h-8"
  >
  <div className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />
- 离线 ({statistics.offline + statistics.error + statistics.unknown})
+ {t("tabOffline")} ({statistics.offline + statistics.error + statistics.unknown})
  </Button>
  {statistics.by_tag && Object.entries(statistics.by_tag).map(([tag, count]) => (
  <Button
@@ -523,7 +527,9 @@ export default function ServersPage() {
  <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
  <div className="flex flex-col items-center justify-center py-12 gap-4">
  <Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600" />
- <p className="text-sm text-zinc-500 dark:text-zinc-600">加载服务器列表...</p>
+ <p className="text-sm text-zinc-500 dark:text-zinc-600">
+   {t("loadingList")}
+ </p>
  </div>
  </div>
  )}
@@ -594,7 +600,7 @@ export default function ServersPage() {
  </span>
  </TooltipTrigger>
  <TooltipContent side="top">
- <p>离线</p>
+ <p>{t("tooltipOffline")}</p>
  </TooltipContent>
  </Tooltip>
  </TooltipProvider>
@@ -625,10 +631,10 @@ export default function ServersPage() {
  </div>
  <div className="space-y-1">
  <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
- 未找到匹配的服务器
+ {t("emptyFilteredTitle")}
  </p>
  <p className={"text-xs text-zinc-500 dark:text-zinc-600"}>
- 请尝试调整搜索条件或筛选标签
+ {t("emptyFilteredDescription")}
  </p>
  </div>
  </div>
@@ -642,7 +648,7 @@ export default function ServersPage() {
  <div className="relative flex-1 max-w-md opacity-50 pointer-events-none">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 dark:text-zinc-600 h-4 w-4" />
  <Input
- placeholder="搜索服务器名称、地址或用户名..."
+ placeholder={t("searchPlaceholder")}
  className={"pl-10 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}
  disabled
  />
@@ -651,7 +657,7 @@ export default function ServersPage() {
  {/* 右侧：添加按钮 */}
  <Button onClick={() => setIsAddDialogOpen(true)} className="shadow-sm flex-shrink-0">
  <Plus className="mr-2 h-4 w-4" />
- 添加服务器
+ {t("addServer")}
  </Button>
  </div>
 
@@ -661,10 +667,10 @@ export default function ServersPage() {
  </div>
  <div className="space-y-1">
  <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
- 暂无服务器配置
+ {t("emptyAllTitle")}
  </p>
  <p className={"text-xs text-zinc-500 dark:text-zinc-600"}>
- 点击上方按钮添加您的第一台服务器
+ {t("emptyAllDescription")}
  </p>
  </div>
  </div>

@@ -52,7 +52,7 @@ type Service interface {
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error
 
 	// UpdateProfile 更新用户资料
-	UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar string) error
+	UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar, language, timezone string) error
 
 	// ListUsers 获取用户列表（管理员功能）
 	ListUsers(ctx context.Context, limit, offset int) ([]*User, int64, error)
@@ -420,7 +420,7 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 	return nil
 }
 
-func (s *authService) UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar string) error {
+func (s *authService) UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar, language, timezone string) error {
 	// 查找用户
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -435,6 +435,16 @@ func (s *authService) UpdateProfile(ctx context.Context, userID uuid.UUID, email
 	// 更新头像（\x00 表示不更新，空字符串表示移除，其他值表示设置新头像）
 	if avatar != "\x00" {
 		user.Avatar = avatar
+	}
+
+	// 更新语言偏好（仅当非空时）
+	if language != "" {
+		user.Language = language
+	}
+
+	// 更新时区偏好（仅当非空时）
+	if timezone != "" {
+		user.Timezone = timezone
 	}
 
 	return s.repo.Update(ctx, user)

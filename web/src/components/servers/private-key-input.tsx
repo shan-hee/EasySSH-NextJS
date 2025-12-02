@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -32,26 +33,35 @@ function likelyPrivateKey(text: string) {
 
 export function PrivateKeyInput({
   id = "privateKey",
-  label = "私钥",
+  label,
   value,
   onChange,
   required,
-  placeholder = "粘贴或从文件导入私钥内容",
+  placeholder,
   errorText,
   className,
   accept = ".pem,.key,.ppk,.txt",
   allowDragDrop = true,
 }: PrivateKeyInputProps) {
+  const tServers = useTranslations("servers")
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [dragActive, setDragActive] = React.useState(false)
   const [warning, setWarning] = React.useState<string | null>(null)
+
+  const labelText = label ?? tServers("formPrivateKeyLabel")
+  const placeholderText =
+    placeholder ?? tServers("formPrivateKeyPlaceholder")
 
   const readFile = (file: File) => {
     const reader = new FileReader()
     reader.onload = () => {
       const text = String(reader.result ?? "")
       onChange(text)
-      setWarning(likelyPrivateKey(text) ? null : "未检测到常见私钥标识，请确认内容是否正确")
+      setWarning(
+        likelyPrivateKey(text)
+          ? null
+          : tServers("formPrivateKeyWarning")
+      )
     }
     reader.readAsText(file)
   }
@@ -90,7 +100,10 @@ export function PrivateKeyInput({
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between">
-        <Label htmlFor={id}>{label}{required ? " *" : ""}</Label>
+        <Label htmlFor={id}>
+          {labelText}
+          {required ? " *" : ""}
+        </Label>
         <div className="flex gap-2">
           <input
             ref={fileInputRef}
@@ -103,9 +116,9 @@ export function PrivateKeyInput({
             type="button"
             variant="outline"
             onClick={() => fileInputRef.current?.click()}
-            aria-label="选择私钥文件"
+            aria-label={tServers("formPrivateKeyFileAria")}
           >
-            选择文件
+            {tServers("formPrivateKeyFileButton")}
           </Button>
         </div>
       </div>
@@ -121,7 +134,7 @@ export function PrivateKeyInput({
       >
         <Textarea
           id={id}
-          placeholder={placeholder}
+          placeholder={placeholderText}
           value={value}
           onChange={(e) => {
             const text = e.target.value
@@ -129,7 +142,11 @@ export function PrivateKeyInput({
             if (text.length === 0) {
               setWarning(null)
             } else {
-              setWarning(likelyPrivateKey(text) ? null : null)
+              setWarning(
+                likelyPrivateKey(text)
+                  ? null
+                  : tServers("formPrivateKeyWarning")
+              )
             }
           }}
           rows={8}
@@ -145,4 +162,3 @@ export function PrivateKeyInput({
     </div>
   )
 }
-

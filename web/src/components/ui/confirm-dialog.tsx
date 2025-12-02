@@ -9,6 +9,7 @@ import {
   DialogTitle as AlertDialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { useTranslations } from "next-intl"
 
 interface ConfirmDialogProps {
   open: boolean
@@ -26,11 +27,16 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmText = "确认",
-  cancelText = "取消",
+  confirmText,
+  cancelText,
   variant = "default",
   onConfirm,
 }: ConfirmDialogProps) {
+  const tCommon = useTranslations("common")
+
+  const effectiveCancelText = cancelText ?? tCommon("cancel")
+  const effectiveConfirmText = confirmText ?? tCommon("confirm")
+
   const handleConfirm = () => {
     onConfirm()
     onOpenChange(false)
@@ -44,12 +50,14 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{cancelText}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {effectiveCancelText}
+          </Button>
           <Button
             onClick={handleConfirm}
             className={variant === "destructive" ? "bg-red-600 hover:bg-red-700" : ""}
           >
-            {confirmText}
+            {effectiveConfirmText}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

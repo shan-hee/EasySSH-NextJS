@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput } from "@/components/settings/form-field"
 import { Zap, Save, Loader2, RotateCcw } from "lucide-react"
@@ -10,6 +11,8 @@ import { settingsApi } from "@/lib/api/settings"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 
 export function PerformanceTab() {
+  const t = useTranslations("settingsSystemPerformance")
+  const tCommon = useTranslations("common")
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: performanceSchema,
     loadFn: async () => {
@@ -37,15 +40,15 @@ export function PerformanceTab() {
     <div className="space-y-4">
       {/* 基本性能设置 */}
       <SettingsSection
-        title="基本性能设置"
-        description="配置系统的基本性能参数"
+        title={t("sectionTitle")}
+        description={t("sectionDescription")}
         icon={<Zap className="h-5 w-5" />}
       >
         <FormInput
           form={form}
           name="default_page_size"
-          label="默认分页大小"
-          description="列表页面每页显示的默认条数 (10-100)"
+          label={t("fieldDefaultPageSize")}
+          description={t("fieldDefaultPageSizeDesc")}
           type="number"
           min={10}
           max={100}
@@ -56,8 +59,8 @@ export function PerformanceTab() {
         <FormInput
           form={form}
           name="max_file_upload_size"
-          label="最大文件上传大小 (MB)"
-          description="允许上传的单个文件最大大小 (1-1024 MB)"
+          label={t("fieldMaxUploadSize")}
+          description={t("fieldMaxUploadSizeDesc")}
           type="number"
           min={1}
           max={1024}
@@ -70,18 +73,18 @@ export function PerformanceTab() {
       <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
-          重置
+          {tCommon("reset")}
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
+              {tCommon("saving")}
             </>
           ) : (
             <>
               <Save className="mr-2 h-4 w-4" />
-              保存
+              {tCommon("save")}
             </>
           )}
         </Button>

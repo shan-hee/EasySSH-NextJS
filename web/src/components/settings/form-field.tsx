@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils"
 
 interface BaseFormFieldProps<TFieldValues extends FieldValues> {
@@ -58,7 +59,13 @@ export function FormInput<TFieldValues extends FieldValues>({
   step,
   className,
 }: FormInputProps<TFieldValues>) {
+  const t = useTranslations()
   const error = form.formState.errors[name]
+  const rawMessage = (error as any)?.message as string | undefined
+  const message =
+    rawMessage && rawMessage.startsWith("settingsValidation.")
+      ? t(rawMessage as any)
+      : rawMessage
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -81,9 +88,9 @@ export function FormInput<TFieldValues extends FieldValues>({
         })}
         className={error ? "border-destructive" : ""}
       />
-      {error && (
+      {message && (
         <p className="text-sm text-destructive">
-          {error.message as string}
+          {message}
         </p>
       )}
     </div>
@@ -134,7 +141,13 @@ export function FormSelect<TFieldValues extends FieldValues>({
   options,
   className,
 }: FormSelectProps<TFieldValues>) {
+  const t = useTranslations()
   const error = form.formState.errors[name]
+  const rawMessage = (error as any)?.message as string | undefined
+  const message =
+    rawMessage && rawMessage.startsWith("settingsValidation.")
+      ? t(rawMessage as any)
+      : rawMessage
   const value = form.watch(name)
 
   return (
@@ -161,9 +174,9 @@ export function FormSelect<TFieldValues extends FieldValues>({
           ))}
         </SelectContent>
       </Select>
-      {error && (
+      {message && (
         <p className="text-sm text-destructive">
-          {error.message as string}
+          {message}
         </p>
       )}
     </div>
@@ -183,7 +196,13 @@ export function FormTextarea<TFieldValues extends FieldValues>({
   rows = 3,
   className,
 }: FormTextareaProps<TFieldValues>) {
+  const t = useTranslations()
   const error = form.formState.errors[name]
+  const rawMessage = (error as any)?.message as string | undefined
+  const message =
+    rawMessage && rawMessage.startsWith("settingsValidation.")
+      ? t(rawMessage as any)
+      : rawMessage
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -201,9 +220,9 @@ export function FormTextarea<TFieldValues extends FieldValues>({
         {...form.register(name)}
         className={error ? "border-destructive" : ""}
       />
-      {error && (
+      {message && (
         <p className="text-sm text-destructive">
-          {error.message as string}
+          {message}
         </p>
       )}
     </div>

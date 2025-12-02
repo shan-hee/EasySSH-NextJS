@@ -6,6 +6,7 @@ import { Terminal, FileText, Folder, Variable, History } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CompletionItem } from "@/lib/completion/types"
 import { useTerminalTheme } from "@/contexts/terminal-theme-context"
+import { useTranslations } from "next-intl"
 
 interface CompletionItemProps {
   item: CompletionItem
@@ -39,24 +40,12 @@ function getIcon(type: CompletionItem["type"]) {
   }
 }
 
-/**
- * 获取来源标签文本
- */
-function getSourceLabel(source: CompletionItem["source"]): string {
-  switch (source) {
-    case "local":
-      return "本地"
-    case "remote":
-      return "远端"
-    case "history":
-      return "历史"
-    case "script":
-      return "脚本库"
-    case "ai":
-      return "AI"
-    default:
-      return ""
-  }
+const sourceLabelKey: Record<CompletionItem["source"], string> = {
+  local: "completionSourceLocal",
+  remote: "completionSourceRemote",
+  history: "completionSourceHistory",
+  script: "completionSourceScript",
+  ai: "completionSourceAi",
 }
 
 /**
@@ -101,6 +90,7 @@ export function CompletionItemComponent({
   onMouseEnter,
 }: CompletionItemProps) {
   const theme = useTerminalTheme()
+  const t = useTranslations("terminal")
 
   return (
     <div
@@ -129,7 +119,7 @@ export function CompletionItemComponent({
       {/* 来源标签 */}
       <div className="flex-shrink-0">
         <span className="text-xs px-1.5 py-0.5 rounded font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800">
-          {getSourceLabel(item.source)}
+          {t(sourceLabelKey[item.source])}
         </span>
       </div>
     </div>
