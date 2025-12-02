@@ -31,14 +31,14 @@ export function SettingsSection({
 }: SettingsSectionProps) {
   return (
     <Card className={cn("border-none shadow-none bg-transparent py-0 gap-0", className)}>
-      <CardHeader className="p-0 pb-6">
+      <CardHeader className="p-0 pb-4 border-none">
         <div className="flex items-center gap-2">
           {icon}
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="border-none">{title}</CardTitle>
         </div>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="p-0 space-y-4">
+      <CardContent className="p-0 space-y-4 border-none">
         {children}
       </CardContent>
     </Card>

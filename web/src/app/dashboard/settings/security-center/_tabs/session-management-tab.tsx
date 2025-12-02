@@ -40,100 +40,105 @@ export function SessionManagementTab() {
   const maxTabs = form.watch("max_tabs")
 
   return (
-    <div className="space-y-4">
-      <SettingsSection
-        title={t("sectionTitle")}
-        description={t("sectionDescription")}
-        icon={<Clock className="h-5 w-5" />}
-      >
-        <FormInput
-          form={form}
-          name="session_timeout"
-          label={t("fieldSessionTimeout")}
-          description={t("fieldSessionTimeoutDesc")}
-          type="number"
-          min={5}
-          max={1440}
-          step={5}
-          required
-        />
+    <div className="flex flex-1 min-h-0 flex-col">
+      {/* 可滚动内容区 - flex-1 + min-h-0 确保正确收缩 */}
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-4">
+        <div className="space-y-4">
+          <SettingsSection
+            title={t("sectionTitle")}
+            description={t("sectionDescription")}
+            icon={<Clock className="h-5 w-5" />}
+          >
+            <FormInput
+              form={form}
+              name="session_timeout"
+              label={t("fieldSessionTimeout")}
+              description={t("fieldSessionTimeoutDesc")}
+              type="number"
+              min={5}
+              max={1440}
+              step={5}
+              required
+            />
 
-        <FormInput
-          form={form}
-          name="max_tabs"
-          label={t("fieldMaxTabs")}
-          description={t("fieldMaxTabsDesc")}
-          type="number"
-          min={1}
-          max={200}
-          step={1}
-          required
-        />
+            <FormInput
+              form={form}
+              name="max_tabs"
+              label={t("fieldMaxTabs")}
+              description={t("fieldMaxTabsDesc")}
+              type="number"
+              min={1}
+              max={200}
+              step={1}
+              required
+            />
 
-        <FormInput
-          form={form}
-          name="inactive_minutes"
-          label={t("fieldInactiveMinutes")}
-          description={t("fieldInactiveMinutesDesc")}
-          type="number"
-          min={5}
-          max={1440}
-          step={5}
-          required
-        />
+            <FormInput
+              form={form}
+              name="inactive_minutes"
+              label={t("fieldInactiveMinutes")}
+              description={t("fieldInactiveMinutesDesc")}
+              type="number"
+              min={5}
+              max={1440}
+              step={5}
+              required
+            />
 
-        <FormSwitch
-          form={form}
-          name="remember_login"
-          label={t("fieldRememberLogin")}
-          description={t("fieldRememberLoginDesc")}
-        />
+            <FormSwitch
+              form={form}
+              name="remember_login"
+              label={t("fieldRememberLogin")}
+              description={t("fieldRememberLoginDesc")}
+            />
 
-        <FormSwitch
-          form={form}
-          name="hibernate"
-          label={t("fieldHibernate")}
-          description={t("fieldHibernateDesc")}
-        />
+            <FormSwitch
+              form={form}
+              name="hibernate"
+              label={t("fieldHibernate")}
+              description={t("fieldHibernateDesc")}
+            />
 
-        <div className="rounded-lg border p-4 bg-muted/50">
-          <p className="text-sm font-medium mb-2">{t("previewTitle")}</p>
-          <div className="text-sm text-muted-foreground space-y-1">
-            <p>
-              {t("previewSessionTimeoutPrefix")}
-              <span className="font-semibold text-foreground">{sessionTimeout}</span>
-              {t("previewSessionTimeoutSuffix")}
-            </p>
-            <p>
-              {t("previewMaxTabsPrefix")}
-              <span className="font-semibold text-foreground">{maxTabs}</span>
-              {t("previewMaxTabsSuffix")}
-            </p>
-            <p>
-              {t("previewRememberLoginPrefix")}
-              <span className="font-semibold text-foreground">
-                {form.watch("remember_login") ? t("previewEnabled") : t("previewDisabled")}
-              </span>
-            </p>
-            <p>
-              {t("previewHibernatePrefix")}
-              <span className="font-semibold text-foreground">
-                {form.watch("hibernate") ? t("previewEnabled") : t("previewDisabled")}
-              </span>
-            </p>
-          </div>
+            <div className="rounded-lg border p-4 bg-muted/50">
+              <p className="text-sm font-medium mb-2">{t("previewTitle")}</p>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>
+                  {t("previewSessionTimeoutPrefix")}
+                  <span className="font-semibold text-foreground">{sessionTimeout}</span>
+                  {t("previewSessionTimeoutSuffix")}
+                </p>
+                <p>
+                  {t("previewMaxTabsPrefix")}
+                  <span className="font-semibold text-foreground">{maxTabs}</span>
+                  {t("previewMaxTabsSuffix")}
+                </p>
+                <p>
+                  {t("previewRememberLoginPrefix")}
+                  <span className="font-semibold text-foreground">
+                    {form.watch("remember_login") ? t("previewEnabled") : t("previewDisabled")}
+                  </span>
+                </p>
+                <p>
+                  {t("previewHibernatePrefix")}
+                  <span className="font-semibold text-foreground">
+                    {form.watch("hibernate") ? t("previewEnabled") : t("previewDisabled")}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <Alert>
+              <InfoIcon className="h-4 w-4" />
+              <AlertDescription>
+                {t("alertContent")}
+              </AlertDescription>
+            </Alert>
+          </SettingsSection>
         </div>
+      </div>
 
-        <Alert>
-          <InfoIcon className="h-4 w-4" />
-          <AlertDescription>
-            {t("alertContent")}
-          </AlertDescription>
-        </Alert>
-      </SettingsSection>
-
-      {/* 保存按钮区域 */}
-      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+      {/* 固定底部按钮区 - shrink-0 防止被压缩 */}
+      <div className="shrink-0 flex justify-end gap-2 p-4 bg-background">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
           {tCommon("reset")}

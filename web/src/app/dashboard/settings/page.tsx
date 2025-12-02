@@ -16,17 +16,7 @@ import {
   Bot,
   Mail,
 } from "lucide-react"
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // 导入所有配置子页签组件
@@ -127,66 +117,57 @@ function SettingsContent() {
   return (
     <>
       <PageHeader title={t("pageTitle")} />
-      <div className="flex flex-1 overflow-hidden">
-        <SidebarProvider>
-          {/* 左侧导航栏 - 桌面端 */}
-          <Sidebar collapsible="none" className="hidden md:flex md:w-52 lg:w-56 shrink-0 bg-transparent border-none">
-            <SidebarContent className="bg-transparent">
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {navGroups.flatMap((group) => group.items).map((item) => (
-                      <SidebarMenuItem key={item.id}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={item.id === activeSection}
-                          onClick={() => handleSectionChange(item.id)}
-                        >
-                          <button>
-                            <item.icon className="h-4 w-4" />
-                            <span>{t(item.nameKey)}</span>
-                          </button>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </SidebarContent>
-          </Sidebar>
+      <div className="flex flex-1 min-h-0">
+        {/* 左侧导航栏 - 桌面端 */}
+        <nav className="hidden md:flex md:w-48 lg:w-52 shrink-0 flex-col bg-background/50 overflow-y-auto p-2">
+          <ul className="flex flex-col gap-1">
+            {navGroups.flatMap((group) => group.items).map((item) => (
+              <li key={item.id}>
+                <button
+                  onClick={() => handleSectionChange(item.id)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-3 h-8 text-sm transition-colors",
+                    "hover:bg-accent hover:text-accent-foreground",
+                    item.id === activeSection
+                      ? "bg-accent text-accent-foreground font-medium"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{t(item.nameKey)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-          {/* 右侧内容区 */}
-          <main className="flex min-h-[400px] flex-1 flex-col overflow-hidden">
-            {/* 移动端下拉选择器 */}
-            <div className="md:hidden border-b px-4 py-3">
-              <Select value={activeSection} onValueChange={handleSectionChange}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("mobileSelectPlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {allItems.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      <div className="flex items-center gap-2">
-                        <item.icon className="h-4 w-4" />
-                        <span>{t(item.nameKey)}</span>
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {t(item.groupLabelKey)}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        {/* 右侧内容区 */}
+        <main className="flex-1 flex flex-col min-h-0">
+          {/* 移动端下拉选择器 */}
+          <div className="md:hidden border-b px-4 py-3 shrink-0">
+            <Select value={activeSection} onValueChange={handleSectionChange}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={t("mobileSelectPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {allItems.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    <div className="flex items-center gap-2">
+                      <item.icon className="h-4 w-4" />
+                      <span>{t(item.nameKey)}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {t(item.groupLabelKey)}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            {/* 内容滚动区域 */}
-            <div className="flex-1 overflow-y-auto scrollbar-custom">
-              <div className="space-y-4 p-4">
-                {ActiveComponent && <ActiveComponent />}
-              </div>
-            </div>
-          </main>
-        </SidebarProvider>
+          {/* 内容区域 - Tab 组件直接作为 flex 子元素 */}
+          {ActiveComponent && <ActiveComponent />}
+        </main>
       </div>
     </>
   )

@@ -47,9 +47,12 @@ export function CompletionTab() {
   const cache = form.watch("completion_cache")
 
   return (
-    <div className="space-y-4">
-      {/* 补全功能总开关 */}
-      <SettingsSection
+    <div className="flex flex-1 min-h-0 flex-col">
+      {/* 可滚动内容区 - flex-1 + min-h-0 确保正确收缩 */}
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-4">
+        <div className="space-y-4">
+          {/* 补全功能总开关 */}
+          <SettingsSection
         title={t("sectionMainTitle")}
         description={t("sectionMainDescription")}
         icon={<Command className="h-5 w-5" />}
@@ -386,15 +389,17 @@ export function CompletionTab() {
         </SettingsSection>
       )}
 
-      <Alert>
-        <InfoIcon className="h-4 w-4" />
-        <AlertDescription>
-          {t("finalAlert")}
-        </AlertDescription>
-      </Alert>
+          <Alert>
+            <InfoIcon className="h-4 w-4" />
+            <AlertDescription>
+              {t("finalAlert")}
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
 
-      {/* 保存按钮区域 */}
-      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+      {/* 固定底部按钮区 - shrink-0 防止被压缩 */}
+      <div className="shrink-0 flex justify-end gap-2 p-4 bg-background">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
           {tCommon("reset")}

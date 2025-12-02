@@ -33,10 +33,16 @@ export function DingTalkNotificationWrapper() {
   }
 
   return (
-    <div className="space-y-4">
-      <DingTalkNotificationTab form={form} />
+    <div className="relative h-full">
+      {/* 可滚动内容区 - 底部留出按钮区域的空间 */}
+      <div className="h-full overflow-y-auto scrollbar-custom p-4 pb-20">
+        <div className="space-y-4">
+          <DingTalkNotificationTab form={form} />
+        </div>
+      </div>
 
-      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+      {/* 固定底部按钮区 - 使用绝对定位固定在底部 */}
+      <div className="absolute bottom-0 left-0 right-0 flex justify-end gap-2 p-4 bg-background">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
           重置

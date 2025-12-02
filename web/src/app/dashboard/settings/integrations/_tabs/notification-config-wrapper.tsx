@@ -86,21 +86,26 @@ export function NotificationConfigWrapper() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 邮件通知 */}
-      <EmailNotificationTab form={form} />
+    <div className="flex flex-1 min-h-0 flex-col">
+      {/* 可滚动内容区 - flex-1 + min-h-0 确保正确收缩 */}
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-4">
+        <div className="space-y-6">
+          {/* 邮件通知 */}
+          <EmailNotificationTab form={form} />
 
-      {/* Webhook 通知 */}
-      <WebhookNotificationTab form={form} />
+          {/* Webhook 通知 */}
+          <WebhookNotificationTab form={form} />
 
-      {/* 钉钉通知 */}
-      <DingTalkNotificationTab form={form} />
+          {/* 钉钉通知 */}
+          <DingTalkNotificationTab form={form} />
 
-      {/* 企业微信通知 */}
-      <WeComNotificationTab form={form} />
+          {/* 企业微信通知 */}
+          <WeComNotificationTab form={form} />
+        </div>
+      </div>
 
-      {/* 保存按钮区域 */}
-      <div className="flex justify-end gap-2 pt-6 pb-16 mt-6">
+      {/* 固定底部按钮区 - shrink-0 防止被压缩 */}
+      <div className="shrink-0 flex justify-end gap-2 p-4 bg-background">
         <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
           重置
