@@ -94,6 +94,7 @@ const messages = {
     logsOperations: "Operation Logs",
     logsLogin: "Login Logs",
     terminal: "Terminal",
+    userManagement: "User Management",
     systemSettings: "System Settings",
     systemOrg: "System & Organization",
     planPro: "Pro",

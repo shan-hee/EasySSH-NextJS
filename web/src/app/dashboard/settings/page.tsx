@@ -11,7 +11,6 @@ import {
   Command,
   Shield,
   Clock,
-  Users,
   Archive,
   Bot,
   Mail,
@@ -28,7 +27,6 @@ import { AccessControlTab } from "./security-center/_tabs/access-control-tab"
 import { SessionManagementTab } from "./security-center/_tabs/session-management-tab"
 import { NetworkSecurityTab } from "./security-center/_tabs/network-security-tab"
 
-import { UserManagementContent } from "./management/_tabs/user-management-content"
 import { BackupRestoreTab } from "./management/_tabs/backup-restore-tab"
 
 import { AIConfigWrapper } from "./integrations/_tabs/ai-config-wrapper"
@@ -73,7 +71,6 @@ const navGroups: NavGroup[] = [
   {
     labelKey: "groupManagementOps",
     items: [
-      { id: "users", nameKey: "itemUsers", icon: Users, component: UserManagementContent },
       { id: "backup", nameKey: "itemBackup", icon: Archive, component: BackupRestoreTab },
     ],
   },

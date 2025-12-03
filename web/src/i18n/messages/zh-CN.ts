@@ -85,6 +85,7 @@ const messages = {
     logsOperations: "操作日志",
     logsLogin: "登录日志",
     terminal: "终端",
+    userManagement: "用户管理",
     systemSettings: "系统设置",
     systemOrg: "系统与组织",
     planPro: "专业版",

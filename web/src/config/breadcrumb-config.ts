@@ -42,9 +42,8 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     showTitle: true,
   },
   '/dashboard/servers/history': {
-    breadcrumbs: [
-      { title: 'nav.connections', href: '/dashboard/servers' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================
@@ -55,126 +54,112 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     showTitle: false,
   },
   '/dashboard/terminal/sessions': {
-    breadcrumbs: [
-      { title: 'nav.terminal', href: '/dashboard/terminal' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================
   // 自动化模块
   // ===================
   '/dashboard/scripts': {
-    breadcrumbs: [
-      { title: 'nav.automation' }, // 无父级聚合页，不可点击
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/automation/schedules': {
-    breadcrumbs: [
-      { title: 'nav.automation' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/automation/history': {
-    breadcrumbs: [
-      { title: 'nav.automation' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/automation/batch': {
-    breadcrumbs: [
-      { title: 'nav.automation' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================
   // 文件管理
   // ===================
   '/dashboard/sftp': {
-    showTitle: false,
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/transfers/history': {
-    breadcrumbs: [
-      { title: 'nav.file', href: '/dashboard/sftp' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/storage': {
-    breadcrumbs: [
-      { title: 'nav.file' }, // 无明确的父级页面
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================
   // 监控告警
   // ===================
   '/dashboard/monitoring/resources': {
-    breadcrumbs: [
-      { title: 'nav.monitoring' }, // 统一使用侧边栏名称
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/monitoring/alerts': {
-    breadcrumbs: [
-      { title: 'nav.monitoring' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/monitoring/health': {
-    breadcrumbs: [
-      { title: 'nav.monitoring' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================
   // 日志审计
   // ===================
   '/dashboard/logs': {
-    breadcrumbs: [
-      { title: 'nav.logs' }, // 统一命名
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/logs/login': {
-    breadcrumbs: [
-      { title: 'nav.logs', href: '/dashboard/logs' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/logs/commands': {
-    breadcrumbs: [
-      { title: 'nav.logs', href: '/dashboard/logs' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/logs/files': {
-    breadcrumbs: [
-      { title: 'nav.logs', href: '/dashboard/logs' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================
-  // 系统与组织
+  // 系统设置
   // ===================
+  '/dashboard/settings': {
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
+  },
   '/dashboard/settings/system-config': {
-    breadcrumbs: [
-      { title: 'nav.systemOrg' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/settings/security-center': {
-    breadcrumbs: [
-      { title: 'nav.systemOrg' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/settings/integrations': {
-    breadcrumbs: [
-      { title: 'nav.systemOrg' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
   '/dashboard/settings/management': {
-    breadcrumbs: [
-      { title: 'nav.systemOrg' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================
   // 用户管理
   // ===================
   '/dashboard/users': {
-    breadcrumbs: [
-      { title: 'nav.systemOrg' },
-    ],
+    // 仅显示系统名称 + 当前页面标题
+    showTitle: true,
   },
 
   // ===================

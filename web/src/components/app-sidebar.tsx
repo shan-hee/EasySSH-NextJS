@@ -9,6 +9,7 @@ import {
   FileText,
   FolderOpen,
   Activity,
+  Users,
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 
@@ -94,6 +95,11 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
         ],
       },
       {
+        title: tNav("userManagement"),
+        url: "/dashboard/users",
+        icon: Users,
+      },
+      {
         title: tNav("systemSettings"),
         url: "/dashboard/settings",
         icon: Settings2,
@@ -125,7 +131,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
     [all, tNav]
   )
   const groupSettings = React.useMemo(
-    () => all.filter((i) => i.title === tNav("systemSettings")),
+    () => all.filter((i) => [tNav("userManagement"), tNav("systemSettings")].includes(i.title)),
     [all, tNav],
   )
 
