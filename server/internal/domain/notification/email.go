@@ -22,6 +22,9 @@ type EmailService interface {
 
 	// SendPasswordChangedNotification 发送密码修改通知
 	SendPasswordChangedNotification(ctx context.Context, email, username string, changeTime time.Time) error
+
+	// SendVerificationCode 发送验证码邮件
+	SendVerificationCode(ctx context.Context, email, code string) error
 }
 
 // EmailConfig 邮件服务配置
@@ -33,6 +36,8 @@ type EmailConfig struct {
 	FromEmail    string // 发件人邮箱
 	FromName     string // 发件人名称
 	UseTLS       bool   // 是否使用 TLS
+	SystemName   string // 系统名称（用于邮件模板）
+	CurrentYear  int    // 当前年份（用于版权信息）
 }
 
 // Validate 验证邮件配置
@@ -53,11 +58,12 @@ func (c *EmailConfig) Validate() error {
 type EmailTemplate string
 
 const (
-	TemplateLogin          EmailTemplate = "login"
-	TemplateAlert          EmailTemplate = "alert"
-	TemplateWelcome        EmailTemplate = "welcome"
-	Template2FAEnabled     EmailTemplate = "2fa_enabled"
-	TemplatePasswordChange EmailTemplate = "password_changed"
+	TemplateLogin            EmailTemplate = "login"
+	TemplateAlert            EmailTemplate = "alert"
+	TemplateWelcome          EmailTemplate = "welcome"
+	Template2FAEnabled       EmailTemplate = "2fa_enabled"
+	TemplatePasswordChange   EmailTemplate = "password_changed"
+	TemplateVerificationCode EmailTemplate = "verification_code"
 )
 
 // EmailData 邮件数据结构

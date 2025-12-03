@@ -38,7 +38,23 @@ export interface RegisterRequest {
   username: string
   email: string
   password: string
+  verification_code: string
   run_mode?: "demo" | "development" | "production"
+}
+
+/**
+ * 发送验证码请求
+ */
+export interface SendVerificationCodeRequest {
+  email: string
+}
+
+/**
+ * 发送验证码响应
+ */
+export interface SendVerificationCodeResponse {
+  message: string
+  expires_in: number
 }
 
 /**
@@ -71,6 +87,16 @@ export interface AuthStatusResponse {
  * 认证 API 服务
  */
 export const authApi = {
+  /**
+   * 发送邮箱验证码
+   */
+  async sendVerificationCode(data: SendVerificationCodeRequest): Promise<SendVerificationCodeResponse> {
+    return apiFetch<SendVerificationCodeResponse>("/auth/send-verification-code", {
+      method: "POST",
+      body: data,
+    })
+  },
+
   /**
    * 用户注册
    */

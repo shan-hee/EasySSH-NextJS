@@ -1,9 +1,11 @@
 package rest
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -174,6 +176,8 @@ type AuthHandler struct {
 	accessTokenTTLSeconds  int         // Access Token 有效期（秒）
 	refreshTokenTTLSeconds int         // Refresh Token Cookie 有效期（秒）
 	systemConfigService    systemconfig.Service // 系统配置服务（用于在 /auth/status 中返回公共配置）
+	verificationService    interface{} // 验证码服务
+	emailService           interface{} // 邮件服务
 }
 
 // NewAuthHandler 创建认证处理器
@@ -183,6 +187,8 @@ func NewAuthHandler(
 	securityService interface{},
 	accessTokenTTLSeconds, refreshTokenTTLSeconds int,
 	systemConfigService systemconfig.Service,
+	verificationService interface{},
+	emailService interface{},
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:            authService,
@@ -191,6 +197,8 @@ func NewAuthHandler(
 		accessTokenTTLSeconds:  accessTokenTTLSeconds,
 		refreshTokenTTLSeconds: refreshTokenTTLSeconds,
 		systemConfigService:    systemConfigService,
+		verificationService:    verificationService,
+		emailService:           emailService,
 	}
 }
 
@@ -205,10 +213,11 @@ const (
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	Username string  `json:"username" binding:"required,min=3,max=50"`
-	Email    string  `json:"email" binding:"required,email"`
-	Password string  `json:"password" binding:"required,min=6"`
-	RunMode  RunMode `json:"run_mode,omitempty"` // 运行模式（可选，仅用于初始化管理员）
+	Username         string  `json:"username" binding:"required,min=3,max=50"`
+	Email            string  `json:"email" binding:"required,email"`
+	Password         string  `json:"password" binding:"required,min=6"`
+	VerificationCode string  `json:"verification_code" binding:"required,len=6"` // 邮箱验证码
+	RunMode          RunMode `json:"run_mode,omitempty"`                         // 运行模式（可选，仅用于初始化管理员）
 }
 
 // ChangePasswordRequest 修改密码请求
@@ -271,6 +280,97 @@ type OAuthTokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
+// SendVerificationCode 发送邮箱验证码
+// POST /api/v1/auth/send-verification-code
+func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
+	// 定义请求结构
+	type SendVerificationCodeRequest struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+
+	var req SendVerificationCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 检查验证码服务是否可用
+	if h.verificationService == nil {
+		c.Error(fmt.Errorf("verification service is nil"))
+		RespondError(c, http.StatusServiceUnavailable, "service_unavailable", "Verification service is not available. Please contact administrator.")
+		return
+	}
+
+	// 检查邮件服务是否可用
+	if h.emailService == nil {
+		c.Error(fmt.Errorf("email service is nil - SMTP not configured"))
+		RespondError(c, http.StatusServiceUnavailable, "email_not_configured", "Email service is not configured. Please configure SMTP settings in: Settings > Integrations > Email Notifications")
+		return
+	}
+
+	// 类型断言验证码服务
+	verificationService, ok := h.verificationService.(interface {
+		GenerateAndSend(ctx context.Context, email string) error
+		GetCode(ctx context.Context, email string) (string, error)
+		CanSend(ctx context.Context, email string) (bool, error)
+	})
+	if !ok {
+		c.Error(fmt.Errorf("verification service type assertion failed"))
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid verification service")
+		return
+	}
+
+	// 类型断言邮件服务
+	emailService, ok := h.emailService.(interface {
+		SendVerificationCode(ctx context.Context, email, code string) error
+	})
+	if !ok {
+		c.Error(fmt.Errorf("email service type assertion failed"))
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid email service")
+		return
+	}
+
+	// 检查是否可以发送（频率限制）
+	canSend, err := verificationService.CanSend(c.Request.Context(), req.Email)
+	if err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to check send status")
+		return
+	}
+	if !canSend {
+		RespondError(c, http.StatusTooManyRequests, "too_frequent", "Please wait 60 seconds before requesting another code")
+		return
+	}
+
+	// 生成并存储验证码
+	if err := verificationService.GenerateAndSend(c.Request.Context(), req.Email); err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate verification code")
+		return
+	}
+
+	// 获取验证码
+	code, err := verificationService.GetCode(c.Request.Context(), req.Email)
+	if err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get verification code")
+		return
+	}
+
+	// 发送验证码邮件
+	if err := emailService.SendVerificationCode(c.Request.Context(), req.Email, code); err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to send verification code email")
+		return
+	}
+
+	// 返回成功响应
+	RespondSuccess(c, gin.H{
+		"message":    "Verification code sent successfully",
+		"expires_in": 300, // 5分钟
+	})
+}
+
 // Register 注册新用户
 // POST /api/v1/auth/register
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -286,6 +386,28 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		if err == nil && config != nil && !config.AllowRegistration {
 			RespondError(c, http.StatusForbidden, "registration_disabled", "User registration is currently disabled")
 			return
+		}
+	}
+
+	// 验证邮箱验证码
+	if h.verificationService != nil {
+		verificationService, ok := h.verificationService.(interface {
+			Verify(ctx interface{}, email, code string) error
+		})
+		if ok {
+			if err := verificationService.Verify(c.Request.Context(), req.Email, req.VerificationCode); err != nil {
+				// 根据错误类型返回不同的错误信息
+				errMsg := "Invalid or expired verification code"
+				if err.Error() == "verification code not found" {
+					errMsg = "Verification code not found, please request a new one"
+				} else if err.Error() == "too many verification attempts" {
+					errMsg = "Too many failed attempts, please request a new code"
+				} else if err.Error() == "verification code invalid" {
+					errMsg = "Invalid verification code"
+				}
+				RespondError(c, http.StatusBadRequest, "verification_failed", errMsg)
+				return
+			}
 		}
 	}
 

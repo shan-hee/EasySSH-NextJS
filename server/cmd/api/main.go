@@ -37,6 +37,7 @@ import (
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/domain/user"
 	"github.com/easyssh/server/internal/domain/useraiconfig"
+	"github.com/easyssh/server/internal/domain/verification"
 	"github.com/easyssh/server/internal/infra/cache"
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/easyssh/server/internal/infra/db"
@@ -149,6 +150,13 @@ func main() {
 	var emailService notification.EmailService
 	smtpConfig, err := notificationConfigService.GetSMTPConfig(context.Background())
 	if err == nil && smtpConfig != nil && smtpConfig.Enabled {
+		// 获取系统配置用于邮件模板
+		sysConfig, _ := systemConfigService.Get(context.Background())
+		systemName := "EasySSH"
+		if sysConfig != nil && sysConfig.SystemName != "" {
+			systemName = sysConfig.SystemName
+		}
+
 		// 从数据库加载成功且启用了邮件服务
 		emailService, err = notification.NewEmailService(&notification.EmailConfig{
 			SMTPHost:     smtpConfig.Host,
@@ -158,6 +166,8 @@ func main() {
 			FromEmail:    smtpConfig.FromEmail,
 			FromName:     smtpConfig.FromName,
 			UseTLS:       smtpConfig.UseTLS,
+			SystemName:   systemName,
+			CurrentYear:  time.Now().Year(),
 		})
 		if err != nil {
 			log.Printf("⚠️ Warning: Failed to initialize email service: %v", err)
@@ -176,6 +186,15 @@ func main() {
 		if setter, ok := authService.(emailServiceSetter); ok {
 			setter.SetEmailService(emailService)
 		}
+	}
+
+	// 验证码服务（需要 Redis）
+	var verificationService interface{}
+	if redisClient != nil {
+		verificationService = verification.NewService(redisClient.GetClient())
+		log.Println("✅ Verification service initialized")
+	} else {
+		log.Println("⚠️  Warning: Verification service is disabled (Redis not available)")
 	}
 
 	// 加密器（用于服务器密码和私钥）
@@ -257,6 +276,8 @@ func main() {
 		accessTokenTTLSeconds,
 		refreshTokenTTLSeconds,
 		systemConfigService,
+		verificationService,
+		emailService,
 	)
 	oauthHandler := rest.NewOAuthHandler(
 		authService,
@@ -369,6 +390,7 @@ func main() {
 		// 认证路由（公开）
 		authRoutes := v1.Group("/auth")
 		{
+			authRoutes.POST("/send-verification-code", authHandler.SendVerificationCode)
 			authRoutes.POST("/register", authHandler.Register)
 			authRoutes.POST("/logout", authHandler.Logout)
 			// 使用可选认证中间件，支持未登录和已登录状态

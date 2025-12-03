@@ -481,3 +481,210 @@ const passwordChangedTemplate = `
 </body>
 </html>
 `
+
+// 验证码邮件模板
+const verificationCodeTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+        }
+        .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 16px;
+            padding: 0;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 40px 30px;
+        }
+        .header-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .header h1 {
+            color: white;
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 16px;
+            color: #475569;
+            margin-bottom: 20px;
+        }
+        .code-box {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 2px dashed #cbd5e1;
+            text-align: center;
+            padding: 40px 20px;
+            margin: 30px 0;
+            border-radius: 12px;
+            position: relative;
+        }
+        .code-label {
+            font-size: 14px;
+            color: #64748b;
+            font-weight: 500;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .code {
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: 12px;
+            color: #6366f1;
+            margin: 15px 0;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            text-shadow: 0 2px 4px rgba(99, 102, 241, 0.1);
+        }
+        .expiry {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            color: #64748b;
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: white;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+        .info-section {
+            background-color: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+        .info-section h3 {
+            color: #1e40af;
+            font-size: 15px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+        .info-section ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #475569;
+        }
+        .info-section li {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .warning {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-left: 4px solid #f59e0b;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+        .warning-title {
+            color: #92400e;
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .warning p {
+            color: #78350f;
+            font-size: 14px;
+            margin: 0;
+            line-height: 1.6;
+        }
+        .footer {
+            background-color: #f8fafc;
+            text-align: center;
+            padding: 30px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .footer p {
+            color: #64748b;
+            font-size: 13px;
+            margin: 5px 0;
+        }
+        .footer-brand {
+            color: #475569;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <div class="container">
+            <div class="header">
+                <div class="header-icon">✉️</div>
+                <h1>邮箱验证码</h1>
+            </div>
+
+            <div class="content">
+                <p class="greeting">您好：</p>
+
+                <p style="color: #475569; margin-bottom: 25px;">
+                    您正在注册 <strong>{{.SystemName}}</strong> 账户，请使用以下验证码完成注册：
+                </p>
+
+                <div class="code-box">
+                    <div class="code-label">您的验证码</div>
+                    <div class="code">{{.Code}}</div>
+                    <div class="expiry">
+                        <span>⏱</span>
+                        <span>有效期：5 分钟</span>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3>📌 使用说明</h3>
+                    <ul>
+                        <li>请在注册页面输入此验证码</li>
+                        <li>验证码 5 分钟内有效</li>
+                        <li>每个验证码只能使用一次</li>
+                    </ul>
+                </div>
+
+                <div class="warning">
+                    <div class="warning-title">
+                        <span>⚠️</span>
+                        <span>安全提示</span>
+                    </div>
+                    <p>如果这不是您的操作，请忽略此邮件。请勿将验证码透露给任何人。</p>
+                </div>
+            </div>
+
+            <div class="footer">
+                <p>此邮件由 {{.SystemName}} 系统自动发送，请勿直接回复。</p>
+                <p class="footer-brand">© {{.CurrentYear}} {{.SystemName}}. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+`

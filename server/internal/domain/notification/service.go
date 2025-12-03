@@ -52,6 +52,9 @@ func (s *smtpEmailService) initTemplates() error {
 	// 密码修改通知模板
 	s.templates[TemplatePasswordChange] = template.Must(template.New("password_changed").Parse(passwordChangedTemplate))
 
+	// 验证码邮件模板
+	s.templates[TemplateVerificationCode] = template.Must(template.New("verification_code").Parse(verificationCodeTemplate))
+
 	return nil
 }
 
@@ -130,6 +133,34 @@ func (s *smtpEmailService) SendPasswordChangedNotification(ctx context.Context, 
 		To:       email,
 		Subject:  "🔑 密码已修改 - EasySSH",
 		Template: TemplatePasswordChange,
+		Data:     data,
+	})
+}
+
+// SendVerificationCode 发送验证码邮件
+func (s *smtpEmailService) SendVerificationCode(ctx context.Context, email, code string) error {
+	// 使用系统配置中的名称，如果未设置则使用默认值
+	systemName := s.config.SystemName
+	if systemName == "" {
+		systemName = "EasySSH"
+	}
+
+	// 使用配置中的年份，如果未设置则使用当前年份
+	currentYear := s.config.CurrentYear
+	if currentYear == 0 {
+		currentYear = time.Now().Year()
+	}
+
+	data := map[string]interface{}{
+		"Code":        code,
+		"SystemName":  systemName,
+		"CurrentYear": currentYear,
+	}
+
+	return s.sendEmail(ctx, &EmailData{
+		To:       email,
+		Subject:  fmt.Sprintf("📧 邮箱验证码 - %s", systemName),
+		Template: TemplateVerificationCode,
 		Data:     data,
 	})
 }
