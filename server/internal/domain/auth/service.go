@@ -52,6 +52,9 @@ type Service interface {
 	// ChangePassword 修改密码
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error
 
+	// ResetPassword 重置密码（忘记密码，不需要旧密码）
+	ResetPassword(ctx context.Context, userID uuid.UUID, newPassword string) error
+
 	// UpdateProfile 更新用户资料
 	UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar, language, timezone string) error
 
@@ -401,6 +404,49 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 	// 更新用户
 	if err := s.repo.Update(ctx, user); err != nil {
 		return err
+	}
+
+	// 异步发送密码修改通知邮件
+	if s.emailService != nil {
+		go func() {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := s.emailService.SendPasswordChangedNotification(
+				notifyCtx,
+				user.Email,
+				user.Username,
+				time.Now(),
+			); err != nil {
+				fmt.Printf("Failed to send password changed notification email: %v\n", err)
+			}
+		}()
+	}
+
+	return nil
+}
+
+// ResetPassword 重置密码（忘记密码，不需要旧密码）
+func (s *authService) ResetPassword(ctx context.Context, userID uuid.UUID, newPassword string) error {
+	// 查找用户
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find user failed: %w", err)
+	}
+
+	// 验证新密码策略
+	if err := ValidatePasswordWithDefault(newPassword); err != nil {
+		return fmt.Errorf("password validation failed: %w", err)
+	}
+
+	// 设置新密码
+	if err := user.SetPassword(newPassword); err != nil {
+		return fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	// 更新用户
+	if err := s.repo.Update(ctx, user); err != nil {
+		return fmt.Errorf("update user failed: %w", err)
 	}
 
 	// 异步发送密码修改通知邮件

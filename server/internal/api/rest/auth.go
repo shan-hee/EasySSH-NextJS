@@ -13,6 +13,7 @@ import (
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/systemconfig"
+	"github.com/easyssh/server/internal/domain/verification"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -226,6 +227,13 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
 
+// ResetPasswordRequest 重置密码请求
+type ResetPasswordRequest struct {
+	Email            string `json:"email" binding:"required,email"`
+	VerificationCode string `json:"verification_code" binding:"required,len=6"`
+	NewPassword      string `json:"new_password" binding:"required,min=6"`
+}
+
 // UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
 	Email    string  `json:"email,omitempty"`
@@ -278,6 +286,111 @@ type OAuthTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int    `json:"expires_in"`
+}
+
+// SendPasswordResetCode 发送密码重置验证码
+// POST /api/v1/auth/send-password-reset-code
+func (h *AuthHandler) SendPasswordResetCode(c *gin.Context) {
+	// 定义请求结构
+	type SendPasswordResetCodeRequest struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+
+	var req SendPasswordResetCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 检查验证码服务是否可用
+	if h.verificationService == nil {
+		c.Error(fmt.Errorf("verification service is nil"))
+		RespondError(c, http.StatusServiceUnavailable, "service_unavailable", "Verification service is not available. Please contact administrator.")
+		return
+	}
+
+	// 检查邮件服务是否可用
+	if h.emailService == nil {
+		c.Error(fmt.Errorf("email service is nil - SMTP not configured"))
+		RespondError(c, http.StatusServiceUnavailable, "email_not_configured", "Email service is not configured. Please configure SMTP settings in: Settings > Integrations > Email Notifications")
+		return
+	}
+
+	// 检查用户是否存在
+	user, err := h.authService.GetUserByEmail(c.Request.Context(), req.Email)
+	if err != nil {
+		// 为了安全，不透露用户是否存在，统一返回成功
+		RespondSuccess(c, gin.H{
+			"message":    "If the email exists, a password reset code has been sent",
+			"expires_in": 300, // 5分钟
+		})
+		return
+	}
+
+	// 类型断言验证码服务
+	verificationService, ok := h.verificationService.(interface {
+		GenerateAndSendWithType(ctx context.Context, email string, codeType verification.VerificationCodeType) error
+		GetCodeWithType(ctx context.Context, email string, codeType verification.VerificationCodeType) (string, error)
+		CanSendWithType(ctx context.Context, email string, codeType verification.VerificationCodeType) (bool, error)
+	})
+	if !ok {
+		c.Error(fmt.Errorf("verification service type assertion failed"))
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid verification service")
+		return
+	}
+
+	// 类型断言邮件服务
+	emailService, ok := h.emailService.(interface {
+		SendPasswordResetCode(ctx context.Context, email, code string) error
+	})
+	if !ok {
+		c.Error(fmt.Errorf("email service type assertion failed"))
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid email service")
+		return
+	}
+
+	// 使用密码重置验证码类型
+	codeType := verification.TypePasswordReset
+
+	// 检查是否可以发送（频率限制）
+	canSend, err := verificationService.CanSendWithType(c.Request.Context(), req.Email, codeType)
+	if err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to check send status")
+		return
+	}
+	if !canSend {
+		RespondError(c, http.StatusTooManyRequests, "too_frequent", "Please wait 60 seconds before requesting another code")
+		return
+	}
+
+	// 生成并存储验证码
+	if err := verificationService.GenerateAndSendWithType(c.Request.Context(), req.Email, codeType); err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate verification code")
+		return
+	}
+
+	// 获取验证码
+	code, err := verificationService.GetCodeWithType(c.Request.Context(), req.Email, codeType)
+	if err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get verification code")
+		return
+	}
+
+	// 发送密码重置验证码邮件
+	if err := emailService.SendPasswordResetCode(c.Request.Context(), user.Email, code); err != nil {
+		c.Error(err)
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to send password reset code email")
+		return
+	}
+
+	// 返回成功响应
+	RespondSuccess(c, gin.H{
+		"message":    "Password reset code sent successfully",
+		"expires_in": 300, // 5分钟
+	})
 }
 
 // SendVerificationCode 发送邮箱验证码
@@ -751,6 +864,73 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	RespondSuccessWithMessage(c, nil, "Password changed successfully")
+}
+
+// ResetPassword 重置密码（忘记密码）
+// POST /api/v1/auth/reset-password
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 检查验证码服务是否可用
+	if h.verificationService == nil {
+		c.Error(fmt.Errorf("verification service is nil"))
+		RespondError(c, http.StatusServiceUnavailable, "service_unavailable", "Verification service is not available. Please contact administrator.")
+		return
+	}
+
+	// 类型断言验证码服务
+	verificationService, ok := h.verificationService.(interface {
+		VerifyWithType(ctx context.Context, email, code string, codeType verification.VerificationCodeType) error
+	})
+	if !ok {
+		c.Error(fmt.Errorf("verification service type assertion failed"))
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid verification service")
+		return
+	}
+
+	// 验证密码重置验证码
+	codeType := verification.TypePasswordReset
+	if err := verificationService.VerifyWithType(c.Request.Context(), req.Email, req.VerificationCode, codeType); err != nil {
+		// 记录错误以便调试
+		c.Error(fmt.Errorf("verification failed: %w", err))
+
+		// 根据错误类型返回不同的错误信息
+		errMsg := "Invalid or expired verification code"
+		errStr := err.Error()
+		if errStr == "verification code not found" {
+			errMsg = "Verification code not found, please request a new one"
+		} else if errStr == "too many verification attempts" {
+			errMsg = "Too many failed attempts, please request a new code"
+		} else if errStr == "verification code invalid" {
+			errMsg = "Invalid verification code"
+		}
+		RespondError(c, http.StatusBadRequest, "verification_failed", errMsg)
+		return
+	}
+
+	// 获取用户
+	user, err := h.authService.GetUserByEmail(c.Request.Context(), req.Email)
+	if err != nil {
+		if errors.Is(err, auth.ErrUserNotFound) {
+			RespondError(c, http.StatusNotFound, "user_not_found", "User not found")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get user")
+		return
+	}
+
+	// 重置密码（直接设置新密码，不需要旧密码）
+	if err := h.authService.ResetPassword(c.Request.Context(), user.ID, req.NewPassword); err != nil {
+		c.Error(fmt.Errorf("reset password failed: %w", err))
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to reset password")
+		return
+	}
+
+	RespondSuccessWithMessage(c, nil, "Password reset successfully")
 }
 
 // UpdateProfile 更新用户资料

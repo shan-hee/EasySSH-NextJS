@@ -23,8 +23,11 @@ type EmailService interface {
 	// SendPasswordChangedNotification 发送密码修改通知
 	SendPasswordChangedNotification(ctx context.Context, email, username string, changeTime time.Time) error
 
-	// SendVerificationCode 发送验证码邮件
+	// SendVerificationCode 发送验证码邮件（注册用）
 	SendVerificationCode(ctx context.Context, email, code string) error
+
+	// SendPasswordResetCode 发送密码重置验证码邮件
+	SendPasswordResetCode(ctx context.Context, email, code string) error
 }
 
 // EmailConfig 邮件服务配置
@@ -64,6 +67,7 @@ const (
 	Template2FAEnabled       EmailTemplate = "2fa_enabled"
 	TemplatePasswordChange   EmailTemplate = "password_changed"
 	TemplateVerificationCode EmailTemplate = "verification_code"
+	TemplatePasswordReset    EmailTemplate = "password_reset"
 )
 
 // EmailData 邮件数据结构

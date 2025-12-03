@@ -593,11 +593,7 @@ export function LoginForm({
                     type="button"
                     variant="link"
                     className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 p-0 h-auto no-underline hover:no-underline transition-colors"
-                    onClick={() => {
-                      toast.info(tAuth("loginForgotPasswordToastTitle"), {
-                        description: tAuth("loginForgotPasswordToastDesc"),
-                      })
-                    }}
+                    onClick={() => router.push("/forgot-password")}
                   >
                     {tAuth("loginForgotPassword")}
                   </Button>

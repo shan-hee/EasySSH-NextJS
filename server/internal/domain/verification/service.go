@@ -30,14 +30,22 @@ var (
 
 // Service 验证码服务接口
 type Service interface {
-	// GenerateAndSend 生成并发送验证码
+	// GenerateAndSend 生成并发送验证码（注册用）
 	GenerateAndSend(ctx context.Context, email string) error
-	// Verify 验证验证码
+	// GenerateAndSendWithType 生成并发送指定类型的验证码
+	GenerateAndSendWithType(ctx context.Context, email string, codeType VerificationCodeType) error
+	// Verify 验证验证码（注册用）
 	Verify(ctx context.Context, email, code string) error
+	// VerifyWithType 验证指定类型的验证码
+	VerifyWithType(ctx context.Context, email, code string, codeType VerificationCodeType) error
 	// CanSend 检查是否可以发送验证码
 	CanSend(ctx context.Context, email string) (bool, error)
-	// GetCode 获取验证码（用于邮件发送）
+	// CanSendWithType 检查是否可以发送指定类型的验证码
+	CanSendWithType(ctx context.Context, email string, codeType VerificationCodeType) (bool, error)
+	// GetCode 获取验证码（用于邮件发送，注册用）
 	GetCode(ctx context.Context, email string) (string, error)
+	// GetCodeWithType 获取指定类型的验证码
+	GetCodeWithType(ctx context.Context, email string, codeType VerificationCodeType) (string, error)
 }
 
 type service struct {
@@ -51,10 +59,15 @@ func NewService(redisClient *redis.Client) Service {
 	}
 }
 
-// GenerateAndSend 生成并发送验证码
+// GenerateAndSend 生成并发送验证码（注册用，向后兼容）
 func (s *service) GenerateAndSend(ctx context.Context, email string) error {
+	return s.GenerateAndSendWithType(ctx, email, TypeRegister)
+}
+
+// GenerateAndSendWithType 生成并发送指定类型的验证码
+func (s *service) GenerateAndSendWithType(ctx context.Context, email string, codeType VerificationCodeType) error {
 	// 检查发送频率
-	canSend, err := s.CanSend(ctx, email)
+	canSend, err := s.CanSendWithType(ctx, email, codeType)
 	if err != nil {
 		return err
 	}
@@ -72,6 +85,7 @@ func (s *service) GenerateAndSend(ctx context.Context, email string) error {
 	verificationCode := VerificationCode{
 		Code:      code,
 		Email:     email,
+		Type:      codeType,
 		Attempts:  0,
 		CreatedAt: time.Now(),
 	}
@@ -83,13 +97,13 @@ func (s *service) GenerateAndSend(ctx context.Context, email string) error {
 	}
 
 	// 存储到Redis
-	key := s.getCodeKey(email)
+	key := s.getCodeKeyWithType(email, codeType)
 	if err := s.redisClient.Set(ctx, key, data, CodeExpiration).Err(); err != nil {
 		return fmt.Errorf("failed to store verification code: %w", err)
 	}
 
 	// 设置发送频率限制
-	sentKey := s.getSentKey(email)
+	sentKey := s.getSentKeyWithType(email, codeType)
 	if err := s.redisClient.Set(ctx, sentKey, "1", SendInterval).Err(); err != nil {
 		return fmt.Errorf("failed to set send interval: %w", err)
 	}
@@ -97,9 +111,14 @@ func (s *service) GenerateAndSend(ctx context.Context, email string) error {
 	return nil
 }
 
-// Verify 验证验证码
+// Verify 验证验证码（向后兼容）
 func (s *service) Verify(ctx context.Context, email, code string) error {
-	key := s.getCodeKey(email)
+	return s.VerifyWithType(ctx, email, code, TypeRegister)
+}
+
+// VerifyWithType 验证指定类型的验证码
+func (s *service) VerifyWithType(ctx context.Context, email, code string, codeType VerificationCodeType) error {
+	key := s.getCodeKeyWithType(email, codeType)
 
 	// 从Redis获取验证码数据
 	data, err := s.redisClient.Get(ctx, key).Result()
@@ -138,15 +157,20 @@ func (s *service) Verify(ctx context.Context, email, code string) error {
 	}
 
 	// 删除发送频率限制
-	sentKey := s.getSentKey(email)
+	sentKey := s.getSentKeyWithType(email, codeType)
 	s.redisClient.Del(ctx, sentKey)
 
 	return nil
 }
 
-// CanSend 检查是否可以发送验证码
+// CanSend 检查是否可以发送验证码（向后兼容）
 func (s *service) CanSend(ctx context.Context, email string) (bool, error) {
-	sentKey := s.getSentKey(email)
+	return s.CanSendWithType(ctx, email, TypeRegister)
+}
+
+// CanSendWithType 检查是否可以发送指定类型的验证码
+func (s *service) CanSendWithType(ctx context.Context, email string, codeType VerificationCodeType) (bool, error) {
+	sentKey := s.getSentKeyWithType(email, codeType)
 	exists, err := s.redisClient.Exists(ctx, sentKey).Result()
 	if err != nil {
 		return false, fmt.Errorf("failed to check send interval: %w", err)
@@ -154,9 +178,14 @@ func (s *service) CanSend(ctx context.Context, email string) (bool, error) {
 	return exists == 0, nil
 }
 
-// GetCode 获取验证码（用于邮件发送）
+// GetCode 获取验证码（向后兼容）
 func (s *service) GetCode(ctx context.Context, email string) (string, error) {
-	key := s.getCodeKey(email)
+	return s.GetCodeWithType(ctx, email, TypeRegister)
+}
+
+// GetCodeWithType 获取指定类型的验证码
+func (s *service) GetCodeWithType(ctx context.Context, email string, codeType VerificationCodeType) (string, error) {
+	key := s.getCodeKeyWithType(email, codeType)
 	data, err := s.redisClient.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -187,12 +216,22 @@ func (s *service) generateCode() (string, error) {
 	return string(code), nil
 }
 
-// getCodeKey 获取验证码Redis键
+// getCodeKey 获取验证码Redis键（向后兼容）
 func (s *service) getCodeKey(email string) string {
-	return fmt.Sprintf("verification_code:%s", email)
+	return s.getCodeKeyWithType(email, TypeRegister)
 }
 
-// getSentKey 获取发送频率限制Redis键
+// getCodeKeyWithType 获取指定类型的验证码Redis键
+func (s *service) getCodeKeyWithType(email string, codeType VerificationCodeType) string {
+	return fmt.Sprintf("verification_code:%s:%s", codeType, email)
+}
+
+// getSentKey 获取发送频率限制Redis键（向后兼容）
 func (s *service) getSentKey(email string) string {
-	return fmt.Sprintf("verification_code_sent:%s", email)
+	return s.getSentKeyWithType(email, TypeRegister)
+}
+
+// getSentKeyWithType 获取指定类型的发送频率限制Redis键
+func (s *service) getSentKeyWithType(email string, codeType VerificationCodeType) string {
+	return fmt.Sprintf("verification_code_sent:%s:%s", codeType, email)
 }

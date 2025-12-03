@@ -58,6 +58,15 @@ export interface SendVerificationCodeResponse {
 }
 
 /**
+ * 重置密码请求
+ */
+export interface ResetPasswordRequest {
+  email: string
+  verification_code: string
+  new_password: string
+}
+
+/**
  * 注册响应
  */
 export interface RegisterResponse {
@@ -88,10 +97,30 @@ export interface AuthStatusResponse {
  */
 export const authApi = {
   /**
-   * 发送邮箱验证码
+   * 发送邮箱验证码（注册用）
    */
   async sendVerificationCode(data: SendVerificationCodeRequest): Promise<SendVerificationCodeResponse> {
     return apiFetch<SendVerificationCodeResponse>("/auth/send-verification-code", {
+      method: "POST",
+      body: data,
+    })
+  },
+
+  /**
+   * 发送密码重置验证码
+   */
+  async sendPasswordResetCode(data: SendVerificationCodeRequest): Promise<SendVerificationCodeResponse> {
+    return apiFetch<SendVerificationCodeResponse>("/auth/send-password-reset-code", {
+      method: "POST",
+      body: data,
+    })
+  },
+
+  /**
+   * 重置密码
+   */
+  async resetPassword(data: ResetPasswordRequest): Promise<void> {
+    return apiFetch<void>("/auth/reset-password", {
       method: "POST",
       body: data,
     })

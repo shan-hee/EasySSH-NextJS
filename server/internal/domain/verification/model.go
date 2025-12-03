@@ -2,12 +2,23 @@ package verification
 
 import "time"
 
+// VerificationCodeType 验证码类型
+type VerificationCodeType string
+
+const (
+	// TypeRegister 注册验证码
+	TypeRegister VerificationCodeType = "register"
+	// TypePasswordReset 密码重置验证码
+	TypePasswordReset VerificationCodeType = "password_reset"
+)
+
 // VerificationCode 验证码数据结构
 type VerificationCode struct {
-	Code      string    `json:"code"`       // 验证码
-	Email     string    `json:"email"`      // 邮箱地址
-	Attempts  int       `json:"attempts"`   // 验证尝试次数
-	CreatedAt time.Time `json:"created_at"` // 创建时间
+	Code      string               `json:"code"`       // 验证码
+	Email     string               `json:"email"`      // 邮箱地址
+	Type      VerificationCodeType `json:"type"`       // 验证码类型
+	Attempts  int                  `json:"attempts"`   // 验证尝试次数
+	CreatedAt time.Time            `json:"created_at"` // 创建时间
 }
 
 // VerificationCodeRequest 发送验证码请求

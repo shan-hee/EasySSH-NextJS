@@ -20,6 +20,22 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   "Invalid verification code": "验证码错误",
   "Please wait 60 seconds before requesting another code": "请等待60秒后再次获取验证码",
 
+  // 密码重置相关错误
+  "If the email exists, a password reset code has been sent": "如果该邮箱存在，密码重置验证码已发送",
+  "Password reset code sent successfully": "密码重置验证码发送成功",
+  "Password reset successfully": "密码重置成功",
+  "Failed to send password reset code email": "发送密码重置验证码邮件失败",
+  "Failed to reset password": "重置密码失败",
+
+  // 密码策略相关错误
+  "密码长度至少需要 8 个字符": "密码长度至少需要 8 个字符",
+  "密码过于简单，请使用更复杂的密码": "密码过于简单，请使用更复杂的密码",
+  "密码必须包含至少一个大写字母": "密码必须包含至少一个大写字母",
+  "密码必须包含至少一个小写字母": "密码必须包含至少一个小写字母",
+  "密码必须包含至少一个数字": "密码必须包含至少一个数字",
+  "密码必须包含至少一个特殊字符": "密码必须包含至少一个特殊字符",
+  "password validation failed": "密码验证失败，请确保密码符合要求",
+
   // 权限相关错误
   "User registration is currently disabled": "用户注册功能已关闭",
   "Verification service is not available. Please contact administrator.": "验证码服务不可用，请联系管理员",

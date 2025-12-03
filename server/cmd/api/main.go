@@ -391,6 +391,8 @@ func main() {
 		authRoutes := v1.Group("/auth")
 		{
 			authRoutes.POST("/send-verification-code", authHandler.SendVerificationCode)
+			authRoutes.POST("/send-password-reset-code", authHandler.SendPasswordResetCode)
+			authRoutes.POST("/reset-password", authHandler.ResetPassword)
 			authRoutes.POST("/register", authHandler.Register)
 			authRoutes.POST("/logout", authHandler.Logout)
 			// 使用可选认证中间件，支持未登录和已登录状态

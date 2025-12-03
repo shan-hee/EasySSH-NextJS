@@ -55,6 +55,9 @@ func (s *smtpEmailService) initTemplates() error {
 	// 验证码邮件模板
 	s.templates[TemplateVerificationCode] = template.Must(template.New("verification_code").Parse(verificationCodeTemplate))
 
+	// 密码重置验证码邮件模板
+	s.templates[TemplatePasswordReset] = template.Must(template.New("password_reset").Parse(passwordResetTemplate))
+
 	return nil
 }
 
@@ -137,7 +140,7 @@ func (s *smtpEmailService) SendPasswordChangedNotification(ctx context.Context, 
 	})
 }
 
-// SendVerificationCode 发送验证码邮件
+// SendVerificationCode 发送验证码邮件（注册用）
 func (s *smtpEmailService) SendVerificationCode(ctx context.Context, email, code string) error {
 	// 使用系统配置中的名称，如果未设置则使用默认值
 	systemName := s.config.SystemName
@@ -161,6 +164,34 @@ func (s *smtpEmailService) SendVerificationCode(ctx context.Context, email, code
 		To:       email,
 		Subject:  fmt.Sprintf("📧 邮箱验证码 - %s", systemName),
 		Template: TemplateVerificationCode,
+		Data:     data,
+	})
+}
+
+// SendPasswordResetCode 发送密码重置验证码邮件
+func (s *smtpEmailService) SendPasswordResetCode(ctx context.Context, email, code string) error {
+	// 使用系统配置中的名称，如果未设置则使用默认值
+	systemName := s.config.SystemName
+	if systemName == "" {
+		systemName = "EasySSH"
+	}
+
+	// 使用配置中的年份，如果未设置则使用当前年份
+	currentYear := s.config.CurrentYear
+	if currentYear == 0 {
+		currentYear = time.Now().Year()
+	}
+
+	data := map[string]interface{}{
+		"Code":        code,
+		"SystemName":  systemName,
+		"CurrentYear": currentYear,
+	}
+
+	return s.sendEmail(ctx, &EmailData{
+		To:       email,
+		Subject:  fmt.Sprintf("🔑 密码重置验证码 - %s", systemName),
+		Template: TemplatePasswordReset,
 		Data:     data,
 	})
 }
