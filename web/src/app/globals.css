@@ -194,7 +194,7 @@
     background: hsl(var(--muted-foreground) / 0.5);
   }
 
-  /* 隐藏滚动条样式别名（兼容性） */
+  /* 隐藏滚动条样式别名 */
   .scrollbar-hide {
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* Internet Explorer 10+ */

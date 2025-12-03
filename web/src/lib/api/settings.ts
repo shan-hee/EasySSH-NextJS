@@ -196,42 +196,11 @@ export const settingsApi = {
    * 获取所有通知配置（统一接口）
    */
   async getNotificationConfig(): Promise<NotificationConfig> {
-    try {
-      const response = await apiFetch<GetNotificationConfigResponse>("/settings/notifications", {
-        method: "GET",
-        retry: false, // 禁用重试，减少错误日志
-      })
-      return response.config
-    } catch (error) {
-      // 返回默认配置（API 未实现时）
-      return {
-        smtp: {
-          enabled: false,
-          host: "",
-          port: 587,
-          username: "",
-          password: "",
-          from_email: "",
-          from_name: "",
-          use_tls: true,
-        },
-        webhook: {
-          enabled: false,
-          url: "",
-          secret: "",
-          method: "POST",
-        },
-        dingtalk: {
-          enabled: false,
-          webhook_url: "",
-          secret: "",
-        },
-        wecom: {
-          enabled: false,
-          webhook_url: "",
-        },
-      }
-    }
+    const response = await apiFetch<GetNotificationConfigResponse>("/settings/notifications", {
+      method: "GET",
+      retry: false, // 禁用重试，减少错误日志
+    })
+    return response.config
   },
 
   /**

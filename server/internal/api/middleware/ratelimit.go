@@ -1,11 +1,11 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/easyssh/server/internal/domain/security"
 	"github.com/gin-gonic/gin"
 )
 
@@ -137,7 +137,7 @@ func RateLimitMiddleware(limiter *RateLimiter) gin.HandlerFunc {
 
 // LoginRateLimitMiddleware 登录接口专用速率限制，支持动态配置
 // 默认: 5次/分钟/IP
-func LoginRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
+func LoginRateLimitMiddleware(securityService security.Service) gin.HandlerFunc {
 	// 使用动态速率限制器
 	return func(c *gin.Context) {
 		// 默认值
@@ -146,14 +146,10 @@ func LoginRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
 		// 优先从请求上下文缓存获取配置(避免重复查询数据库)
 		if secConfig, ok := GetSecurityConfigFromContext(c); ok {
 			limit = secConfig.LoginLimit
-		} else {
+		} else if securityService != nil {
 			// 缓存未命中,降级为查询数据库
-			if ss, ok := securityService.(interface {
-				GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
-			}); ok {
-				if config, err := ss.GetRateLimitConfig(c.Request.Context()); err == nil {
-					limit = config.LoginLimit
-				}
+			if config, err := securityService.GetRateLimitConfig(c.Request.Context()); err == nil {
+				limit = config.LoginLimit
 			}
 		}
 
@@ -176,7 +172,7 @@ func LoginRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
 
 // APIRateLimitMiddleware API 接口通用速率限制，支持动态配置
 // 默认: 100次/分钟/IP
-func APIRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
+func APIRateLimitMiddleware(securityService security.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 默认值
 		limit := 100
@@ -184,14 +180,10 @@ func APIRateLimitMiddleware(securityService interface{}) gin.HandlerFunc {
 		// 优先从请求上下文缓存获取配置(避免重复查询数据库)
 		if secConfig, ok := GetSecurityConfigFromContext(c); ok {
 			limit = secConfig.APILimit
-		} else {
+		} else if securityService != nil {
 			// 缓存未命中,降级为查询数据库
-			if ss, ok := securityService.(interface {
-				GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
-			}); ok {
-				if config, err := ss.GetRateLimitConfig(c.Request.Context()); err == nil {
-					limit = config.APILimit
-				}
+			if config, err := securityService.GetRateLimitConfig(c.Request.Context()); err == nil {
+				limit = config.APILimit
 			}
 		}
 

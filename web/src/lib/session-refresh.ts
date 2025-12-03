@@ -1,4 +1,3 @@
-import { getApiBase } from "@/lib/config"
 import { useAuthStore } from "@/stores/auth-store"
 
 export interface RefreshTokenResult {
@@ -19,25 +18,9 @@ export async function performRefreshToken(): Promise<RefreshTokenResult> {
     throw new Error("Refresh not supported on server")
   }
 
-  const apiBase = getApiBase()
-  let url: string
-
-  if (apiBase) {
-    url = `${apiBase.replace(/\/+$/, "")}/oauth/token`
-  } else {
-    const origin = window.location.origin
-    url = `${origin}/oauth/token`
-  }
-
-  let credentials: RequestCredentials = "same-origin"
-  try {
-    const reqUrl = new URL(url, window.location.href)
-    if (reqUrl.origin !== window.location.origin) {
-      credentials = "include"
-    }
-  } catch {
-    // ignore URL parse error, fallback to same-origin
-  }
+  // 统一使用当前站点下的 /oauth/token 端点
+  const url = "/oauth/token"
+  const credentials: RequestCredentials = "same-origin"
 
   const res = await fetch(url, {
     method: "POST",
@@ -76,4 +59,3 @@ export async function performRefreshToken(): Promise<RefreshTokenResult> {
     expiresIn,
   }
 }
-

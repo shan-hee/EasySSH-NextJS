@@ -21,7 +21,7 @@ import {
   PromptInputModelSelectItem,
   PromptInputModelSelectValue,
 } from "@/components/ui/shadcn-io/ai/prompt-input"
-// 注意：暂时使用简化的代码块样式，避免 react-syntax-highlighter 的兼容性问题
+// 注意：使用简化的代码块样式，避免引入额外依赖
 // 如果需要完整语法高亮，可以后续使用 shiki（你已安装）
 
 // ========== 常量定义 ==========

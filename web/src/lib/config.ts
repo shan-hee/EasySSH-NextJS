@@ -6,17 +6,6 @@
  */
 
 /**
- * 获取后端基础地址
- * 纯 CSR 模式下不再需要此函数，保留用于兼容性
- *
- * @returns 后端基础地址
- * @deprecated 纯 CSR 模式下使用相对路径即可
- */
-export function getApiBase(): string {
-  return process.env.NEXT_PUBLIC_API_BASE || ''
-}
-
-/**
  * 获取 API URL (带 /api/v1 路径)
  *
  * 开发模式：使用完整 URL 指向后端服务器
@@ -83,9 +72,6 @@ export function getWsUrl(path: string): string {
  * 环境配置对象
  */
 export const config = {
-  // 后端基础地址 (不带路径)
-  apiBase: getApiBase(),
-
   // API URL (带 /api/v1)
   apiUrl: getApiUrl(),
 

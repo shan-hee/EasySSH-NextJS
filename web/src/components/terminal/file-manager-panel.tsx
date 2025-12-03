@@ -224,10 +224,9 @@ export function FileManagerPanel({
     </>
   )
 
-  // 如果提供了内部挂载容器，则挂载到该容器内（终端内部悬浮，位于工具栏下方）
-  if (internalContainer) {
-    return createPortal(panelContent, internalContainer)
+  // 仅在提供挂载容器时渲染（终端内部悬浮，位于工具栏下方）
+  if (!internalContainer) {
+    return null
   }
-  // 否则回退到页面级（保持兼容）
-  return createPortal(panelContent, document.body)
+  return createPortal(panelContent, internalContainer)
 }

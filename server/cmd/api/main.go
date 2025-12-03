@@ -189,7 +189,7 @@ func main() {
 	}
 
 	// 验证码服务（需要 Redis）
-	var verificationService interface{}
+	var verificationService verification.Service
 	if redisClient != nil {
 		verificationService = verification.NewService(redisClient.GetClient())
 		log.Println("✅ Verification service initialized")

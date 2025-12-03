@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -12,6 +11,8 @@ import (
 	"time"
 
 	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/easyssh/server/internal/domain/notification"
+	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/domain/verification"
 	"github.com/gin-gonic/gin"
@@ -30,17 +31,15 @@ type CookieConfig struct {
 }
 
 // getCookieConfig 从安全配置服务获取 Cookie 配置
-func getCookieConfig(c *gin.Context, securityService interface{}) (secure bool, domain string, sameSite http.SameSite) {
+func getCookieConfig(c *gin.Context, securityService security.Service) (secure bool, domain string, sameSite http.SameSite) {
 	// 默认值
 	secure = true
 	domain = ""
 	sameSite = http.SameSiteLaxMode
 
-	// 尝试从安全配置服务获取配置
-	if ss, ok := securityService.(interface {
-		GetCookieConfig(ctx interface{}) (*CookieConfig, error)
-	}); ok {
-		if config, err := ss.GetCookieConfig(c.Request.Context()); err == nil {
+	// 从安全配置服务获取配置
+	if securityService != nil {
+		if config, err := securityService.GetCookieConfig(c.Request.Context()); err == nil {
 			secure = config.Secure
 			domain = config.Domain
 		}
@@ -74,8 +73,7 @@ func getCookieConfig(c *gin.Context, securityService interface{}) (secure bool, 
 }
 
 // setAuthCookies 设置认证相关的 HttpOnly Cookie（仅用于 refresh_token）
-// 为了向后兼容已有调用签名，此函数忽略 accessToken 参数，只负责写入 refresh_token Cookie。
-func setAuthCookies(c *gin.Context, _ /* accessToken */ string, refreshToken string, securityService interface{}, _ /* accessTokenMaxAge */ int, refreshTokenMaxAge int) {
+func setAuthCookies(c *gin.Context, refreshToken string, securityService security.Service, refreshTokenMaxAge int) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
 
 	http.SetCookie(c.Writer, &http.Cookie{
@@ -91,25 +89,15 @@ func setAuthCookies(c *gin.Context, _ /* accessToken */ string, refreshToken str
 	})
 }
 
-// clearAuthCookies 清除认证相关的 Cookie（支持动态配置）
-func clearAuthCookies(c *gin.Context, securityService interface{}) {
+// clearAuthCookies 清除认证相关的 Cookie（仅清理当前版本使用的路径）
+func clearAuthCookies(c *gin.Context, securityService security.Service) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
 
-	// 同时清理新路径(/oauth)和历史路径(/)上的 refresh_token Cookie，确保迁移过程中的兼容性
+	// 清理当前使用的 /oauth 路径上的 refresh_token Cookie
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     RefreshTokenCookieName,
 		Value:    "",
 		Path:     "/oauth",
-		Domain:   domain,
-		MaxAge:   -1,
-		Secure:   secure,
-		HttpOnly: true,
-		SameSite: sameSite,
-	})
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     RefreshTokenCookieName,
-		Value:    "",
-		Path:     "/",
 		Domain:   domain,
 		MaxAge:   -1,
 		Secure:   secure,
@@ -173,23 +161,23 @@ func hashRefreshToken(token string) string {
 type AuthHandler struct {
 	authService            auth.Service
 	jwtService             auth.JWTService
-	securityService        interface{} // 安全配置服务（用于动态配置）
-	accessTokenTTLSeconds  int         // Access Token 有效期（秒）
-	refreshTokenTTLSeconds int         // Refresh Token Cookie 有效期（秒）
-	systemConfigService    systemconfig.Service // 系统配置服务（用于在 /auth/status 中返回公共配置）
-	verificationService    interface{} // 验证码服务
-	emailService           interface{} // 邮件服务
+	securityService        security.Service // 安全配置服务
+	accessTokenTTLSeconds  int              // Access Token 有效期（秒）
+	refreshTokenTTLSeconds int              // Refresh Token Cookie 有效期（秒）
+	systemConfigService    systemconfig.Service           // 系统配置服务（用于在 /auth/status 中返回公共配置）
+	verificationService    verification.Service           // 验证码服务
+	emailService           notification.EmailService      // 邮件服务
 }
 
 // NewAuthHandler 创建认证处理器
 func NewAuthHandler(
 	authService auth.Service,
 	jwtService auth.JWTService,
-	securityService interface{},
+	securityService security.Service,
 	accessTokenTTLSeconds, refreshTokenTTLSeconds int,
 	systemConfigService systemconfig.Service,
-	verificationService interface{},
-	emailService interface{},
+	verificationService verification.Service,
+	emailService notification.EmailService,
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:            authService,
@@ -327,33 +315,11 @@ func (h *AuthHandler) SendPasswordResetCode(c *gin.Context) {
 		return
 	}
 
-	// 类型断言验证码服务
-	verificationService, ok := h.verificationService.(interface {
-		GenerateAndSendWithType(ctx context.Context, email string, codeType verification.VerificationCodeType) error
-		GetCodeWithType(ctx context.Context, email string, codeType verification.VerificationCodeType) (string, error)
-		CanSendWithType(ctx context.Context, email string, codeType verification.VerificationCodeType) (bool, error)
-	})
-	if !ok {
-		c.Error(fmt.Errorf("verification service type assertion failed"))
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid verification service")
-		return
-	}
-
-	// 类型断言邮件服务
-	emailService, ok := h.emailService.(interface {
-		SendPasswordResetCode(ctx context.Context, email, code string) error
-	})
-	if !ok {
-		c.Error(fmt.Errorf("email service type assertion failed"))
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid email service")
-		return
-	}
-
 	// 使用密码重置验证码类型
 	codeType := verification.TypePasswordReset
 
 	// 检查是否可以发送（频率限制）
-	canSend, err := verificationService.CanSendWithType(c.Request.Context(), req.Email, codeType)
+	canSend, err := h.verificationService.CanSendWithType(c.Request.Context(), req.Email, codeType)
 	if err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to check send status")
@@ -365,14 +331,14 @@ func (h *AuthHandler) SendPasswordResetCode(c *gin.Context) {
 	}
 
 	// 生成并存储验证码
-	if err := verificationService.GenerateAndSendWithType(c.Request.Context(), req.Email, codeType); err != nil {
+	if err := h.verificationService.GenerateAndSendWithType(c.Request.Context(), req.Email, codeType); err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate verification code")
 		return
 	}
 
 	// 获取验证码
-	code, err := verificationService.GetCodeWithType(c.Request.Context(), req.Email, codeType)
+	code, err := h.verificationService.GetCodeWithType(c.Request.Context(), req.Email, codeType)
 	if err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get verification code")
@@ -380,7 +346,7 @@ func (h *AuthHandler) SendPasswordResetCode(c *gin.Context) {
 	}
 
 	// 发送密码重置验证码邮件
-	if err := emailService.SendPasswordResetCode(c.Request.Context(), user.Email, code); err != nil {
+	if err := h.emailService.SendPasswordResetCode(c.Request.Context(), user.Email, code); err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to send password reset code email")
 		return
@@ -421,30 +387,11 @@ func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
 		return
 	}
 
-	// 类型断言验证码服务
-	verificationService, ok := h.verificationService.(interface {
-		GenerateAndSend(ctx context.Context, email string) error
-		GetCode(ctx context.Context, email string) (string, error)
-		CanSend(ctx context.Context, email string) (bool, error)
-	})
-	if !ok {
-		c.Error(fmt.Errorf("verification service type assertion failed"))
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid verification service")
-		return
-	}
-
-	// 类型断言邮件服务
-	emailService, ok := h.emailService.(interface {
-		SendVerificationCode(ctx context.Context, email, code string) error
-	})
-	if !ok {
-		c.Error(fmt.Errorf("email service type assertion failed"))
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid email service")
-		return
-	}
+	// 使用注册验证码类型
+	codeType := verification.TypeRegister
 
 	// 检查是否可以发送（频率限制）
-	canSend, err := verificationService.CanSend(c.Request.Context(), req.Email)
+	canSend, err := h.verificationService.CanSendWithType(c.Request.Context(), req.Email, codeType)
 	if err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to check send status")
@@ -456,14 +403,14 @@ func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
 	}
 
 	// 生成并存储验证码
-	if err := verificationService.GenerateAndSend(c.Request.Context(), req.Email); err != nil {
+	if err := h.verificationService.GenerateAndSendWithType(c.Request.Context(), req.Email, codeType); err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to generate verification code")
 		return
 	}
 
 	// 获取验证码
-	code, err := verificationService.GetCode(c.Request.Context(), req.Email)
+	code, err := h.verificationService.GetCodeWithType(c.Request.Context(), req.Email, codeType)
 	if err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get verification code")
@@ -471,7 +418,7 @@ func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
 	}
 
 	// 发送验证码邮件
-	if err := emailService.SendVerificationCode(c.Request.Context(), req.Email, code); err != nil {
+	if err := h.emailService.SendVerificationCode(c.Request.Context(), req.Email, code); err != nil {
 		c.Error(err)
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to send verification code email")
 		return
@@ -504,23 +451,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	// 验证邮箱验证码
 	if h.verificationService != nil {
-		verificationService, ok := h.verificationService.(interface {
-			Verify(ctx interface{}, email, code string) error
-		})
-		if ok {
-			if err := verificationService.Verify(c.Request.Context(), req.Email, req.VerificationCode); err != nil {
-				// 根据错误类型返回不同的错误信息
-				errMsg := "Invalid or expired verification code"
-				if err.Error() == "verification code not found" {
-					errMsg = "Verification code not found, please request a new one"
-				} else if err.Error() == "too many verification attempts" {
-					errMsg = "Too many failed attempts, please request a new code"
-				} else if err.Error() == "verification code invalid" {
-					errMsg = "Invalid verification code"
-				}
-				RespondError(c, http.StatusBadRequest, "verification_failed", errMsg)
-				return
+		if err := h.verificationService.Verify(c.Request.Context(), req.Email, req.VerificationCode); err != nil {
+			// 根据错误类型返回不同的错误信息
+			errMsg := "Invalid or expired verification code"
+			if err.Error() == "verification code not found" {
+				errMsg = "Verification code not found, please request a new one"
+			} else if err.Error() == "too many verification attempts" {
+				errMsg = "Too many failed attempts, please request a new code"
+			} else if err.Error() == "verification code invalid" {
+				errMsg = "Invalid verification code"
 			}
+			RespondError(c, http.StatusBadRequest, "verification_failed", errMsg)
+			return
 		}
 	}
 
@@ -553,7 +495,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	// 设置 HttpOnly refresh_token Cookie（与登录流程保持一致）
 	if strings.TrimSpace(refreshToken) != "" {
-		setAuthCookies(c, "", refreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+		setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
 	}
 
 	// 在上下文中记录用户信息，便于审计日志使用
@@ -704,7 +646,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 
 		// 设置 HttpOnly refresh_token Cookie
 		if refreshToken != "" {
-			setAuthCookies(c, "", refreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+			setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
 		}
 
 		// 在上下文中记录用户信息，便于审计日志使用
@@ -746,7 +688,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 
 		// 如有轮换，更新 refresh_token Cookie
 		if newRefreshToken != "" {
-			setAuthCookies(c, "", newRefreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+			setAuthCookies(c, newRefreshToken, h.securityService, h.refreshTokenTTLSeconds)
 		}
 
 		RespondSuccess(c, OAuthTokenResponse{
@@ -882,19 +824,9 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	// 类型断言验证码服务
-	verificationService, ok := h.verificationService.(interface {
-		VerifyWithType(ctx context.Context, email, code string, codeType verification.VerificationCodeType) error
-	})
-	if !ok {
-		c.Error(fmt.Errorf("verification service type assertion failed"))
-		RespondError(c, http.StatusInternalServerError, "internal_error", "Invalid verification service")
-		return
-	}
-
 	// 验证密码重置验证码
 	codeType := verification.TypePasswordReset
-	if err := verificationService.VerifyWithType(c.Request.Context(), req.Email, req.VerificationCode, codeType); err != nil {
+	if err := h.verificationService.VerifyWithType(c.Request.Context(), req.Email, req.VerificationCode, codeType); err != nil {
 		// 记录错误以便调试
 		c.Error(fmt.Errorf("verification failed: %w", err))
 
@@ -1097,7 +1029,7 @@ func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
 	}
 
 	// 设置 HttpOnly Cookie
-	setAuthCookies(c, accessToken, refreshToken, h.securityService, h.accessTokenTTLSeconds, h.refreshTokenTTLSeconds)
+	setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
 
 	// 返回用户信息和令牌
 	RespondSuccess(c, AuthResponse{

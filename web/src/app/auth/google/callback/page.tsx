@@ -49,8 +49,6 @@ function GoogleAuthCallbackInner() {
     const idToken = hashParams.get("id_token")
     const error = hashParams.get("error")
     const stateFromHash = hashParams.get("state")
-
-    // Google 也会把 state 放在 query 参数里，兼容读取一次
     const stateFromQuery = searchParams.get("state")
     const next =
       parseNextFromState(stateFromHash) ||

@@ -6,6 +6,7 @@ import (
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/oauth"
+	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/gin-gonic/gin"
 )
@@ -14,7 +15,7 @@ import (
 type OAuthHandler struct {
 	authService         auth.Service
 	systemConfigService systemconfig.Service
-	securityService     interface{} // 安全配置服务
+	securityService     security.Service // 安全配置服务
 	accessTokenTTL      int
 	refreshTokenTTL     int
 }
@@ -23,7 +24,7 @@ type OAuthHandler struct {
 func NewOAuthHandler(
 	authService auth.Service,
 	systemConfigService systemconfig.Service,
-	securityService interface{},
+	securityService security.Service,
 	accessTokenTTL, refreshTokenTTL int,
 ) *OAuthHandler {
 	return &OAuthHandler{
@@ -155,7 +156,7 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 
 	// 设置 HttpOnly refresh_token Cookie
 	if refreshToken != "" {
-		setAuthCookies(c, "", refreshToken, h.securityService, h.accessTokenTTL, h.refreshTokenTTL)
+		setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTL)
 	}
 
 	// 在上下文中记录用户信息，便于审计日志使用
