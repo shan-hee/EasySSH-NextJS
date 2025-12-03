@@ -274,7 +274,12 @@ export default function ServersPage() {
  // 查找服务器以获取名称
  const server = servers.find(s => s.id === serverId)
  const serverName = server?.name || server?.host || ""
- router.push(`/dashboard/terminal?server=${serverId}&name=${encodeURIComponent(serverName)}`)
+ // 优化：使用 sessionStorage 传递参数，避免 URL 参数导致的二次跳转
+ sessionStorage.setItem("pendingConnection", JSON.stringify({
+   server: serverId,
+   name: serverName
+ }))
+ router.push("/dashboard/terminal")
  }
 
  const handleEdit = (server: Server) => {

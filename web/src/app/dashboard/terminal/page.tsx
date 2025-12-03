@@ -6,7 +6,7 @@ import { getErrorMessage } from "@/lib/error-utils"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import { TerminalSession } from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { serversApi, type Server } from "@/lib/api"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { useTabUIStore } from "@/stores/tab-ui-store"
@@ -18,18 +18,34 @@ const lastActivityMap = new Map<string, number>()
 
 function TerminalPageContent() {
  const router = useRouter()
- const searchParams = useSearchParams()
  const { ready } = useAuthReady()
  const t = useTranslations("terminal")
  const quickConnectName = t("quickConnectTabName")
  const [servers, setServers] = useState<QuickServer[]>([])
  const [loading, setLoading] = useState(true)
 
- // 根据 URL 参数决定初始会话类型
+ // 根据 sessionStorage 决定初始会话类型
  const [sessions, setSessions] = useState<TerminalSession[]>(() => {
  const now = Date.now()
- const serverId = searchParams.get("server")
- const serverName = searchParams.get("name") || "" // 从 URL 获取服务器名称
+
+ // 从 sessionStorage 读取待连接的服务器信息
+ let serverId: string | null = null
+ let serverName = ""
+
+ if (typeof window !== 'undefined') {
+   const pendingConnection = sessionStorage.getItem("pendingConnection")
+   if (pendingConnection) {
+     try {
+       const data = JSON.parse(pendingConnection)
+       serverId = data.server
+       serverName = data.name || ""
+       // 读取后立即清除，避免重复使用
+       sessionStorage.removeItem("pendingConnection")
+     } catch (e) {
+       console.error("Failed to parse pending connection:", e)
+     }
+   }
+ }
 
  // 如果有 server 参数，创建终端会话（等待服务器信息加载）
  if (serverId) {
@@ -37,7 +53,7 @@ function TerminalPageContent() {
  {
  id: `auto-${serverId}-${now}`,
  serverId: serverId, // 暂时使用字符串，稍后 useEffect 会填充完整信息
- serverName: serverName, // 使用 URL 传递的服务器名称
+ serverName: serverName, // 使用传递的服务器名称
  host: "",
  port: undefined,
  username: "",
@@ -74,76 +90,71 @@ function TerminalPageContent() {
  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
  const initializedRef = useRef(false)
 
- // 处理 URL 参数中的服务器 ID（在 servers 加载完成后）
+ // 处理待连接的服务器（在 servers 加载完成后）
  useEffect(() => {
  if (!initializedRef.current && !loading && servers.length > 0) {
  initializedRef.current = true
 
- const serverId = searchParams.get("server")
- if (serverId) {
- // 查找服务器信息
- const server = servers.find(s => s.id.toString() === serverId)
+ // 查找是否有待连接的会话（通过 auto- 前缀识别）
+ const pendingSession = sessions.find(s => s.id.startsWith("auto-"))
+ if (pendingSession) {
+   const serverId = pendingSession.serverId.toString()
+   // 查找服务器信息
+   const server = servers.find(s => s.id.toString() === serverId)
 
- if (server && server.status === "online") {
- // 服务器在线，更新会话信息
- setSessions(prev => {
- const updated = prev.map(s => {
- // 只更新我们初始创建的 auto- 会话
- if (s.id.startsWith(`auto-${serverId}-`)) {
- return {
- ...s,
- serverId: server.id,
- serverName: server.name || `${server.username}@${server.host}:${server.port}`,
- host: server.host,
- port: server.port,
- username: server.username,
- isConnected: true,
- status: "connected" as const,
- group: server.group,
- tags: server.tags,
- }
- }
- return s
- })
+   if (server && server.status === "online") {
+     // 服务器在线，更新会话信息
+     setSessions(prev => {
+       const updated = prev.map(s => {
+         // 只更新我们初始创建的 auto- 会话
+         if (s.id === pendingSession.id) {
+           return {
+             ...s,
+             serverId: server.id,
+             serverName: server.name || `${server.username}@${server.host}:${server.port}`,
+             host: server.host,
+             port: server.port,
+             username: server.username,
+             isConnected: true,
+             status: "connected" as const,
+             group: server.group,
+             tags: server.tags,
+           }
+         }
+         return s
+       })
 
- // 设置激活的会话
- const activeSession = updated.find(s => s.id.startsWith(`auto-${serverId}-`))
- if (activeSession) {
- setActiveSessionId(activeSession.id)
- }
+       // 设置激活的会话
+       setActiveSessionId(pendingSession.id)
 
- return updated
- })
+       return updated
+     })
+   } else {
+     // 服务器不存在或离线，回退到快速连接
+     if (!server) {
+       toast.error(t("errorServerNotFound"))
+     } else {
+       toast.error(t("errorServerOffline"))
+     }
 
- // 清除 URL 参数
- router.replace("/dashboard/terminal", { scroll: false })
- } else {
- // 服务器不存在或离线，回退到快速连接
- if (!server) {
- toast.error(t("errorServerNotFound"))
- } else {
- toast.error(t("errorServerOffline"))
- }
-
- const now = Date.now()
- setSessions([{
- id: "quick-initial",
- serverId: 0,
- serverName: quickConnectName,
- host: "",
- port: undefined,
- username: "",
- isConnected: false,
- status: "disconnected",
- lastActivity: now,
- type: "quick",
- pinned: false,
- }])
- router.replace("/dashboard/terminal", { scroll: false })
+     const now = Date.now()
+     setSessions([{
+       id: "quick-initial",
+       serverId: 0,
+       serverName: quickConnectName,
+       host: "",
+       port: undefined,
+       username: "",
+       isConnected: false,
+       status: "disconnected",
+       lastActivity: now,
+       type: "quick",
+       pinned: false,
+     }])
+   }
  }
  }
- }
- }, [loading, servers, searchParams, router])
+ }, [loading, servers, sessions, t, quickConnectName])
 
  // 加载服务器列表 - 优化版本
  const loadServers = useCallback(async () => {
