@@ -12,15 +12,16 @@ export function DingTalkNotificationWrapper() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: dingTalkConfigSchema,
     loadFn: async () => {
-      const config = await settingsApi.getDingTalkConfig()
+      const config = await settingsApi.getNotificationConfig()
       return {
-        dingtalk_enabled: config.enabled,
-        dingtalk_webhook_url: config.webhook_url,
-        dingtalk_secret: config.secret,
+        dingtalk_enabled: config.dingtalk.enabled,
+        dingtalk_webhook_url: config.dingtalk.webhook_url,
+        dingtalk_secret: config.dingtalk.secret,
       }
     },
     saveFn: async (data) => {
-      await settingsApi.saveDingTalkConfig({
+      // 只提交钉钉配置
+      await settingsApi.saveDingTalkConfigOnly({
         enabled: data.dingtalk_enabled,
         webhook_url: data.dingtalk_webhook_url,
         secret: data.dingtalk_secret || "",

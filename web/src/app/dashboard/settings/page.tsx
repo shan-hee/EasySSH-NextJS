@@ -29,8 +29,8 @@ import { NetworkSecurityTab } from "./security-center/_tabs/network-security-tab
 
 import { BackupRestoreTab } from "./management/_tabs/backup-restore-tab"
 
-import { AIConfigWrapper } from "./integrations/_tabs/ai-config-wrapper"
 import { NotificationConfigWrapper } from "./integrations/_tabs/notification-config-wrapper"
+import { AIConfigWrapper } from "./integrations/_tabs/ai-config-wrapper"
 
 // 定义导航项结构
 interface NavItem {

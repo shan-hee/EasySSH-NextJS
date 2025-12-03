@@ -76,10 +76,6 @@ export interface SystemConfig {
   default_timezone: string
   date_format: string
 
-  // 性能设置
-  default_page_size: number
-  max_file_upload_size: number
-
   // 文件传输设置
   download_exclude_patterns: string
   default_download_mode: "fast" | "compatible"
@@ -191,21 +187,6 @@ export interface GetRateLimitConfigResponse {
 }
 
 /**
- * Cookie 配置
- */
-export interface CookieConfig {
-  secure: boolean
-  domain: string
-}
-
-/**
- * 获取 Cookie 配置响应
- */
-export interface GetCookieConfigResponse {
-  config: CookieConfig
-}
-
-/**
  * 系统设置 API 服务
  */
 export const settingsApi = {
@@ -263,13 +244,55 @@ export const settingsApi = {
     })
   },
 
+  // === 通知配置分组 API ===
+
+  /**
+   * 保存 SMTP 配置
+   */
+  async saveSMTPConfigOnly(config: SMTPConfig): Promise<void> {
+    return apiFetch<void>("/settings/smtp", {
+      method: "POST",
+      body: config,
+    })
+  },
+
+  /**
+   * 保存 Webhook 配置
+   */
+  async saveWebhookConfigOnly(config: WebhookConfig): Promise<void> {
+    return apiFetch<void>("/settings/webhook", {
+      method: "POST",
+      body: config,
+    })
+  },
+
+  /**
+   * 保存钉钉配置
+   */
+  async saveDingTalkConfigOnly(config: DingTalkConfig): Promise<void> {
+    return apiFetch<void>("/settings/dingding", {
+      method: "POST",
+      body: config,
+    })
+  },
+
+  /**
+   * 保存企业微信配置
+   */
+  async saveWeComConfigOnly(config: WeComConfig): Promise<void> {
+    return apiFetch<void>("/settings/wechat", {
+      method: "POST",
+      body: config,
+    })
+  },
+
   // === 通知测试连接 API ===
 
   /**
    * 测试 SMTP 连接
    */
   async testSMTPConnection(config: SMTPConfig): Promise<void> {
-    return apiFetch<void>("/settings/notifications/smtp/test", {
+    return apiFetch<void>("/settings/smtp/test", {
       method: "POST",
       body: config,
     })
@@ -279,7 +302,7 @@ export const settingsApi = {
    * 测试 Webhook 连接
    */
   async testWebhookConnection(config: WebhookConfig): Promise<void> {
-    return apiFetch<void>("/settings/notifications/webhook/test", {
+    return apiFetch<void>("/settings/webhook/test", {
       method: "POST",
       body: config,
     })
@@ -289,7 +312,7 @@ export const settingsApi = {
    * 测试钉钉连接
    */
   async testDingTalkConnection(config: DingTalkConfig): Promise<void> {
-    return apiFetch<void>("/settings/notifications/dingtalk/test", {
+    return apiFetch<void>("/settings/dingding/test", {
       method: "POST",
       body: config,
     })
@@ -299,88 +322,10 @@ export const settingsApi = {
    * 测试企业微信连接
    */
   async testWeComConnection(config: WeComConfig): Promise<void> {
-    return apiFetch<void>("/settings/notifications/wecom/test", {
+    return apiFetch<void>("/settings/wechat/test", {
       method: "POST",
       body: config,
     })
-  },
-
-  // === 单独的通知配置 API（向后兼容） ===
-
-  /**
-   * 获取 SMTP 配置
-   * @deprecated 建议使用 getNotificationConfig() 获取完整配置
-   */
-  async getSMTPConfig(): Promise<SMTPConfig> {
-    const config = await this.getNotificationConfig()
-    return config.smtp
-  },
-
-  /**
-   * 保存 SMTP 配置
-   * @deprecated 建议使用 saveNotificationConfig() 保存完整配置
-   */
-  async saveSMTPConfig(smtpConfig: SMTPConfig): Promise<void> {
-    const config = await this.getNotificationConfig()
-    config.smtp = smtpConfig
-    return this.saveNotificationConfig(config)
-  },
-
-  /**
-   * 获取 Webhook 配置
-   * @deprecated 建议使用 getNotificationConfig() 获取完整配置
-   */
-  async getWebhookConfig(): Promise<WebhookConfig> {
-    const config = await this.getNotificationConfig()
-    return config.webhook
-  },
-
-  /**
-   * 保存 Webhook 配置
-   * @deprecated 建议使用 saveNotificationConfig() 保存完整配置
-   */
-  async saveWebhookConfig(webhookConfig: WebhookConfig): Promise<void> {
-    const config = await this.getNotificationConfig()
-    config.webhook = webhookConfig
-    return this.saveNotificationConfig(config)
-  },
-
-  /**
-   * 获取钉钉配置
-   * @deprecated 建议使用 getNotificationConfig() 获取完整配置
-   */
-  async getDingTalkConfig(): Promise<DingTalkConfig> {
-    const config = await this.getNotificationConfig()
-    return config.dingtalk
-  },
-
-  /**
-   * 保存钉钉配置
-   * @deprecated 建议使用 saveNotificationConfig() 保存完整配置
-   */
-  async saveDingTalkConfig(dingtalkConfig: DingTalkConfig): Promise<void> {
-    const config = await this.getNotificationConfig()
-    config.dingtalk = dingtalkConfig
-    return this.saveNotificationConfig(config)
-  },
-
-  /**
-   * 获取企业微信配置
-   * @deprecated 建议使用 getNotificationConfig() 获取完整配置
-   */
-  async getWeComConfig(): Promise<WeComConfig> {
-    const config = await this.getNotificationConfig()
-    return config.wecom
-  },
-
-  /**
-   * 保存企业微信配置
-   * @deprecated 建议使用 saveNotificationConfig() 保存完整配置
-   */
-  async saveWeComConfig(wecomConfig: WeComConfig): Promise<void> {
-    const config = await this.getNotificationConfig()
-    config.wecom = wecomConfig
-    return this.saveNotificationConfig(config)
   },
 
   /**
@@ -396,9 +341,29 @@ export const settingsApi = {
   /**
    * 保存系统配置
    */
-  async saveSystemConfig(config: SystemConfig): Promise<void> {
-    return apiFetch<void>("/settings/system", {
-      method: "POST",
+  async saveBasicInfo(config: Partial<SystemConfig>): Promise<void> {
+    return apiFetch<void>("/settings/system/basic", {
+      method: "PATCH",
+      body: config,
+    })
+  },
+
+  /**
+   * 保存文件传输配置
+   */
+  async saveFileTransferConfig(config: Partial<SystemConfig>): Promise<void> {
+    return apiFetch<void>("/settings/system/file-transfer", {
+      method: "PATCH",
+      body: config,
+    })
+  },
+
+  /**
+   * 保存补全配置
+   */
+  async saveCompletionConfig(config: Partial<SystemConfig>): Promise<void> {
+    return apiFetch<void>("/settings/system/completion", {
+      method: "PATCH",
       body: config,
     })
   },
@@ -487,28 +452,6 @@ export const settingsApi = {
     })
   },
 
-  /**
-   * 获取 Cookie 配置
-   * @deprecated Cookie配置已移至环境变量(.env.example)，此方法已废弃
-   */
-  async getCookieConfig(): Promise<CookieConfig> {
-    const response = await apiFetch<GetCookieConfigResponse>("/settings/advanced/cookie", {
-      method: "GET",
-    })
-    return response.config
-  },
-
-  /**
-   * 保存 Cookie 配置
-   * @deprecated Cookie配置已移至环境变量(.env.example)，此方法已废弃
-   */
-  async saveCookieConfig(config: CookieConfig): Promise<void> {
-    return apiFetch<void>("/settings/advanced/cookie", {
-      method: "POST",
-      body: config,
-    })
-  },
-
   // === AI 配置相关 API ===
 
   /**
@@ -528,214 +471,61 @@ export const settingsApi = {
       body: config,
     })
   },
+}
 
+/**
+ * 用户AI配置
+ */
+export interface UserAIConfig {
+  use_system_config: boolean
+  custom_enabled: boolean
+  custom_provider: string
+  custom_endpoint: string
+  custom_model: string
+  has_api_key: boolean
+}
+
+/**
+ * 保存用户AI配置请求
+ */
+export interface SaveUserAIConfigRequest {
+  use_system_config: boolean
+  custom_enabled: boolean
+  custom_provider: string
+  custom_api_key: string
+  custom_endpoint: string
+  custom_model: string
+}
+
+/**
+ * 用户AI配置 API 服务
+ */
+export const userAIConfigApi = {
   /**
-   * 获取用户 AI 配置
+   * 获取当前用户的AI配置
    */
-  async getAIUserConfig(): Promise<any> {
-    const response = await apiFetch<any>("/settings/ai/user", { method: "GET" })
-    return response.config || {}
+  async getUserAIConfig(): Promise<UserAIConfig> {
+    return apiFetch<UserAIConfig>("/users/me/ai-config", {
+      method: "GET",
+    })
   },
 
   /**
-   * 保存用户 AI 配置
+   * 保存当前用户的AI配置
    */
-  async saveAIUserConfig(config: any): Promise<void> {
-    return apiFetch<void>("/settings/ai/user", {
-      method: "POST",
+  async saveUserAIConfig(config: SaveUserAIConfigRequest): Promise<void> {
+    return apiFetch<void>("/users/me/ai-config", {
+      method: "PUT",
       body: config,
     })
   },
 
   /**
-   * 获取 AI 模型参数
+   * 删除当前用户的AI配置（恢复使用系统配置）
    */
-  async getAIModelParams(): Promise<any> {
-    const response = await apiFetch<any>("/settings/ai/model-params", { method: "GET" })
-    return response.params || {}
-  },
-
-  /**
-   * 保存 AI 模型参数
-   */
-  async saveAIModelParams(params: any): Promise<void> {
-    return apiFetch<void>("/settings/ai/model-params", {
-      method: "POST",
-      body: params,
+  async deleteUserAIConfig(): Promise<void> {
+    return apiFetch<void>("/users/me/ai-config", {
+      method: "DELETE",
     })
-  },
-
-  /**
-   * 获取 AI 隐私设置
-   */
-  async getAIPrivacySettings(): Promise<any> {
-    const response = await apiFetch<any>("/settings/ai/privacy", { method: "GET" })
-    return response.settings || {}
-  },
-
-  /**
-   * 保存 AI 隐私设置
-   */
-  async saveAIPrivacySettings(settings: any): Promise<void> {
-    return apiFetch<void>("/settings/ai/privacy", {
-      method: "POST",
-      body: settings,
-    })
-  },
-
-  // === 集成配置相关 API（统一接口 - 已废弃） ===
-
-  /**
-   * 获取集成配置（包含AI、通知等所有配置）
-   * @deprecated 请使用各个独立的 API 方法
-   */
-  async getIntegrationsConfig(): Promise<any> {
-    // 并行获取所有配置（禁用重试以减少错误日志）
-    const [aiSystem, aiUser, modelParams, privacy, notifications] = await Promise.all([
-      // AI配置
-      apiFetch<any>("/settings/ai/system", { method: "GET", retry: false }).catch(() => ({ config: {} })),
-      apiFetch<any>("/settings/ai/user", { method: "GET", retry: false }).catch(() => ({ config: {} })),
-      apiFetch<any>("/settings/ai/model-params", { method: "GET", retry: false }).catch(() => ({ params: {} })),
-      apiFetch<any>("/settings/ai/privacy", { method: "GET", retry: false }).catch(() => ({ settings: {} })),
-      // 通知配置（使用统一 API）
-      this.getNotificationConfig(),
-    ])
-
-    // 合并所有配置
-    return {
-      // AI系统配置
-      system_enabled: aiSystem.config?.system_enabled ?? false,
-      system_provider: aiSystem.config?.system_provider ?? "openai",
-      system_api_endpoint: aiSystem.config?.system_api_endpoint ?? "",
-      system_default_model: aiSystem.config?.system_default_model ?? "",
-      system_rate_limit: aiSystem.config?.system_rate_limit ?? 100,
-
-      // AI用户配置
-      use_system_config: aiUser.config?.use_system_config ?? true,
-      provider: aiUser.config?.provider ?? "openai",
-      api_key: aiUser.config?.api_key ?? "",
-      api_endpoint: aiUser.config?.api_endpoint ?? "",
-      preferred_model: aiUser.config?.preferred_model ?? "",
-
-      // AI模型参数
-      temperature: modelParams.params?.temperature ?? 0.7,
-      max_tokens: modelParams.params?.max_tokens ?? 2048,
-      top_p: modelParams.params?.top_p ?? 1.0,
-      frequency_penalty: modelParams.params?.frequency_penalty ?? 0.0,
-      presence_penalty: modelParams.params?.presence_penalty ?? 0.0,
-
-      // AI隐私设置
-      save_history: privacy.settings?.save_history ?? true,
-      allow_training: privacy.settings?.allow_training ?? false,
-      auto_delete_days: privacy.settings?.auto_delete_days ?? 30,
-
-      // SMTP配置
-      enabled: notifications.smtp.enabled ?? false,
-      host: notifications.smtp.host ?? "",
-      port: notifications.smtp.port ?? 587,
-      username: notifications.smtp.username ?? "",
-      password: notifications.smtp.password ?? "",
-      from_email: notifications.smtp.from_email ?? "",
-      from_name: notifications.smtp.from_name ?? "",
-      use_tls: notifications.smtp.use_tls ?? true,
-
-      // Webhook配置
-      webhook_url: notifications.webhook.url ?? "",
-      webhook_method: notifications.webhook.method ?? "POST",
-      webhook_secret: notifications.webhook.secret ?? "",
-      webhook_enabled: notifications.webhook.enabled ?? false,
-
-      // 钉钉配置
-      dingtalk_enabled: notifications.dingtalk.enabled ?? false,
-      dingtalk_webhook_url: notifications.dingtalk.webhook_url ?? "",
-      dingtalk_secret: notifications.dingtalk.secret ?? "",
-
-      // 企业微信配置
-      wecom_enabled: notifications.wecom.enabled ?? false,
-      wecom_webhook_url: notifications.wecom.webhook_url ?? "",
-    }
-  },
-
-  /**
-   * 保存集成配置（包含AI、通知等所有配置）
-   */
-  async saveIntegrationsConfig(config: any): Promise<void> {
-    // 并行保存所有配置
-    await Promise.all([
-      // 保存AI系统配置
-      apiFetch<void>("/settings/ai/system", {
-        method: "POST",
-        body: {
-          system_enabled: config.system_enabled,
-          system_provider: config.system_provider,
-          system_api_endpoint: config.system_api_endpoint,
-          system_default_model: config.system_default_model,
-          system_rate_limit: config.system_rate_limit,
-        },
-      }).catch(err => console.error("Failed to save AI system config:", err)),
-
-      // 保存AI用户配置
-      apiFetch<void>("/settings/ai/user", {
-        method: "POST",
-        body: {
-          use_system_config: config.use_system_config,
-          provider: config.provider,
-          api_key: config.api_key,
-          api_endpoint: config.api_endpoint,
-          preferred_model: config.preferred_model,
-        },
-      }).catch(err => console.error("Failed to save AI user config:", err)),
-
-      // 保存AI模型参数
-      apiFetch<void>("/settings/ai/model-params", {
-        method: "POST",
-        body: {
-          temperature: config.temperature,
-          max_tokens: config.max_tokens,
-          top_p: config.top_p,
-          frequency_penalty: config.frequency_penalty,
-          presence_penalty: config.presence_penalty,
-        },
-      }).catch(err => console.error("Failed to save model params:", err)),
-
-      // 保存AI隐私设置
-      apiFetch<void>("/settings/ai/privacy", {
-        method: "POST",
-        body: {
-          save_history: config.save_history,
-          allow_training: config.allow_training,
-          auto_delete_days: config.auto_delete_days,
-        },
-      }).catch(err => console.error("Failed to save privacy settings:", err)),
-
-      // 保存通知配置（使用统一 API）
-      this.saveNotificationConfig({
-        smtp: {
-          enabled: config.enabled,
-          host: config.host,
-          port: config.port,
-          username: config.username,
-          password: config.password,
-          from_email: config.from_email,
-          from_name: config.from_name,
-          use_tls: config.use_tls,
-        },
-        webhook: {
-          enabled: config.webhook_enabled,
-          url: config.webhook_url,
-          method: config.webhook_method,
-          secret: config.webhook_secret,
-        },
-        dingtalk: {
-          enabled: config.dingtalk_enabled,
-          webhook_url: config.dingtalk_webhook_url,
-          secret: config.dingtalk_secret,
-        },
-        wecom: {
-          enabled: config.wecom_enabled,
-          webhook_url: config.wecom_webhook_url,
-        },
-      }).catch(err => console.error("Failed to save notification config:", err)),
-    ])
   },
 }

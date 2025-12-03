@@ -57,15 +57,8 @@ export function BasicTab() {
       }
     },
     saveFn: async (data) => {
-      // 加载完整配置
-      const fullConfig = await settingsApi.getSystemConfig()
-      // 合并当前页签的修改
-      const updatedConfig = {
-        ...fullConfig,
-        ...data,
-      }
-      // 全量保存
-      await settingsApi.saveSystemConfig(updatedConfig)
+      // 只提交基本信息配置
+      await settingsApi.saveBasicInfo(data)
     },
   })
 

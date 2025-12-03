@@ -1,22 +1,5 @@
 import { z } from "zod"
 
-// IP白名单 Schema
-export const ipWhitelistSchema = z.object({
-  ip_address: z
-    .string()
-    .min(1, "settingsValidation.ipWhitelistIpRequired")
-    .refine(
-      (ip) => {
-        // 简单的IP或CIDR验证
-        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/
-        return ipRegex.test(ip)
-      },
-      { message: "settingsValidation.ipWhitelistIpInvalid" }
-    ),
-  description: z.string().optional(),
-  enabled: z.boolean().default(true),
-})
-
 // 会话管理 Schema
 export const sessionManagementSchema = z.object({
   session_timeout: z
@@ -54,19 +37,6 @@ export const rateLimitSchema = z.object({
     .max(10000, "settingsValidation.apiLimitMax"),
 })
 
-// JWT 配置 Schema
-export const jwtConfigSchema = z.object({
-  jwt_secret: z.string().min(32, "settingsValidation.jwtSecretMin"),
-  access_token_expire_minutes: z
-    .number()
-    .min(1, "settingsValidation.accessExpireMin")
-    .max(168, "settingsValidation.accessExpireMax"),
-  refresh_token_expire_days: z
-    .number()
-    .min(24, "settingsValidation.refreshExpireMin")
-    .max(720, "settingsValidation.refreshExpireMax"),
-})
-
 // 网络安全配置 Schema (包含 IP 白名单/黑名单)
 export const networkSecuritySchema = z.object({
   allowlist_ips: z.string().optional(),
@@ -76,19 +46,9 @@ export const networkSecuritySchema = z.object({
 // 网络安全完整配置 Schema (CORS + 速率限制)
 export const networkSecurityFullSchema = corsConfigSchema.merge(rateLimitSchema)
 
-// 完整的安全配置 Schema
-export const securityConfigSchema = sessionManagementSchema
-  .merge(corsConfigSchema)
-  .merge(rateLimitSchema)
-  .merge(jwtConfigSchema)
-  .merge(networkSecuritySchema)
-
 // 导出类型
-export type IPWhitelistFormData = z.infer<typeof ipWhitelistSchema>
 export type SessionManagementFormData = z.infer<typeof sessionManagementSchema>
 export type CORSConfigFormData = z.infer<typeof corsConfigSchema>
 export type RateLimitFormData = z.infer<typeof rateLimitSchema>
-export type JWTConfigFormData = z.infer<typeof jwtConfigSchema>
 export type NetworkSecurityFormData = z.infer<typeof networkSecuritySchema>
 export type NetworkSecurityFullFormData = z.infer<typeof networkSecurityFullSchema>
-export type SecurityConfigFormData = z.infer<typeof securityConfigSchema>

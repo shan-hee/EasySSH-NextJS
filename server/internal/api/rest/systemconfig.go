@@ -189,3 +189,142 @@ func (h *SystemConfigHandler) fromDTO(dto *SystemConfigDTOV2) (*systemconfig.Sys
 
 	return config, nil
 }
+
+// PatchBasicInfo 部分更新基本信息配置
+// @Summary 部分更新基本信息配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SystemConfigDTOV2 true "基本信息配置"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/system/basic [patch]
+func (h *SystemConfigHandler) PatchBasicInfo(c *gin.Context) {
+	var dto SystemConfigDTOV2
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// 获取现有配置
+	existingConfig, err := h.service.Get(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 只更新基本信息字段
+	existingConfig.SystemName = dto.SystemName
+	existingConfig.SystemLogo = dto.SystemLogo
+	existingConfig.SystemFavicon = dto.SystemFavicon
+	existingConfig.DefaultLanguage = dto.DefaultLanguage
+	existingConfig.DefaultTimezone = dto.DefaultTimezone
+	existingConfig.DateFormat = dto.DateFormat
+	existingConfig.AllowRegistration = dto.AllowRegistration
+	existingConfig.OAuthEnabled = dto.OAuthEnabled
+	existingConfig.GoogleClientID = dto.GoogleClientID
+	existingConfig.GoogleClientSecret = dto.GoogleClientSecret
+
+	if err := h.service.Save(c.Request.Context(), existingConfig); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Basic info updated successfully"})
+}
+
+// PatchFileTransferConfig 部分更新文件传输配置
+// @Summary 部分更新文件传输配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SystemConfigDTOV2 true "文件传输配置"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/system/file-transfer [patch]
+func (h *SystemConfigHandler) PatchFileTransferConfig(c *gin.Context) {
+	var dto SystemConfigDTOV2
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// 获取现有配置
+	existingConfig, err := h.service.Get(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 只更新文件传输字段
+	existingConfig.DownloadExcludePatterns = dto.DownloadExcludePatterns
+	existingConfig.DefaultDownloadMode = dto.DefaultDownloadMode
+	existingConfig.SkipExcludedOnUpload = dto.SkipExcludedOnUpload
+	existingConfig.MaxFileUploadSize = dto.MaxFileUploadSize
+
+	if err := h.service.Save(c.Request.Context(), existingConfig); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "File transfer config updated successfully"})
+}
+
+// PatchCompletionConfig 部分更新补全配置
+// @Summary 部分更新补全配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SystemConfigDTOV2 true "补全配置"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/system/completion [patch]
+func (h *SystemConfigHandler) PatchCompletionConfig(c *gin.Context) {
+	var dto SystemConfigDTOV2
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// 获取现有配置
+	existingConfig, err := h.service.Get(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 只更新补全配置字段
+	existingConfig.CompletionEnabled = dto.CompletionEnabled
+
+	// 序列化补全配置
+	if dto.CompletionProviders != nil {
+		data, err := json.Marshal(dto.CompletionProviders)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		existingConfig.CompletionProviders = string(data)
+	}
+
+	if dto.CompletionQuotas != nil {
+		data, err := json.Marshal(dto.CompletionQuotas)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		existingConfig.CompletionQuotas = string(data)
+	}
+
+	if dto.CompletionCache != nil {
+		data, err := json.Marshal(dto.CompletionCache)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		existingConfig.CompletionCache = string(data)
+	}
+
+	if err := h.service.Save(c.Request.Context(), existingConfig); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Completion config updated successfully"})
+}

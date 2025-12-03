@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
-import { integrationsConfigSchema } from "@/schemas/settings/integrations.schema"
+import { aiSystemConfigSchema } from "@/schemas/settings/integrations.schema"
 import { settingsApi } from "@/lib/api/settings"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { SettingsLoading } from "@/components/settings/settings-loading"
@@ -24,8 +24,9 @@ export function AIConfigWrapper() {
     { label: t("providerAzure"), value: "azure" },
     { label: t("providerCustom"), value: "custom" },
   ]
+
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
-    schema: integrationsConfigSchema,
+    schema: aiSystemConfigSchema,
     loadFn: async () => {
       // 只获取 AI 系统配置
       const systemConfig = await settingsApi.getAISystemConfig()
@@ -71,7 +72,12 @@ export function AIConfigWrapper() {
                   <Label>{t("fieldProviderLabel")}</Label>
                   <Select
                     value={form.watch("system_provider")}
-                    onValueChange={(val) => form.setValue("system_provider", val as "openai" | "anthropic" | "azure" | "custom")}
+                    onValueChange={(val) =>
+                      form.setValue(
+                        "system_provider",
+                        val as "openai" | "anthropic" | "azure" | "custom",
+                      )
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t("fieldProviderPlaceholder")} />
@@ -146,3 +152,4 @@ export function AIConfigWrapper() {
     </div>
   )
 }
+

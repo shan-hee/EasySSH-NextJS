@@ -1,8 +1,7 @@
 import { z } from "zod"
 
-// AI服务商配置 Schema
-export const aiProviderSchema = z.object({
-  // 系统配置（管理员）
+// AI系统配置 Schema（仅管理员，API 配置）
+export const aiSystemConfigSchema = z.object({
   system_enabled: z.boolean().optional(),
   system_provider: z.enum(["openai", "anthropic", "azure", "custom"]).optional(),
   system_api_endpoint: z
@@ -12,45 +11,67 @@ export const aiProviderSchema = z.object({
     .optional(),
   system_default_model: z.string().optional(),
   system_rate_limit: z.number().min(1).max(1000).optional(),
-
-  // 个人配置
-  use_system_config: z.boolean(),
-  provider: z.enum(["openai", "anthropic", "azure", "custom"]),
-  api_key: z.string().min(1, "settingsValidation.apiKeyRequired"),
-  api_endpoint: z.string().url("settingsValidation.apiEndpointInvalid").or(z.literal("")),
-  preferred_model: z.string().min(1, "settingsValidation.preferredModelRequired"),
-})
-
-// AI模型参数 Schema
-export const aiModelParamsSchema = z.object({
-  temperature: z.number().min(0).max(2),
-  max_tokens: z.number().min(256).max(8192),
-  top_p: z.number().min(0).max(1),
-  frequency_penalty: z.number().min(-2).max(2),
-  presence_penalty: z.number().min(-2).max(2),
-})
-
-// AI隐私设置 Schema
-export const aiPrivacySchema = z.object({
-  save_history: z.boolean(),
-  allow_training: z.boolean(),
-  auto_delete_days: z.number().min(7).max(365),
 })
 
 // SMTP配置 Schema
-export const smtpConfigSchema = z.object({
-  enabled: z.boolean(),
-  host: z.string().min(1, "settingsValidation.smtpHostRequired"),
-  port: z
-    .number()
-    .min(1, "settingsValidation.smtpPortMin")
-    .max(65535, "settingsValidation.smtpPortMax"),
-  username: z.string().min(1, "settingsValidation.smtpUsernameRequired"),
-  password: z.string().min(1, "settingsValidation.smtpPasswordRequired"),
-  from_email: z.string().email("settingsValidation.smtpFromEmailInvalid"),
-  from_name: z.string().min(1, "settingsValidation.smtpFromNameRequired"),
-  use_tls: z.boolean(),
-})
+export const smtpConfigSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    host: z.string().optional(),
+    port: z.number().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    from_email: z.string().optional(),
+    from_name: z.string().optional(),
+    use_tls: z.boolean().default(true),
+  })
+  .superRefine((data, ctx) => {
+    // 如果启用了邮件通知，则所有字段都必填
+    if (data.enabled) {
+      if (!data.host || data.host.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "settingsValidation.smtpHostRequired",
+          path: ["host"],
+        })
+      }
+      if (!data.port || data.port < 1 || data.port > 65535) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "settingsValidation.smtpPortMin",
+          path: ["port"],
+        })
+      }
+      if (!data.username || data.username.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "settingsValidation.smtpUsernameRequired",
+          path: ["username"],
+        })
+      }
+      if (!data.password || data.password.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "settingsValidation.smtpPasswordRequired",
+          path: ["password"],
+        })
+      }
+      if (!data.from_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.from_email)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "settingsValidation.smtpFromEmailInvalid",
+          path: ["from_email"],
+        })
+      }
+      if (!data.from_name || data.from_name.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "settingsValidation.smtpFromNameRequired",
+          path: ["from_name"],
+        })
+      }
+    }
+  })
 
 // 钉钉配置 Schema
 export const dingTalkConfigSchema = z.object({
@@ -79,21 +100,15 @@ export const webhookConfigSchema = z.object({
   webhook_secret: z.string().optional(),
 })
 
-// 完整的集成配置 Schema
-export const integrationsConfigSchema = aiProviderSchema
-  .merge(aiModelParamsSchema)
-  .merge(aiPrivacySchema)
-  .merge(smtpConfigSchema)
+// 通知配置 Schema（仅包含通知相关的配置）
+export const notificationConfigSchema = smtpConfigSchema
   .merge(dingTalkConfigSchema)
   .merge(weComConfigSchema)
   .merge(webhookConfigSchema)
 
 // 导出类型
-export type AIProviderFormData = z.infer<typeof aiProviderSchema>
-export type AIModelParamsFormData = z.infer<typeof aiModelParamsSchema>
-export type AIPrivacyFormData = z.infer<typeof aiPrivacySchema>
+export type AISystemConfigFormData = z.infer<typeof aiSystemConfigSchema>
 export type SMTPConfigFormData = z.infer<typeof smtpConfigSchema>
 export type DingTalkConfigFormData = z.infer<typeof dingTalkConfigSchema>
 export type WeComConfigFormData = z.infer<typeof weComConfigSchema>
 export type WebhookConfigFormData = z.infer<typeof webhookConfigSchema>
-export type IntegrationsConfigFormData = z.infer<typeof integrationsConfigSchema>

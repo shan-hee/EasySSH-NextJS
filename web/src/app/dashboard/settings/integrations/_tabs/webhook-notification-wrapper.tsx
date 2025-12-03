@@ -12,16 +12,17 @@ export function WebhookNotificationWrapper() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: webhookConfigSchema,
     loadFn: async () => {
-      const config = await settingsApi.getWebhookConfig()
+      const config = await settingsApi.getNotificationConfig()
       return {
-        webhook_enabled: config.enabled,
-        webhook_url: config.url,
-        webhook_method: config.method as "POST" | "GET",
-        webhook_secret: config.secret,
+        webhook_enabled: config.webhook.enabled,
+        webhook_url: config.webhook.url,
+        webhook_method: config.webhook.method as "POST" | "GET",
+        webhook_secret: config.webhook.secret,
       }
     },
     saveFn: async (data) => {
-      await settingsApi.saveWebhookConfig({
+      // 只提交 Webhook 配置
+      await settingsApi.saveWebhookConfigOnly({
         enabled: data.webhook_enabled,
         url: data.webhook_url,
         method: data.webhook_method,

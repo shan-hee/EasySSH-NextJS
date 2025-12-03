@@ -3,18 +3,7 @@
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
-import {
-  Bot,
-  Sliders,
-  Shield,
-  Mail,
-  MessageSquare,
-  MessageCircle,
-  Webhook,
-} from "lucide-react"
-import { AIProviderWrapper } from "./_tabs/ai-provider-wrapper"
-import { AIModelParamsWrapper } from "./_tabs/ai-model-params-wrapper"
-import { AIPrivacyWrapper } from "./_tabs/ai-privacy-wrapper"
+import { Mail, MessageSquare, MessageCircle, Webhook } from "lucide-react"
 import { EmailNotificationWrapper } from "./_tabs/email-notification-wrapper"
 import { DingTalkNotificationWrapper } from "./_tabs/dingtalk-notification-wrapper"
 import { WeComNotificationWrapper } from "./_tabs/wecom-notification-wrapper"
@@ -25,16 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function IntegrationsPage() {
   const t = useTranslations("settingsIntegrations")
-  const [activeSection, setActiveSection] = useState("ai")
+  const [activeSection, setActiveSection] = useState("email")
   const [isLoading] = useState(false)
 
-  // 这里简化处理，实际应根据用户角色判断
-  const isAdmin = true
-
   const navItems = [
-    { id: "ai", icon: Bot, labelKey: "navAiService" },
-    { id: "modelParams", icon: Sliders, labelKey: "navModelParams" },
-    { id: "privacy", icon: Shield, labelKey: "navPrivacy" },
     { id: "email", icon: Mail, labelKey: "navEmail" },
     { id: "dingtalk", icon: MessageSquare, labelKey: "navDingtalk" },
     { id: "wecom", icon: MessageCircle, labelKey: "navWecom" },
@@ -112,11 +95,6 @@ export default function IntegrationsPage() {
             {/* 内容滚动区域 */}
             <div className="flex-1 overflow-y-auto scrollbar-custom">
               <div className="space-y-4 p-4">
-                {activeSection === "ai" && (
-                  <AIProviderWrapper isAdmin={isAdmin} />
-                )}
-                {activeSection === "modelParams" && <AIModelParamsWrapper />}
-                {activeSection === "privacy" && <AIPrivacyWrapper />}
                 {activeSection === "email" && <EmailNotificationWrapper />}
                 {activeSection === "dingtalk" && <DingTalkNotificationWrapper />}
                 {activeSection === "wecom" && <WeComNotificationWrapper />}

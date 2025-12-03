@@ -36,6 +36,7 @@ import (
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/domain/user"
+	"github.com/easyssh/server/internal/domain/useraiconfig"
 	"github.com/easyssh/server/internal/infra/cache"
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/easyssh/server/internal/infra/db"
@@ -92,6 +93,7 @@ func main() {
 		&security.SecurityConfig{},               // 安全配置表
 		&notificationconfig.NotificationConfig{}, // 通知配置表
 		&aiconfig.AIConfig{},                     // AI配置表
+		&useraiconfig.UserAIConfig{},             // 用户AI配置表
 		// 其他表
 		&sshkey.SSHKey{},         // SSH密钥表
 		&sshhostkey.SSHHostKey{}, // SSH主机密钥表（TOFU安全验证）
@@ -135,6 +137,10 @@ func main() {
 	// AI配置服务
 	aiConfigRepo := aiconfig.NewRepository(database)
 	aiConfigService := aiconfig.NewService(aiConfigRepo)
+
+	// 用户AI配置服务
+	userAIConfigRepo := useraiconfig.NewRepository(database)
+	userAIConfigService := useraiconfig.NewService(userAIConfigRepo)
 
 	log.Println("✅ New configuration services initialized")
 
@@ -277,6 +283,7 @@ func main() {
 	systemConfigHandler := rest.NewSystemConfigHandler(systemConfigService)
 	notificationConfigHandler := rest.NewNotificationConfigHandler(notificationConfigService)
 	aiConfigHandler := rest.NewAIConfigHandler(aiConfigService)
+	userAIConfigHandler := rest.NewUserAIConfigHandler(userAIConfigService)
 	// 其他处理器
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 	avatarHandler := rest.NewAvatarHandler()
@@ -397,6 +404,11 @@ func main() {
 
 			// 通知设置路由
 			userRoutes.PUT("/me/notifications", authHandler.UpdateNotificationSettings) // 更新通知设置
+
+			// 用户AI配置路由
+			userRoutes.GET("/me/ai-config", userAIConfigHandler.GetUserAIConfig)       // 获取用户AI配置
+			userRoutes.PUT("/me/ai-config", userAIConfigHandler.SaveUserAIConfig)      // 保存用户AI配置
+			userRoutes.DELETE("/me/ai-config", userAIConfigHandler.DeleteUserAIConfig) // 删除用户AI配置
 		}
 
 		// 用户管理路由（需要认证）
@@ -574,6 +586,10 @@ func main() {
 			// 系统配置
 			settingsGroup.GET("/system", systemConfigHandler.GetSystemConfig)
 			settingsGroup.POST("/system", systemConfigHandler.SaveSystemConfig)
+			// 系统配置 - 分组部分更新
+			settingsGroup.PATCH("/system/basic", systemConfigHandler.PatchBasicInfo)
+			settingsGroup.PATCH("/system/file-transfer", systemConfigHandler.PatchFileTransferConfig)
+			settingsGroup.PATCH("/system/completion", systemConfigHandler.PatchCompletionConfig)
 
 			// 安全配置
 			settingsGroup.GET("/security", securityHandler.GetSecurityConfig)

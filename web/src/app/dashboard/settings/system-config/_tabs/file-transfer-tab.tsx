@@ -27,12 +27,8 @@ export function FileTransferTab() {
       }
     },
     saveFn: async (data) => {
-      const fullConfig = await settingsApi.getSystemConfig()
-      const updatedConfig = {
-        ...fullConfig,
-        ...data,
-      }
-      await settingsApi.saveSystemConfig(updatedConfig)
+      // 只提交文件传输配置
+      await settingsApi.saveFileTransferConfig(data)
     },
   })
 

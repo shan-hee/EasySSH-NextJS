@@ -44,12 +44,11 @@ export function I18nTab() {
       }
     },
     saveFn: async (data) => {
-      const fullConfig = await settingsApi.getSystemConfig()
-      const updatedConfig = {
-        ...fullConfig,
-        ...data,
-      }
-      await settingsApi.saveSystemConfig(updatedConfig)
+      // 仅更新国际化相关配置
+      await settingsApi.saveBasicInfo({
+        default_timezone: data.default_timezone,
+        date_format: data.date_format,
+      })
     },
   })
 

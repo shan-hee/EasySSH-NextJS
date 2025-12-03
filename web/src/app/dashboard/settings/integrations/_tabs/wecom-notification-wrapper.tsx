@@ -12,14 +12,15 @@ export function WeComNotificationWrapper() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: weComConfigSchema,
     loadFn: async () => {
-      const config = await settingsApi.getWeComConfig()
+      const config = await settingsApi.getNotificationConfig()
       return {
-        wecom_enabled: config.enabled,
-        wecom_webhook_url: config.webhook_url,
+        wecom_enabled: config.wecom.enabled,
+        wecom_webhook_url: config.wecom.webhook_url,
       }
     },
     saveFn: async (data) => {
-      await settingsApi.saveWeComConfig({
+      // 只提交企业微信配置
+      await settingsApi.saveWeComConfigOnly({
         enabled: data.wecom_enabled,
         webhook_url: data.wecom_webhook_url,
       })

@@ -11,29 +11,40 @@ import { SettingsLoading } from "@/components/settings/settings-loading"
 export function EmailNotificationWrapper() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: smtpConfigSchema,
+    defaultValues: {
+      enabled: false,
+      host: "",
+      port: 587,
+      username: "",
+      password: "",
+      from_email: "",
+      from_name: "",
+      use_tls: true,
+    },
     loadFn: async () => {
-      const config = await settingsApi.getSMTPConfig()
+      const config = await settingsApi.getNotificationConfig()
       return {
-        enabled: config.enabled,
-        host: config.host,
-        port: config.port,
-        username: config.username,
-        password: config.password,
-        from_email: config.from_email,
-        from_name: config.from_name,
-        use_tls: config.use_tls,
+        enabled: config.smtp.enabled ?? false,
+        host: config.smtp.host ?? "",
+        port: config.smtp.port ?? 587,
+        username: config.smtp.username ?? "",
+        password: config.smtp.password ?? "",
+        from_email: config.smtp.from_email ?? "",
+        from_name: config.smtp.from_name ?? "",
+        use_tls: config.smtp.use_tls ?? true,
       }
     },
     saveFn: async (data) => {
-      await settingsApi.saveSMTPConfig({
-        enabled: data.enabled,
-        host: data.host,
-        port: data.port,
-        username: data.username,
-        password: data.password,
-        from_email: data.from_email,
-        from_name: data.from_name,
-        use_tls: data.use_tls,
+      // 只提交 SMTP 配置
+      await settingsApi.saveSMTPConfigOnly({
+        enabled: data.enabled ?? false,
+        host: data.host ?? "",
+        port: data.port ?? 587,
+        username: data.username ?? "",
+        password: data.password ?? "",
+        from_email: data.from_email ?? "",
+        from_name: data.from_name ?? "",
+        use_tls: data.use_tls ?? true,
       })
     },
   })

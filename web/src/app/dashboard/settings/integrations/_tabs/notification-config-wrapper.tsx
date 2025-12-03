@@ -5,7 +5,7 @@ import { WebhookNotificationTab } from "./webhook-notification-tab"
 import { DingTalkNotificationTab } from "./dingtalk-notification-tab"
 import { WeComNotificationTab } from "./wecom-notification-tab"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
-import { integrationsConfigSchema } from "@/schemas/settings/integrations.schema"
+import { notificationConfigSchema } from "@/schemas/settings/integrations.schema"
 import { settingsApi } from "@/lib/api/settings"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { Save, Loader2, RotateCcw } from "lucide-react"
 
 export function NotificationConfigWrapper() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
-    schema: integrationsConfigSchema,
+    schema: notificationConfigSchema,
     loadFn: async () => {
       // 使用统一的通知配置 API
       const config = await settingsApi.getNotificationConfig()

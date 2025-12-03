@@ -29,12 +29,8 @@ export function CompletionTab() {
       }
     },
     saveFn: async (data) => {
-      const fullConfig = await settingsApi.getSystemConfig()
-      const updatedConfig = {
-        ...fullConfig,
-        ...data,
-      }
-      await settingsApi.saveSystemConfig(updatedConfig)
+      // 只提交补全配置
+      await settingsApi.saveCompletionConfig(data)
     },
   })
 

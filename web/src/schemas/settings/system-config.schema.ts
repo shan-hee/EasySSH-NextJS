@@ -48,20 +48,6 @@ export const fileTransferSchema = z.object({
     .max(1024, "settingsValidation.fileUploadSizeMax"),
 })
 
-// 性能设置 Schema（已废弃，保留用于向后兼容）
-export const performanceSchema = z.object({
-  default_page_size: z
-    .number()
-    .min(10, "settingsValidation.pageSizeMin")
-    .max(100, "settingsValidation.pageSizeMax")
-    .optional(),
-  max_file_upload_size: z
-    .number()
-    .min(1, "settingsValidation.fileUploadSizeMin")
-    .max(1024, "settingsValidation.fileUploadSizeMax")
-    .optional(),
-})
-
 // 补全配置 Schema
 export const completionSchema = z.object({
   // 全局开关
@@ -111,17 +97,8 @@ export const completionSchema = z.object({
   }),
 })
 
-// 完整的系统配置 Schema (所有标签页合并)
-export const systemConfigSchema = basicInfoSchema
-  .merge(i18nSchema)
-  .merge(performanceSchema)
-  .merge(fileTransferSchema)
-  .merge(completionSchema)
-
 // 导出类型
 export type BasicInfoFormData = z.infer<typeof basicInfoSchema>
 export type I18nFormData = z.infer<typeof i18nSchema>
-export type PerformanceFormData = z.infer<typeof performanceSchema>
 export type FileTransferFormData = z.infer<typeof fileTransferSchema>
 export type CompletionFormData = z.infer<typeof completionSchema>
-export type SystemConfigFormData = z.infer<typeof systemConfigSchema>

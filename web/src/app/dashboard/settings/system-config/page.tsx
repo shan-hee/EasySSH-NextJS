@@ -3,16 +3,9 @@
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
-import {
-  Settings,
-  Globe,
-  Zap,
-  HardDrive,
-  Command,
-} from "lucide-react"
+import { Settings, Globe, HardDrive, Command } from "lucide-react"
 import { BasicTab } from "./_tabs/basic-tab"
 import { I18nTab } from "./_tabs/i18n-tab"
-import { PerformanceTab } from "./_tabs/performance-tab"
 import { FileTransferTab } from "./_tabs/file-transfer-tab"
 import { CompletionTab } from "./_tabs/completion-tab"
 import { SkeletonCard } from "@/components/ui/loading"
@@ -27,7 +20,6 @@ export default function SystemConfigPage() {
   const navItems = [
     { id: "basic", icon: Settings, labelKey: "itemBasic" },
     { id: "i18n", icon: Globe, labelKey: "itemI18n" },
-    { id: "performance", icon: Zap, labelKey: "itemPerformance" },
     { id: "fileTransfer", icon: HardDrive, labelKey: "itemFileTransfer" },
     { id: "completion", icon: Command, labelKey: "itemCompletion" },
   ]
@@ -105,7 +97,6 @@ export default function SystemConfigPage() {
               <div className="space-y-4 p-4">
                 {activeSection === "basic" && <BasicTab />}
                 {activeSection === "i18n" && <I18nTab />}
-                {activeSection === "performance" && <PerformanceTab />}
                 {activeSection === "fileTransfer" && <FileTransferTab />}
                 {activeSection === "completion" && <CompletionTab />}
               </div>
