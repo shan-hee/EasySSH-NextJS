@@ -4,21 +4,24 @@
 
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useLayoutEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { CompletionItemComponent } from "./completion-item"
 import type { CompletionItem } from "@/lib/completion/types"
 import { useTerminalTheme } from "@/contexts/terminal-theme-context"
+import { computeFloatingPosition, type FloatingPlacement } from "@/lib/overlay-position"
+import { cn } from "@/lib/utils"
 
 interface CompletionPopupProps {
   items: CompletionItem[]
   selectedIndex: number
-  position: { x: number; y: number }
+  position: { x: number; y: number; lineTop?: number; lineBottom?: number }
   matchedPrefix: string
   showIcon?: boolean
   showDescription?: boolean
   onSelect: (item: CompletionItem, index: number) => void
   onClose: () => void
+  onPlacementChange?: (placement: FloatingPlacement) => void
 }
 
 export function CompletionPopup({
@@ -30,10 +33,12 @@ export function CompletionPopup({
   showDescription = true,
   onSelect,
   onClose,
+  onPlacementChange,
 }: CompletionPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null)
   const selectedItemRef = useRef<HTMLDivElement>(null)
   const theme = useTerminalTheme()
+  const [placement, setPlacement] = useState<FloatingPlacement>("bottom")
 
   // 自动滚动到选中项
   useEffect(() => {
@@ -63,30 +68,39 @@ export function CompletionPopup({
   }, [onClose])
 
   // 调整弹窗位置,避免超出屏幕
-  useEffect(() => {
+  // 使用 useLayoutEffect，确保在浏览器首帧渲染前就确定最终位置，避免出现「先出现再跳动」的过程
+  useLayoutEffect(() => {
     if (!popupRef.current) return
+    if (items.length === 0) return
 
     const popup = popupRef.current
     const rect = popup.getBoundingClientRect()
-    const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
 
-    let adjustedX = position.x
-    let adjustedY = position.y
+    const result = computeFloatingPosition({
+      anchor: position,
+      rect,
+      // 优先顺序：下 -> 上 -> 右 -> 左
+      preferredPlacements: ["bottom", "top", "right", "left"],
+      margin: 8,
+      avoidArea:
+        position.lineTop !== undefined && position.lineBottom !== undefined
+          ? { top: position.lineTop, bottom: position.lineBottom }
+          : undefined,
+    })
 
-    // 如果超出右边界,向左调整
-    if (rect.right > viewportWidth) {
-      adjustedX = viewportWidth - rect.width - 10
+    if (!result) {
+      // 极端情况下没有任何方向能完全放下，直接关闭
+      onClose()
+      return
     }
 
-    // 如果超出底部,向上显示
-    if (rect.bottom > viewportHeight) {
-      adjustedY = position.y - rect.height - 20 // 显示在光标上方
+    setPlacement(result.placement)
+    if (onPlacementChange) {
+      onPlacementChange(result.placement)
     }
-
-    popup.style.left = `${adjustedX}px`
-    popup.style.top = `${adjustedY}px`
-  }, [position])
+    popup.style.left = `${result.left}px`
+    popup.style.top = `${result.top}px`
+  }, [position, items.length, onClose])
 
   if (items.length === 0) {
     return null
@@ -95,7 +109,10 @@ export function CompletionPopup({
   const popup = (
     <div
       ref={popupRef}
-      className="fixed z-[9999] rounded-md shadow-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800"
+      className={cn(
+        "fixed z-[9999] rounded-md shadow-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 flex",
+        placement === "top" ? "flex-col-reverse" : "flex-col",
+      )}
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
@@ -105,7 +122,12 @@ export function CompletionPopup({
         backgroundColor: theme.background,
       }}
     >
-      <div className="overflow-y-auto max-h-[240px] scrollbar-custom">
+      <div
+        className={cn(
+          "overflow-y-auto max-h-[240px] scrollbar-custom flex-1 flex",
+          placement === "top" ? "flex-col-reverse" : "flex-col",
+        )}
+      >
         {items.map((item, index) => (
           <div
             key={`${item.text}-${index}`}

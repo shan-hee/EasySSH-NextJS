@@ -28,6 +28,7 @@ import {
 import type { CompletionItem, CompletionResult } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
+import type { FloatingPlacement } from "@/lib/overlay-position"
 
 interface WebTerminalProps {
   sessionId: string
@@ -210,7 +211,7 @@ export function WebTerminal({
     visible: boolean
     items: CompletionItem[]
     selectedIndex: number
-    position: { x: number; y: number }
+    position: { x: number; y: number; lineTop?: number; lineBottom?: number }
     matchedPrefix: string
   }>({
     visible: false,
@@ -219,6 +220,13 @@ export function WebTerminal({
     position: { x: 0, y: 0 },
     matchedPrefix: "",
   })
+
+  // 记录补全弹窗最终的摆放方向（用于决定键盘上下键的行为）
+  const [completionPlacement, setCompletionPlacement] = useState<FloatingPlacement>("bottom")
+  const completionPlacementRef = useRef<FloatingPlacement>("bottom")
+  useEffect(() => {
+    completionPlacementRef.current = completionPlacement
+  }, [completionPlacement])
 
   // 使用 ref 跟踪最新的 completionState
   const completionStateRef = useRef(completionState)
@@ -332,14 +340,26 @@ export function WebTerminal({
       return
     }
 
-    // 计算弹窗位置
-    const position = getCursorScreenPosition(terminal)
+    // 计算弹窗位置（基于终端内部坐标）
+    const cursorPosition = getCursorScreenPosition(terminal)
+
+    // 将终端内部坐标转换为页面坐标
+    let position: { x: number; y: number; lineTop?: number; lineBottom?: number } = {
+      x: cursorPosition.x,
+      y: cursorPosition.y,
+      lineTop: cursorPosition.lineTop,
+      lineBottom: cursorPosition.lineBottom,
+    }
 
     // 获取终端容器的位置偏移
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
-      position.x += rect.left
-      position.y += rect.top
+      position = {
+        x: position.x + rect.left,
+        y: position.y + rect.top,
+        lineTop: position.lineTop !== undefined ? position.lineTop + rect.top : undefined,
+        lineBottom: position.lineBottom !== undefined ? position.lineBottom + rect.top : undefined,
+      }
     }
 
     setCompletionState({
@@ -383,21 +403,33 @@ export function WebTerminal({
           return
         }
 
-        // 上箭头 - 向上导航
+        // 上箭头 - 向上导航（在弹窗位于上方时做“反转”）
         if (isUpArrow(data)) {
-          setCompletionState((prev) => ({
-            ...prev,
-            selectedIndex: Math.max(0, prev.selectedIndex - 1),
-          }))
+          const isTopPlacement = completionPlacementRef.current === "top"
+          setCompletionState((prev) => {
+            const delta = isTopPlacement ? 1 : -1
+            const nextIndex = Math.max(0, Math.min(prev.items.length - 1, prev.selectedIndex + delta))
+            if (nextIndex === prev.selectedIndex) return prev
+            return {
+              ...prev,
+              selectedIndex: nextIndex,
+            }
+          })
           return
         }
 
-        // 下箭头 - 向下导航
+        // 下箭头 - 向下导航（在弹窗位于上方时做“反转”）
         if (isDownArrow(data)) {
-          setCompletionState((prev) => ({
-            ...prev,
-            selectedIndex: Math.min(prev.items.length - 1, prev.selectedIndex + 1),
-          }))
+          const isTopPlacement = completionPlacementRef.current === "top"
+          setCompletionState((prev) => {
+            const delta = isTopPlacement ? -1 : 1
+            const nextIndex = Math.max(0, Math.min(prev.items.length - 1, prev.selectedIndex + delta))
+            if (nextIndex === prev.selectedIndex) return prev
+            return {
+              ...prev,
+              selectedIndex: nextIndex,
+            }
+          })
           return
         }
 
@@ -779,6 +811,7 @@ export function WebTerminal({
             matchedPrefix={completionState.matchedPrefix}
             onSelect={applyCompletionItem}
             onClose={closeCompletion}
+            onPlacementChange={setCompletionPlacement}
           />
         </TerminalThemeProvider>
       )}

@@ -84,6 +84,7 @@ import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransf
 import { FileActionMenu, type FileAction } from "@/components/sftp/file-action-menu"
 import { useFileListVirtualizer } from "@/hooks/use-file-list-virtualizer"
 import { toast } from "sonner"
+import { computeFloatingPosition } from "@/lib/overlay-position"
 
 interface FileItem {
   name: string
@@ -258,6 +259,7 @@ export function SftpManager(props: SftpManagerProps) {
   const sessionLabelInputRef = useRef<HTMLInputElement>(null)
   const filteredFilesRef = useRef<EnhancedFileItem[]>([])
   const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement | null>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
   const gridScrollRef = useRef<HTMLDivElement>(null)
 
@@ -459,6 +461,31 @@ export function SftpManager(props: SftpManagerProps) {
       clearTimeout(timer)
       document.removeEventListener('click', handleClickOutside)
     }
+  }, [contextMenu])
+
+  // 根据视窗空间自动调整右键菜单位置，避免被裁剪
+  useEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) return
+
+    const menu = contextMenuRef.current
+    const rect = menu.getBoundingClientRect()
+
+    const coords = computeFloatingPosition({
+      anchor: { x: contextMenu.x, y: contextMenu.y },
+      rect,
+      // 右键菜单优先尝试：下 -> 上 -> 右 -> 左
+      preferredPlacements: ["bottom", "top", "right", "left"],
+      margin: 8,
+    })
+
+    if (!coords) {
+      // 极端情况下无法完整显示时，直接关闭菜单
+      setContextMenu(null)
+      return
+    }
+
+    menu.style.left = `${coords.left}px`
+    menu.style.top = `${coords.top}px`
   }, [contextMenu])
 
   // 原生拖拽事件处理
@@ -2532,6 +2559,7 @@ export function SftpManager(props: SftpManagerProps) {
       {/* macOS 风格右键菜单（使用 Portal 渲染到 body，避免被 transform/overflow 影响） */}
       {contextMenu && typeof document !== 'undefined' && createPortal(
         <div
+          ref={contextMenuRef}
           key={contextMenu.key}
           className="fixed z-[9999] animate-in fade-in-0 zoom-in-95 duration-200"
           style={{

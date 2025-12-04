@@ -105,11 +105,13 @@ export function parseCompletionContext(terminal: Terminal): CompletionContext {
 /**
  * 计算光标在屏幕上的位置(用于定位补全弹窗)
  * @param terminal xterm.js 终端实例
- * @returns 光标的屏幕坐标 {x, y}
+ * @returns 光标的屏幕坐标和当前行区域
  */
 export function getCursorScreenPosition(terminal: Terminal): {
   x: number
   y: number
+  lineTop: number
+  lineBottom: number
 } {
   const buffer = terminal.buffer.active
   const cursorX = buffer.cursorX
@@ -119,9 +121,14 @@ export function getCursorScreenPosition(terminal: Terminal): {
   // 方案1: 尝试使用内部API获取精确尺寸
   const dimensions = (terminal as any)._core?._renderService?.dimensions
   if (dimensions?.css?.cell) {
+    const lineHeight = dimensions.css.cell.height
+    const lineTop = padding + cursorY * lineHeight
+    const lineBottom = lineTop + lineHeight
     return {
       x: padding + cursorX * dimensions.css.cell.width,
-      y: padding + (cursorY + 1) * dimensions.css.cell.height, // +1 显示在光标下方
+      y: padding + (cursorY + 1) * lineHeight, // +1 显示在光标下方
+      lineTop,
+      lineBottom,
     }
   }
 
@@ -136,10 +143,14 @@ export function getCursorScreenPosition(terminal: Terminal): {
     if (renderWidth > 0 && renderHeight > 0) {
       const charWidth = renderWidth / terminal.cols
       const lineHeight = renderHeight / terminal.rows
+      const lineTop = padding + cursorY * lineHeight
+      const lineBottom = lineTop + lineHeight
 
       return {
         x: padding + cursorX * charWidth,
         y: padding + (cursorY + 1) * lineHeight,
+        lineTop,
+        lineBottom,
       }
     }
   }
@@ -148,10 +159,14 @@ export function getCursorScreenPosition(terminal: Terminal): {
   // 基于常见终端字体大小(14px)的估算
   const charWidth = 8.4 // 14px字体的平均字符宽度
   const lineHeight = 20 // 14px字体的行高
+  const lineTop = padding + cursorY * lineHeight
+  const lineBottom = lineTop + lineHeight
 
   return {
     x: padding + cursorX * charWidth,
     y: padding + (cursorY + 1) * lineHeight,
+    lineTop,
+    lineBottom,
   }
 }
 
