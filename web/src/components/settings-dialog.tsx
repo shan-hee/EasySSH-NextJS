@@ -1062,9 +1062,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             value={profileForm.username}
                             onChange={(e) => setProfileForm(prev => ({ ...prev, username: e.target.value }))}
                           />
-                          <p className="text-xs text-muted-foreground">
-                            {tAccount("usernameHint")}
-                          </p>
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="email">
@@ -1151,9 +1148,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                               </SelectItem>
                             </SelectContent>
                           </Select>
-                          <p className="text-xs text-muted-foreground">
-                            {tAccount("languageHint")}
-                          </p>
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="timezone">
@@ -1195,9 +1189,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                               </SelectItem>
                             </SelectContent>
                           </Select>
-                          <p className="text-xs text-muted-foreground">
-                            {tAccount("timezoneHint")}
-                          </p>
+
                         </div>
                         <Button
                           className="mt-2"
