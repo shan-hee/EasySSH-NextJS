@@ -5,12 +5,7 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Eye, EyeOff, Lock, User, Mail, ShieldCheck } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
@@ -151,7 +146,7 @@ export function RegisterForm({
       <form onSubmit={handleSubmit}>
         <FieldGroup>
           {/* Logo 和标题 */}
-          <FadeSlideIn delay={0}>
+          <FadeSlideIn disabled>
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex flex-col items-center gap-3">
                 <div className="flex size-16 items-center justify-center">
@@ -187,7 +182,7 @@ export function RegisterForm({
           <div className="rounded-xl p-6 bg-transparent">
             <div className="space-y-4">
               {/* 用户名输入 */}
-              <FadeSlideIn delay={0.1}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="username" className="text-zinc-700 dark:text-zinc-200">
                     {tAuth("registerUsernameLabel")}
@@ -208,14 +203,11 @@ export function RegisterForm({
                       maxLength={50}
                     />
                   </div>
-                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    {tAuth("registerUsernameHint")}
-                  </FieldDescription>
                 </Field>
               </FadeSlideIn>
 
               {/* 邮箱输入 */}
-              <FadeSlideIn delay={0.2}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="email" className="text-zinc-700 dark:text-zinc-200">
                     {tAuth("registerEmailLabel")}
@@ -234,14 +226,11 @@ export function RegisterForm({
                       required
                     />
                   </div>
-                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    {tAuth("registerEmailHint")}
-                  </FieldDescription>
                 </Field>
               </FadeSlideIn>
 
               {/* 验证码输入 */}
-              <FadeSlideIn delay={0.25}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="verificationCode" className="text-zinc-700 dark:text-zinc-200">
                     {tAuth("registerVerificationCodeLabel")}
@@ -278,14 +267,11 @@ export function RegisterForm({
                       )}
                     </Button>
                   </div>
-                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    {tAuth("registerVerificationCodeHint")}
-                  </FieldDescription>
                 </Field>
               </FadeSlideIn>
 
               {/* 密码输入 */}
-              <FadeSlideIn delay={0.35}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="password" className="text-zinc-700 dark:text-zinc-200">
                     {tAuth("registerPasswordLabel")}
@@ -320,7 +306,7 @@ export function RegisterForm({
               </FadeSlideIn>
 
               {/* 确认密码输入 */}
-              <FadeSlideIn delay={0.45}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="confirmPassword" className="text-zinc-700 dark:text-zinc-200">
                     {tAuth("registerConfirmPasswordLabel")}
@@ -355,7 +341,7 @@ export function RegisterForm({
               </FadeSlideIn>
 
               {/* 注册按钮 */}
-              <FadeSlideIn delay={0.55}>
+              <FadeSlideIn disabled>
                 <Field>
                   <Button
                     type="submit"
@@ -380,7 +366,7 @@ export function RegisterForm({
           {/* 底部提示 */}
           <div className="space-y-3">
             {/* 登录提示 */}
-            <FadeSlideIn delay={0.65}>
+            <FadeSlideIn disabled>
               <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
                 {tAuth("registerHaveAccount")}
                 <Button
@@ -395,7 +381,7 @@ export function RegisterForm({
             </FadeSlideIn>
 
             {/* 版本信息 */}
-            <FadeSlideIn delay={0.75}>
+            <FadeSlideIn disabled>
               <div className="text-center text-xs text-zinc-500 dark:text-zinc-600">
                 {config?.system_name || "EasySSH"} v1.0.0 | © 2025 All rights reserved
               </div>

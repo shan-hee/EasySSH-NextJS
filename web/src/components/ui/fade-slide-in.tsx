@@ -9,6 +9,8 @@ interface FadeSlideInProps {
   duration?: number
   distance?: number
   className?: string
+  /** 禁用动画，直接渲染子元素 */
+  disabled?: boolean
 }
 
 export function FadeSlideIn({
@@ -17,7 +19,13 @@ export function FadeSlideIn({
   duration = 0.8,
   distance = 30,
   className = "",
+  disabled = false,
 }: FadeSlideInProps) {
+  // 禁用动画时直接渲染子元素
+  if (disabled) {
+    return className ? <div className={className}>{children}</div> : <>{children}</>
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: distance }}

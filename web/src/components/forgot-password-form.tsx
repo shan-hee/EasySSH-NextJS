@@ -5,12 +5,7 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
@@ -147,7 +142,7 @@ export function ForgotPasswordForm({
       <form onSubmit={handleSubmit}>
         <FieldGroup>
           {/* Logo 和标题 */}
-          <FadeSlideIn delay={0}>
+          <FadeSlideIn disabled>
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex flex-col items-center gap-3">
                 <div className="flex size-16 items-center justify-center">
@@ -181,7 +176,7 @@ export function ForgotPasswordForm({
           <div className="rounded-xl p-6 bg-transparent">
             <div className="space-y-4">
               {/* 邮箱输入 */}
-              <FadeSlideIn delay={0.1}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="email" className="text-zinc-700 dark:text-zinc-200">
                     邮箱地址
@@ -200,14 +195,11 @@ export function ForgotPasswordForm({
                       required
                     />
                   </div>
-                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    我们将向此邮箱发送验证码
-                  </FieldDescription>
                 </Field>
               </FadeSlideIn>
 
               {/* 验证码输入 */}
-              <FadeSlideIn delay={0.2}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="verificationCode" className="text-zinc-700 dark:text-zinc-200">
                     验证码
@@ -244,14 +236,11 @@ export function ForgotPasswordForm({
                       )}
                     </Button>
                   </div>
-                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    验证码有效期为 5 分钟
-                  </FieldDescription>
                 </Field>
               </FadeSlideIn>
 
               {/* 新密码输入 */}
-              <FadeSlideIn delay={0.3}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="newPassword" className="text-zinc-700 dark:text-zinc-200">
                     新密码
@@ -282,14 +271,11 @@ export function ForgotPasswordForm({
                       )}
                     </button>
                   </div>
-                  <FieldDescription className="text-zinc-600 dark:text-zinc-500 text-xs">
-                    密码长度至少为 8 个字符，必须包含大写字母、小写字母和数字
-                  </FieldDescription>
                 </Field>
               </FadeSlideIn>
 
               {/* 确认密码输入 */}
-              <FadeSlideIn delay={0.4}>
+              <FadeSlideIn disabled>
                 <Field>
                   <FieldLabel htmlFor="confirmPassword" className="text-zinc-700 dark:text-zinc-200">
                     确认新密码
@@ -324,7 +310,7 @@ export function ForgotPasswordForm({
               </FadeSlideIn>
 
               {/* 重置按钮 */}
-              <FadeSlideIn delay={0.5}>
+              <FadeSlideIn disabled>
                 <Field>
                   <Button
                     type="submit"
@@ -349,7 +335,7 @@ export function ForgotPasswordForm({
           {/* 底部提示 */}
           <div className="space-y-3">
             {/* 返回登录 */}
-            <FadeSlideIn delay={0.6}>
+            <FadeSlideIn disabled>
               <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
                 记起密码了？
                 <Button
@@ -364,7 +350,7 @@ export function ForgotPasswordForm({
             </FadeSlideIn>
 
             {/* 版本信息 */}
-            <FadeSlideIn delay={0.7}>
+            <FadeSlideIn disabled>
               <div className="text-center text-xs text-zinc-500 dark:text-zinc-600">
                 {config?.system_name || "EasySSH"} v1.0.0 | © 2025 All rights reserved
               </div>
