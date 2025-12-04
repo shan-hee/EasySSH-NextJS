@@ -28,7 +28,8 @@ import {
 import type { CompletionItem, CompletionResult } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
-import type { FloatingPlacement } from "@/lib/overlay-position"
+
+type CompletionPlacement = "top" | "bottom"
 
 interface WebTerminalProps {
   sessionId: string
@@ -211,7 +212,7 @@ export function WebTerminal({
     visible: boolean
     items: CompletionItem[]
     selectedIndex: number
-    position: { x: number; y: number; lineTop?: number; lineBottom?: number }
+    position: { x: number; y: number }
     matchedPrefix: string
   }>({
     visible: false,
@@ -221,9 +222,9 @@ export function WebTerminal({
     matchedPrefix: "",
   })
 
-  // 记录补全弹窗最终的摆放方向（用于决定键盘上下键的行为）
-  const [completionPlacement, setCompletionPlacement] = useState<FloatingPlacement>("bottom")
-  const completionPlacementRef = useRef<FloatingPlacement>("bottom")
+  // 记录补全弹窗的摆放方向（用于决定键盘上下键的行为）
+  const [completionPlacement, setCompletionPlacement] = useState<CompletionPlacement>("bottom")
+  const completionPlacementRef = useRef<CompletionPlacement>("bottom")
   useEffect(() => {
     completionPlacementRef.current = completionPlacement
   }, [completionPlacement])
@@ -344,11 +345,9 @@ export function WebTerminal({
     const cursorPosition = getCursorScreenPosition(terminal)
 
     // 将终端内部坐标转换为页面坐标
-    let position: { x: number; y: number; lineTop?: number; lineBottom?: number } = {
+    let position = {
       x: cursorPosition.x,
       y: cursorPosition.y,
-      lineTop: cursorPosition.lineTop,
-      lineBottom: cursorPosition.lineBottom,
     }
 
     // 获取终端容器的位置偏移
@@ -357,8 +356,6 @@ export function WebTerminal({
       position = {
         x: position.x + rect.left,
         y: position.y + rect.top,
-        lineTop: position.lineTop !== undefined ? position.lineTop + rect.top : undefined,
-        lineBottom: position.lineBottom !== undefined ? position.lineBottom + rect.top : undefined,
       }
     }
 
@@ -403,7 +400,7 @@ export function WebTerminal({
           return
         }
 
-        // 上箭头 - 向上导航（在弹窗位于上方时做“反转”）
+        // 上箭头 - 向上导航（在弹窗位于上方时反转方向）
         if (isUpArrow(data)) {
           const isTopPlacement = completionPlacementRef.current === "top"
           setCompletionState((prev) => {
@@ -418,7 +415,7 @@ export function WebTerminal({
           return
         }
 
-        // 下箭头 - 向下导航（在弹窗位于上方时做“反转”）
+        // 下箭头 - 向下导航（在弹窗位于上方时反转方向）
         if (isDownArrow(data)) {
           const isTopPlacement = completionPlacementRef.current === "top"
           setCompletionState((prev) => {
