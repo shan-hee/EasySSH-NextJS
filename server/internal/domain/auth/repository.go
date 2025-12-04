@@ -84,18 +84,8 @@ func NewRepository(db *gorm.DB) Repository {
 }
 
 func (r *gormRepository) Create(ctx context.Context, user *User) error {
-	// 检查用户名是否已存在
+	// 检查邮箱是否已存在（邮箱是唯一标识）
 	var count int64
-	if err := r.db.WithContext(ctx).Model(&User{}).
-		Where("username = ?", user.Username).
-		Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return ErrUserAlreadyExists
-	}
-
-	// 检查邮箱是否已存在
 	if err := r.db.WithContext(ctx).Model(&User{}).
 		Where("email = ?", user.Email).
 		Count(&count).Error; err != nil {

@@ -1562,6 +1562,8 @@ const messages = {
     registerToastFailedTitle: "Registration failed",
     registerToastFailedDesc: "Please check your input and try again.",
     loginTitle: "Sign in",
+    loginEmailLabel: "Email",
+    loginEmailPlaceholder: "Enter email address",
     loginUsernameLabel: "Account",
     loginUsernamePlaceholder: "Enter account",
     loginPasswordLabel: "Password",

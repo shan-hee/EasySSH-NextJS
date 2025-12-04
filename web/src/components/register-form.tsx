@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Eye, EyeOff, Lock, User, Mail, ShieldCheck } from "lucide-react"
+import { Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
@@ -28,7 +28,6 @@ export function RegisterForm({
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -94,14 +93,6 @@ export function RegisterForm({
       return
     }
 
-    // 验证用户名长度
-    if (username.length < 3 || username.length > 50) {
-      toast.error(tAuth("registerToastUsernameInvalidTitle"), {
-        description: tAuth("registerToastUsernameInvalidDesc"),
-      })
-      return
-    }
-
     setIsLoading(true)
 
     // 验证验证码
@@ -113,9 +104,8 @@ export function RegisterForm({
     }
 
     try {
-      // 调用注册 API
+      // 调用注册 API（用户名由后端自动生成）
       const response = await authApi.register({
-        username,
         email,
         password,
         verification_code: verificationCode,
@@ -181,31 +171,6 @@ export function RegisterForm({
           {/* 表单卡片 */}
           <div className="rounded-xl p-6 bg-transparent">
             <div className="space-y-4">
-              {/* 用户名输入 */}
-              <FadeSlideIn disabled>
-                <Field>
-                  <FieldLabel htmlFor="username" className="text-zinc-700 dark:text-zinc-200">
-                    {tAuth("registerUsernameLabel")}
-                  </FieldLabel>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
-                    <Input
-                      id="username"
-                      type="text"
-                      placeholder={tAuth("registerUsernamePlaceholder")}
-                      name="username"
-                      autoComplete="username"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="pl-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
-                      required
-                      minLength={3}
-                      maxLength={50}
-                    />
-                  </div>
-                </Field>
-              </FadeSlideIn>
-
               {/* 邮箱输入 */}
               <FadeSlideIn disabled>
                 <Field>

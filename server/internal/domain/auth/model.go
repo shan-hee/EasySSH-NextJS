@@ -20,7 +20,7 @@ const (
 // User 用户模型
 type User struct {
 	ID               uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Username         string         `gorm:"uniqueIndex;not null;size:50" json:"username"`
+	Username         string         `gorm:"not null;size:50" json:"username"` // 允许重复，用户可修改
 	Email            string         `gorm:"uniqueIndex;not null;size:100" json:"email"`
 	Password         string         `gorm:"not null;size:255" json:"-"` // bcrypt hash，不在 JSON 中返回
 	Role             UserRole       `gorm:"type:varchar(20);default:'user'" json:"role"`

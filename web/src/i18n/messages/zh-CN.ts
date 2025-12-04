@@ -1506,6 +1506,8 @@ const messages = {
     registerToastFailedTitle: "注册失败",
     registerToastFailedDesc: "请检查输入信息并重试",
     loginTitle: "登录",
+    loginEmailLabel: "邮箱",
+    loginEmailPlaceholder: "请输入邮箱地址",
     loginUsernameLabel: "账号",
     loginUsernamePlaceholder: "请输入账号",
     loginPasswordLabel: "密码",

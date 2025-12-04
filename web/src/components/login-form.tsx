@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/input-otp"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { Eye, EyeOff, Lock, User } from "lucide-react"
+import { Eye, EyeOff, Lock, Mail } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
@@ -61,7 +61,7 @@ export function LoginForm({
 
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
   // 2FA 相关状态（PKCE + 2FA）
@@ -147,7 +147,7 @@ export function LoginForm({
 
       // 2. 调用 /oauth/authorize：根据是否启用 2FA 决定流程
       const authorizeResp = await authApi.authorizeWithPkce({
-        username,
+        email,
         password,
         client_id: "easyssh-web",
         redirect_uri: ru,
@@ -527,24 +527,24 @@ export function LoginForm({
                 </FadeSlideIn>
               </div>
             ) : (
-              // 账号密码登录表单
+              // 邮箱密码登录表单
               <div className="space-y-4">
-              {/* 账号输入 */}
+              {/* 邮箱输入 */}
               <FadeSlideIn delay={0.1}>
                 <Field>
-                  <FieldLabel htmlFor="username" className="text-zinc-700 dark:text-zinc-200">
-                    {tAuth("loginUsernameLabel")}
+                  <FieldLabel htmlFor="email" className="text-zinc-700 dark:text-zinc-200">
+                    {tAuth("loginEmailLabel")}
                   </FieldLabel>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                     <Input
-                      id="username"
-                      type="text"
-                      placeholder={tAuth("loginUsernamePlaceholder")}
-                      name="username"
-                      autoComplete="username"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      id="email"
+                      type="email"
+                      placeholder={tAuth("loginEmailPlaceholder")}
+                      name="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       className="pl-10 bg-white/80 dark:bg-zinc-900/50 border-zinc-300 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-zinc-400 dark:focus:border-zinc-600 focus:ring-zinc-400 dark:focus:ring-zinc-600"
                       required
                     />

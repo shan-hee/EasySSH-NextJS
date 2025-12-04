@@ -25,11 +25,11 @@ type SessionInfo struct {
 
 // Service 认证服务接口
 type Service interface {
-	// Register 注册新用户
-	Register(ctx context.Context, username, email, password string, role UserRole) (*User, error)
+	// Register 注册新用户（username 自动生成）
+	Register(ctx context.Context, email, password string, role UserRole) (*User, error)
 
-	// AuthenticateUser 验证用户名和密码，返回用户（不创建会话或令牌）
-	AuthenticateUser(ctx context.Context, username, password string) (*User, error)
+	// AuthenticateUser 验证邮箱和密码，返回用户（不创建会话或令牌）
+	AuthenticateUser(ctx context.Context, email, password string) (*User, error)
 
 	// CreateSessionWithTokens 为已认证用户创建会话并生成访问令牌/刷新令牌
 	CreateSessionWithTokens(ctx context.Context, user *User, sessionInfo *SessionInfo) (accessToken, refreshToken string, err error)
@@ -55,8 +55,8 @@ type Service interface {
 	// ResetPassword 重置密码（忘记密码，不需要旧密码）
 	ResetPassword(ctx context.Context, userID uuid.UUID, newPassword string) error
 
-	// UpdateProfile 更新用户资料
-	UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar, language, timezone string) error
+	// UpdateProfile 更新用户资料（包含用户名）
+	UpdateProfile(ctx context.Context, userID uuid.UUID, username, email, avatar, language, timezone string) error
 
 	// ListUsers 获取用户列表（管理员功能）
 	ListUsers(ctx context.Context, limit, offset int) ([]*User, int64, error)
@@ -146,16 +146,19 @@ func (s *authService) SetEmailService(emailService EmailService) {
 	s.emailService = emailService
 }
 
-func (s *authService) Register(ctx context.Context, username, email, password string, role UserRole) (*User, error) {
+func (s *authService) Register(ctx context.Context, email, password string, role UserRole) (*User, error) {
 	// 参数验证
-	if username == "" || email == "" || password == "" {
-		return nil, errors.New("username, email and password are required")
+	if email == "" || password == "" {
+		return nil, errors.New("email and password are required")
 	}
 
 	// 密码策略验证
 	if err := ValidatePasswordWithDefault(password); err != nil {
 		return nil, err
 	}
+
+	// 自动生成用户名：使用邮箱前缀 + 随机后缀
+	username := s.generateUsername(email)
 
 	// 生成头像
 	avatar, err := s.generateAvatarForUser(username, email)
@@ -186,10 +189,10 @@ func (s *authService) Register(ctx context.Context, username, email, password st
 	return user, nil
 }
 
-// AuthenticateUser 验证用户名和密码，返回用户信息（不创建会话或令牌）
-func (s *authService) AuthenticateUser(ctx context.Context, username, password string) (*User, error) {
-	// 查找用户
-	user, err := s.repo.FindByUsername(ctx, username)
+// AuthenticateUser 验证邮箱和密码，返回用户信息（不创建会话或令牌）
+func (s *authService) AuthenticateUser(ctx context.Context, email, password string) (*User, error) {
+	// 使用邮箱查找用户
+	user, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			return nil, ErrInvalidCredentials
@@ -288,21 +291,19 @@ func (s *authService) GetUserByEmail(ctx context.Context, email string) (*User, 
 
 func (s *authService) RegisterOAuthUser(ctx context.Context, username, email, avatar string, role UserRole) (*User, error) {
 	// 参数验证
-	if username == "" || email == "" {
-		return nil, errors.New("username and email are required")
-	}
-
-	// 检查用户名是否已存在
-	existingUser, err := s.repo.FindByUsername(ctx, username)
-	if err == nil && existingUser != nil {
-		// 用户名已存在，添加随机后缀
-		username = fmt.Sprintf("%s_%d", username, time.Now().Unix()%10000)
+	if email == "" {
+		return nil, errors.New("email is required")
 	}
 
 	// 检查邮箱是否已存在
-	existingUser, err = s.repo.FindByEmail(ctx, email)
+	existingUser, err := s.repo.FindByEmail(ctx, email)
 	if err == nil && existingUser != nil {
 		return nil, ErrUserAlreadyExists
+	}
+
+	// 如果没有提供用户名，使用邮箱前缀生成
+	if username == "" {
+		username = s.generateUsername(email)
 	}
 
 	// 如果没有提供头像，生成默认头像
@@ -469,11 +470,16 @@ func (s *authService) ResetPassword(ctx context.Context, userID uuid.UUID, newPa
 	return nil
 }
 
-func (s *authService) UpdateProfile(ctx context.Context, userID uuid.UUID, email, avatar, language, timezone string) error {
+func (s *authService) UpdateProfile(ctx context.Context, userID uuid.UUID, username, email, avatar, language, timezone string) error {
 	// 查找用户
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
 		return err
+	}
+
+	// 更新用户名（仅当非空时）
+	if username != "" {
+		user.Username = username
 	}
 
 	// 更新邮箱（仅当非空时）
@@ -524,9 +530,14 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 		return nil, "", "", errors.New("admin already exists")
 	}
 
-	// 参数验证
-	if username == "" || email == "" || password == "" {
-		return nil, "", "", errors.New("username, email and password are required")
+	// 参数验证：邮箱和密码是必须的，用户名可选（为空则自动生成）
+	if email == "" || password == "" {
+		return nil, "", "", errors.New("email and password are required")
+	}
+
+	// 如果没有提供用户名，自动生成
+	if username == "" {
+		username = s.generateUsername(email)
 	}
 
 	// 密码策略验证
@@ -1114,4 +1125,21 @@ func urlEncodeSVG(svg string) string {
 	svg = strings.ReplaceAll(svg, "\t", "")
 
 	return svg
+}
+
+// generateUsername 根据邮箱自动生成用户名
+func (s *authService) generateUsername(email string) string {
+	// 提取邮箱前缀（@之前的部分）
+	parts := strings.Split(email, "@")
+	prefix := parts[0]
+
+	// 限制前缀长度（最多20个字符）
+	if len(prefix) > 20 {
+		prefix = prefix[:20]
+	}
+
+	// 生成6位随机后缀
+	randomSuffix := fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
+
+	return fmt.Sprintf("%s_%s", prefix, randomSuffix)
 }

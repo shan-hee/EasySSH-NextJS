@@ -442,6 +442,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
       // 保存个人信息和头像
       await authApi.updateProfile({
+        username: profileForm.username,
         email: profileForm.email,
         avatar: finalAvatar, // 包含头像数据
       })
@@ -1001,7 +1002,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             id="username"
                             placeholder={tAccount("usernamePlaceholder")}
                             value={profileForm.username}
-                            disabled
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, username: e.target.value }))}
                           />
                           <p className="text-xs text-muted-foreground">
                             {tAccount("usernameHint")}

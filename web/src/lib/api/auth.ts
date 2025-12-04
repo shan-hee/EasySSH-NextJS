@@ -24,7 +24,7 @@ export interface User {
  * 登录请求
  */
 export interface LoginRequest {
-  username: string
+  email: string
   password: string
 }
 
@@ -35,7 +35,7 @@ export interface LoginRequest {
  * 注册请求
  */
 export interface RegisterRequest {
-  username: string
+  username?: string  // 可选，为空时自动生成
   email: string
   password: string
   verification_code: string
@@ -224,7 +224,7 @@ export const authApi = {
    * 注意：仅在浏览器端调用
    */
   async authorizeWithPkce(params: {
-    username: string
+    email: string
     password: string
     client_id: string
     redirect_uri: string
@@ -243,7 +243,7 @@ export const authApi = {
         code_challenge: params.code_challenge,
         code_challenge_method: params.code_challenge_method,
         state: params.state ?? "",
-        username: params.username,
+        email: params.email,
         password: params.password,
       },
     })

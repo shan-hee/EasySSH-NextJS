@@ -202,7 +202,7 @@ const (
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	Username         string  `json:"username" binding:"required,min=3,max=50"`
+	Username         string  `json:"username"`                                   // 可选，为空时自动生成
 	Email            string  `json:"email" binding:"required,email"`
 	Password         string  `json:"password" binding:"required,min=6"`
 	VerificationCode string  `json:"verification_code" binding:"required,len=6"` // 邮箱验证码
@@ -224,6 +224,7 @@ type ResetPasswordRequest struct {
 
 // UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
+	Username string  `json:"username,omitempty"`             // 用户名（可修改）
 	Email    string  `json:"email,omitempty"`
 	Avatar   *string `json:"avatar"`             // 使用指针类型区分"未提供"和"空字符串"
 	Language string  `json:"language,omitempty"` // 用户界面语言偏好，如 zh-CN、en-US
@@ -239,7 +240,7 @@ type AuthResponse struct {
 	ExpiresIn    int         `json:"expires_in"` // 秒
 }
 
-// OAuthAuthorizeRequest PKCE 授权请求（开发版：采用 JSON 提交用户名密码）
+// OAuthAuthorizeRequest PKCE 授权请求（开发版：采用 JSON 提交邮箱密码）
 type OAuthAuthorizeRequest struct {
 	ResponseType        string `json:"response_type" binding:"required"` // 期望为 "code"
 	ClientID            string `json:"client_id" binding:"required"`
@@ -249,8 +250,8 @@ type OAuthAuthorizeRequest struct {
 	CodeChallengeMethod string `json:"code_challenge_method" binding:"required"` // 期望为 "S256"
 	State               string `json:"state"`
 
-	// 登录凭证（用户名 + 密码）
-	Username string `json:"username" binding:"required"`
+	// 登录凭证（邮箱 + 密码）
+	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -451,7 +452,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	// 验证邮箱验证码
 	if h.verificationService != nil {
-		if err := h.verificationService.Verify(c.Request.Context(), req.Email, req.VerificationCode); err != nil {
+		if err := h.verificationService.VerifyWithType(c.Request.Context(), req.Email, req.VerificationCode, verification.TypeRegister); err != nil {
 			// 根据错误类型返回不同的错误信息
 			errMsg := "Invalid or expired verification code"
 			if err.Error() == "verification code not found" {
@@ -466,11 +467,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		}
 	}
 
-	// 注册用户（默认角色为 user）
-	user, err := h.authService.Register(c.Request.Context(), req.Username, req.Email, req.Password, auth.RoleUser)
+	// 注册用户（默认角色为 user，username 自动生成）
+	user, err := h.authService.Register(c.Request.Context(), req.Email, req.Password, auth.RoleUser)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserAlreadyExists) {
-			RespondError(c, http.StatusConflict, "user_exists", "Username or email already exists")
+			RespondError(c, http.StatusConflict, "user_exists", "Email already exists")
 			return
 		}
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to register user")
@@ -543,11 +544,11 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 		return
 	}
 
-	// 认证用户（此处不创建会话，真正创建会话发生在 /oauth/token 中）
-	user, err := h.authService.AuthenticateUser(c.Request.Context(), req.Username, req.Password)
+	// 认证用户（使用邮箱，此处不创建会话，真正创建会话发生在 /oauth/token 中）
+	user, err := h.authService.AuthenticateUser(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
-			RespondError(c, http.StatusUnauthorized, "invalid_credentials", "Invalid username or password")
+			RespondError(c, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password")
 			return
 		}
 		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
@@ -894,6 +895,7 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	if err := h.authService.UpdateProfile(
 		c.Request.Context(),
 		parsedUID,
+		req.Username,
 		req.Email,
 		avatarValue,
 		req.Language,
