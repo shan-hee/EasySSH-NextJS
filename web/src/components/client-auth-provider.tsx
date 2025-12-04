@@ -65,15 +65,15 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
   const login = useCallback(
     async (credentials: LoginRequest) => {
       try {
-        // 1. 使用 PKCE 授权获取授权码
-        const { username, password } = credentials
+        // 1. 使用 PKCE 授权获取授权码（使用邮箱 + 密码）
+        const { email, password } = credentials
         const redirectUri =
           typeof window !== "undefined"
             ? `${window.location.origin}/auth/callback`
             : "/auth/callback"
 
         const { code } = await authApi.authorizeWithPkce({
-          username,
+          email,
           password,
           client_id: "easyssh-web",
           redirect_uri: redirectUri,
