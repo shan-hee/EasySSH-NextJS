@@ -224,11 +224,12 @@ type ResetPasswordRequest struct {
 
 // UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
-	Username string  `json:"username,omitempty"`             // 用户名（可修改）
-	Email    string  `json:"email,omitempty"`
-	Avatar   *string `json:"avatar"`             // 使用指针类型区分"未提供"和"空字符串"
-	Language string  `json:"language,omitempty"` // 用户界面语言偏好，如 zh-CN、en-US
-	Timezone string  `json:"timezone,omitempty"` // 用户时区偏好，如 Asia/Shanghai
+	Username         string  `json:"username,omitempty"`             // 用户名（可修改）
+	Email            string  `json:"email,omitempty"`                // 新邮箱地址
+	VerificationCode string  `json:"verification_code,omitempty"`    // 邮箱验证码（修改邮箱时必需）
+	Avatar           *string `json:"avatar"`                         // 使用指针类型区分"未提供"和"空字符串"
+	Language         string  `json:"language,omitempty"`             // 用户界面语言偏好，如 zh-CN、en-US
+	Timezone         string  `json:"timezone,omitempty"`             // 用户时区偏好，如 Asia/Shanghai
 }
 
 // AuthResponse 认证响应
@@ -366,6 +367,7 @@ func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
 	// 定义请求结构
 	type SendVerificationCodeRequest struct {
 		Email string `json:"email" binding:"required,email"`
+		Type  string `json:"type,omitempty"` // 验证码类型: register, password_reset, email_change
 	}
 
 	var req SendVerificationCodeRequest
@@ -388,8 +390,16 @@ func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
 		return
 	}
 
-	// 使用注册验证码类型
-	codeType := verification.TypeRegister
+	// 根据请求中的 type 参数确定验证码类型
+	var codeType verification.VerificationCodeType
+	switch req.Type {
+	case "password_reset":
+		codeType = verification.TypePasswordReset
+	case "email_change":
+		codeType = verification.TypeEmailChange
+	default:
+		codeType = verification.TypeRegister
+	}
 
 	// 检查是否可以发送（频率限制）
 	canSend, err := h.verificationService.CanSendWithType(c.Request.Context(), req.Email, codeType)
@@ -884,6 +894,41 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 
 	uid, _ := userID.(string)
 	parsedUID, _ := parseUUID(uid)
+
+	// 如果用户尝试修改邮箱，需要验证验证码
+	if req.Email != "" {
+		// 获取当前用户信息
+		currentUser, err := h.authService.GetUserByID(c.Request.Context(), parsedUID)
+		if err != nil {
+			RespondError(c, http.StatusInternalServerError, "user_not_found", "Failed to get user information")
+			return
+		}
+
+		// 如果新邮箱与当前邮箱不同，需要验证验证码
+		if req.Email != currentUser.Email {
+			if req.VerificationCode == "" {
+				RespondError(c, http.StatusBadRequest, "verification_required", "Verification code is required when changing email")
+				return
+			}
+
+			// 验证邮箱验证码（使用新邮箱地址验证）
+			if h.verificationService != nil {
+				if err := h.verificationService.VerifyWithType(c.Request.Context(), req.Email, req.VerificationCode, verification.TypeEmailChange); err != nil {
+					// 根据错误类型返回不同的错误信息
+					errMsg := "Invalid or expired verification code"
+					if err.Error() == "verification code not found" {
+						errMsg = "Verification code not found, please request a new one"
+					} else if err.Error() == "too many verification attempts" {
+						errMsg = "Too many failed attempts, please request a new code"
+					} else if err.Error() == "verification code invalid" {
+						errMsg = "Invalid verification code"
+					}
+					RespondError(c, http.StatusBadRequest, "verification_failed", errMsg)
+					return
+				}
+			}
+		}
+	}
 
 	// 处理 avatar 参数：如果提供了指针，使用其值（可能是空字符串）；否则使用特殊标记表示不更新
 	avatarValue := "\x00" // 特殊标记，表示不更新头像

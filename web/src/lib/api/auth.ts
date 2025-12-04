@@ -47,6 +47,7 @@ export interface RegisterRequest {
  */
 export interface SendVerificationCodeRequest {
   email: string
+  type?: "register" | "password_reset" | "email_change" // 验证码类型
 }
 
 /**
@@ -97,12 +98,14 @@ export interface AuthStatusResponse {
  */
 export const authApi = {
   /**
-   * 发送邮箱验证码（注册用）
+   * 发送邮箱验证码
+   * @param email 邮箱地址
+   * @param type 验证码类型：register(注册), password_reset(重置密码), email_change(修改邮箱)
    */
-  async sendVerificationCode(data: SendVerificationCodeRequest): Promise<SendVerificationCodeResponse> {
+  async sendVerificationCode(email: string, type: "register" | "password_reset" | "email_change" = "register"): Promise<SendVerificationCodeResponse> {
     return apiFetch<SendVerificationCodeResponse>("/auth/send-verification-code", {
       method: "POST",
-      body: data,
+      body: { email, type },
     })
   },
 
@@ -158,7 +161,7 @@ export const authApi = {
    * 更新用户资料
    * Cookie 会自动携带,无需传递 token
    */
-  async updateProfile(data: Partial<User>): Promise<User> {
+  async updateProfile(data: Partial<User> & { verification_code?: string }): Promise<User> {
     return apiFetch<User>("/users/me", {
       method: "PUT",
       body: data,

@@ -10,6 +10,8 @@ const (
 	TypeRegister VerificationCodeType = "register"
 	// TypePasswordReset 密码重置验证码
 	TypePasswordReset VerificationCodeType = "password_reset"
+	// TypeEmailChange 邮箱变更验证码
+	TypeEmailChange VerificationCodeType = "email_change"
 )
 
 // VerificationCode 验证码数据结构

@@ -155,11 +155,21 @@ const messages = {
 
     // 个人信息 - 提示
     toastInvalidEmail: "邮箱格式不正确",
+    toastEmailNotChanged: "新邮箱与当前邮箱相同",
+    toastVerificationCodeRequired: "修改邮箱时必须输入6位验证码",
+    toastCodeSent: "验证码已发送到新邮箱",
+    toastCodeSendFailed: "验证码发送失败，请重试",
     toastProfileSaved: "个人信息已保存",
     toastSaveFailed: "保存失败，请重试。",
     toastLanguageRequired: "请选择语言",
     toastTimezoneRequired: "请选择时区",
     toastPreferencesSaved: "个人偏好已保存",
+
+    // 个人信息 - 邮箱验证
+    verificationCodeLabel: "邮箱验证码",
+    verificationCodePlaceholder: "请输入6位验证码",
+    verificationCodeHint: "请查收新邮箱中的验证码，有效期5分钟",
+    sendCodeButton: "发送验证码",
 
     // SSH 密钥相关提示（为后续 SSH Tab i18n 预置）
     sshKeyToastNameRequired: "请输入密钥名称",

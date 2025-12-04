@@ -158,11 +158,21 @@ const messages = {
 
     // Profile - toasts
     toastInvalidEmail: "Invalid email format",
+    toastEmailNotChanged: "New email is same as current email",
+    toastVerificationCodeRequired: "6-digit verification code is required when changing email",
+    toastCodeSent: "Verification code sent to new email",
+    toastCodeSendFailed: "Failed to send verification code, please try again",
     toastProfileSaved: "Profile saved",
     toastSaveFailed: "Save failed, please try again.",
     toastLanguageRequired: "Please choose a language",
     toastTimezoneRequired: "Please choose a timezone",
     toastPreferencesSaved: "Preferences saved",
+
+    // Profile - email verification
+    verificationCodeLabel: "Email Verification Code",
+    verificationCodePlaceholder: "Enter 6-digit code",
+    verificationCodeHint: "Please check your new email inbox for the verification code (valid for 5 minutes)",
+    sendCodeButton: "Send Code",
 
     // Profile - avatar toasts
     avatarGenerateSuccess: "Avatar generated.",

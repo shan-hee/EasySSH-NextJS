@@ -141,8 +141,12 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   const [profileForm, setProfileForm] = React.useState({
     username: "",
     email: "",
+    verificationCode: "", // 邮箱验证码
   })
   const [profileLoading, setProfileLoading] = React.useState(false)
+  const [sendingCode, setSendingCode] = React.useState(false) // 发送验证码加载状态
+  const [countdown, setCountdown] = React.useState(0) // 验证码倒计时
+  const [originalEmail, setOriginalEmail] = React.useState("") // 原始邮箱地址，用于判断是否修改
 
   // 头像上传状态
   const [avatarFile, setAvatarFile] = React.useState<File | null>(null)
@@ -387,6 +391,14 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     if (newOpen && user) {
       setAvatarPreview(user.avatar || "")
       setAvatarFile(null)
+      // 初始化个人信息表单
+      setProfileForm({
+        username: user.username || "",
+        email: user.email || "",
+        verificationCode: "",
+      })
+      setOriginalEmail(user.email || "")
+      setCountdown(0)
       // 重新同步个人偏好（避免系统配置或用户信息变化后未刷新）
       setPreferencesForm({
         language: user.language || config?.default_language || "zh-CN",
@@ -398,6 +410,41 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   const handleSectionChange = React.useCallback((section: SettingsSection) => {
     setActiveSection(section)
   }, [])
+
+  // 验证码倒计时逻辑
+  React.useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [countdown])
+
+  // 发送验证码
+  const handleSendVerificationCode = React.useCallback(async () => {
+    // 验证邮箱格式
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!profileForm.email || !emailRegex.test(profileForm.email)) {
+      toast.error(tAccount("toastInvalidEmail"))
+      return
+    }
+
+    // 检查邮箱是否已修改
+    if (profileForm.email === originalEmail) {
+      toast.error(tAccount("toastEmailNotChanged"))
+      return
+    }
+
+    setSendingCode(true)
+    try {
+      await authApi.sendVerificationCode(profileForm.email, "email_change")
+      toast.success(tAccount("toastCodeSent"))
+      setCountdown(60) // 开始60秒倒计时
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, tAccount("toastCodeSendFailed")))
+    } finally {
+      setSendingCode(false)
+    }
+  }, [profileForm.email, originalEmail, tAccount])
 
   const getSectionLabel = React.useCallback(
     (section: SettingsSection) => {
@@ -431,6 +478,14 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       return
     }
 
+    // 如果用户修改了邮箱，必须输入验证码
+    if (profileForm.email !== originalEmail) {
+      if (!profileForm.verificationCode || profileForm.verificationCode.length !== 6) {
+        toast.error(tAccount("toastVerificationCodeRequired"))
+        return
+      }
+    }
+
     setProfileLoading(true)
     try {
       let finalAvatar = avatarPreview
@@ -440,21 +495,24 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         finalAvatar = await compressImage(avatarFile, 128, 128)
       }
 
-      // 保存个人信息和头像
+      // 保存个人信息和头像（包含验证码如果邮箱有变更）
       await authApi.updateProfile({
         username: profileForm.username,
         email: profileForm.email,
         avatar: finalAvatar, // 包含头像数据
+        verification_code: profileForm.email !== originalEmail ? profileForm.verificationCode : undefined,
       })
       await refreshUser()
       setAvatarFile(null) // 清除文件选择状态
+      setProfileForm(prev => ({ ...prev, verificationCode: "" })) // 清除验证码
+      setOriginalEmail(profileForm.email) // 更新原始邮箱
       toast.success(tAccount("toastProfileSaved"))
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, tAccount("toastSaveFailed")))
     } finally {
       setProfileLoading(false)
     }
-  }, [profileForm, avatarFile, avatarPreview, refreshUser, tAccount])
+  }, [profileForm, originalEmail, avatarFile, avatarPreview, refreshUser, tAccount])
 
   // 保存个人偏好（语言与时区）
   const handleSavePreferences = React.useCallback(async () => {
@@ -1020,6 +1078,37 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             onChange={(e) => setProfileForm(prev => ({ ...prev, email: e.target.value }))}
                           />
                         </div>
+                        {/* 如果邮箱已修改，显示验证码输入 */}
+                        {profileForm.email !== originalEmail && profileForm.email && (
+                          <div className="space-y-2">
+                            <Label htmlFor="verification-code">
+                              {tAccount("verificationCodeLabel")}
+                            </Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id="verification-code"
+                                placeholder={tAccount("verificationCodePlaceholder")}
+                                value={profileForm.verificationCode}
+                                onChange={(e) => setProfileForm(prev => ({ ...prev, verificationCode: e.target.value }))}
+                                maxLength={6}
+                                className="flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleSendVerificationCode}
+                                disabled={sendingCode || countdown > 0}
+                                className="shrink-0"
+                              >
+                                {sendingCode && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {countdown > 0 ? `${countdown}s` : tAccount("sendCodeButton")}
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {tAccount("verificationCodeHint")}
+                            </p>
+                          </div>
+                        )}
                         <Button
                           className="mt-4"
                           onClick={handleSaveProfile}
