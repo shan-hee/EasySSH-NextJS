@@ -5,7 +5,7 @@ import { useMemo, useEffect } from "react"
 import { NextIntlClientProvider } from "next-intl"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/contexts/system-config-context"
-import { getEffectiveLocale, saveLocaleToStorage } from "@/utils/datetime"
+import { getEffectiveLocale, getEffectiveTimezone, saveLocaleToStorage } from "@/utils/datetime"
 import zhCN from "@/i18n/messages/zh-CN"
 import enUS from "@/i18n/messages/en-US"
 
@@ -24,6 +24,7 @@ export function DashboardI18nProvider({ children }: DashboardI18nProviderProps) 
 
   // 直接调用 getEffectiveLocale，它会自动从 localStorage 读取
   const locale = getEffectiveLocale(user, config)
+  const timeZone = getEffectiveTimezone(user, config)
 
   const messages = useMemo(() => {
     return allMessages[locale] ?? zhCN
@@ -37,9 +38,8 @@ export function DashboardI18nProvider({ children }: DashboardI18nProviderProps) 
   }, [user?.language])
 
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={messages} timeZone={timeZone}>
       {children}
     </NextIntlClientProvider>
   )
 }
-

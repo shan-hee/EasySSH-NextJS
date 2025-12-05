@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { useMemo } from "react"
 import { NextIntlClientProvider } from "next-intl"
 import { useSystemConfig } from "@/contexts/system-config-context"
-import { getEffectiveLocale } from "@/utils/datetime"
+import { getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 import zhCN from "@/i18n/messages/zh-CN"
 import enUS from "@/i18n/messages/en-US"
 
@@ -28,15 +28,15 @@ export function AuthI18nProvider({ children }: AuthI18nProviderProps) {
 
   // 直接调用 getEffectiveLocale，它会自动从 localStorage 读取
   const locale = getEffectiveLocale(null, config)
+  const timeZone = getEffectiveTimezone(null, config)
 
   const messages = useMemo(() => {
     return allMessages[locale] ?? zhCN
   }, [locale])
 
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={messages} timeZone={timeZone}>
       {children}
     </NextIntlClientProvider>
   )
 }
-
