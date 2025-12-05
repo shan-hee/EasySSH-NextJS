@@ -142,6 +142,7 @@ const COMMON_COMMANDS: CommandDefinition[] = [
     description: "容器管理",
     subcommands: [
       "run",
+      "system",
       "ps",
       "images",
       "pull",

@@ -1,4 +1,5 @@
 import type { CompletionProvider, CompletionContext, CompletionItem } from "../types"
+import { matchesCommandWithPrefix } from "../utils"
 
 /**
  * RemoteHistoryProvider - 远端历史命令补全提供者
@@ -52,17 +53,24 @@ export class RemoteHistoryProvider implements CompletionProvider {
    * 获取补全项
    */
   async getCompletions(context: CompletionContext): Promise<CompletionItem[]> {
-    const { currentWord } = context
+    const { fullLine, cursorPosition, currentWord } = context
 
-    // 如果当前词为空，不提供补全
-    if (!currentWord) {
+    // 计算行前缀: 从命令行首到光标位置的内容
+    const rawPrefix = fullLine.slice(
+      0,
+      Math.min(cursorPosition, fullLine.length)
+    )
+    const linePrefix = rawPrefix.trim()
+
+    // 如果既没有行前缀也没有当前词, 不提供补全
+    if (!linePrefix && !currentWord) {
       return []
     }
 
     return this.historyCache
       .filter(cmd => {
-        // 前缀匹配
-        return cmd.toLowerCase().startsWith(currentWord.toLowerCase())
+        // 行级 + token 级前缀匹配
+        return matchesCommandWithPrefix(cmd, linePrefix, currentWord)
       })
       .map((cmd, index) => {
         // 动态优先级：最新的命令优先级最高
@@ -77,7 +85,7 @@ export class RemoteHistoryProvider implements CompletionProvider {
           source: "remote" as const,
           description: "远端历史命令",
           priority: dynamicPriority,
-          score: this.calculateScore(cmd, currentWord),
+          score: this.calculateScore(cmd, linePrefix || currentWord),
           providerName: "remote-history",
         }
       })
@@ -85,15 +93,63 @@ export class RemoteHistoryProvider implements CompletionProvider {
 
   /**
    * 计算匹配分数
-   * 精确匹配 > 前缀匹配 > 包含匹配
+   * 精确匹配 > 行级/Token 前缀匹配 > 包含匹配
    */
   private calculateScore(command: string, prefix: string): number {
-    const cmdLower = command.toLowerCase()
-    const prefixLower = prefix.toLowerCase()
+    const commandLower = command.toLowerCase()
+    const prefixLower = prefix.toLowerCase().trim()
 
-    if (command === prefix) return 100 // 精确匹配
-    if (cmdLower.startsWith(prefixLower)) return 80 // 前缀匹配
-    if (cmdLower.includes(prefixLower)) return 60 // 包含匹配
+    if (!prefixLower) return 0
+
+    if (commandLower === prefixLower) {
+      return 110
+    }
+
+    if (commandLower.startsWith(prefixLower)) {
+      return 95
+    }
+
+    const prefixTokens = prefixLower
+      .split(/\s+/)
+      .filter((token) => token.length > 0)
+    const commandTokens = commandLower
+      .split(/\s+/)
+      .filter((token) => token.length > 0)
+
+    if (prefixTokens.length === 0 || commandTokens.length === 0) {
+      return 0
+    }
+
+    let matchedTokens = 0
+    for (
+      let index = 0;
+      index < prefixTokens.length && index < commandTokens.length;
+      index++
+    ) {
+      const prefixToken = prefixTokens[index]
+      const commandToken = commandTokens[index]
+      const isLast = index === prefixTokens.length - 1
+
+      if (isLast) {
+        if (!commandToken.startsWith(prefixToken)) {
+          break
+        }
+      } else {
+        if (commandToken !== prefixToken) {
+          break
+        }
+      }
+
+      matchedTokens++
+    }
+
+    const coverage =
+      prefixTokens.length > 0 ? matchedTokens / prefixTokens.length : 0
+
+    if (coverage === 1) return 90
+    if (coverage >= 0.6) return 80
+    if (coverage > 0) return 70
+    if (commandLower.includes(prefixLower)) return 60
 
     return 0
   }

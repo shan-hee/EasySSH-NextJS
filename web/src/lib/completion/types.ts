@@ -160,7 +160,7 @@ export const DEFAULT_SOURCE_QUOTAS: SourceQuotaConfig[] = [
 export const DEFAULT_COMPLETION_CONFIG: CompletionConfig = {
   enabled: true,
   trigger: "tab",
-  autoTriggerDelay: 300,
+  autoTriggerDelay: 200,
   maxItems: 10,
   providers: {
     local: true,

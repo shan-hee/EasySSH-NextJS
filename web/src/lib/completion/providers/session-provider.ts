@@ -1,4 +1,5 @@
 import type { CompletionProvider, CompletionContext, CompletionItem } from "../types"
+import { matchesCommandWithPrefix } from "../utils"
 
 /**
  * SessionProvider - 当前会话命令补全提供者
@@ -51,17 +52,24 @@ export class SessionProvider implements CompletionProvider {
    * 获取补全项
    */
   async getCompletions(context: CompletionContext): Promise<CompletionItem[]> {
-    const { currentWord } = context
+    const { fullLine, cursorPosition, currentWord } = context
 
-    // 如果当前词为空，不提供补全
-    if (!currentWord) {
+    // 计算行前缀: 从命令行首到光标位置的内容
+    const rawPrefix = fullLine.slice(
+      0,
+      Math.min(cursorPosition, fullLine.length)
+    )
+    const linePrefix = rawPrefix.trim()
+
+    // 如果既没有行前缀也没有当前词, 不提供补全
+    if (!linePrefix && !currentWord) {
       return []
     }
 
     return this.sessionCommands
       .filter(cmd => {
-        // 前缀匹配
-        return cmd.toLowerCase().startsWith(currentWord.toLowerCase())
+        // 行级 + token 级前缀匹配
+        return matchesCommandWithPrefix(cmd, linePrefix, currentWord)
       })
       .map((cmd, index) => {
         // 计算相对优先级：最近使用的略高
@@ -75,7 +83,7 @@ export class SessionProvider implements CompletionProvider {
           source: "local" as const,
           description: "本次会话",
           priority: this.priority + recencyBonus,
-          score: this.calculateScore(cmd, currentWord, index),
+          score: this.calculateScore(cmd, linePrefix || currentWord, index),
           providerName: "session",
         }
       })
@@ -86,17 +94,64 @@ export class SessionProvider implements CompletionProvider {
    * 考虑匹配度和使用时间（越近的分数越高）
    */
   private calculateScore(command: string, prefix: string, index: number): number {
-    const cmdLower = command.toLowerCase()
-    const prefixLower = prefix.toLowerCase()
+    const commandLower = command.toLowerCase()
+    const prefixLower = prefix.toLowerCase().trim()
+
+    if (!prefixLower) return 0
 
     let baseScore = 0
 
-    if (command === prefix) {
-      baseScore = 100 // 精确匹配
-    } else if (cmdLower.startsWith(prefixLower)) {
-      baseScore = 80 // 前缀匹配
-    } else if (cmdLower.includes(prefixLower)) {
-      baseScore = 60 // 包含匹配
+    if (commandLower === prefixLower) {
+      baseScore = 110
+    } else if (commandLower.startsWith(prefixLower)) {
+      baseScore = 95
+    } else {
+      const prefixTokens = prefixLower
+        .split(/\s+/)
+        .filter((token) => token.length > 0)
+      const commandTokens = commandLower
+        .split(/\s+/)
+        .filter((token) => token.length > 0)
+
+      if (prefixTokens.length > 0 && commandTokens.length > 0) {
+        let matchedTokens = 0
+        for (
+          let tokenIndex = 0;
+          tokenIndex < prefixTokens.length && tokenIndex < commandTokens.length;
+          tokenIndex++
+        ) {
+          const prefixToken = prefixTokens[tokenIndex]
+          const commandToken = commandTokens[tokenIndex]
+          const isLast = tokenIndex === prefixTokens.length - 1
+
+          if (isLast) {
+            if (!commandToken.startsWith(prefixToken)) {
+              break
+            }
+          } else {
+            if (commandToken !== prefixToken) {
+              break
+            }
+          }
+
+          matchedTokens++
+        }
+
+        const coverage =
+          prefixTokens.length > 0
+            ? matchedTokens / prefixTokens.length
+            : 0
+
+        if (coverage === 1) {
+          baseScore = 90
+        } else if (coverage >= 0.6) {
+          baseScore = 80
+        } else if (coverage > 0) {
+          baseScore = 70
+        } else if (commandLower.includes(prefixLower)) {
+          baseScore = 60
+        }
+      }
     }
 
     // 时效性加成：越新的命令得分越高

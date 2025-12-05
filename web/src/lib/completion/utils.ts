@@ -281,3 +281,68 @@ export function isDownArrow(data: string): boolean {
 export function isEnterKey(data: string): boolean {
   return data === "\r" || data === "\n"
 }
+
+/**
+ * 命令匹配辅助:
+ * - 优先按整行前缀前缀匹配: command.startsWith(linePrefix)
+ * - 如果整行不匹配, 按“按空格分词 + 最后一个词前缀匹配”的方式匹配:
+ *   例如: linePrefix = "docker sy", command = "docker system prune -af"
+ *   => tokensPrefix = ["docker", "sy"], tokensCmd = ["docker", "system", "prune", "-af"]
+ *   => 前面的 token 要完全相等, 最后一个 token 允许前缀匹配
+ */
+export function matchesCommandWithPrefix(
+  command: string,
+  linePrefix: string,
+  currentWord: string
+): boolean {
+  const cleanedLinePrefix = linePrefix.trim()
+  const effectivePrefix =
+    cleanedLinePrefix || (currentWord ? currentWord.trim() : "")
+
+  if (!effectivePrefix) return false
+
+  const cmdLower = command.toLowerCase()
+  const linePrefixLower = cleanedLinePrefix.toLowerCase()
+  const currentWordLower = currentWord.toLowerCase()
+
+  // 1. 整行前缀匹配
+  if (cleanedLinePrefix && cmdLower.startsWith(linePrefixLower)) {
+    return true
+  }
+
+  // 2. 按 token 匹配:
+  //    - 前面的 token 必须完全相等
+  //    - 最后一个 token 允许前缀匹配 (用户正在输入的那个词)
+  const prefixTokens = (cleanedLinePrefix || currentWordLower)
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .map((t) => t.toLowerCase())
+
+  const cmdTokens = command
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .map((t) => t.toLowerCase())
+
+  if (prefixTokens.length === 0 || cmdTokens.length === 0) {
+    return false
+  }
+
+  for (let i = 0; i < prefixTokens.length; i++) {
+    const p = prefixTokens[i]
+    const c = cmdTokens[i]
+    if (!c) return false
+
+    const isLast = i === prefixTokens.length - 1
+
+    if (isLast) {
+      // 最后一个词允许前缀匹配
+      if (!c.startsWith(p)) return false
+    } else {
+      // 之前的词必须完全匹配
+      if (c !== p) return false
+    }
+  }
+
+  return true
+}

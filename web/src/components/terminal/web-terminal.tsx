@@ -24,6 +24,7 @@ import {
   isUpArrow,
   isDownArrow,
   isEnterKey,
+  isBackspaceKey,
 } from "@/lib/completion/utils"
 import type { CompletionItem, CompletionResult } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
@@ -90,7 +91,7 @@ export function WebTerminal({
   clearShortcut = 'Ctrl+L',
   completionEnabled = true,
   completionTrigger = 'auto',
-  completionAutoDelay = 300,
+  completionAutoDelay = 200,
   completionMaxItems = 10,
   completionShowIcon = true,
   completionShowDescription = true,
@@ -146,6 +147,9 @@ export function WebTerminal({
 
       // 加载脚本库到 ScriptProvider
       scriptProviderRef.current?.loadScripts(data.scripts)
+
+      // 补全数据发生变化时，清空引擎缓存，确保新数据参与排序
+      completionEngineRef.current?.clearCache()
     }
   })
 
@@ -156,6 +160,9 @@ export function WebTerminal({
       remoteHistoryProviderRef.current?.clear()
       scriptProviderRef.current?.clear()
       sessionProviderRef.current?.clear()
+
+      // 同步清空补全引擎缓存
+      completionEngineRef.current?.clearCache()
     }
   }, [ws, isConnected, serverId])
 
@@ -241,9 +248,10 @@ export function WebTerminal({
   const scriptProviderRef = useRef<ScriptProvider | null>(null)
   const sessionProviderRef = useRef<SessionProvider | null>(null)
 
-  // 自动补全定时器
+  // 自动补全定时器（防抖）
   const autoCompleteTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const AUTO_COMPLETE_DELAY = 200 // 毫秒
+  // 补全请求进行中标记,用于简单节流: 上一次请求未完成时,忽略新的自动触发
+  const completionInProgressRef = useRef(false)
 
   // 使用 ref 保存最新的 handleCompletionRequest 函数
   const handleCompletionRequestRef = useRef<(() => Promise<void>) | undefined>(undefined)
@@ -331,41 +339,59 @@ export function WebTerminal({
       return
     }
 
-    const context = parseCompletionContext(terminal)
-
-    // 获取补全结果
-    const result = await completionEngineRef.current.getCompletions(context)
-
-    if (!result || result.items.length === 0) {
-      closeCompletion()
+    // 如果上一轮请求还在进行中,直接跳过本次,避免频繁并发请求
+    if (completionInProgressRef.current) {
       return
     }
+    completionInProgressRef.current = true
 
-    // 计算弹窗位置（基于终端内部坐标）
-    const cursorPosition = getCursorScreenPosition(terminal)
+    const context = parseCompletionContext(terminal)
 
-    // 将终端内部坐标转换为页面坐标
-    let position = {
-      x: cursorPosition.x,
-      y: cursorPosition.y,
-    }
+    try {
+      // 获取补全结果
+      const result = await completionEngineRef.current.getCompletions(context)
 
-    // 获取终端容器的位置偏移
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect()
-      position = {
-        x: position.x + rect.left,
-        y: position.y + rect.top,
+      if (!result || result.items.length === 0) {
+        closeCompletion()
+        return
       }
-    }
 
-    setCompletionState({
-      visible: true,
-      items: result.items,
-      selectedIndex: 0,
-      position,
-      matchedPrefix: context.currentWord,
-    })
+      // 计算弹窗位置（基于终端内部坐标）
+      const cursorPosition = getCursorScreenPosition(terminal)
+
+      // 将终端内部坐标转换为页面坐标
+      let position = {
+        x: cursorPosition.x,
+        y: cursorPosition.y,
+      }
+
+      // 获取终端容器的位置偏移
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        position = {
+          x: position.x + rect.left,
+          y: position.y + rect.top,
+        }
+      }
+
+      // 计算用于高亮的前缀：优先整行前缀，其次当前词
+      const rawPrefix = context.fullLine.slice(
+        0,
+        Math.min(context.cursorPosition, context.fullLine.length)
+      )
+      const linePrefix = rawPrefix.trim()
+      const matchedPrefix = linePrefix || context.currentWord
+
+      setCompletionState({
+        visible: true,
+        items: result.items,
+        selectedIndex: 0,
+        position,
+        matchedPrefix,
+      })
+    } finally {
+      completionInProgressRef.current = false
+    }
   }, [completionEnabled, terminal, closeCompletion, containerRef])
 
   // 更新 ref 以保持最新的函数引用
@@ -392,14 +418,19 @@ export function WebTerminal({
         return
       }
 
+      // 全局 ESC 处理: 仅在补全弹窗可见时,用 ESC 关闭弹窗,
+      // 并且不会触发新的自动补全
+      if (completionStateRef.current.visible && isEscapeKey(data)) {
+        closeCompletion()
+        if (autoCompleteTimerRef.current) {
+          clearTimeout(autoCompleteTimerRef.current)
+          autoCompleteTimerRef.current = null
+        }
+        return
+      }
+
       // 如果补全弹窗可见,处理导航键
       if (completionStateRef.current.visible) {
-        // Escape 键 - 关闭补全
-        if (isEscapeKey(data)) {
-          closeCompletion()
-          return
-        }
-
         // 上箭头 - 向上导航（在弹窗位于上方时反转方向）
         if (isUpArrow(data)) {
           const isTopPlacement = completionPlacementRef.current === "top"
@@ -459,34 +490,51 @@ export function WebTerminal({
           sessionProviderRef.current.addCommand(command)
         }
 
-        // 回车键不触发补全
+        // 回车键不触发自动补全
         return
       }
 
-      // 自动触发补全（节流）
+      // 自动触发补全（防抖）：键盘连续输入时合并为一次补全请求
       // 清除旧定时器
       if (autoCompleteTimerRef.current) {
         clearTimeout(autoCompleteTimerRef.current)
         autoCompleteTimerRef.current = null
       }
 
-      // 设置新定时器
+      // 对于控制字符(ESC/Backspace/方向键等),不触发自动补全
+      // 仅对可打印字符(含空格)进行自动补全
+      if (!data || data.length === 0) {
+        return
+      }
+      const firstCharCode = data.charCodeAt(0)
+      if (firstCharCode < 32 || firstCharCode === 127) {
+        return
+      }
+
       autoCompleteTimerRef.current = setTimeout(() => {
         const context = parseCompletionContext(terminal)
 
-        // 只在输入命令时触发（至少2个字符）
-        if (context.currentWord && context.currentWord.length >= 2) {
+        // 基于“整行前缀”判断是否触发自动补全:
+        // 例如: "docker s" 也应该触发，而不仅仅看最后一个单词 "s"
+        const rawPrefix = context.fullLine.slice(
+          0,
+          Math.min(context.cursorPosition, context.fullLine.length)
+        )
+        const linePrefix = rawPrefix.trim()
+        const effectivePrefix = linePrefix || context.currentWord
+
+        // 只在有一定长度的有效前缀时触发（至少2个字符）
+        if (effectivePrefix && effectivePrefix.length >= 2) {
           // 使用 ref 保证调用最新的函数
           handleCompletionRequestRef.current?.()
         }
-        // 定时器执行完毕后清空引用
+
         autoCompleteTimerRef.current = null
-      }, AUTO_COMPLETE_DELAY)
+      }, completionEngineRef.current?.getConfig().autoTriggerDelay ?? completionAutoDelay ?? 200)
     })
 
     return () => {
       disposable.dispose()
-      // 清理定时器
       if (autoCompleteTimerRef.current) {
         clearTimeout(autoCompleteTimerRef.current)
         autoCompleteTimerRef.current = null

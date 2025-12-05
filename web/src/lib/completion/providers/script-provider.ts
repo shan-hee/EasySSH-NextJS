@@ -1,4 +1,5 @@
 import type { CompletionProvider, CompletionContext, CompletionItem } from "../types"
+import { matchesCommandWithPrefix } from "../utils"
 
 /**
  * 脚本项接口（来自服务器）
@@ -42,22 +43,27 @@ export class ScriptProvider implements CompletionProvider {
    * 获取补全项
    */
   async getCompletions(context: CompletionContext): Promise<CompletionItem[]> {
-    const { currentWord, currentTokenIndex } = context
+    const { currentWord, fullLine, cursorPosition } = context
 
-    // 如果当前词为空，不提供补全
-    if (!currentWord) {
-      return []
-    }
+    const rawPrefix = fullLine.slice(
+      0,
+      Math.min(cursorPosition, fullLine.length)
+    )
+    const linePrefix = rawPrefix.trim()
 
-    // 仅在第一个词（命令位置）提供脚本补全
-    if (currentTokenIndex !== 0) {
+    // 如果既没有行前缀也没有当前词, 不提供补全
+    if (!linePrefix && !currentWord) {
       return []
     }
 
     return this.scriptsCache
       .filter(script => {
-        // 前缀匹配脚本内容（实际命令）
-        return script.content.toLowerCase().startsWith(currentWord.toLowerCase())
+        // 行级 + token 级前缀匹配
+        return matchesCommandWithPrefix(
+          script.content,
+          linePrefix,
+          currentWord
+        )
       })
       .map(script => {
         // 动态优先级：基于执行次数
@@ -72,7 +78,7 @@ export class ScriptProvider implements CompletionProvider {
           source: "script" as const, // 来自脚本库
           description: script.name,  // 描述显示脚本名称
           priority: dynamicPriority,
-          score: this.calculateScore(script, currentWord),
+          score: this.calculateScore(script, linePrefix || currentWord),
           providerName: "script",
         }
       })
@@ -82,24 +88,77 @@ export class ScriptProvider implements CompletionProvider {
    * 计算匹配分数
    */
   private calculateScore(script: ScriptItem, prefix: string): number {
-    const contentLower = script.content.toLowerCase()
-    const prefixLower = prefix.toLowerCase()
+    const commandLower = script.content.toLowerCase()
+    const prefixLower = prefix.toLowerCase().trim()
 
-    // 精确匹配
-    if (script.content === prefix) return 100
+    if (!prefixLower) return 0
 
-    // 前缀匹配
-    if (contentLower.startsWith(prefixLower)) {
-      // 执行次数多的得分更高
-      return 80 + Math.min(script.executions, 20)
+    // 精确匹配整行命令
+    if (commandLower === prefixLower) {
+      return 120 + Math.min(script.executions, 20)
     }
 
-    // 包含匹配
-    if (contentLower.includes(prefixLower)) {
-      return 60 + Math.min(script.executions / 2, 10)
+    // 先尝试简单的字符串前缀匹配
+    if (commandLower.startsWith(prefixLower)) {
+      return 100 + Math.min(script.executions, 20)
     }
 
-    return 0
+    // 基于 token 的前缀匹配：前面 token 完全相等，最后一个 token 允许前缀匹配
+    const prefixTokens = prefixLower
+      .split(/\s+/)
+      .filter((token) => token.length > 0)
+    const commandTokens = commandLower
+      .split(/\s+/)
+      .filter((token) => token.length > 0)
+
+    if (prefixTokens.length === 0 || commandTokens.length === 0) {
+      return 0
+    }
+
+    let matchedTokens = 0
+    for (
+      let index = 0;
+      index < prefixTokens.length && index < commandTokens.length;
+      index++
+    ) {
+      const prefixToken = prefixTokens[index]
+      const commandToken = commandTokens[index]
+      const isLast = index === prefixTokens.length - 1
+
+      if (isLast) {
+        // 最后一个词允许前缀匹配
+        if (!commandToken.startsWith(prefixToken)) {
+          break
+        }
+      } else {
+        // 前面的词必须完全相等
+        if (commandToken !== prefixToken) {
+          break
+        }
+      }
+
+      matchedTokens++
+    }
+
+    const coverage =
+      prefixTokens.length > 0 ? matchedTokens / prefixTokens.length : 0
+
+    let baseScore = 0
+    if (coverage === 1) {
+      baseScore = 95
+    } else if (coverage >= 0.6) {
+      baseScore = 85
+    } else if (coverage > 0) {
+      baseScore = 70
+    } else if (commandLower.includes(prefixLower)) {
+      // 退化为包含匹配
+      baseScore = 60
+    }
+
+    // 执行次数加成，最多 +20
+    const executionBonus = Math.min(script.executions, 20)
+
+    return baseScore + executionBonus
   }
 
   /**

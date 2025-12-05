@@ -136,14 +136,14 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
               <div className={"text-xs mb-2 text-zinc-600 dark:text-zinc-500"}>
                 {tTerminal("quickConnectOfflineSectionTitle")}
               </div>
-              <div className="space-y-1.5">
+              <AnimatedList className="space-y-1.5">
                 {offlineServers.map((server) => (
                   <div key={server.id} className={"flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-600"}>
                     <div className={"w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"}></div>
                     {server.name || server.host} <span className="font-mono">({server.host})</span>
                   </div>
                 ))}
-              </div>
+              </AnimatedList>
             </div>
           )}
         </div>

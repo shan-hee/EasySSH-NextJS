@@ -63,15 +63,25 @@ export class CompletionEngine {
       return null
     }
 
-    // 如果当前词为空且不是命令位置,不补全
-    if (context.currentWord === "" && context.currentTokenIndex > 0) {
+    // 计算行前缀: 从命令行首到光标位置的内容
+    const rawLinePrefix = context.fullLine.slice(
+      0,
+      Math.min(context.cursorPosition, context.fullLine.length)
+    )
+    const linePrefix = rawLinePrefix.trim()
+
+    // 用于排序/缓存的“有效前缀”：优先使用整行前缀，退回当前词
+    const effectivePrefix = linePrefix || context.currentWord
+
+    // 如果既没有整行前缀也没有当前词,且不在命令位置,不补全
+    if (!effectivePrefix && context.currentTokenIndex > 0) {
       return null
     }
 
     // 生成缓存键：基于会话ID、当前词和token位置
     // 包含 sessionId 确保不同服务器的补全结果不会混淆
-    // 注意：不包含 fullLine，避免因命令行上下文不同导致缓存命中率低
-    const cacheKey = `${this.sessionId}:${context.currentWord}:${context.currentTokenIndex}`
+    // 使用 effectivePrefix（优先整行前缀）以体现行级语义
+    const cacheKey = `${this.sessionId}:${effectivePrefix}:${context.currentTokenIndex}`
 
     // 尝试从缓存获取
     const cached = this.cache.get(cacheKey)
@@ -108,10 +118,10 @@ export class CompletionEngine {
 
     if (this.config.enableQuotaAllocation && this.config.sourceQuotas) {
       // 使用配额分配
-      limitedItems = this.allocateWithQuota(uniqueItems, context.currentWord)
+      limitedItems = this.allocateWithQuota(uniqueItems, effectivePrefix)
     } else {
       // 使用原有的简单排序+截取
-      const sortedItems = this.sortItems(uniqueItems, context.currentWord)
+      const sortedItems = this.sortItems(uniqueItems, effectivePrefix)
       limitedItems = sortedItems.slice(0, this.config.maxItems)
     }
 
@@ -142,14 +152,18 @@ export class CompletionEngine {
     const seen = new Map<string, CompletionItem>()
 
     for (const item of items) {
-      const existing = seen.get(item.text)
+      // 使用 providerName + text 作为 key，避免不同来源的相同命令被合并，
+      // 保证脚本库/历史等各自的配额可以生效
+      const providerKey = item.providerName || "unknown"
+      const key = `${providerKey}:${item.text}`
+      const existing = seen.get(key)
 
       if (!existing) {
-        seen.set(item.text, item)
+        seen.set(key, item)
       } else {
         // 如果已存在,保留优先级更高的
         if ((item.priority || 0) > (existing.priority || 0)) {
-          seen.set(item.text, item)
+          seen.set(key, item)
         }
       }
     }
@@ -172,48 +186,85 @@ export class CompletionEngine {
     const quotaConfigs = this.config.sourceQuotas || DEFAULT_SOURCE_QUOTAS
     const totalLimit = this.config.maxItems
 
-    // 步骤1: 按提供者分组
+    // 1. 按提供者分组，并在组内按匹配度排序
     const itemsByProvider = new Map<string, CompletionItem[]>()
-
     for (const item of items) {
       const providerName = item.providerName || this.getProviderName(item)
-
       if (!itemsByProvider.has(providerName)) {
         itemsByProvider.set(providerName, [])
       }
       itemsByProvider.get(providerName)!.push(item)
     }
 
-    // 步骤2: 每组内部排序
-    for (const [_, groupItems] of itemsByProvider) {
+    for (const [providerName, groupItems] of itemsByProvider) {
       groupItems.sort((a, b) => this.compareItems(a, b, prefix))
+      itemsByProvider.set(providerName, groupItems)
     }
 
-    // 步骤3: 单轮分配
     const result: CompletionItem[] = []
-    let remaining = totalLimit
+    const usedByProvider = new Map<string, number>()
 
-    // 按配额配置顺序分配（配置顺序即优先级）
+    // 2. 先满足每个来源的 min 配额（如果有足够候选）
     for (const config of quotaConfigs) {
-      if (remaining <= 0) break
+      const providerName = config.providerName
+      const groupItems = itemsByProvider.get(providerName)
+      if (!groupItems || groupItems.length === 0) continue
+      if (result.length >= totalLimit) break
 
-      const items = itemsByProvider.get(config.providerName) || []
-      if (items.length === 0) continue
+      const take = Math.min(config.min, groupItems.length, totalLimit - result.length)
+      if (take <= 0) continue
 
-      // 计算本次分配数量
-      let toTake: number
-      if (config.unlimited) {
-        // 无限制源：使用softMax或剩余空间
-        toTake = Math.min(items.length, remaining, config.softMax || Infinity)
-      } else {
-        // 有限制源：使用max
-        toTake = Math.min(items.length, remaining, config.max)
+      for (let i = 0; i < take; i++) {
+        result.push(groupItems[i])
+      }
+      usedByProvider.set(providerName, take)
+      itemsByProvider.set(providerName, groupItems.slice(take))
+    }
+
+    if (result.length >= totalLimit) {
+      return result
+    }
+
+    // 3. 合并剩余候选，按全局匹配度排序
+    const remainingPool: { providerName: string; item: CompletionItem }[] = []
+    for (const [providerName, groupItems] of itemsByProvider) {
+      for (const item of groupItems) {
+        remainingPool.push({ providerName, item })
+      }
+    }
+
+    remainingPool.sort((a, b) => this.compareItems(a.item, b.item, prefix))
+
+    // 将配额配置转换为映射，便于快速查找 max / softMax
+    const quotaMap = new Map<string, SourceQuotaConfig>()
+    for (const config of quotaConfigs) {
+      quotaMap.set(config.providerName, config)
+    }
+
+    // 4. 在不超过各来源 max 的前提下，用全局排序填满剩余空位
+    for (const entry of remainingPool) {
+      if (result.length >= totalLimit) break
+
+      const providerName = entry.providerName
+      const item = entry.item
+      const config = quotaMap.get(providerName)
+
+      let providerMax = totalLimit
+      if (config) {
+        if (config.unlimited) {
+          providerMax = Math.min(config.softMax ?? totalLimit, totalLimit)
+        } else {
+          providerMax = config.max
+        }
       }
 
-      if (toTake > 0) {
-        result.push(...items.slice(0, toTake))
-        remaining -= toTake
+      const used = usedByProvider.get(providerName) ?? 0
+      if (used >= providerMax) {
+        continue
       }
+
+      result.push(item)
+      usedByProvider.set(providerName, used + 1)
     }
 
     return result
@@ -251,29 +302,19 @@ export class CompletionEngine {
   private compareItems(
     a: CompletionItem,
     b: CompletionItem,
-    prefix: string
+    _prefix: string
   ): number {
-    // 1. 精确匹配优先
-    const aExact = a.text === prefix ? 1 : 0
-    const bExact = b.text === prefix ? 1 : 0
-    if (aExact !== bExact) return bExact - aExact
-
-    // 2. 前缀匹配优先
-    const aPrefix = a.text.startsWith(prefix) ? 1 : 0
-    const bPrefix = b.text.startsWith(prefix) ? 1 : 0
-    if (aPrefix !== bPrefix) return bPrefix - aPrefix
-
-    // 3. 按优先级排序
-    const aPriority = a.priority || 0
-    const bPriority = b.priority || 0
-    if (aPriority !== bPriority) return bPriority - aPriority
-
-    // 4. 按分数排序(如果有)
+    // 1. 先按匹配分数排序（由各 Provider 基于整行内容计算）
     const aScore = a.score || 0
     const bScore = b.score || 0
     if (aScore !== bScore) return bScore - aScore
 
-    // 5. 按字母顺序排序
+    // 2. 再按优先级排序（来源权重/业务权重）
+    const aPriority = a.priority || 0
+    const bPriority = b.priority || 0
+    if (aPriority !== bPriority) return bPriority - aPriority
+
+    // 3. 最后按字母顺序稳定排序
     return a.text.localeCompare(b.text)
   }
 
