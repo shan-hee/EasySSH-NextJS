@@ -203,6 +203,19 @@ export default function AutomationHistoryPage() {
     return null
   }
 
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "success":
+        return <CheckCircle className="h-4 w-4 text-green-600" />
+      case "failed":
+        return <XCircle className="h-4 w-4 text-red-600" />
+      case "running":
+        return <Clock className="h-4 w-4 text-blue-600 animate-spin" />
+      default:
+        return <Clock className="h-4 w-4 text-muted-foreground" />
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "success":
