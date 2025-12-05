@@ -326,7 +326,34 @@ export function WebTerminal({
       if (!terminal) return
 
       const context = parseCompletionContext(terminal)
-      applyCompletion(terminal, item.text, context.currentWord, sendInput)
+      // 对于脚本库/历史命令等整行补全,优先采用"补后缀"策略:
+      // 如果当前整行已经是补全文本的前缀(例如: "docker system"),
+      // 仅插入剩余部分(白色文字)即可,无需删除已有前缀;
+      // 否则回退到"整行替换",避免出现 "docker docker ..."。
+      const isFullLineCompletion =
+        item.source === "script" ||
+        item.type === "history"
+
+      let deleteCount: number
+      let completionText = item.text
+
+      if (isFullLineCompletion) {
+        const currentLine = context.fullLine.trim()
+
+        if (currentLine && item.text.startsWith(currentLine)) {
+          // 当前行已经是补全文本的前缀: 只补后缀部分
+          deleteCount = 0
+          completionText = item.text.slice(currentLine.length)
+        } else {
+          // 当前行只是近似前缀(例如 docker sy),直接替换整行
+          deleteCount = context.fullLine.length
+        }
+      } else {
+        // 普通局部补全(命令/子命令等): 仅删除当前词
+        deleteCount = context.currentWord.length
+      }
+
+      applyCompletion(terminal, completionText, deleteCount, sendInput)
       closeCompletion()
     },
     [terminal, closeCompletion, sendInput]

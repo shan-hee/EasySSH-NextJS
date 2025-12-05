@@ -174,18 +174,15 @@ export function getCursorScreenPosition(terminal: Terminal): {
  * 应用补全到终端
  * @param terminal xterm.js 终端实例
  * @param completion 补全文本
- * @param currentWord 当前已输入的词
+ * @param deleteCount 需要删除的字符数
  * @param sendInput 发送真实输入的函数（通过 WebSocket）
  */
 export function applyCompletion(
   terminal: Terminal,
   completion: string,
-  currentWord: string,
+  deleteCount: number,
   sendInput: (data: string) => void
 ): void {
-  // 计算需要删除的字符数
-  const deleteCount = currentWord.length
-
   // 合并删除和补全为一次操作，避免竞态条件和视觉闪烁
   let combinedInput = ""
 
