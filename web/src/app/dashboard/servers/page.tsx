@@ -84,7 +84,7 @@ function SortableServerItem({
       {...listeners}
       className="group flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40 cursor-grab active:cursor-grabbing"
     >
-      <ServerIcon className="h-5 w-5 text-zinc-400 dark:text-zinc-600 flex-shrink-0" />
+      <ServerIcon className={`h-5 w-5 flex-shrink-0 ${server.status === 'online' ? 'text-sidebar-foreground' : 'text-zinc-400 dark:text-zinc-600'}`} />
 
       <div className="flex-1 min-w-0 flex items-center gap-4">
         <div className="flex-shrink-0">
@@ -588,7 +588,7 @@ export default function ServersPage() {
  key={server.id}
  className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40"}
  >
- <ServerIcon className="h-5 w-5 text-zinc-400 dark:text-zinc-600 flex-shrink-0" />
+ <ServerIcon className={`h-5 w-5 flex-shrink-0 ${server.status === 'online' ? 'text-sidebar-foreground' : 'text-zinc-400 dark:text-zinc-600'}`} />
 
  <div className="flex-1 min-w-0 flex items-center gap-4">
  <div className="flex-shrink-0">
