@@ -30,7 +30,7 @@ RUN mkdir -p /server/static && \
 # ================================
 # 阶段 2：构建后端（Go）
 # ================================
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:1.24-alpine AS backend-builder
 
 WORKDIR /build
 

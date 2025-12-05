@@ -37,7 +37,7 @@
 - **编辑器**：Monaco Editor
 
 ### 后端
-- **语言**：Go 1.23+
+- **语言**：Go 1.24+
 - **框架**：Gin + GORM
 - **数据库**：PostgreSQL 16+ / Redis 7+
 - **SSH**：golang.org/x/crypto/ssh
@@ -110,7 +110,7 @@ docker run -d \
 
 **前置要求**：
 - Node.js 20+ / pnpm 9+
-- Go 1.23+
+- Go 1.24+
 - PostgreSQL 16+ / Redis 7+
 
 **一键启动**：
