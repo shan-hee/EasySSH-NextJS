@@ -222,23 +222,24 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const deleteFile = useCallback(
     async (fileName: string) => {
-      try {
-        const fullPath = currentPath.endsWith('/')
-          ? `${currentPath}${fileName}`
-          : `${currentPath}/${fileName}`;
+      const fullPath = currentPath.endsWith('/')
+        ? `${currentPath}${fileName}`
+        : `${currentPath}/${fileName}`;
 
-        await sftpApi.delete(serverId, fullPath);
-
+      const deletePromise = sftpApi.delete(serverId, fullPath).then(() => {
         // 差异更新: 本地移除对应项
         setFiles(prev => prev.filter(f => f.name !== fileName));
-        toast.success(tSftp("toastDeleteSuccessSingle", { file: fileName }));
-      } catch (error) {
-        console.error('[useSftpSession] 删除失败:', error);
-        toast.error(getErrorMessage(error, tSftp("toastDeleteFailed")));
-        throw error;
-      }
+      });
+
+      toast.promise(deletePromise, {
+        loading: tSftp("toastDeleteLoading", { file: fileName }),
+        success: tSftp("toastDeleteSuccessSingle", { file: fileName }),
+        error: (err) => getErrorMessage(err, tSftp("toastDeleteFailed", { message: "" })),
+      });
+
+      return deletePromise;
     },
-    [serverId, currentPath]
+    [serverId, currentPath, tSftp]
   );
 
   /**
@@ -246,22 +247,24 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const createFolder = useCallback(
     async (name: string) => {
-      try {
-        const fullPath = currentPath.endsWith('/')
-          ? `${currentPath}${name}`
-          : `${currentPath}/${name}`;
+      const fullPath = currentPath.endsWith('/')
+        ? `${currentPath}${name}`
+        : `${currentPath}/${name}`;
 
-        const info = await sftpApi.createDirectory(serverId, fullPath);
+      const createPromise = sftpApi.createDirectory(serverId, fullPath).then((info) => {
         const item = convertFileInfo(info);
         setFiles(prev => upsertFileItem(prev, item));
-        toast.success(tSftp("toastCreateFolderSuccess", { name }));
-      } catch (error) {
-        console.error('[useSftpSession] 创建文件夹失败:', error);
-        toast.error(getErrorMessage(error, tSftp("toastCreateFolderFailed")));
-        throw error;
-      }
+      });
+
+      toast.promise(createPromise, {
+        loading: tSftp("toastCreateFolderLoading", { name }),
+        success: tSftp("toastCreateFolderSuccess", { name }),
+        error: (err) => getErrorMessage(err, tSftp("toastCreateFolderFailed")),
+      });
+
+      return createPromise;
     },
-    [serverId, currentPath, refresh, convertFileInfo]
+    [serverId, currentPath, convertFileInfo, tSftp]
   );
 
   /**
@@ -269,25 +272,24 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const createFile = useCallback(
     async (name: string) => {
-      try {
-        const fullPath = currentPath.endsWith('/')
-          ? `${currentPath}${name}`
-          : `${currentPath}/${name}`;
+      const fullPath = currentPath.endsWith('/')
+        ? `${currentPath}${name}`
+        : `${currentPath}/${name}`;
 
-        // 创建空文件,后端返回 FileInfo
-        const info = await sftpApi.writeFile(serverId, fullPath, '');
+      const createPromise = sftpApi.writeFile(serverId, fullPath, '').then((info) => {
         const item = convertFileInfo(info);
         setFiles(prev => upsertFileItem(prev, item));
-        toast.success(
-          tSftp("toastSaveFileSuccess", { file: name })
-        );
-      } catch (error) {
-        console.error('[useSftpSession] 创建文件失败:', error);
-        toast.error(getErrorMessage(error, tSftp("toastSaveFileFailed")));
-        throw error;
-      }
+      });
+
+      toast.promise(createPromise, {
+        loading: tSftp("toastSaveFileLoading", { file: name }),
+        success: tSftp("toastSaveFileSuccess", { file: name }),
+        error: (err) => getErrorMessage(err, tSftp("toastSaveFileFailed")),
+      });
+
+      return createPromise;
     },
-    [serverId, currentPath, refresh, convertFileInfo]
+    [serverId, currentPath, convertFileInfo, tSftp]
   );
 
   /**
@@ -295,17 +297,15 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const renameFile = useCallback(
     async (oldName: string, newName: string) => {
-      try {
-        const oldPath = currentPath.endsWith('/')
-          ? `${currentPath}${oldName}`
-          : `${currentPath}/${oldName}`;
+      const oldPath = currentPath.endsWith('/')
+        ? `${currentPath}${oldName}`
+        : `${currentPath}/${oldName}`;
 
-        const newPath = currentPath.endsWith('/')
-          ? `${currentPath}${newName}`
-          : `${currentPath}/${newName}`;
+      const newPath = currentPath.endsWith('/')
+        ? `${currentPath}${newName}`
+        : `${currentPath}/${newName}`;
 
-        await sftpApi.rename(serverId, oldPath, newPath);
-
+      const renamePromise = sftpApi.rename(serverId, oldPath, newPath).then(() => {
         // 差异更新: 本地仅更新名称(大小/时间通常保持不变)
         setFiles(prev =>
           prev.map(f =>
@@ -314,16 +314,17 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
               : f
           )
         );
-        toast.success(
-          tSftp("toastRenameSuccess", { oldName, newName })
-        );
-      } catch (error) {
-        console.error('[useSftpSession] 重命名失败:', error);
-        toast.error(getErrorMessage(error, tSftp("toastRenameFailed")));
-        throw error;
-      }
+      });
+
+      toast.promise(renamePromise, {
+        loading: tSftp("toastRenameLoading", { oldName }),
+        success: tSftp("toastRenameSuccess", { oldName, newName }),
+        error: (err) => getErrorMessage(err, tSftp("toastRenameFailed")),
+      });
+
+      return renamePromise;
     },
-    [serverId, currentPath]
+    [serverId, currentPath, tSftp]
   );
 
   /**
@@ -353,14 +354,12 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const saveFile = useCallback(
     async (fileName: string, content: string) => {
-      try {
-        const fullPath = currentPath.endsWith('/')
-          ? `${currentPath}${fileName}`
-          : `${currentPath}/${fileName}`;
+      const fullPath = currentPath.endsWith('/')
+        ? `${currentPath}${fileName}`
+        : `${currentPath}/${fileName}`;
 
-        const info = await sftpApi.writeFile(serverId, fullPath, content);
+      const savePromise = sftpApi.writeFile(serverId, fullPath, content).then((info) => {
         const updated = convertFileInfo(info);
-
         // 差异更新: 仅更新对应文件的大小/时间/权限等字段
         setFiles(prev =>
           prev.map(f =>
@@ -375,16 +374,17 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
               : f
           )
         );
-        toast.success(
-          tSftp("toastSaveFileSuccess", { file: fileName })
-        );
-      } catch (error) {
-        console.error('[useSftpSession] 保存文件失败:', error);
-        toast.error(getErrorMessage(error, tSftp("toastSaveFileFailed")));
-        throw error;
-      }
+      });
+
+      toast.promise(savePromise, {
+        loading: tSftp("toastSaveFileLoading", { file: fileName }),
+        success: tSftp("toastSaveFileSuccess", { file: fileName }),
+        error: (err) => getErrorMessage(err, tSftp("toastSaveFileFailed")),
+      });
+
+      return savePromise;
     },
-    [serverId, currentPath, refresh, convertFileInfo]
+    [serverId, currentPath, convertFileInfo, tSftp]
   );
 
   /**
@@ -392,14 +392,19 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    */
   const batchDeleteFiles = useCallback(
     async (fileNames: string[]) => {
-      try {
-        // 构建完整路径
-        const fullPaths = fileNames.map((fileName) =>
-          currentPath.endsWith('/')
-            ? `${currentPath}${fileName}`
-            : `${currentPath}/${fileName}`
-        );
+      // 构建完整路径
+      const fullPaths = fileNames.map((fileName) =>
+        currentPath.endsWith('/')
+          ? `${currentPath}${fileName}`
+          : `${currentPath}/${fileName}`
+      );
 
+      // 显示loading状态
+      const toastId = toast.loading(
+        tSftp("toastBatchDeleteLoading", { count: fileNames.length })
+      );
+
+      try {
         // 调用批量删除 API
         const result = await sftpApi.batchDelete(serverId, fullPaths);
 
@@ -414,14 +419,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         setFiles(prev => prev.filter(f => !successNames.has(f.name)));
 
         // 显示结果
-        if (result.success.length > 0) {
-          toast.success(
-            tSftp("toastBatchDeleteSuccess", {
-              count: result.success.length,
-            })
-          );
-        }
-
         if (result.failed.length > 0) {
           const failedNames = result.failed.map(f => {
             const parts = f.path.split('/');
@@ -431,19 +428,29 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
             tSftp("toastBatchDeletePartialFailed", {
               count: result.failed.length,
               names: failedNames,
-            })
+            }),
+            { id: toastId }
           );
+        } else if (result.success.length > 0) {
+          toast.success(
+            tSftp("toastBatchDeleteSuccess", {
+              count: result.success.length,
+            }),
+            { id: toastId }
+          );
+        } else {
+          toast.dismiss(toastId);
         }
 
         // 返回结果供调用者处理
         return result;
       } catch (error) {
         console.error('[useSftpSession] 批量删除失败:', error);
-        toast.error(getErrorMessage(error, tSftp("toastBatchDeleteFailed")));
+        toast.error(getErrorMessage(error, tSftp("toastBatchDeleteFailed")), { id: toastId });
         throw error;
       }
     },
-    [serverId, currentPath]
+    [serverId, currentPath, tSftp]
   );
 
   /**

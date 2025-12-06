@@ -1235,20 +1235,26 @@ export function SftpManager(props: SftpManagerProps) {
 
   // 处理修改权限
   const handleChmod = async (mode: string) => {
-    try {
-      const { sftpApi } = await import("@/lib/api/sftp")
-      await sftpApi.chmod(serverId, chmodDialog.filePath, mode)
+    const fileName = chmodDialog.fileName;
+    const filePath = chmodDialog.filePath;
+
+    const chmodPromise = import("@/lib/api/sftp").then(({ sftpApi }) =>
+      sftpApi.chmod(serverId, filePath, mode)
+    ).then(() => {
       // 刷新文件列表
       onRefresh()
-    } catch (error) {
-      console.error("Failed to chmod:", error)
-      const message = error instanceof Error ? error.message : String(error)
-      toast.error(
-        tSftp("toastChmodFailed", {
-          message,
-        })
-      )
-    }
+    });
+
+    toast.promise(chmodPromise, {
+      loading: tSftp("toastChmodLoading", { file: fileName }),
+      success: tSftp("toastChmodSuccess", { file: fileName }),
+      error: (err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        return tSftp("toastChmodFailed", { message })
+      },
+    });
+
+    return chmodPromise;
   }
 
   // 主界面内容
