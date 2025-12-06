@@ -332,4 +332,18 @@
   .animate-collapsible-up {
     animation: collapsible-up 0.1s ease-in-out;
   }
+
+  /* Skeleton 呼吸动画 - 比 animate-pulse 更柔和自然 */
+  @keyframes skeleton-breathe {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+
+  .animate-skeleton {
+    animation: skeleton-breathe 2s ease-in-out infinite;
+  }
 }

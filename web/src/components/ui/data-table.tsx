@@ -325,12 +325,11 @@ export function DataTable<TData, TValue = unknown>({
               {Array.from({ length: Math.min(pageSize, 10) }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-3 animate-pulse"
-                  style={{ animationDelay: `${i * 50}ms` }}
+                  className="flex items-center gap-3"
                 >
-                  <div className="h-8 bg-muted rounded flex-1" />
-                  <div className="h-8 bg-muted rounded w-1/4" />
-                  <div className="h-8 bg-muted rounded w-1/6" />
+                  <div className="h-8 bg-primary/10 rounded-md flex-1 animate-pulse" />
+                  <div className="h-8 bg-primary/10 rounded-md w-1/4 animate-pulse" />
+                  <div className="h-8 bg-primary/10 rounded-md w-1/6 animate-pulse" />
                 </div>
               ))}
             </div>
