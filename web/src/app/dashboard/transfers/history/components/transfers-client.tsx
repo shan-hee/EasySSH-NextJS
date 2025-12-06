@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useTransition, useOptimistic, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown } from "lucide-react"
+import { SkeletonStatsCard } from "@/components/ui/loading"
 import { fileTransfersApi, type FileTransfer, type FileTransferStatistics } from "@/lib/api/file-transfers"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
@@ -181,66 +182,75 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
-      {/* 统计卡片 */}
-      <div className="grid gap-4 md:grid-cols-4 shrink-0">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsTotal")}</CardTitle>
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics?.total_transfers || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {t("statsTotalDesc", {
-                completed: statistics?.completed_transfers || 0,
-              })}
-            </p>
-          </CardContent>
-        </Card>
+      {/* 统计卡片 - 加载时显示骨架屏 */}
+      {refreshing && !initialData ? (
+        <div className="grid gap-4 md:grid-cols-4 shrink-0">
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4 shrink-0">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsTotal")}</CardTitle>
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{statistics?.total_transfers || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                {t("statsTotalDesc", {
+                  completed: statistics?.completed_transfers || 0,
+                })}
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsUpload")}</CardTitle>
-            <UploadIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {statistics?.by_type?.upload || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {formatFileSize(statistics?.total_bytes_uploaded || 0)}
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsUpload")}</CardTitle>
+              <UploadIcon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {statistics?.by_type?.upload || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatFileSize(statistics?.total_bytes_uploaded || 0)}
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsDownload")}</CardTitle>
-            <DownloadIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {statistics?.by_type?.download || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {formatFileSize(statistics?.total_bytes_downloaded || 0)}
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsDownload")}</CardTitle>
+              <DownloadIcon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {statistics?.by_type?.download || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatFileSize(statistics?.total_bytes_downloaded || 0)}
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsFailed")}</CardTitle>
-            <XCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {statistics?.failed_transfers || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">{t("statsFailedDesc")}</p>
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsFailed")}</CardTitle>
+              <XCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {statistics?.failed_transfers || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("statsFailedDesc")}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* DataTable - 使用乐观更新的数据 */}
       <DataTable

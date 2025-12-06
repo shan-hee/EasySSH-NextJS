@@ -32,7 +32,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { usersApi, type UserDetail, type UserRole } from "@/lib/api"
-import { SkeletonCard } from "@/components/ui/loading"
+import { SkeletonStatsCard } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createUserColumns } from "./components/user-columns"
@@ -277,10 +277,10 @@ export default function UsersPage() {
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
           {/* 统计卡片骨架屏 */}
           <div className="grid gap-4 md:grid-cols-4 shrink-0">
-            <SkeletonCard showHeader={false} lines={2} />
-            <SkeletonCard showHeader={false} lines={2} />
-            <SkeletonCard showHeader={false} lines={2} />
-            <SkeletonCard showHeader={false} lines={2} />
+            <SkeletonStatsCard />
+            <SkeletonStatsCard />
+            <SkeletonStatsCard />
+            <SkeletonStatsCard />
           </div>
           {/* 表格骨架屏 */}
           <Card className="flex-1 min-h-0 flex flex-col">

@@ -3,10 +3,9 @@
 import React, { useState, useEffect, useRef, useCallback, startTransition } from "react"
 import { PageHeader } from "@/components/page-header"
 import { SftpManager } from "@/components/sftp/sftp-manager"
-import { FolderOpen, Server, Plus, ChevronDown, GripVertical } from "lucide-react"
+import { FolderOpen, Server, Plus, ChevronDown, GripVertical, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { SkeletonList } from "@/components/ui/loading"
 import {
  DropdownMenu,
  DropdownMenuContent,
@@ -865,22 +864,8 @@ export default function SftpPage() {
  </div>
  )
 
- // 加载状态 - 使用列表骨架屏
- if (loading) {
-   return (
-     <>
-       <PageHeader title={tSftp("title")} />
-       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-         <div className="flex items-center justify-between mb-4">
-           <h3 className="text-lg font-semibold">
-             {tSftp("availableServers")}
-           </h3>
-         </div>
-         <SkeletonList items={6} showIcon iconShape="square" showSubtitle />
-       </div>
-     </>
-   )
- }
+ // 加载状态 - 直接显示界面，服务器列表异步加载
+ // 与快速连接界面保持一致，不使用骨架屏
 
  return (
  <>
@@ -975,7 +960,18 @@ export default function SftpPage() {
  </div>
 
  {/* 服务器列表 */}
- {(onlineServers.length > 0 || offlineServers.length > 0) && (
+ {loading ? (
+ // 加载中 - 与快速连接界面一致的加载动画
+ <div className="space-y-4">
+   <div className="h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800" />
+   <div className="flex flex-col items-center justify-center py-12 gap-4">
+     <Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600" />
+     <p className="text-sm text-zinc-500 dark:text-zinc-600">
+       {tCommon("loading")}
+     </p>
+   </div>
+ </div>
+ ) : (onlineServers.length > 0 || offlineServers.length > 0) ? (
  <div className="flex-1 overflow-auto px-6 pb-6">
  <div className="max-w-4xl mx-auto space-y-6">
  {/* 在线服务器 */}
@@ -1056,7 +1052,7 @@ export default function SftpPage() {
  )}
  </div>
  </div>
- )}
+ ) : null}
  </div>
  ) : fullscreenSessionId ? (
  // 全屏模式 - 只显示一个会话

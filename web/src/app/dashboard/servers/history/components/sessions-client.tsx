@@ -4,6 +4,7 @@ import React, { useState, useCallback, useTransition, useOptimistic } from "reac
 import { useTranslations } from "next-intl"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, Activity, ArrowUpDown, ArrowDownUp } from "lucide-react"
+import { SkeletonStatsCard } from "@/components/ui/loading"
 import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
@@ -201,76 +202,85 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
-      {/* 统计卡片 */}
-      <div className="grid gap-4 md:grid-cols-4 shrink-0">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t("statsTotalTitle")}
-            </CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics?.total_sessions || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {t("statsTotalDesc", {
-                active: statistics?.active_sessions || 0,
-              })}
-            </p>
-          </CardContent>
-        </Card>
+      {/* 统计卡片 - 加载时显示骨架屏 */}
+      {refreshing && !initialData ? (
+        <div className="grid gap-4 md:grid-cols-4 shrink-0">
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4 shrink-0">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {t("statsTotalTitle")}
+              </CardTitle>
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{statistics?.total_sessions || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                {t("statsTotalDesc", {
+                  active: statistics?.active_sessions || 0,
+                })}
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t("statsClosedTitle")}
-            </CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-600">
-              {statistics?.closed_sessions || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t("statsClosedDesc")}
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {t("statsClosedTitle")}
+              </CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-gray-600">
+                {statistics?.closed_sessions || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("statsClosedDesc")}
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t("statsUploadTitle")}
-            </CardTitle>
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {formatBytes(statistics?.total_bytes_sent || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t("statsUploadDesc")}
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {t("statsUploadTitle")}
+              </CardTitle>
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {formatBytes(statistics?.total_bytes_sent || 0)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("statsUploadDesc")}
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t("statsDownloadTitle")}
-            </CardTitle>
-            <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatBytes(statistics?.total_bytes_received || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t("statsDownloadDesc")}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {t("statsDownloadTitle")}
+              </CardTitle>
+              <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {formatBytes(statistics?.total_bytes_received || 0)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("statsDownloadDesc")}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* DataTable - 使用乐观更新的数据 */}
       <DataTable

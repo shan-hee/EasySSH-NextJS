@@ -6,36 +6,12 @@ import { dashboardApi, type DashboardStats } from "@/lib/api/dashboard"
 import { QuickActions } from "./components/quick-actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity, FileText, Server, ServerOff } from "lucide-react"
+import { SkeletonStatsCard } from "@/components/ui/loading"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { isApiError } from "@/lib/api-client"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
-
-/**
- * 统计卡片骨架屏 - 精确匹配真实卡片的高度和布局
- * 策略：使用透明文本占位，而不是固定高度的 span，确保行高完全一致
- */
-function StatsCardSkeleton() {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">
-          <span className="inline-block w-20 animate-pulse rounded bg-muted text-transparent">占位</span>
-        </CardTitle>
-        <div className="h-4 w-4 animate-pulse rounded bg-muted" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">
-          <span className="inline-block w-16 animate-pulse rounded bg-muted text-transparent">0</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          <span className="inline-block w-24 animate-pulse rounded bg-muted text-transparent">占位文字</span>
-        </p>
-      </CardContent>
-    </Card>
-  )
-}
 
 /**
  * 仪表盘页面（Client Component）
@@ -75,11 +51,11 @@ export default function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
           {!stats ? (
             <>
-              <StatsCardSkeleton />
-              <StatsCardSkeleton />
-              <StatsCardSkeleton />
-              <StatsCardSkeleton />
-              <StatsCardSkeleton />
+              <SkeletonStatsCard />
+              <SkeletonStatsCard />
+              <SkeletonStatsCard />
+              <SkeletonStatsCard />
+              <SkeletonStatsCard />
             </>
           ) : (
             <>

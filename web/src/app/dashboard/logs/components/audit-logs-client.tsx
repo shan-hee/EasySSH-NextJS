@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, XCircle, Activity, User } from "lucide-react"
+import { SkeletonStatsCard } from "@/components/ui/loading"
 import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
@@ -144,64 +145,73 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
 
   return (
     <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
-      {/* 统计卡片 */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsTotalTitle")}</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics?.total_logs || 0}</div>
-            <p className="text-xs text-muted-foreground">{t("statsTotalDesc")}</p>
-          </CardContent>
-        </Card>
+      {/* 统计卡片 - 加载时显示骨架屏 */}
+      {loading && !initialData ? (
+        <div className="grid gap-4 md:grid-cols-4">
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+          <SkeletonStatsCard />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsTotalTitle")}</CardTitle>
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{statistics?.total_logs || 0}</div>
+              <p className="text-xs text-muted-foreground">{t("statsTotalDesc")}</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsSuccessTitle")}</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {statistics?.success_count || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t("statsSuccessDescPrefix")}{" "}
-              {statistics?.total_logs
-                ? Math.round((statistics.success_count / statistics.total_logs) * 100)
-                : 0}
-              %
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsSuccessTitle")}</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {statistics?.success_count || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("statsSuccessDescPrefix")}{" "}
+                {statistics?.total_logs
+                  ? Math.round((statistics.success_count / statistics.total_logs) * 100)
+                  : 0}
+                %
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsFailureTitle")}</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {statistics?.failure_count || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">{t("statsFailureDesc")}</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsFailureTitle")}</CardTitle>
+              <XCircle className="h-4 w-4 text-red-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {statistics?.failure_count || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("statsFailureDesc")}</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("statsActiveUsersTitle")}</CardTitle>
-            <User className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {statistics?.top_users?.length || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">{t("statsActiveUsersDesc")}</p>
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t("statsActiveUsersTitle")}</CardTitle>
+              <User className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {statistics?.top_users?.length || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("statsActiveUsersDesc")}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* 操作日志表格 */}
       <Card className="flex-1 min-h-0">

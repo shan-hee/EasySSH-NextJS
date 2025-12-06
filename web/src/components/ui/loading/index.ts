@@ -16,6 +16,7 @@
  * - SkeletonCard: 卡片骨架屏
  * - SkeletonTable: 表格骨架屏
  * - SkeletonList: 列表骨架屏
+ * - SkeletonStatsCard: 统计卡片骨架屏
  */
 
 export { LoadingSpinner } from "./loading-spinner"
@@ -35,3 +36,5 @@ export type { SkeletonTableProps } from "./skeleton-table"
 
 export { SkeletonList } from "./skeleton-list"
 export type { SkeletonListProps } from "./skeleton-list"
+
+export { SkeletonStatsCard } from "./skeleton-stats-card"
