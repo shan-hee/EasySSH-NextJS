@@ -43,7 +43,12 @@ type Server struct {
 	LastConnected *time.Time     `json:"last_connected,omitempty"`
 	Description   string         `gorm:"type:text" json:"description"`
 	SortOrder     int            `gorm:"default:0;index" json:"sort_order"` // 用户自定义排序顺序
-	CreatedAt     time.Time      `json:"created_at"`
+	// 地理位置信息（通过 IP 自动查询）
+	Country     string `gorm:"size:100" json:"country,omitempty"`
+	CountryCode string `gorm:"size:10" json:"country_code,omitempty"`
+	Region      string `gorm:"size:100" json:"region,omitempty"`
+	City        string `gorm:"size:100" json:"city,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"` // 软删除
 }
@@ -87,6 +92,14 @@ func (s *Server) ToPublic() map[string]interface{} {
 
 	if s.LastConnected != nil {
 		result["last_connected"] = s.LastConnected
+	}
+
+	// 添加地理位置信息
+	if s.Country != "" || s.Region != "" || s.City != "" {
+		result["country"] = s.Country
+		result["country_code"] = s.CountryCode
+		result["region"] = s.Region
+		result["city"] = s.City
 	}
 
 	return result

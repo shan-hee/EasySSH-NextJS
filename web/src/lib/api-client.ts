@@ -1,6 +1,26 @@
-import { getApiUrl } from "@/lib/config"
+import { getApiUrl as getApiUrlFromConfig } from "@/lib/config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
 import { performRefreshToken } from "@/lib/session-refresh"
+
+// 重新导出 getApiUrl 以便其他模块使用
+export function getApiUrl(path: string = ""): string {
+  const baseUrl = getApiUrlFromConfig()
+  return path ? `${baseUrl}${path}` : baseUrl
+}
+
+/**
+ * 获取认证头
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  }
+  const token = getCurrentAccessToken()
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return headers
+}
 
 // 全局刷新会话 Promise，避免并发重复刷新
 let refreshPromise: Promise<void> | null = null

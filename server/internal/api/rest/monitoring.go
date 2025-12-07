@@ -2,8 +2,10 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/easyssh/server/internal/domain/monitoring"
 	"github.com/gin-gonic/gin"
@@ -22,12 +24,9 @@ func NewMonitoringHandler(monitoringService monitoring.Service) *MonitoringHandl
 	}
 }
 
-// GetSystemInfo 获取系统综合信息
-// GET /api/v1/monitoring/:server_id/system
-func (h *MonitoringHandler) GetSystemInfo(c *gin.Context) {
-	serverID := c.Param("server_id")
-
-	// 设置用户 ID 到上下文
+// GetAllResources 获取所有服务器的资源概览
+// GET /api/v1/monitoring/resources
+func (h *MonitoringHandler) GetAllResources(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
 		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -37,137 +36,65 @@ func (h *MonitoringHandler) GetSystemInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 	ctx = setUserIDToContext(ctx, userID)
 
-	systemInfo, err := h.monitoringService.GetSystemInfo(ctx, serverID)
+	resources, err := h.monitoringService.GetAllServersResources(ctx)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "monitoring_error", err.Error())
 		return
 	}
 
-	RespondSuccess(c, systemInfo)
+	RespondSuccess(c, resources)
 }
 
-// GetCPUInfo 获取 CPU 信息
-// GET /api/v1/monitoring/:server_id/cpu
-func (h *MonitoringHandler) GetCPUInfo(c *gin.Context) {
-	serverID := c.Param("server_id")
-
+// StreamResources 流式获取服务器资源（SSE）
+// GET /api/v1/monitoring/resources/stream
+func (h *MonitoringHandler) StreamResources(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
 		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
 
-	ctx := c.Request.Context()
-	ctx = setUserIDToContext(ctx, userID)
-
-	cpuInfo, err := h.monitoringService.GetCPUInfo(ctx, serverID)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "monitoring_error", err.Error())
-		return
-	}
-
-	RespondSuccess(c, cpuInfo)
-}
-
-// GetMemoryInfo 获取内存信息
-// GET /api/v1/monitoring/:server_id/memory
-func (h *MonitoringHandler) GetMemoryInfo(c *gin.Context) {
-	serverID := c.Param("server_id")
-
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
+	// 设置 SSE 响应头
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 
 	ctx := c.Request.Context()
 	ctx = setUserIDToContext(ctx, userID)
 
-	memInfo, err := h.monitoringService.GetMemoryInfo(ctx, serverID)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "monitoring_error", err.Error())
-		return
-	}
+	// 创建结果 channel
+	resultChan := make(chan *monitoring.ServerResourceSummary, 10)
 
-	RespondSuccess(c, memInfo)
-}
+	// 启动流式采集
+	go func() {
+		if err := h.monitoringService.StreamServersResources(ctx, resultChan); err != nil {
+			// 错误通过 SSE 发送
+			errData, _ := json.Marshal(map[string]string{"error": err.Error()})
+			fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", errData)
+			c.Writer.Flush()
+		}
+	}()
 
-// GetDiskInfo 获取磁盘信息
-// GET /api/v1/monitoring/:server_id/disk
-func (h *MonitoringHandler) GetDiskInfo(c *gin.Context) {
-	serverID := c.Param("server_id")
-
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	ctx := c.Request.Context()
-	ctx = setUserIDToContext(ctx, userID)
-
-	diskInfo, err := h.monitoringService.GetDiskInfo(ctx, serverID)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "monitoring_error", err.Error())
-		return
-	}
-
-	RespondSuccess(c, diskInfo)
-}
-
-// GetNetworkInfo 获取网络信息
-// GET /api/v1/monitoring/:server_id/network
-func (h *MonitoringHandler) GetNetworkInfo(c *gin.Context) {
-	serverID := c.Param("server_id")
-
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	ctx := c.Request.Context()
-	ctx = setUserIDToContext(ctx, userID)
-
-	netInfo, err := h.monitoringService.GetNetworkInfo(ctx, serverID)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "monitoring_error", err.Error())
-		return
-	}
-
-	RespondSuccess(c, netInfo)
-}
-
-// GetTopProcesses 获取资源占用最高的进程
-// GET /api/v1/monitoring/:server_id/processes?limit=10
-func (h *MonitoringHandler) GetTopProcesses(c *gin.Context) {
-	serverID := c.Param("server_id")
-
-	// 获取 limit 参数
-	limitStr := c.DefaultQuery("limit", "10")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 10
-	}
-
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	ctx := c.Request.Context()
-	ctx = setUserIDToContext(ctx, userID)
-
-	processes, err := h.monitoringService.GetTopProcesses(ctx, serverID, limit)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "monitoring_error", err.Error())
-		return
-	}
-
-	RespondSuccess(c, gin.H{
-		"processes": processes,
-		"total":     len(processes),
+	// 流式输出
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case result, ok := <-resultChan:
+			if !ok {
+				// channel 关闭，发送完成事件
+				fmt.Fprintf(w, "event: done\ndata: {}\n\n")
+				return false
+			}
+			// 发送服务器数据
+			data, err := json.Marshal(result)
+			if err != nil {
+				return true
+			}
+			fmt.Fprintf(w, "event: server\ndata: %s\n\n", data)
+			return true
+		case <-ctx.Done():
+			return false
+		}
 	})
 }
 

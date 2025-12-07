@@ -45,6 +45,7 @@ import (
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/easyssh/server/internal/infra/db"
 	"github.com/easyssh/server/internal/pkg/crypto"
+	"github.com/easyssh/server/internal/pkg/geoip"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -79,6 +80,10 @@ func main() {
 		log.Fatalf("❌ Failed to connect to Redis: %v", err)
 	}
 	defer redisClient.Close()
+
+	// 初始化 GeoIP 客户端并设置 Redis 缓存
+	geoip.SetRedisClient(redisClient)
+	log.Println("✅ GeoIP client initialized with Redis cache")
 
 	// 数据库迁移（自动迁移）
 	if err := database.AutoMigrate(
@@ -557,15 +562,11 @@ func main() {
 		}
 
 		// 监控路由（需要认证）
-		monitoringRoutes := v1.Group("/monitoring/:server_id")
+		monitoringRoutes := v1.Group("/monitoring")
 		monitoringRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			monitoringRoutes.GET("/system", monitoringHandler.GetSystemInfo)      // 系统综合信息
-			monitoringRoutes.GET("/cpu", monitoringHandler.GetCPUInfo)            // CPU 信息
-			monitoringRoutes.GET("/memory", monitoringHandler.GetMemoryInfo)      // 内存信息
-			monitoringRoutes.GET("/disk", monitoringHandler.GetDiskInfo)          // 磁盘信息
-			monitoringRoutes.GET("/network", monitoringHandler.GetNetworkInfo)    // 网络信息
-			monitoringRoutes.GET("/processes", monitoringHandler.GetTopProcesses) // 进程列表
+			monitoringRoutes.GET("/resources", monitoringHandler.GetAllResources)        // 所有服务器资源概览
+			monitoringRoutes.GET("/resources/stream", monitoringHandler.StreamResources) // 流式获取服务器资源（SSE）
 		}
 
 		// 审计日志路由（需要认证）

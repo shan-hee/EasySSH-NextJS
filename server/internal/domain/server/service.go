@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/easyssh/server/internal/pkg/crypto"
+	"github.com/easyssh/server/internal/pkg/geoip"
 	"github.com/google/uuid"
 )
 
@@ -82,15 +83,17 @@ type ServerStatistics struct {
 
 // serverService 服务器服务实现
 type serverService struct {
-	repo      Repository
-	encryptor *crypto.Encryptor
+	repo        Repository
+	encryptor   *crypto.Encryptor
+	geoipClient *geoip.Client
 }
 
 // NewService 创建服务器服务
 func NewService(repo Repository, encryptor *crypto.Encryptor) Service {
 	return &serverService{
-		repo:      repo,
-		encryptor: encryptor,
+		repo:        repo,
+		encryptor:   encryptor,
+		geoipClient: geoip.NewClient(),
 	}
 }
 
@@ -143,6 +146,9 @@ func (s *serverService) Create(ctx context.Context, userID uuid.UUID, req *Creat
 		}
 		server.PrivateKey = encrypted
 	}
+
+	// 查询 IP 地理位置（异步执行，不阻塞创建流程）
+	s.updateServerLocation(ctx, server)
 
 	// 保存到数据库
 	if err := s.repo.Create(ctx, server); err != nil {
@@ -218,6 +224,9 @@ func (s *serverService) Update(ctx context.Context, userID, serverID uuid.UUID, 
 			server.PrivateKey = encrypted
 		}
 	}
+
+	// 每次编辑提交时都更新地理位置
+	s.updateServerLocation(ctx, server)
 
 	// 保存更新
 	if err := s.repo.Update(ctx, server); err != nil {
@@ -312,4 +321,22 @@ func checkTCPConnection(host string, port int, timeout time.Duration) error {
 	}
 	defer conn.Close()
 	return nil
+}
+
+// updateServerLocation 查询并更新服务器的地理位置信息
+func (s *serverService) updateServerLocation(ctx context.Context, server *Server) {
+	loc, err := s.geoipClient.Lookup(ctx, server.Host)
+	if err != nil {
+		// 查询失败时不影响主流程，仅清空位置信息
+		server.Country = ""
+		server.CountryCode = ""
+		server.Region = ""
+		server.City = ""
+		return
+	}
+
+	server.Country = loc.Country
+	server.CountryCode = loc.CountryCode
+	server.Region = loc.Region
+	server.City = loc.City
 }

@@ -75,16 +75,6 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
         ],
       },
       {
-        title: tNav("monitoring"),
-        url: "#",
-        icon: Activity,
-        items: [
-          { title: tNav("monitoringResources"), url: "/dashboard/monitoring/resources" },
-          { title: tNav("monitoringAlerts"), url: "/dashboard/monitoring/alerts" },
-          { title: tNav("monitoringHealth"), url: "/dashboard/monitoring/health" },
-        ],
-      },
-      {
         title: tNav("logs"),
         url: "#",
         icon: FileText,
@@ -126,7 +116,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
     [all]
   )
   const groupObserveAudit = React.useMemo(
-    () => all.filter((i) => [tNav("monitoring"), tNav("logs")].includes(i.title)),
+    () => all.filter((i) => [tNav("logs")].includes(i.title)),
     [all, tNav]
   )
   const groupSettings = React.useMemo(

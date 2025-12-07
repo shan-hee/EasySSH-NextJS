@@ -29,6 +29,11 @@ export interface Server {
   last_connected?: string
   description?: string
   os?: string
+  // 地理位置信息
+  country?: string
+  country_code?: string
+  region?: string
+  city?: string
   created_at: string
   updated_at: string
 }
