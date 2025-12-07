@@ -39,9 +39,7 @@ export default function MonitoringAlertsPage() {
 
  return (
  <>
- <PageHeader title={t("pageTitle")}>
- <Button><Plus className="mr-2 h-4 w-4" />{t("newRule")}</Button>
- </PageHeader>
+ <PageHeader title={t("pageTitle")} />
 
  <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
  <div className="grid gap-4 md:grid-cols-4">
@@ -111,11 +109,17 @@ export default function MonitoringAlertsPage() {
  </Card>
 
  <Card>
-   <CardHeader>
-   <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
-   <CardDescription>
-     {t("tableDescription", { total: rules.length })}
-   </CardDescription>
+   <CardHeader className="flex flex-row items-center justify-between">
+   <div>
+     <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
+     <CardDescription>
+       {t("tableDescription", { total: rules.length })}
+     </CardDescription>
+   </div>
+   <Button size="sm">
+     <Plus className="mr-2 h-4 w-4" />
+     {t("newRule")}
+   </Button>
    </CardHeader>
  <CardContent>
  <div className="rounded-md border">

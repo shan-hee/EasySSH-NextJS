@@ -73,10 +73,6 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     // 仅显示系统名称 + 当前页面标题
     showTitle: true,
   },
-  '/dashboard/automation/batch': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
 
   // ===================
   // 文件管理

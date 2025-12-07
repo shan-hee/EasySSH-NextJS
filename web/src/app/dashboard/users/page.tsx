@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,6 +30,7 @@ import {
   Shield,
   Eye,
   Trash2,
+  RefreshCw,
 } from "lucide-react"
 import { usersApi, type UserDetail, type UserRole } from "@/lib/api"
 import { SkeletonStatsCard } from "@/components/ui/loading"
@@ -40,6 +41,7 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 
 export default function UsersPage() {
   const t = useTranslations("users")
+  const tCommon = useTranslations("common")
   const { ready } = useAuthReady()
   // 数据状态
   const [users, setUsers] = useState<UserDetail[]>([])
@@ -266,12 +268,7 @@ export default function UsersPage() {
 
   return (
     <>
-      <PageHeader title={t("pageTitle")}>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          {t("btnNewUser")}
-        </Button>
-      </PageHeader>
+      <PageHeader title={t("pageTitle")} />
 
       {loading ? (
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
@@ -358,39 +355,62 @@ export default function UsersPage() {
             </Card>
           </div>
 
-          {/* DataTable */}
-          <DataTable
-            data={users}
-            columns={columns}
-            loading={refreshing}
-            emptyMessage={t("tableEmpty")}
-            enableRowSelection={true}
-            toolbar={(table) => (
-              <DataTableToolbar
-                table={table}
-                searchKey="username"
-                searchPlaceholder={t("searchPlaceholder")}
-                filters={roleFilters}
-                onRefresh={handleRefresh}
-                showRefresh={true}
+          {/* 用户列表 */}
+          <Card className="flex-1 min-h-0">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">{t("pageTitle")}</CardTitle>
+                <CardDescription>{t("tableDescription", { count: users.length })}</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                  {tCommon("tableRefresh")}
+                </Button>
+                <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("btnNewUser")}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 min-h-0 p-4 pt-0">
+              <DataTable
+                data={users}
+                columns={columns}
+                loading={refreshing}
+                emptyMessage={t("tableEmpty")}
+                enableRowSelection={true}
+                toolbar={(table) => (
+                  <DataTableToolbar
+                    table={table}
+                    searchKey="username"
+                    searchPlaceholder={t("searchPlaceholder")}
+                    filters={roleFilters}
+                  />
+                )}
+                batchActions={(table) => (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      const selectedRows = table.getFilteredSelectedRowModel().rows
+                      const userIds = selectedRows.map(row => row.original.id)
+                      handleBatchDelete(userIds)
+                    }}
+                    className="h-7"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {t("batchDelete")}
+                  </Button>
+                )}
               />
-            )}
-            batchActions={(table) => (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  const selectedRows = table.getFilteredSelectedRowModel().rows
-                  const userIds = selectedRows.map(row => row.original.id)
-                  handleBatchDelete(userIds)
-                }}
-                className="h-7"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                {t("batchDelete")}
-              </Button>
-            )}
-          />
+            </CardContent>
+          </Card>
         </div>
       )}
 

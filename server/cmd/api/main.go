@@ -28,6 +28,9 @@ import (
 	"github.com/easyssh/server/internal/domain/notificationconfig"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
 	"github.com/easyssh/server/internal/domain/script"
+	"github.com/easyssh/server/internal/domain/taskexecution"
+	"github.com/easyssh/server/internal/domain/taskexecutor"
+	"github.com/easyssh/server/internal/domain/taskscheduler"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/ssh"
@@ -98,6 +101,9 @@ func main() {
 		// 其他表
 		&sshkey.SSHKey{},         // SSH密钥表
 		&sshhostkey.SSHHostKey{}, // SSH主机密钥表（TOFU安全验证）
+		// 任务执行相关表
+		&taskexecution.TaskExecution{},       // 任务执行历史表
+		&taskexecution.TaskExecutionServer{}, // 任务执行服务器结果表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -245,6 +251,37 @@ func main() {
 	scheduledTaskRepo := scheduledtask.NewRepository(database)
 	scheduledTaskService := scheduledtask.NewService(scheduledTaskRepo)
 
+	// 任务执行历史服务
+	taskExecutionRepo := taskexecution.NewRepository(database)
+	taskExecutionService := taskexecution.NewService(taskExecutionRepo)
+
+	// 任务执行引擎
+	taskExecutor := taskexecutor.NewExecutor(
+		serverService,
+		scriptService,
+		scheduledTaskRepo,
+		taskExecutionRepo,
+		encryptor,
+		10, // 最大并发数
+	)
+	taskExecutor.SetHostKeyCallback(sshHostKeyService.GetHostKeyCallback())
+
+	// 注入执行器到批量任务服务
+	batchTaskService.SetExecutor(taskExecutor)
+
+	// 任务调度器
+	taskScheduler := taskscheduler.NewScheduler(scheduledTaskRepo, taskExecutor)
+
+	// 注入调度器到定时任务服务
+	scheduledTaskService.SetScheduler(taskScheduler)
+
+	// 启动调度器
+	if err := taskScheduler.Start(); err != nil {
+		log.Printf("⚠️ Warning: Failed to start task scheduler: %v", err)
+	} else {
+		log.Println("✅ Task scheduler started")
+	}
+
 	// SSH会话服务
 	sshSessionRepo := sshsession.NewRepository(database)
 	sshSessionService := sshsession.NewService(sshSessionRepo)
@@ -296,6 +333,7 @@ func main() {
 	scriptHandler := rest.NewScriptHandler(scriptService)
 	batchTaskHandler := rest.NewBatchTaskHandler(batchTaskService)
 	scheduledTaskHandler := rest.NewScheduledTaskHandler(scheduledTaskService)
+	taskExecutionHandler := rest.NewTaskExecutionHandler(taskExecutionService)
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	userHandler := rest.NewUserHandler(userService)
@@ -580,6 +618,16 @@ func main() {
 			scheduledTaskRoutes.POST("/:id/trigger", scheduledTaskHandler.Trigger)     // 手动触发
 		}
 
+		// 任务执行历史路由（需要认证）
+		taskExecutionRoutes := v1.Group("/task-executions")
+		taskExecutionRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			taskExecutionRoutes.GET("", taskExecutionHandler.List)                     // 执行历史列表
+			taskExecutionRoutes.GET("/statistics", taskExecutionHandler.GetStatistics) // 统计信息
+			taskExecutionRoutes.GET("/:id", taskExecutionHandler.GetByID)              // 执行详情
+			taskExecutionRoutes.GET("/:id/results", taskExecutionHandler.GetResults)   // 服务器执行结果
+		}
+
 		// SSH会话路由（需要认证）
 		sshSessionRoutes := v1.Group("/ssh-sessions")
 		sshSessionRoutes.Use(middleware.AuthMiddleware(jwtService))
@@ -785,6 +833,10 @@ func main() {
 	<-quit
 
 	log.Println("🛑 Shutting down server...")
+
+	// 停止任务调度器
+	taskScheduler.Stop()
+	log.Println("✅ Task scheduler stopped")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

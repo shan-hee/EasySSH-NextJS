@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,37 +25,17 @@ import {
  SelectTrigger,
  SelectValue,
 } from "@/components/ui/select"
-import {
- Table,
- TableBody,
- TableCell,
- TableHead,
- TableHeader,
- TableRow,
-} from "@/components/ui/table"
-import {
- DropdownMenu,
- DropdownMenuContent,
- DropdownMenuItem,
- DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { DataTable } from "@/components/ui/data-table"
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import {
  Plus,
- Search,
- MoreHorizontal,
  Calendar,
- Play,
- Pause,
- Edit,
- Trash2,
  CheckCircle,
- XCircle,
+ Pause,
  Zap,
- Server as ServerIcon,
- RefreshCw,
- Loader2,
- Terminal,
- FileText
+ Search,
+ FileText,
+ RefreshCw
 } from "lucide-react"
 import {
  scheduledTasksApi,
@@ -70,6 +50,8 @@ import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/hooks/use-system-config"
 import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 import { useTranslations } from "next-intl"
+import { SkeletonStatsCard } from "@/components/ui/loading"
+import { createScheduledTaskColumns } from "./components/scheduled-task-columns"
 
 export default function AutomationSchedulesPage() {
  const { ready } = useAuthReady()
@@ -93,10 +75,6 @@ export default function AutomationSchedulesPage() {
  totalRuns: 0,
  })
 
- // 筛选状态
- const [searchTerm, setSearchTerm] = useState("")
- const [selectedStatus, setSelectedStatus] = useState<string>("all")
- const [selectedType, setSelectedType] = useState<string>("all")
 
  // 对话框状态
  const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -185,18 +163,6 @@ export default function AutomationSchedulesPage() {
    loadData()
  }, [ready])
 
- // 过滤任务
- const filteredTasks = tasks.filter((task) => {
- const matchesSearch =
- task.task_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
- task.description.toLowerCase().includes(searchTerm.toLowerCase())
- const matchesStatus =
- selectedStatus === "all" ||
- (selectedStatus === "enabled" && task.enabled) ||
- (selectedStatus === "disabled" && !task.enabled)
- const matchesType = selectedType === "all" || task.task_type === selectedType
- return matchesSearch && matchesStatus && matchesType
- })
 
  // 过滤服务器
  const filteredServers = servers.filter(
@@ -455,84 +421,33 @@ export default function AutomationSchedulesPage() {
    )
  }
 
- // 计算成功率
- const calculateSuccessRate = (task: ScheduledTask) => {
- if (task.run_count === 0) return 100
- const successCount = task.run_count - task.failure_count
- return ((successCount / task.run_count) * 100).toFixed(1)
- }
-
- // 获取类型图标
- const getTypeIcon = (type: string) => {
- switch (type) {
- case "command":
- return <Terminal className="h-4 w-4" />
- case "script":
- return <FileText className="h-4 w-4" />
- case "batch":
- return <Zap className="h-4 w-4" />
- default:
- return <ServerIcon className="h-4 w-4" />
- }
- }
-
- // 获取类型名称
- const getTypeName = (type: string) => {
- switch (type) {
- case "command":
- return t("typeCommand")
- case "script":
- return t("typeScript")
- case "batch":
- return t("typeBatch")
- default:
- return type
- }
- }
-
- // 获取状态Badge
- const getStatusBadge = (task: ScheduledTask) => {
- if (!task.enabled) {
- return <Badge variant="secondary">{t("statusDisabled")}</Badge>
- }
-
- if (task.last_status === "success") {
- return <Badge className="bg-green-100 text-green-800">{t("statusRunning")}</Badge>
- } else if (task.last_status === "failed") {
- return <Badge className="bg-red-100 text-red-800">{t("statusFailed")}</Badge>
- }
-
- return <Badge className="bg-blue-100 text-blue-800">{t("statusPending")}</Badge>
- }
+ // 创建表格列配置
+ const columns = useMemo(
+ () =>
+ createScheduledTaskColumns(t, {
+ onToggle: handleToggle,
+ onTrigger: handleTrigger,
+ onEdit: handleEdit,
+ onDelete: handleDelete,
+ formatDate,
+ }),
+ [t, formatDate]
+ )
 
  return (
  <>
- <PageHeader
- title={t("pageTitle")}>
- <div className="flex items-center gap-2">
- <Button
- variant="outline"
- size="sm"
- onClick={handleRefresh}
- disabled={refreshing}
- >
- <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
- {t("refresh")}
- </Button>
- <Button onClick={() => setIsDialogOpen(true)}>
- <Plus className="mr-2 h-4 w-4" />
- {t("newTask")}
- </Button>
- </div>
- </PageHeader>
+ <PageHeader title={t("pageTitle")} />
 
+ <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ {/* 统计卡片 - 加载时显示骨架屏 */}
  {loading ? (
- <div className="flex flex-1 items-center justify-center">
- <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+ <div className="grid gap-4 md:grid-cols-4">
+ <SkeletonStatsCard />
+ <SkeletonStatsCard />
+ <SkeletonStatsCard />
+ <SkeletonStatsCard />
  </div>
  ) : (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
- {/* 统计卡片 */}
  <div className="grid gap-4 md:grid-cols-4">
  <Card>
  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -578,175 +493,69 @@ export default function AutomationSchedulesPage() {
  </CardContent>
  </Card>
  </div>
-
- {/* 搜索和筛选 */}
- <div className="flex flex-col gap-4">
- <div className="flex items-center gap-4">
-<div className="relative flex-1 max-w-md">
-<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-<Input
- placeholder={t("searchPlaceholder")}
- className="pl-10"
- value={searchTerm}
- onChange={(e) => setSearchTerm(e.target.value)}
- />
- </div>
-
-<Select value={selectedStatus} onValueChange={setSelectedStatus}>
-<SelectTrigger className="w-[150px]">
- <SelectValue placeholder={t("statusFilterPlaceholder")} />
-</SelectTrigger>
-<SelectContent>
- <SelectItem value="all">{t("statusFilterAll")}</SelectItem>
- <SelectItem value="enabled">{t("statusFilterEnabled")}</SelectItem>
- <SelectItem value="disabled">{t("statusFilterDisabled")}</SelectItem>
- </SelectContent>
- </Select>
-
-<Select value={selectedType} onValueChange={setSelectedType}>
-<SelectTrigger className="w-[150px]">
- <SelectValue placeholder={t("typeFilterPlaceholder")} />
-</SelectTrigger>
-<SelectContent>
- <SelectItem value="all">{t("typeFilterAll")}</SelectItem>
- <SelectItem value="command">{t("typeCommand")}</SelectItem>
- <SelectItem value="script">{t("typeScript")}</SelectItem>
- <SelectItem value="batch">{t("typeBatch")}</SelectItem>
- </SelectContent>
- </Select>
- </div>
- </div>
+ )}
 
  {/* 任务列表 */}
- <Card>
- <Table>
- <TableHeader>
- <TableRow>
- <TableHead className="w-[200px]">{t("tableColTaskName")}</TableHead>
- <TableHead className="w-[100px]">{t("tableColType")}</TableHead>
- <TableHead className="w-[120px]">{t("tableColCron")}</TableHead>
- <TableHead className="w-[100px]">{t("tableColStatus")}</TableHead>
- <TableHead className="w-[150px]">{t("tableColLastRun")}</TableHead>
- <TableHead className="w-[150px]">{t("tableColNextRun")}</TableHead>
- <TableHead className="w-[80px] text-center">{t("tableColRunCount")}</TableHead>
- <TableHead className="w-[80px] text-center">{t("tableColSuccessRate")}</TableHead>
- <TableHead className="w-[120px] text-right">{t("tableColActions")}</TableHead>
- </TableRow>
- </TableHeader>
- <TableBody>
- {filteredTasks.length === 0 ? (
- <TableRow>
- <TableCell colSpan={9} className="h-32 text-center">
- <div className="flex flex-col items-center justify-center text-muted-foreground">
- <Calendar className="h-8 w-8 mb-2" />
- <p className="text-sm">
- {searchTerm || selectedStatus !== "all" || selectedType !== "all"
- ? t("emptyFiltered")
- : t("emptyAll")}
- </p>
+ <Card className="flex-1 min-h-0">
+ <CardHeader className="flex flex-row items-center justify-between">
+ <div>
+ <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
+ <CardDescription>
+ {t("tableDescription", { count: tasks.length })}
+ </CardDescription>
  </div>
- </TableCell>
- </TableRow>
- ) : (
- filteredTasks.map((task) => (
- <TableRow key={task.id}>
- <TableCell className="font-medium">
- <div className="flex flex-col">
- <span>{task.task_name}</span>
- {task.description && (
- <span className="text-xs text-muted-foreground line-clamp-1">
- {task.description}
- </span>
- )}
- </div>
- </TableCell>
- <TableCell>
  <div className="flex items-center gap-2">
- {getTypeIcon(task.task_type)}
- <span className="text-sm">{getTypeName(task.task_type)}</span>
- </div>
- </TableCell>
- <TableCell>
- <code className="text-xs bg-muted px-2 py-1 rounded">
- {task.cron_expression}
- </code>
- </TableCell>
- <TableCell>{getStatusBadge(task)}</TableCell>
- <TableCell>
- <div className="flex flex-col text-sm">
- <span>{formatDate(task.last_run_at)}</span>
- {task.last_status && (
- <div className="flex items-center gap-1 mt-1">
- {task.last_status === "success" ? (
- <CheckCircle className="h-3 w-3 text-green-600" />
- ) : (
- <XCircle className="h-3 w-3 text-red-600" />
- )}
- <span className="text-xs text-muted-foreground">
- {task.last_status === "success" ? t("lastStatusSuccess") : t("lastStatusFailed")}
- </span>
- </div>
- )}
- </div>
- </TableCell>
- <TableCell>
- <span className="text-sm">{formatDate(task.next_run_at)}</span>
- </TableCell>
- <TableCell className="text-center">
- <span className="text-sm">{task.run_count}</span>
- </TableCell>
- <TableCell className="text-center">
- <span className="text-sm">{calculateSuccessRate(task)}%</span>
- </TableCell>
- <TableCell className="text-right">
- <div className="flex items-center justify-end gap-1">
  <Button
- variant="ghost"
+ variant="outline"
  size="sm"
- onClick={() => handleToggle(task.id, task.enabled)}
- className="h-8 w-8 p-0"
- title={task.enabled ? t("tooltipToggleDisable") : t("tooltipToggleEnable")}
+ onClick={handleRefresh}
+ disabled={refreshing}
  >
- {task.enabled ? (
- <Pause className="h-4 w-4" />
- ) : (
- <Play className="h-4 w-4" />
- )}
+ <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+ {t("refresh")}
  </Button>
- <DropdownMenu>
- <DropdownMenuTrigger asChild>
- <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
- <MoreHorizontal className="h-4 w-4" />
+ <Button size="sm" onClick={() => setIsDialogOpen(true)}>
+ <Plus className="mr-2 h-4 w-4" />
+ {t("newTask")}
  </Button>
- </DropdownMenuTrigger>
- <DropdownMenuContent align="end">
- <DropdownMenuItem onClick={() => handleTrigger(task.id)}>
- <Zap className="mr-2 h-4 w-4" />
- {t("actionImmediateRun")}
- </DropdownMenuItem>
- <DropdownMenuItem onClick={() => handleEdit(task)}>
- <Edit className="mr-2 h-4 w-4" />
- {t("actionEdit")}
- </DropdownMenuItem>
- <DropdownMenuItem
- onClick={() => handleDelete(task.id)}
- className="text-destructive"
- >
- <Trash2 className="mr-2 h-4 w-4" />
- {t("actionDelete")}
- </DropdownMenuItem>
- </DropdownMenuContent>
- </DropdownMenu>
  </div>
- </TableCell>
- </TableRow>
- ))
+ </CardHeader>
+ <CardContent className="flex-1 min-h-0 p-4 pt-0">
+ <DataTable
+ data={tasks}
+ columns={columns}
+ loading={loading}
+ emptyMessage={t("emptyAll")}
+ toolbar={(table) => (
+ <DataTableToolbar
+ table={table}
+ searchKey="task_name"
+ searchPlaceholder={t("searchPlaceholder")}
+ filters={[
+ {
+ column: "enabled",
+ title: t("statusFilterPlaceholder"),
+ options: [
+ { label: t("statusFilterEnabled"), value: "enabled" },
+ { label: t("statusFilterDisabled"), value: "disabled" },
+ ],
+ },
+ {
+ column: "task_type",
+ title: t("typeFilterPlaceholder"),
+ options: [
+ { label: t("typeCommand"), value: "command" },
+ { label: t("typeScript"), value: "script" },
+ { label: t("typeBatch"), value: "batch" },
+ ],
+ },
+ ]}
+ />
  )}
- </TableBody>
- </Table>
+ />
+ </CardContent>
  </Card>
  </div>
- )}
 
  {/* 新建任务对话框 */}
  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

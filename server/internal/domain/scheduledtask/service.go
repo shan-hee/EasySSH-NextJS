@@ -13,7 +13,16 @@ var (
 	ErrInvalidScheduledTaskData = errors.New("invalid scheduled task data")
 	ErrUnauthorized             = errors.New("unauthorized access to scheduled task")
 	ErrInvalidCronExpression    = errors.New("invalid cron expression")
+	ErrSchedulerNotInitialized  = errors.New("task scheduler not initialized")
 )
+
+// TaskScheduler 调度器接口（解耦）
+type TaskScheduler interface {
+	AddTask(task *ScheduledTask) error
+	UpdateTask(task *ScheduledTask) error
+	RemoveTask(taskID uuid.UUID)
+	TriggerTaskManually(taskID uuid.UUID) error
+}
 
 // Service 定时任务业务逻辑接口
 type Service interface {
@@ -25,15 +34,22 @@ type Service interface {
 	GetStatistics(userID uuid.UUID) (*ScheduledTaskStatistics, error)
 	ToggleTask(userID uuid.UUID, id uuid.UUID, enabled bool) error
 	TriggerTask(userID uuid.UUID, id uuid.UUID) error
+	SetScheduler(scheduler TaskScheduler)
 }
 
 type service struct {
-	repo Repository
+	repo      Repository
+	scheduler TaskScheduler
 }
 
 // NewService 创建定时任务服务实例
 func NewService(repo Repository) Service {
 	return &service{repo: repo}
+}
+
+// SetScheduler 设置调度器
+func (s *service) SetScheduler(scheduler TaskScheduler) {
+	s.scheduler = scheduler
 }
 
 // validateCronExpression 验证Cron表达式
@@ -139,6 +155,11 @@ func (s *service) CreateScheduledTask(userID uuid.UUID, req *CreateScheduledTask
 		return nil, err
 	}
 
+	// 通知调度器添加任务
+	if s.scheduler != nil && task.Enabled {
+		s.scheduler.AddTask(task)
+	}
+
 	return task, nil
 }
 
@@ -210,6 +231,14 @@ func (s *service) UpdateScheduledTask(userID uuid.UUID, id uuid.UUID, req *Updat
 		return nil, err
 	}
 
+	// 通知调度器更新任务
+	if s.scheduler != nil {
+		updatedTask, _ := s.repo.GetByID(id)
+		if updatedTask != nil {
+			s.scheduler.UpdateTask(updatedTask)
+		}
+	}
+
 	// 返回更新后的任务
 	return s.repo.GetByID(id)
 }
@@ -225,6 +254,11 @@ func (s *service) DeleteScheduledTask(userID uuid.UUID, id uuid.UUID) error {
 	// 验证所有权
 	if existingTask.UserID != userID {
 		return ErrUnauthorized
+	}
+
+	// 通知调度器移除任务
+	if s.scheduler != nil {
+		s.scheduler.RemoveTask(id)
 	}
 
 	return s.repo.Delete(id)
@@ -306,7 +340,19 @@ func (s *service) ToggleTask(userID uuid.UUID, id uuid.UUID, enabled bool) error
 		updates["next_run_at"] = nextRunAt
 	}
 
-	return s.repo.Update(id, updates)
+	if err := s.repo.Update(id, updates); err != nil {
+		return err
+	}
+
+	// 通知调度器更新任务
+	if s.scheduler != nil {
+		updatedTask, _ := s.repo.GetByID(id)
+		if updatedTask != nil {
+			s.scheduler.UpdateTask(updatedTask)
+		}
+	}
+
+	return nil
 }
 
 // TriggerTask 手动触发定时任务
@@ -322,13 +368,10 @@ func (s *service) TriggerTask(userID uuid.UUID, id uuid.UUID) error {
 		return ErrUnauthorized
 	}
 
-	// TODO: 这里应该调用实际的任务执行逻辑
-	// 现在只更新最后运行时间
-	now := time.Now()
-	updates := map[string]interface{}{
-		"last_run_at": now,
-		"run_count":   task.RunCount + 1,
+	// 使用调度器手动触发任务
+	if s.scheduler != nil {
+		return s.scheduler.TriggerTaskManually(id)
 	}
 
-	return s.repo.Update(id, updates)
+	return ErrSchedulerNotInitialized
 }

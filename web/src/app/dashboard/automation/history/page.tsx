@@ -1,14 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/error-utils"
 import {
   Dialog,
   DialogContent,
@@ -17,31 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { DataTable } from "@/components/ui/data-table"
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Search,
-  MoreHorizontal,
-  Eye,
   Download,
   RefreshCw,
   CheckCircle,
@@ -50,195 +29,68 @@ import {
   Terminal,
   Calendar,
   Server,
+  AlertTriangle,
 } from "lucide-react"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { SkeletonStatsCard } from "@/components/ui/loading"
+import { createExecutionHistoryColumns } from "./components/execution-history-columns"
+import {
+  taskExecutionsApi,
+  type TaskExecution,
+  type ExecutionStatistics,
+} from "@/lib/api"
 
-// 模拟执行记录数据
-const mockHistory = [
-  {
-    id: 1,
-    taskName: "数据库备份",
-    type: "schedule",
-    command: "bash /scripts/backup_db.sh",
-    server: "DB Server 01",
-    status: "success",
-    startTime: "2024-01-15 14:30:00",
-    endTime: "2024-01-15 14:32:35",
-    duration: "2分35秒",
-    exitCode: 0,
-    user: "系统",
-    output: "Backup completed successfully. File: backup_20240115_143235.sql.gz",
-  },
-  {
-    id: 2,
-    taskName: "手动命令执行",
-    type: "manual",
-    command: "systemctl restart nginx",
-    server: "Web Server 01",
-    status: "success",
-    startTime: "2024-01-15 14:25:18",
-    endTime: "2024-01-15 14:25:20",
-    duration: "2秒",
-    exitCode: 0,
-    user: "管理员",
-    output: "nginx restarted successfully",
-  },
-  {
-    id: 3,
-    taskName: "批量系统更新",
-    type: "batch",
-    command: "apt update && apt upgrade -y",
-    server: "Web Server 01, Web Server 02, App Server 01",
-    status: "failed",
-    startTime: "2024-01-15 14:20:42",
-    endTime: "2024-01-15 14:21:15",
-    duration: "33秒",
-    exitCode: 1,
-    user: "运维工程师",
-    output: "Error: Package dependency conflict",
-  },
-  {
-    id: 4,
-    taskName: "日志清理",
-    type: "schedule",
-    command: "find /var/log -name '*.log' -mtime +30 -delete",
-    server: "All Servers",
-    status: "success",
-    startTime: "2024-01-15 14:15:33",
-    endTime: "2024-01-15 14:16:18",
-    duration: "45秒",
-    exitCode: 0,
-    user: "系统",
-    output: "Cleaned 127 log files, freed 2.3GB space",
-  },
-  {
-    id: 5,
-    taskName: "部署脚本",
-    type: "script",
-    command: "bash /scripts/deploy_app.sh",
-    server: "App Server 01",
-    status: "running",
-    startTime: "2024-01-15 14:10:15",
-    endTime: null,
-    duration: "进行中...",
-    exitCode: null,
-    user: "开发者",
-    output: "Deploying application...\nStep 1/5 completed",
-  },
-  {
-    id: 6,
-    taskName: "配置文件分发",
-    type: "batch",
-    command: "scp /config/nginx.conf remote:/etc/nginx/",
-    server: "Web Server 01, Web Server 02",
-    status: "success",
-    startTime: "2024-01-15 14:05:08",
-    endTime: "2024-01-15 14:06:20",
-    duration: "1分12秒",
-    exitCode: 0,
-    user: "运维工程师",
-    output: "Files distributed successfully to 2 servers",
-  },
-  {
-    id: 7,
-    taskName: "数据库备份",
-    type: "schedule",
-    command: "bash /scripts/backup_db.sh",
-    server: "DB Server 02",
-    status: "failed",
-    startTime: "2024-01-15 02:00:00",
-    endTime: "2024-01-15 02:00:05",
-    duration: "5秒",
-    exitCode: 1,
-    user: "系统",
-    output: "Error: Cannot connect to database server",
-  },
-  {
-    id: 8,
-    taskName: "性能监控报告",
-    type: "schedule",
-    command: "python /scripts/collect_metrics.py",
-    server: "Monitoring Server",
-    status: "success",
-    startTime: "2024-01-15 14:00:00",
-    endTime: "2024-01-15 14:00:03",
-    duration: "3秒",
-    exitCode: 0,
-    user: "系统",
-    output: "Metrics collected: CPU 45%, Memory 62%, Disk 78%",
-  },
-]
-
-const sourceTypeColors = {
+const triggerTypeColors: Record<string, string> = {
   schedule: "bg-blue-50 text-blue-700 border-blue-200",
   manual: "bg-green-50 text-green-700 border-green-200",
-  batch: "bg-purple-50 text-purple-700 border-purple-200",
-  script: "bg-orange-50 text-orange-700 border-orange-200",
 }
 
 export default function AutomationHistoryPage() {
   const t = useTranslations("automationHistory")
+  const tCommon = useTranslations("common")
   const { ready } = useAuthReady()
-  const [history] = useState(mockHistory)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedStatus, setSelectedStatus] = useState<string>("all")
-  const [selectedType, setSelectedType] = useState<string>("all")
+  const { user } = useClientAuth()
+  const { data: systemConfig } = useSystemConfig()
+  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
+  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+
+  const [executions, setExecutions] = useState<TaskExecution[]>([])
+  const [statistics, setStatistics] = useState<ExecutionStatistics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
-  const [selectedRecord, setSelectedRecord] = useState<typeof mockHistory[0] | null>(null)
+  const [selectedExecution, setSelectedExecution] = useState<TaskExecution | null>(null)
 
-  // 过滤记录
-  const filteredHistory = history.filter(record => {
-    const matchesSearch =
-      record.taskName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.command.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.server.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === "all" || record.status === selectedStatus
-    const matchesType = selectedType === "all" || record.type === selectedType
+  // 加载数据
+  const loadData = useCallback(async () => {
+    try {
+      const [listResponse, statsResponse] = await Promise.all([
+        taskExecutionsApi.list({ limit: 100 }),
+        taskExecutionsApi.getStatistics(1), // 最近1天
+      ])
+      setExecutions(listResponse.data || [])
+      setStatistics(statsResponse)
+    } catch (error) {
+      toast.error(t("toastLoadFailed"), {
+        description: getErrorMessage(error),
+      })
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [t])
 
-    return matchesSearch && matchesStatus && matchesType
-  })
+  // 初始加载
+  useEffect(() => {
+    if (!ready) return
+    loadData()
+  }, [ready, loadData])
 
   if (!ready) {
-    // 未来接入后端前，先等待认证就绪再展示历史记录 UI
     return null
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "success":
-        return <CheckCircle className="h-4 w-4 text-green-600" />
-      case "failed":
-        return <XCircle className="h-4 w-4 text-red-600" />
-      case "running":
-        return <Clock className="h-4 w-4 text-blue-600 animate-spin" />
-      default:
-        return <Clock className="h-4 w-4 text-muted-foreground" />
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "success":
-        return (
-          <Badge className="bg-green-100 text-green-800">
-            {t("statusSuccess")}
-          </Badge>
-        )
-      case "failed":
-        return (
-          <Badge className="bg-red-100 text-red-800">
-            {t("statusFailed")}
-          </Badge>
-        )
-      case "running":
-        return (
-          <Badge className="bg-blue-100 text-blue-800">
-            {t("statusRunning")}
-          </Badge>
-        )
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
   }
 
   const getStatusText = (status: string) => {
@@ -249,6 +101,8 @@ export default function AutomationHistoryPage() {
         return t("statusFailed")
       case "running":
         return t("statusRunning")
+      case "partial":
+        return t("statusPartial")
       default:
         return status
     }
@@ -267,98 +121,133 @@ export default function AutomationHistoryPage() {
     }
   }
 
-  const getSourceTypeBadgeLabel = (type: string) => {
+  const getTriggerTypeLabel = (type: string) => {
     switch (type) {
       case "schedule":
         return t("sourceTypeScheduleShort")
       case "manual":
         return t("sourceTypeManualShort")
-      case "batch":
-        return t("sourceTypeBatchShort")
-      case "script":
-        return t("sourceTypeScriptShort")
       default:
         return type
     }
   }
 
-  const getSourceTypeLabel = (type: string) => {
+  const getTriggerTypeFullLabel = (type: string) => {
     switch (type) {
       case "schedule":
         return t("typeFilterSchedule")
       case "manual":
         return t("typeFilterManual")
-      case "batch":
-        return t("typeFilterBatch")
-      case "script":
-        return t("typeFilterScript")
       default:
         return type
     }
   }
 
-  const getSourceTypeExportLabel = (type: string) => {
+  const getTriggerTypeExportLabel = (type: string) => {
     switch (type) {
       case "schedule":
         return t("exportCsvSourceTypeSchedule")
       case "manual":
         return t("exportCsvSourceTypeManual")
-      case "batch":
-        return t("exportCsvSourceTypeBatch")
-      case "script":
-        return t("exportCsvSourceTypeScript")
       default:
         return type
     }
   }
 
-  const handleViewDetails = (recordId: number) => {
-    const record = history.find(r => r.id === recordId)
-    if (record) {
-      setSelectedRecord(record)
+  // 格式化日期
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "-"
+    return formatInTimezone(
+      dateString,
+      { second: undefined },
+      effectiveLocale,
+      effectiveTimezone,
+    )
+  }
+
+  // 格式化耗时（毫秒转可读格式）
+  const formatDuration = (ms: number) => {
+    if (!ms || ms <= 0) return "-"
+    const seconds = Math.floor(ms / 1000)
+    if (seconds < 60) {
+      return t("durationSeconds", { seconds })
+    }
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    if (minutes < 60) {
+      return t("durationMinutesSeconds", { minutes, seconds: remainingSeconds })
+    }
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    return t("durationHoursMinutes", { hours, minutes: remainingMinutes })
+  }
+
+  const handleViewDetails = async (execution: TaskExecution) => {
+    try {
+      // 获取详情（包含服务器结果）
+      const detail = await taskExecutionsApi.getById(execution.id)
+      setSelectedExecution(detail)
       setIsDetailsDialogOpen(true)
+    } catch (error) {
+      toast.error(t("toastLoadFailed"), {
+        description: getErrorMessage(error),
+      })
     }
   }
 
-  const handleRetry = (recordId: number) => {
-    const record = history.find(r => r.id === recordId)
-    if (record) {
-      console.log("重新执行任务:", record.taskName)
-      // TODO: 实际的重新执行逻辑
-      alert(`即将重新执行任务: ${record.taskName}`)
-    }
+  const handleRetry = (execution: TaskExecution) => {
+    // TODO: 实现重新执行功能
+    toast.info(`即将重新执行任务: ${execution.task_name}`)
   }
 
-  const handleDownloadOutput = (recordId: number) => {
-    const record = history.find(r => r.id === recordId)
-    if (record) {
+  const handleDownloadOutput = async (execution: TaskExecution) => {
+    try {
+      // 获取详情
+      const detail = await taskExecutionsApi.getById(execution.id)
+
+      // 构建输出内容
       const lines = [
-        `${t("fieldTaskName")}: ${record.taskName}`,
-        `${t("fieldSourceType")}: ${getSourceTypeLabel(record.type)}`,
-        `${t("fieldCommand")}: ${record.command}`,
-        `${t("fieldServer")}: ${record.server}`,
-        `${t("fieldStatus")}: ${getStatusText(record.status)}`,
-        `${t("fieldStartTime")}: ${record.startTime}`,
-        `${t("fieldEndTime")}: ${record.endTime || t("exportCsvEndTimeNotFinished")}`,
-        `${t("fieldDuration")}: ${record.duration}`,
-        `${t("fieldExitCode")}: ${record.exitCode !== null ? record.exitCode : "N/A"}`,
-        `${t("fieldUser")}: ${record.user}`,
+        `${t("fieldTaskName")}: ${detail.task_name}`,
+        `${t("fieldSourceType")}: ${getTriggerTypeFullLabel(detail.trigger_type)}`,
+        `${t("fieldCommand")}: ${detail.command}`,
+        `${t("fieldStatus")}: ${getStatusText(detail.status)}`,
+        `${t("fieldStartTime")}: ${formatDate(detail.start_time)}`,
+        `${t("fieldEndTime")}: ${detail.end_time ? formatDate(detail.end_time) : t("exportCsvEndTimeNotFinished")}`,
+        `${t("fieldDuration")}: ${formatDuration(detail.duration)}`,
+        `${t("fieldUser")}: ${detail.username || "-"}`,
         "",
         `========== ${t("fieldOutput")} ==========`,
-        record.output,
       ]
 
-      const content = lines.join("\n")
+      // 添加每个服务器的输出
+      if (detail.server_results && detail.server_results.length > 0) {
+        for (const result of detail.server_results) {
+          lines.push("")
+          lines.push(`--- ${result.server_name} (${result.server_host}) ---`)
+          lines.push(`Status: ${result.status}`)
+          lines.push(`Exit Code: ${result.exit_code ?? "N/A"}`)
+          lines.push(`Output:`)
+          lines.push(result.output || "(no output)")
+          if (result.error_message) {
+            lines.push(`Error: ${result.error_message}`)
+          }
+        }
+      }
 
+      const content = lines.join("\n")
       const blob = new Blob([content], { type: "text/plain;charset=utf-8" })
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `execution_${record.id}_${record.startTime.replace(/[: ]/g, "_")}.txt`
+      link.download = `execution_${detail.id}_${detail.start_time.replace(/[: ]/g, "_")}.txt`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
+    } catch (error) {
+      toast.error(t("toastLoadFailed"), {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -373,22 +262,20 @@ export default function AutomationHistoryPage() {
       t("exportCsvHeaderStartTime"),
       t("exportCsvHeaderEndTime"),
       t("exportCsvHeaderDuration"),
-      t("exportCsvHeaderExitCode"),
       t("exportCsvHeaderUser"),
     ]
 
-    const rows = filteredHistory.map(record => [
-      record.id,
-      record.taskName,
-      getSourceTypeExportLabel(record.type),
-      record.command,
-      record.server,
-      getStatusExportLabel(record.status),
-      record.startTime,
-      record.endTime || t("exportCsvEndTimeNotFinished"),
-      record.duration,
-      record.exitCode !== null ? record.exitCode : "N/A",
-      record.user,
+    const rows = executions.map(execution => [
+      execution.id,
+      execution.task_name,
+      getTriggerTypeExportLabel(execution.trigger_type),
+      execution.command,
+      `${execution.success_count}/${execution.total_servers}`,
+      getStatusExportLabel(execution.status),
+      formatDate(execution.start_time),
+      execution.end_time ? formatDate(execution.end_time) : t("exportCsvEndTimeNotFinished"),
+      formatDuration(execution.duration),
+      execution.username || "-",
     ])
 
     const csvContent = [
@@ -407,264 +294,196 @@ export default function AutomationHistoryPage() {
     URL.revokeObjectURL(url)
   }
 
-  const successCount = history.filter(h => h.status === "success").length
-  const successRate = history.length > 0 ? Math.round((successCount / history.length) * 100) : 0
+  const handleRefresh = () => {
+    setRefreshing(true)
+    loadData()
+  }
+
+  // 统计数据
+  const successCount = statistics?.success_count ?? 0
+  const failedCount = statistics?.failed_count ?? 0
+  const runningCount = statistics?.running_count ?? 0
+  const totalCount = statistics?.total_executions ?? 0
+  const successRate = totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0
+
+  // 创建表格列配置
+  const columns = useMemo(
+    () =>
+      createExecutionHistoryColumns(t, {
+        onViewDetails: handleViewDetails,
+        onRetry: handleRetry,
+        onDownloadOutput: handleDownloadOutput,
+        getTriggerTypeLabel,
+        formatDate,
+        formatDuration,
+      }),
+    [t, effectiveLocale, effectiveTimezone]
+  )
+
+  // 筛选选项
+  const filterOptions = useMemo(() => ({
+    status: [
+      { label: t("statusFilterSuccess"), value: "success", icon: CheckCircle },
+      { label: t("statusFilterFailed"), value: "failed", icon: XCircle },
+      { label: t("statusFilterRunning"), value: "running", icon: Clock },
+    ],
+    trigger_type: [
+      { label: t("typeFilterSchedule"), value: "schedule" },
+      { label: t("typeFilterManual"), value: "manual" },
+    ],
+  }), [t])
 
   return (
     <>
-      <PageHeader title={t("pageTitle")}>
-        <Button variant="outline" size="sm" onClick={handleExportRecords}>
-          <Download className="mr-2 h-4 w-4" />
-          {t("exportButton")}
-        </Button>
-      </PageHeader>
+      <PageHeader title={t("pageTitle")} />
 
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         {/* 统计卡片 */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {t("statsTotalRunsTitle")}
-              </CardTitle>
-              <Terminal className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{history.length}</div>
-              <p className="text-xs text-muted-foreground">
-                {t("statsTotalRunsDesc")}
-              </p>
-            </CardContent>
-          </Card>
+        {loading ? (
+          <div className="grid gap-4 md:grid-cols-4">
+            <SkeletonStatsCard />
+            <SkeletonStatsCard />
+            <SkeletonStatsCard />
+            <SkeletonStatsCard />
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("statsTotalRunsTitle")}
+                </CardTitle>
+                <Terminal className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  {t("statsTotalRunsDesc")}
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {t("statsSuccessTitle")}
-              </CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {successCount}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("statsSuccessDesc", { percent: successRate })}
-              </p>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("statsSuccessTitle")}
+                </CardTitle>
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {successCount}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("statsSuccessDesc", { percent: successRate })}
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {t("statsFailedTitle")}
-              </CardTitle>
-              <XCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {history.filter(h => h.status === "failed").length}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("statsFailedDesc")}
-              </p>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("statsFailedTitle")}
+                </CardTitle>
+                <XCircle className="h-4 w-4 text-red-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">
+                  {failedCount}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("statsFailedDesc")}
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {t("statsRunningTitle")}
-              </CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {history.filter(h => h.status === "running").length}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("statsRunningDesc")}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* 筛选器 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">{t("filterCardTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
-                <Input
-                  placeholder={t("searchPlaceholder")}
-                  className="pl-10"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder={t("statusFilterPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("statusFilterAll")}</SelectItem>
-                    <SelectItem value="success">{t("statusFilterSuccess")}</SelectItem>
-                    <SelectItem value="failed">{t("statusFilterFailed")}</SelectItem>
-                    <SelectItem value="running">{t("statusFilterRunning")}</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={selectedType} onValueChange={setSelectedType}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder={t("typeFilterPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("typeFilterAll")}</SelectItem>
-                    <SelectItem value="schedule">{t("typeFilterSchedule")}</SelectItem>
-                    <SelectItem value="manual">{t("typeFilterManual")}</SelectItem>
-                    <SelectItem value="batch">{t("typeFilterBatch")}</SelectItem>
-                    <SelectItem value="script">{t("typeFilterScript")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("statsRunningTitle")}
+                </CardTitle>
+                <Clock className="h-4 w-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  {runningCount}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("statsRunningDesc")}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* 执行记录列表 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
-            <CardDescription>
-              {t("tableDescription", {
-                current: filteredHistory.length,
-                total: history.length,
-              })}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("colTaskInfo")}</TableHead>
-                    <TableHead>{t("colServer")}</TableHead>
-                    <TableHead>{t("colStatus")}</TableHead>
-                    <TableHead>{t("colTime")}</TableHead>
-                    <TableHead>{t("colDuration")}</TableHead>
-                    <TableHead>{t("colUser")}</TableHead>
-                    <TableHead>{t("colActions")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredHistory.map(record => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <div className="font-medium">{record.taskName}</div>
-                            <Badge
-                              variant="outline"
-                              className={
-                                sourceTypeColors[record.type as keyof typeof sourceTypeColors]
-                              }
-                            >
-                              {getSourceTypeBadgeLabel(record.type)}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 text-xs font-mono text-muted-foreground">
-                            {record.command}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="max-w-xs truncate text-sm" title={record.server}>
-                          {record.server}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(record.status)}
-                          {getStatusBadge(record.status)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-3 w-3 text-muted-foreground" />
-                          <div>
-                            <div className="text-sm font-mono">
-                              {record.startTime.split(" ")[1]}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {record.startTime.split(" ")[0]}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm font-mono">{record.duration}</div>
-                        {record.exitCode !== null && (
-                          <div
-                            className={`text-xs ${
-                              record.exitCode === 0 ? "text-green-600" : "text-red-600"
-                            }`}
-                          >
-                            {t("exitCodeLabel")} {record.exitCode}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">{record.user}</div>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewDetails(record.id)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              {t("actionViewDetails")}
-                            </DropdownMenuItem>
-                            {record.status === "failed" && (
-                              <DropdownMenuItem onClick={() => handleRetry(record.id)}>
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                {t("actionRetry")}
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => handleDownloadOutput(record.id)}>
-                              <Download className="mr-2 h-4 w-4" />
-                              {t("actionDownloadOutput")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        <Card className="flex-1 min-h-0">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
+              <CardDescription>
+                {t("tableDescription", {
+                  current: executions.length,
+                  total: totalCount,
+                })}
+              </CardDescription>
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                {tCommon("tableRefresh")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportRecords}>
+                <Download className="mr-2 h-4 w-4" />
+                {t("exportButton")}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 min-h-0 p-4 pt-0">
+            <DataTable
+              data={executions}
+              columns={columns}
+              loading={loading || refreshing}
+              emptyMessage={t("tableEmpty")}
+              toolbar={(table) => (
+                <DataTableToolbar
+                  table={table}
+                  searchKey="task_name"
+                  searchPlaceholder={t("searchPlaceholder")}
+                  filters={[
+                    {
+                      column: "status",
+                      title: t("statusFilterPlaceholder"),
+                      options: filterOptions.status,
+                    },
+                    {
+                      column: "trigger_type",
+                      title: t("typeFilterPlaceholder"),
+                      options: filterOptions.trigger_type,
+                    },
+                  ]}
+                />
+              )}
+            />
           </CardContent>
         </Card>
       </div>
 
       {/* 执行详情对话框 */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-5xl w-[90vw] max-h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{t("detailsDialogTitle")}</DialogTitle>
             <DialogDescription>{t("detailsDialogDescription")}</DialogDescription>
           </DialogHeader>
 
-          {selectedRecord && (
-            <div className="space-y-6 py-4">
+          {selectedExecution && (
+            <div className="space-y-6 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
               {/* 基本信息 */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -672,14 +491,12 @@ export default function AutomationHistoryPage() {
                     {t("fieldTaskName")}
                   </Label>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{selectedRecord.taskName}</span>
+                    <span className="font-medium">{selectedExecution.task_name}</span>
                     <Badge
                       variant="outline"
-                      className={
-                        sourceTypeColors[selectedRecord.type as keyof typeof sourceTypeColors]
-                      }
+                      className={triggerTypeColors[selectedExecution.trigger_type] || ""}
                     >
-                      {getSourceTypeLabel(selectedRecord.type)}
+                      {getTriggerTypeFullLabel(selectedExecution.trigger_type)}
                     </Badge>
                   </div>
                 </div>
@@ -689,8 +506,18 @@ export default function AutomationHistoryPage() {
                     {t("fieldStatus")}
                   </Label>
                   <div className="flex items-center gap-2">
-                    {getStatusIcon(selectedRecord.status)}
-                    {getStatusBadge(selectedRecord.status)}
+                    {selectedExecution.status === "success" && <CheckCircle className="h-4 w-4 text-green-600" />}
+                    {selectedExecution.status === "failed" && <XCircle className="h-4 w-4 text-red-600" />}
+                    {selectedExecution.status === "running" && <Clock className="h-4 w-4 text-blue-600 animate-spin" />}
+                    {selectedExecution.status === "partial" && <AlertTriangle className="h-4 w-4 text-yellow-600" />}
+                    <Badge className={
+                      selectedExecution.status === "success" ? "bg-green-100 text-green-800" :
+                      selectedExecution.status === "failed" ? "bg-red-100 text-red-800" :
+                      selectedExecution.status === "partial" ? "bg-yellow-100 text-yellow-800" :
+                      "bg-blue-100 text-blue-800"
+                    }>
+                      {getStatusText(selectedExecution.status)}
+                    </Badge>
                   </div>
                 </div>
 
@@ -698,7 +525,7 @@ export default function AutomationHistoryPage() {
                   <Label className="text-sm font-medium text-muted-foreground">
                     {t("fieldUser")}
                   </Label>
-                  <div className="font-medium">{selectedRecord.user}</div>
+                  <div className="font-medium">{selectedExecution.username || "-"}</div>
                 </div>
 
                 <div className="space-y-2">
@@ -707,7 +534,9 @@ export default function AutomationHistoryPage() {
                   </Label>
                   <div className="flex items-center gap-2">
                     <Server className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{selectedRecord.server}</span>
+                    <span className="font-medium">
+                      {selectedExecution.success_count}/{selectedExecution.total_servers} 台成功
+                    </span>
                   </div>
                 </div>
               </div>
@@ -720,7 +549,7 @@ export default function AutomationHistoryPage() {
                   </Label>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-mono">{selectedRecord.startTime}</span>
+                    <span className="text-sm font-mono">{formatDate(selectedExecution.start_time)}</span>
                   </div>
                 </div>
 
@@ -731,7 +560,7 @@ export default function AutomationHistoryPage() {
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-mono">
-                      {selectedRecord.endTime || t("endTimeRunning")}
+                      {selectedExecution.end_time ? formatDate(selectedExecution.end_time) : t("endTimeRunning")}
                     </span>
                   </div>
                 </div>
@@ -742,24 +571,7 @@ export default function AutomationHistoryPage() {
                   </Label>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{selectedRecord.duration}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-muted-foreground">
-                    {t("fieldExitCode")}
-                  </Label>
-                  <div
-                    className={`font-mono font-medium ${
-                      selectedRecord.exitCode === 0
-                        ? "text-green-600"
-                        : selectedRecord.exitCode === null
-                        ? "text-muted-foreground"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {selectedRecord.exitCode !== null ? selectedRecord.exitCode : "N/A"}
+                    <span className="font-medium">{formatDuration(selectedExecution.duration)}</span>
                   </div>
                 </div>
               </div>
@@ -770,42 +582,69 @@ export default function AutomationHistoryPage() {
                   {t("fieldCommand")}
                 </Label>
                 <div className="rounded-md bg-muted p-3">
-                  <code className="text-sm font-mono">{selectedRecord.command}</code>
+                  <code className="text-sm font-mono">{selectedExecution.command}</code>
                 </div>
               </div>
 
-              {/* 执行输出 */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-muted-foreground">
-                  {t("fieldOutput")}
-                </Label>
-                <Textarea
-                  value={selectedRecord.output}
-                  readOnly
-                  className="min-h-[300px] scrollbar-custom text-sm font-mono"
-                />
-              </div>
+              {/* 服务器执行结果 */}
+              {selectedExecution.server_results && selectedExecution.server_results.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    {t("fieldOutput")}
+                  </Label>
+                  <div className="space-y-3">
+                    {selectedExecution.server_results.map((result) => (
+                      <div key={result.id} className="rounded-md border p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Server className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{result.server_name}</span>
+                            <span className="text-sm text-muted-foreground">({result.server_host})</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {result.status === "success" ? (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-red-600" />
+                            )}
+                            <Badge className={
+                              result.status === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                            }>
+                              {result.exit_code !== null && result.exit_code !== undefined ? `Exit: ${result.exit_code}` : result.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        <Textarea
+                          value={result.output || result.error_message || "(no output)"}
+                          readOnly
+                          className="min-h-[120px] max-h-[300px] scrollbar-custom text-sm font-mono resize-y"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          <DialogFooter className="gap-2">
-            {selectedRecord && selectedRecord.status === "failed" && (
+          <DialogFooter className="gap-2 shrink-0">
+            {selectedExecution && selectedExecution.status === "failed" && (
               <Button
                 variant="outline"
                 onClick={() => {
                   setIsDetailsDialogOpen(false)
-                  handleRetry(selectedRecord.id)
+                  handleRetry(selectedExecution)
                 }}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 {t("detailsRetryButton")}
               </Button>
             )}
-            {selectedRecord && (
+            {selectedExecution && (
               <Button
                 variant="outline"
                 onClick={() => {
-                  handleDownloadOutput(selectedRecord.id)
+                  handleDownloadOutput(selectedExecution)
                 }}
               >
                 <Download className="mr-2 h-4 w-4" />

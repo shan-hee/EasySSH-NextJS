@@ -24,13 +24,20 @@ import {
  DialogHeader,
  DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, X, RefreshCw } from "lucide-react"
-import { scriptsApi, type Script } from "@/lib/api"
+import { Plus, X, RefreshCw, Search, Check, Terminal, Server as ServerIcon } from "lucide-react"
+import { scriptsApi, serversApi, batchTasksApi, type Script, type Server } from "@/lib/api"
+import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useRouter } from "next/navigation"
 import { createScriptColumns } from "./components/script-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 
 export default function ScriptsPage() {
  const t = useTranslations("scripts")
+ const tCommon = useTranslations("common")
+ const router = useRouter()
  const { ready } = useAuthReady()
  const [scripts, setScripts] = useState<Script[]>([])
  const [loading, setLoading] = useState(true)
@@ -38,6 +45,16 @@ export default function ScriptsPage() {
  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
  const [editingScriptId, setEditingScriptId] = useState<string | null>(null)
  const [refreshing, setRefreshing] = useState(false)
+
+ // 执行对话框状态
+ const [isExecuteDialogOpen, setIsExecuteDialogOpen] = useState(false)
+ const [executingScript, setExecutingScript] = useState<Script | null>(null)
+ const [servers, setServers] = useState<Server[]>([])
+ const [selectedServerIds, setSelectedServerIds] = useState<string[]>([])
+ const [executionMode, setExecutionMode] = useState<"parallel" | "sequential">("parallel")
+ const [serverSearchQuery, setServerSearchQuery] = useState("")
+ const [loadingServers, setLoadingServers] = useState(false)
+ const [executing, setExecuting] = useState(false)
  // DataTable 分页与列可见性
  const [page, setPage] = useState(1)
  const [pageSize, setPageSize] = useState(20)
@@ -154,12 +171,144 @@ export default function ScriptsPage() {
  )
  : availableEditTags
 
+// 加载服务器列表
+const loadServers = useCallback(async () => {
+  setLoadingServers(true)
+  try {
+    const response = await serversApi.list({ limit: 1000 })
+    setServers(response.data || [])
+  } catch (error: unknown) {
+    console.error("加载服务器列表失败:", error)
+    toast.error(getErrorMessage(error, t("toastLoadServersFailed")))
+  } finally {
+    setLoadingServers(false)
+  }
+}, [t])
+
+// 过滤后的服务器列表
+const filteredServers = useMemo(() => {
+  if (!serverSearchQuery.trim()) return servers
+  const query = serverSearchQuery.toLowerCase()
+  return servers.filter(
+    (server) =>
+      server.name?.toLowerCase().includes(query) ||
+      server.host.toLowerCase().includes(query)
+  )
+}, [servers, serverSearchQuery])
+
+// 在线服务器数量
+const onlineServersCount = useMemo(() => {
+  return servers.filter((s) => s.status === "online").length
+}, [servers])
+
+// 已选择的在线服务器数量
+const selectedOnlineCount = useMemo(() => {
+  return selectedServerIds.filter((id) => {
+    const server = servers.find((s) => s.id === id)
+    return server?.status === "online"
+  }).length
+}, [selectedServerIds, servers])
+
 // 事件处理函数 - 使用 useCallback 避免闭包陷阱
 const handleExecute = useCallback((scriptId: string) => {
- console.log("Execute script:", scriptId)
- toast.info(t("toastExecuteInfo"))
- // TODO: 实现脚本执行对话框和逻辑
- }, [])
+  const script = scripts.find((s) => s.id === scriptId)
+  if (script) {
+    setExecutingScript(script)
+    setSelectedServerIds([])
+    setExecutionMode("parallel")
+    setServerSearchQuery("")
+    setIsExecuteDialogOpen(true)
+    loadServers()
+  }
+}, [scripts, loadServers])
+
+// 执行脚本
+const handleExecuteScript = useCallback(async () => {
+  if (!executingScript) return
+
+  // 过滤出在线的服务器
+  const onlineSelectedIds = selectedServerIds.filter((id) => {
+    const server = servers.find((s) => s.id === id)
+    return server?.status === "online"
+  })
+
+  if (onlineSelectedIds.length === 0) {
+    toast.error(t("toastSelectAtLeastOneServer"))
+    return
+  }
+
+  setExecuting(true)
+  try {
+    // 创建批量任务
+    // 注意: apiFetch 会自动解包 data 字段，所以直接获取 task
+    const response = await batchTasksApi.create({
+      task_name: `${t("executeTaskPrefix")}: ${executingScript.name}`,
+      task_type: "script",
+      script_id: executingScript.id,
+      content: executingScript.content,
+      server_ids: onlineSelectedIds,
+      execution_mode: executionMode,
+    })
+    // response 可能是 { data: BatchTask } 或直接是 BatchTask（取决于 apiFetch 的解包逻辑）
+    const task = "data" in response ? response.data : response
+
+    // 启动任务
+    await batchTasksApi.start(task.id)
+
+    toast.success(t("toastExecuteStarted"))
+    setIsExecuteDialogOpen(false)
+
+    // 跳转到执行历史页面
+    router.push("/dashboard/automation/history")
+  } catch (error: unknown) {
+    console.error("执行脚本失败:", error)
+    toast.error(getErrorMessage(error, t("toastExecuteFailed")))
+  } finally {
+    setExecuting(false)
+  }
+}, [executingScript, selectedServerIds, servers, executionMode, t, router])
+
+// 切换服务器选择
+const toggleServerSelection = useCallback((serverId: string) => {
+  const server = servers.find((s) => s.id === serverId)
+  if (server?.status !== "online") {
+    toast.warning(t("toastOnlyOnlineServers"))
+    return
+  }
+  setSelectedServerIds((prev) =>
+    prev.includes(serverId)
+      ? prev.filter((id) => id !== serverId)
+      : [...prev, serverId]
+  )
+}, [servers, t])
+
+// 全选/取消全选在线服务器
+const toggleSelectAllOnline = useCallback(() => {
+  const onlineServerIds = filteredServers
+    .filter((s) => s.status === "online")
+    .map((s) => s.id)
+
+  const allSelected = onlineServerIds.every((id) => selectedServerIds.includes(id))
+
+  if (allSelected) {
+    setSelectedServerIds((prev) => prev.filter((id) => !onlineServerIds.includes(id)))
+  } else {
+    setSelectedServerIds((prev) => {
+      const newIds = new Set([...prev, ...onlineServerIds])
+      return Array.from(newIds)
+    })
+  }
+}, [filteredServers, selectedServerIds])
+
+// 关闭执行对话框
+const handleCloseExecuteDialog = useCallback((open: boolean) => {
+  setIsExecuteDialogOpen(open)
+  if (!open) {
+    setExecutingScript(null)
+    setSelectedServerIds([])
+    setServerSearchQuery("")
+  }
+}, [])
 
  const handleEdit = useCallback((scriptId: string) => {
  const script = scripts.find(s => s.id === scriptId)
@@ -436,12 +585,7 @@ const filterOptions = useMemo(() => {
 
  return (
  <>
- <PageHeader title={t("pageTitle")}>
- <Button onClick={handleOpenDialog}>
- <Plus className="mr-2 h-4 w-4" />
- {t("btnNew")}
- </Button>
-</PageHeader>
+ <PageHeader title={t("pageTitle")} />
 
 <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
   <Card className="flex-1 min-h-0">
@@ -450,7 +594,7 @@ const filterOptions = useMemo(() => {
         <CardTitle className="text-lg">{t("cardTitle")}</CardTitle>
         <CardDescription>{t("cardDescription", { count: scripts.length })}</CardDescription>
       </div>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <ColumnVisibility
           columns={[
             { id: 'name', label: t("cvName") },
@@ -472,6 +616,19 @@ const filterOptions = useMemo(() => {
             }))
           }))}
         />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          {tCommon("tableRefresh")}
+        </Button>
+        <Button size="sm" onClick={handleOpenDialog}>
+          <Plus className="mr-2 h-4 w-4" />
+          {t("btnNew")}
+        </Button>
       </div>
     </CardHeader>
     <CardContent className="flex-1 min-h-0 p-4 pt-0">
@@ -495,12 +652,7 @@ const filterOptions = useMemo(() => {
               { column: 'author', title: t("filterAuthorTitle"), options: filterOptions.authors },
               { column: 'tags', title: t("filterTagsTitle"), options: filterOptions.tags },
             ]}
-            onRefresh={handleRefresh}
-            showRefresh={true}
-            isRefreshing={refreshing}
-          >
-            {/* 可添加额外操作按钮 */}
-          </DataTableToolbar>
+          />
         )}
       />
     </CardContent>
@@ -801,6 +953,175 @@ placeholder={t("fieldDescriptionPlaceholder")}
  </Button>
  </DialogFooter>
  </DialogContent>
+ </Dialog>
+
+ {/* 执行脚本对话框 */}
+ <Dialog open={isExecuteDialogOpen} onOpenChange={handleCloseExecuteDialog}>
+   <DialogContent className="max-w-md max-h-[85vh] flex flex-col gap-0">
+     <DialogHeader className="shrink-0 pb-4">
+       <DialogTitle className="flex items-center gap-2">
+         <Terminal className="h-5 w-5" />
+         {t("executeDialogTitle")}
+       </DialogTitle>
+       <DialogDescription className="flex items-center gap-2 pt-1">
+         <Badge variant="outline" className="font-mono text-xs">
+           {executingScript?.name}
+         </Badge>
+       </DialogDescription>
+     </DialogHeader>
+
+     <div className="space-y-4 flex-1 min-h-0 overflow-y-auto scrollbar-custom">
+       {/* 选择目标服务器 */}
+       <div className="space-y-3">
+         <div className="flex items-center justify-between">
+           <Label className="text-sm font-medium">{t("executeSelectServers")}</Label>
+           <span className="text-xs text-muted-foreground">
+             {t("executeSelectedSummary", {
+               selected: selectedOnlineCount,
+               online: onlineServersCount,
+             })}
+           </span>
+         </div>
+
+         {/* 搜索框和全选 */}
+         <div className="flex items-center gap-2">
+           <div className="relative flex-1">
+             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+             <Input
+               placeholder={t("executeSearchPlaceholder")}
+               value={serverSearchQuery}
+               onChange={(e) => setServerSearchQuery(e.target.value)}
+               className="pl-8 h-9"
+             />
+           </div>
+           <Button
+             variant="outline"
+             size="sm"
+             onClick={toggleSelectAllOnline}
+             className="h-9 px-3 text-xs whitespace-nowrap"
+           >
+             {filteredServers.filter((s) => s.status === "online").every((s) => selectedServerIds.includes(s.id))
+               ? t("executeUnselectAll")
+               : t("executeSelectAll")}
+           </Button>
+         </div>
+
+         {/* 服务器列表 */}
+         <ScrollArea className="h-[240px] rounded-md border bg-muted/30">
+           {loadingServers ? (
+             <div className="p-2 space-y-1">
+               {Array.from({ length: 4 }).map((_, i) => (
+                 <div key={i} className="flex items-center gap-3 p-2.5 rounded-md border border-transparent">
+                   <Skeleton className="h-4 w-4 rounded" />
+                   <div className="flex-1 space-y-1.5">
+                     <Skeleton className="h-4 w-32" />
+                     <Skeleton className="h-3 w-24" />
+                   </div>
+                   <Skeleton className="h-2 w-2 rounded-full" />
+                 </div>
+               ))}
+             </div>
+           ) : filteredServers.length === 0 ? (
+             <div className="flex flex-col items-center justify-center h-[220px] gap-2 text-muted-foreground">
+               <ServerIcon className="h-8 w-8 opacity-50" />
+               <span className="text-sm">{t("executeNoServers")}</span>
+             </div>
+           ) : (
+             <div className="p-2 space-y-1">
+               {filteredServers.map((server) => {
+                 const isOnline = server.status === "online"
+                 const isSelected = selectedServerIds.includes(server.id)
+                 return (
+                   <div
+                     key={server.id}
+                     className={`flex items-center gap-3 p-2.5 rounded-md transition-all ${
+                       isOnline
+                         ? isSelected
+                           ? "bg-primary/10 border border-primary/30"
+                           : "hover:bg-accent/50 cursor-pointer border border-transparent"
+                         : "opacity-40 cursor-not-allowed border border-transparent"
+                     }`}
+                     onClick={() => toggleServerSelection(server.id)}
+                   >
+                     <Checkbox
+                       checked={isSelected}
+                       disabled={!isOnline}
+                       onCheckedChange={() => toggleServerSelection(server.id)}
+                       className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                     />
+                     <div className="flex-1 min-w-0">
+                       <p className="text-sm font-medium truncate">
+                         {server.name || server.host}
+                       </p>
+                       <p className="text-xs text-muted-foreground truncate font-mono">
+                         {server.host}:{server.port}
+                       </p>
+                     </div>
+                     <div className={`w-2 h-2 rounded-full shrink-0 ${isOnline ? "bg-green-500" : "bg-gray-400"}`} />
+                   </div>
+                 )
+               })}
+             </div>
+           )}
+         </ScrollArea>
+       </div>
+
+       {/* 执行模式 */}
+       <div className="space-y-3 pt-2">
+         <Label className="text-sm font-medium">{t("executeMode")}</Label>
+         <RadioGroup
+           value={executionMode}
+           onValueChange={(value) => setExecutionMode(value as "parallel" | "sequential")}
+           className="grid grid-cols-2 gap-3"
+         >
+           <Label
+             htmlFor="parallel"
+             className={`flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-all ${
+               executionMode === "parallel"
+                 ? "border-primary bg-primary/5"
+                 : "border-border hover:bg-accent/50"
+             }`}
+           >
+             <RadioGroupItem value="parallel" id="parallel" />
+             <span className="text-sm">{t("executeModeParallel")}</span>
+           </Label>
+           <Label
+             htmlFor="sequential"
+             className={`flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-all ${
+               executionMode === "sequential"
+                 ? "border-primary bg-primary/5"
+                 : "border-border hover:bg-accent/50"
+             }`}
+           >
+             <RadioGroupItem value="sequential" id="sequential" />
+             <span className="text-sm">{t("executeModeSequential")}</span>
+           </Label>
+         </RadioGroup>
+       </div>
+     </div>
+
+     <DialogFooter className="shrink-0 pt-4 border-t mt-4">
+       <Button variant="outline" onClick={() => setIsExecuteDialogOpen(false)}>
+         {t("dialogCancel")}
+       </Button>
+       <Button
+         onClick={handleExecuteScript}
+         disabled={executing || selectedOnlineCount === 0}
+       >
+         {executing ? (
+           <>
+             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+             {t("executeRunning")}
+           </>
+         ) : (
+           <>
+             <Check className="mr-2 h-4 w-4" />
+             {t("executeSubmit")}
+           </>
+         )}
+       </Button>
+     </DialogFooter>
+   </DialogContent>
  </Dialog>
  </>
  )

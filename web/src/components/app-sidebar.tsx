@@ -62,7 +62,6 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
           { title: tNav("scripts"), url: "/dashboard/scripts" },
           { title: tNav("schedules"), url: "/dashboard/automation/schedules" },
           { title: tNav("executions"), url: "/dashboard/automation/history" },
-          { title: tNav("batch"), url: "/dashboard/automation/batch" },
         ],
       },
       {
