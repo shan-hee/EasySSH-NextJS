@@ -147,24 +147,33 @@ export class CompletionEngine {
 
   /**
    * 去重补全项
+   * 基于 text 去重，保留最优的项（优先比较 score，其次比较 priority）
    */
   private deduplicateItems(items: CompletionItem[]): CompletionItem[] {
     const seen = new Map<string, CompletionItem>()
 
     for (const item of items) {
-      // 使用 providerName + text 作为 key，避免不同来源的相同命令被合并，
-      // 保证脚本库/历史等各自的配额可以生效
-      const providerKey = item.providerName || "unknown"
-      const key = `${providerKey}:${item.text}`
+      // 仅以 text 作为 key，相同命令只保留一个
+      const key = item.text
       const existing = seen.get(key)
 
       if (!existing) {
         seen.set(key, item)
       } else {
-        // 如果已存在,保留优先级更高的
-        if ((item.priority || 0) > (existing.priority || 0)) {
+        // 比较策略：优先看 score（匹配度），其次看 priority（来源权重）
+        const itemScore = item.score || 0
+        const existingScore = existing.score || 0
+
+        if (itemScore > existingScore) {
+          // 新项 score 更高，替换
           seen.set(key, item)
+        } else if (itemScore === existingScore) {
+          // score 相同时，比较 priority
+          if ((item.priority || 0) > (existing.priority || 0)) {
+            seen.set(key, item)
+          }
         }
+        // 否则保留已有项
       }
     }
 

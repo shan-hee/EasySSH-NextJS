@@ -509,6 +509,12 @@ export function WebTerminal({
 
       // 检测回车键 - 追踪执行的命令（在自动触发之前）
       if (isEnterKey(data)) {
+        // 清除任何待处理的自动补全定时器，避免命令执行后补全框弹出
+        if (autoCompleteTimerRef.current) {
+          clearTimeout(autoCompleteTimerRef.current)
+          autoCompleteTimerRef.current = null
+        }
+
         const context = parseCompletionContext(terminal)
         const command = context.fullLine.trim()
 
@@ -528,8 +534,13 @@ export function WebTerminal({
         autoCompleteTimerRef.current = null
       }
 
-      // 对于控制字符(ESC/Backspace/方向键等),不触发自动补全
-      // 仅对可打印字符(含空格)进行自动补全
+      // Backspace 键：关闭当前补全框
+      if (isBackspaceKey(data)) {
+        closeCompletion()
+        return
+      }
+
+      // 对于其他控制字符(ESC/方向键等),不触发自动补全
       if (!data || data.length === 0) {
         return
       }
@@ -538,10 +549,16 @@ export function WebTerminal({
         return
       }
 
+      // 如果用户输入的是空格，不触发自动补全
+      // 因为用户刚完成一个词的输入，还没开始输入下一个词
+      if (data === " ") {
+        return
+      }
+
       autoCompleteTimerRef.current = setTimeout(() => {
         const context = parseCompletionContext(terminal)
 
-        // 基于“整行前缀”判断是否触发自动补全:
+        // 基于"整行前缀"判断是否触发自动补全:
         // 例如: "docker s" 也应该触发，而不仅仅看最后一个单词 "s"
         const rawPrefix = context.fullLine.slice(
           0,

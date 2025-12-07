@@ -280,6 +280,15 @@ export function isEnterKey(data: string): boolean {
 }
 
 /**
+ * 检查是否是 Backspace 键
+ * @param data 终端输入数据
+ * @returns 是否是 Backspace 键
+ */
+export function isBackspaceKey(data: string): boolean {
+  return data === "\x7f" || data === "\b"
+}
+
+/**
  * 命令匹配辅助:
  * - 优先按整行前缀前缀匹配: command.startsWith(linePrefix)
  * - 如果整行不匹配, 按“按空格分词 + 最后一个词前缀匹配”的方式匹配:
