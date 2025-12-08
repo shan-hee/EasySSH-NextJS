@@ -82,6 +82,7 @@ import { useTranslations } from "next-intl"
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner"
 import type { TransferTask as ImportedTransferTask } from "@/hooks/useFileTransfer"
 import { FileActionMenu, type FileAction } from "@/components/sftp/file-action-menu"
+import { UploadProgressItem } from "@/components/sftp/upload-progress-item"
 import { useFileListVirtualizer } from "@/hooks/use-file-list-virtualizer"
 import { toast } from "sonner"
 import { computeFloatingPosition } from "@/lib/overlay-position"
@@ -1205,21 +1206,6 @@ export function SftpManager(props: SftpManagerProps) {
     } catch {}
   }, [viewMode, pageContext])
 
-  // 传输状态图标
-  const getStatusIcon = (status: TransferTask["status"]) => {
-    switch (status) {
-      case "completed":
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />
-      case "failed":
-        return <XCircle className="h-4 w-4 text-red-500" />
-      case "cancelled":
-        return <XCircle className="h-4 w-4 text-zinc-400" />
-      case "pending":
-        return <Clock className="h-4 w-4 text-yellow-500" />
-      default:
-        return <Activity className="h-4 w-4 text-blue-500 animate-pulse" />
-    }
-  }
 
   // Context value for nested components
   const sessionContextValue = useMemo(() => ({
@@ -1597,99 +1583,11 @@ export function SftpManager(props: SftpManagerProps) {
                 {effectiveTransferTasks.length > 0 ? (
                   <div className="max-h-[400px] overflow-y-auto">
                     {effectiveTransferTasks.map(task => (
-                      <div
+                      <UploadProgressItem
                         key={task.id}
-                        className={cn(
-                          "px-3 py-2 border-b last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors",
-                        )}
-                      >
-                        {/* 文件名和状态 */}
-                        <div className="flex items-center gap-2 mb-1.5">
-                          {getStatusIcon(task.status)}
-                          <span className="text-sm font-medium truncate flex-1">
-                            {task.fileName}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] h-4 px-1 shrink-0"
-                          >
-                            {task.type === "upload"
-                              ? tSftp("transferTypeUpload")
-                              : task.type === "transfer"
-                              ? tSftp("transferTypeTransfer")
-                              : tSftp("transferTypeDownload")}
-                          </Badge>
-                        </div>
-
-                        {/* 跨服务器传输信息 */}
-                        {task.type === "transfer" && task.sourceServer && task.targetServer && (
-                          <div className="text-xs text-muted-foreground mb-1.5 truncate">
-                            {task.sourceServer} → {task.targetServer}
-                          </div>
-                        )}
-
-                        {/* 进度条 */}
-                        {task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled" && (
-                          task.status === "transferring" ? (
-                            // 跨服务器传输使用 indeterminate 进度条
-                            <div className="h-1 mb-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-                              <div className="h-full w-1/3 bg-blue-500 rounded-full animate-indeterminate" />
-                            </div>
-                          ) : (
-                            <Progress value={task.progress} className="h-1 mb-1.5" />
-                          )
-                        )}
-
-                        {/* 详细信息 + 取消操作 */}
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          {task.status === "uploading" || task.status === "downloading" ? (
-                            <>
-                              {task.stage && (
-                                <>
-                                  <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                                    {task.stage === 'http' ? 'HTTP' : 'SFTP'}
-                                  </Badge>
-                                  <span>•</span>
-                                </>
-                              )}
-                              <span>{task.speed}</span>
-                              <span>•</span>
-                              <span>{task.timeRemaining}</span>
-                            </>
-                          ) : task.status === "transferring" ? (
-                            <span className="text-blue-600 dark:text-blue-400">
-                              {tSftp("transferStatusTransferring")}
-                            </span>
-                          ) : task.status === "completed" ? (
-                            <span className="text-green-600 dark:text-green-400">
-                              {tSftp("transferStatusCompleted")} {task.fileSize !== '-' && `• ${task.fileSize}`}
-                            </span>
-                          ) : task.status === "failed" ? (
-                            <span className="text-red-600 dark:text-red-400" title={task.error}>
-                              {tSftp("transferStatusFailed")}
-                            </span>
-                          ) : task.status === "cancelled" ? (
-                            <span className="text-zinc-500 dark:text-zinc-400">
-                              {tSftp("transferStatusCancelled")}
-                            </span>
-                          ) : null}
-                        </div>
-                          <div className="flex items-center gap-2">
-                            {task.status !== "transferring" && <span>{task.progress}%</span>}
-                            {onCancelTransfer && (task.status === "uploading" || task.status === "downloading") && (
-                              <button
-                                type="button"
-                                onClick={() => onCancelTransfer(task.id)}
-                                className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-500 transition-colors"
-                              >
-                                <XCircle className="h-3 w-3" />
-                                <span>{tCommon("cancel")}</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                        task={task}
+                        onCancel={onCancelTransfer}
+                      />
                     ))}
                   </div>
                 ) : (

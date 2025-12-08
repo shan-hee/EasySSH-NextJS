@@ -477,6 +477,11 @@ const messages = {
     transferStatusCancelled: "Cancelled",
     transferStatusTransferring: "Transferring...",
     transferPanelEmpty: "No transfer tasks",
+    // Two-stage upload progress
+    uploadStageHttp: "Uploading",
+    uploadStageSftp: "Writing to remote",
+    uploadStageHttpShort: "Upload",
+    uploadStageSftpShort: "Write",
     contextNewFolder: "New folder",
     contextNewFile: "New file",
     contextUploadFile: "Upload file",

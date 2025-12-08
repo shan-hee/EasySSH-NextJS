@@ -432,6 +432,11 @@ const messages = {
     transferStatusCancelled: "已取消",
     transferStatusTransferring: "传输中...",
     transferPanelEmpty: "暂无传输任务",
+    // 两阶段上传进度
+    uploadStageHttp: "上传中",
+    uploadStageSftp: "写入远端",
+    uploadStageHttpShort: "上传",
+    uploadStageSftpShort: "写入",
     contextNewFolder: "新建文件夹",
     contextNewFile: "新建文件",
     contextUploadFile: "上传文件",
