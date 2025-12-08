@@ -482,6 +482,9 @@ const messages = {
     uploadStageSftp: "Writing to remote",
     uploadStageHttpShort: "Upload",
     uploadStageSftpShort: "Write",
+    // Cross-server transfer two-stage progress
+    transferStageRead: "Read source",
+    transferStageWrite: "Write target",
     contextNewFolder: "New folder",
     contextNewFile: "New file",
     contextUploadFile: "Upload file",

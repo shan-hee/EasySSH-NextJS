@@ -29,7 +29,8 @@ type SFTPHandler struct {
 	serverRepo        server.Repository
 	encryptor         *crypto.Encryptor
 	uploadWSHandler   *ws.SFTPUploadHandler
-	hostKeyCallback   ssh.HostKeyCallback // SSH主机密钥验证回调
+	transferHandler   *ws.SFTPTransferHandler // 跨服务器直连传输处理器
+	hostKeyCallback   ssh.HostKeyCallback     // SSH主机密钥验证回调
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
@@ -41,6 +42,11 @@ func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, 
 		uploadWSHandler: uploadWSHandler,
 		hostKeyCallback: hostKeyCallback,
 	}
+}
+
+// SetTransferHandler 设置跨服务器传输处理器
+func (h *SFTPHandler) SetTransferHandler(handler *ws.SFTPTransferHandler) {
+	h.transferHandler = handler
 }
 
 // createSFTPClient 创建 SFTP 客户端（辅助方法）
@@ -1316,4 +1322,126 @@ func (h *SFTPHandler) transferDirectory(sourceClient, targetClient *sftp.Client,
 	}
 
 	return totalCopied, nil
+}
+
+// ======================================
+// 跨服务器直连传输 API (SCP/rsync)
+// ======================================
+
+// DirectTransferRequest 直连传输请求
+type DirectTransferRequest struct {
+	SourceServerID string `json:"source_server_id" binding:"required"`
+	SourcePath     string `json:"source_path" binding:"required"`
+	TargetServerID string `json:"target_server_id" binding:"required"`
+	TargetPath     string `json:"target_path" binding:"required"`
+	TaskID         string `json:"task_id,omitempty"` // 可选的任务ID，用于WebSocket进度推送
+}
+
+// DirectTransferResponse 直连传输响应
+type DirectTransferResponse struct {
+	Success bool   `json:"success"`
+	TaskID  string `json:"task_id"`
+	Message string `json:"message"`
+}
+
+// DirectTransfer 跨服务器直连传输（使用 rsync/scp）
+// POST /api/v1/sftp/transfer/direct
+// 此方法启动后台传输任务，通过 WebSocket 推送进度
+func (h *SFTPHandler) DirectTransfer(c *gin.Context) {
+	// 检查 transferHandler 是否已设置
+	if h.transferHandler == nil {
+		RespondError(c, http.StatusServiceUnavailable, "transfer_not_available", "Direct transfer service not available")
+		return
+	}
+
+	// 解析请求
+	var req DirectTransferRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 解析用户ID
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Invalid user session")
+		return
+	}
+
+	// 解析服务器 ID
+	sourceServerID, err := uuid.Parse(req.SourceServerID)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_source_server_id", "Invalid source server ID")
+		return
+	}
+
+	targetServerID, err := uuid.Parse(req.TargetServerID)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_target_server_id", "Invalid target server ID")
+		return
+	}
+
+	// 不允许同一服务器内传输
+	if sourceServerID == targetServerID {
+		RespondError(c, http.StatusBadRequest, "same_server", "Cannot transfer between the same server")
+		return
+	}
+
+	// 生成或使用提供的任务ID
+	taskID := req.TaskID
+	if taskID == "" {
+		taskID = uuid.New().String()
+	}
+
+	fmt.Printf("[SFTP DirectTransfer] Starting direct transfer: taskID=%s, source=%s:%s -> target=%s:%s\n",
+		taskID, req.SourceServerID, req.SourcePath, req.TargetServerID, req.TargetPath)
+
+	// 使用独立的 context，不受 HTTP 请求生命周期影响
+	// 传输任务会在后台 goroutine 中执行，不应随 HTTP 请求结束而取消
+	transferCtx := context.Background()
+
+	// 启动后台传输任务
+	err = h.transferHandler.StartDirectTransfer(
+		transferCtx,
+		taskID,
+		userID,
+		sourceServerID,
+		req.SourcePath,
+		targetServerID,
+		req.TargetPath,
+	)
+
+	if err != nil {
+		fmt.Printf("[SFTP DirectTransfer] Failed to start transfer: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "transfer_start_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, DirectTransferResponse{
+		Success: true,
+		TaskID:  taskID,
+		Message: "Transfer started, connect to WebSocket for progress updates",
+	})
+}
+
+// CancelTransfer 取消传输任务
+// POST /api/v1/sftp/transfer/:task_id/cancel
+func (h *SFTPHandler) CancelTransfer(c *gin.Context) {
+	if h.transferHandler == nil {
+		RespondError(c, http.StatusServiceUnavailable, "transfer_not_available", "Direct transfer service not available")
+		return
+	}
+
+	taskID := c.Param("task_id")
+	if taskID == "" {
+		RespondError(c, http.StatusBadRequest, "task_id_required", "Task ID is required")
+		return
+	}
+
+	h.transferHandler.CancelTask(taskID)
+
+	RespondSuccess(c, gin.H{
+		"success": true,
+		"message": "Cancel request sent",
+	})
 }

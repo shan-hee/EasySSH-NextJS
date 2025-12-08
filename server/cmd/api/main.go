@@ -306,6 +306,15 @@ func main() {
 	// SFTP 上传 WebSocket 处理器
 	sftpUploadWSHandler := ws.NewSFTPUploadHandler(securityService)
 
+	// SFTP 跨服务器传输 WebSocket 处理器
+	sftpTransferWSHandler := ws.NewSFTPTransferHandler(
+		serverService,
+		serverRepo,
+		encryptor,
+		securityService,
+		sshHostKeyService.GetHostKeyCallback(),
+	)
+
 	// 令牌有效期（秒），用于 Cookie 和 API 响应
 	accessTokenTTLSeconds := int(accessTokenDuration.Seconds())
 	refreshTokenTTLSeconds := int(refreshIdleDuration.Seconds())
@@ -331,6 +340,7 @@ func main() {
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
+	sftpHandler.SetTransferHandler(sftpTransferWSHandler) // 注入跨服务器传输处理器
 	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), securityService, completionService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
@@ -565,7 +575,16 @@ func main() {
 		sftpTransferRoutes := v1.Group("/sftp")
 		sftpTransferRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			sftpTransferRoutes.POST("/transfer", sftpHandler.Transfer) // 跨服务器文件传输
+			sftpTransferRoutes.POST("/transfer", sftpHandler.Transfer)              // 跨服务器文件传输（流式中转）
+			sftpTransferRoutes.POST("/transfer/direct", sftpHandler.DirectTransfer) // 跨服务器直连传输（rsync/scp）
+			sftpTransferRoutes.POST("/transfer/:task_id/cancel", sftpHandler.CancelTransfer) // 取消传输任务
+		}
+
+		// SFTP 跨服务器传输进度 WebSocket 路由（需要认证）
+		sftpTransferWSRoutes := v1.Group("/sftp/transfer/ws")
+		sftpTransferWSRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			sftpTransferWSRoutes.GET("/:task_id", sftpTransferWSHandler.HandleTransferWebSocket) // 传输进度 WebSocket
 		}
 
 		// 监控路由（需要认证）

@@ -387,7 +387,7 @@ export default function SftpPage() {
  const parentRef = useRef<HTMLDivElement>(null)
 
  // 文件传输管理
- const { tasks: transferTasks, uploadFile, clearCompleted, cancelTask, createTransferTask, addTask, updateTask } = useFileTransfer()
+ const { tasks: transferTasks, uploadFile, clearCompleted, cancelTask, createTransferTask, addTask, updateTask, directTransfer, cancelDirectTransfer } = useFileTransfer()
 
  // 会话标识颜色列表
  const sessionColors = [
@@ -489,7 +489,7 @@ export default function SftpPage() {
  }
  }
 
- // 处理跨会话文件拖放
+ // 处理跨会话文件拖放 - 使用直连传输 (rsync/scp)
  const handleCrossSessionDrop = useCallback(async (targetSessionId: string, dragData: CrossSessionDragData) => {
    const targetSession = sessions.find(s => s.id === targetSessionId)
    const sourceSession = sessions.find(s => s.id === dragData.sourceSessionId)
@@ -510,29 +510,17 @@ export default function SftpPage() {
    const sourcePath = dragData.filePath
    const targetPath = targetSession.currentPath
 
-   // 创建传输任务并添加到列表
-   const task = createTransferTask(
-     fileName,
-     sourceSession.serverName,
-     targetSession.serverName
-   )
-   addTask(task)
-
    try {
-     const result = await sftpApi.transferBetweenServers(
+     // 使用直连传输（rsync/scp），带实时进度
+     await directTransfer(
        sourceSession.serverId,
        sourcePath,
        targetSession.serverId,
-       targetPath
+       targetPath,
+       sourceSession.serverName,
+       targetSession.serverName,
+       fileName
      )
-
-     // 更新任务状态为完成
-     updateTask(task.id, {
-       status: 'completed',
-       progress: 100,
-       fileSize: formatFileSize(result.bytes_copied),
-       fileSizeBytes: result.bytes_copied,
-     })
 
      // 传输成功后刷新目标会话的文件列表
      try {
@@ -565,18 +553,13 @@ export default function SftpPage() {
      }
 
      toast.success(tSftp("toastTransferSuccess", {
-       file: result.file_name,
-       size: formatFileSize(result.bytes_copied)
+       file: fileName,
+       size: "-"
      }))
    } catch (err) {
-     // 更新任务状态为失败
-     updateTask(task.id, {
-       status: 'failed',
-       error: getErrorMessage(err, tSftp("toastTransferFailed")),
-     })
      toast.error(getErrorMessage(err, tSftp("toastTransferFailed")))
    }
- }, [sessions, tSftp, convertFileInfo, createTransferTask, addTask, updateTask])
+ }, [sessions, tSftp, convertFileInfo, directTransfer])
 
  // 快速创建并连接到服务器
  const handleQuickConnect = async (serverId: string) => {

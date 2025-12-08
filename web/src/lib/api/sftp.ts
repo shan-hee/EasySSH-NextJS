@@ -388,6 +388,49 @@ export const sftpApi = {
       retry: false,    // 禁用重试（传输操作不应重试）
     })
   },
+
+  /**
+   * 跨服务器直连传输（rsync/scp）
+   * 启动后台传输任务，通过 WebSocket 推送进度
+   * @returns 任务 ID，用于连接 WebSocket 获取进度
+   */
+  async directTransfer(
+    sourceServerId: string,
+    sourcePath: string,
+    targetServerId: string,
+    targetPath: string,
+    taskId?: string
+  ): Promise<DirectTransferResponse> {
+    return apiFetch<DirectTransferResponse>(`/sftp/transfer/direct`, {
+      method: "POST",
+      body: {
+        source_server_id: sourceServerId,
+        source_path: sourcePath,
+        target_server_id: targetServerId,
+        target_path: targetPath,
+        task_id: taskId,
+      },
+    })
+  },
+
+  /**
+   * 取消跨服务器传输任务
+   */
+  async cancelTransfer(taskId: string): Promise<void> {
+    return apiFetch<void>(`/sftp/transfer/${taskId}/cancel`, {
+      method: "POST",
+    })
+  },
+
+  /**
+   * 获取跨服务器传输 WebSocket URL
+   */
+  getTransferWebSocketUrl(taskId: string): string {
+    const apiUrl = getApiUrl()
+    // 将 http:// 或 https:// 替换为 ws:// 或 wss://
+    const wsUrl = apiUrl.replace(/^http/, "ws")
+    return `${wsUrl}/sftp/transfer/ws/${taskId}`
+  },
 }
 
 /**
@@ -399,3 +442,31 @@ export interface TransferResponse {
   bytes_copied: number
   file_name: string
 }
+
+/**
+ * 直连传输响应
+ */
+export interface DirectTransferResponse {
+  success: boolean
+  task_id: string
+  message: string
+}
+
+/**
+ * 传输进度消息（WebSocket）
+ */
+export interface TransferProgressMessage {
+  type: "started" | "progress" | "complete" | "error" | "cancelled"
+  task_id: string
+  bytes_total: number
+  bytes_copied: number
+  progress: number  // 0-100
+  speed_bps: number
+  eta: string
+  current_file: string
+  files_total: number
+  files_completed: number
+  message: string
+  method: "rsync" | "scp" | "sftp"
+}
+

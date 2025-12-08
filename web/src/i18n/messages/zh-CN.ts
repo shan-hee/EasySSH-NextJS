@@ -437,6 +437,9 @@ const messages = {
     uploadStageSftp: "写入远端",
     uploadStageHttpShort: "上传",
     uploadStageSftpShort: "写入",
+    // 跨服务器传输两阶段进度
+    transferStageRead: "读取源",
+    transferStageWrite: "写入目标",
     contextNewFolder: "新建文件夹",
     contextNewFile: "新建文件",
     contextUploadFile: "上传文件",

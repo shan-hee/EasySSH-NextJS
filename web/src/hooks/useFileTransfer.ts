@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
-import { sftpApi, type FileInfo } from '@/lib/api/sftp';
+import { sftpApi, type FileInfo, type TransferProgressMessage } from '@/lib/api/sftp';
 import { getWsUrl } from '@/lib/config';
 import { getCurrentAccessToken } from '@/stores/auth-store';
 
@@ -24,6 +24,7 @@ export interface TransferTask {
   // 跨服务器传输专用字段
   sourceServer?: string;
   targetServer?: string;
+  transferMethod?: 'rsync' | 'scp' | 'sftp'; // 直连传输方式
 }
 
 /**
@@ -354,6 +355,242 @@ export function useFileTransfer() {
     );
   }, []);
 
+  /**
+   * 跨服务器直连传输（rsync/scp）
+   * 启动后台传输任务，通过 WebSocket 实时推送进度
+   */
+  const directTransfer = useCallback(
+    async (
+      sourceServerId: string,
+      sourcePath: string,
+      targetServerId: string,
+      targetPath: string,
+      sourceServerName: string,
+      targetServerName: string,
+      fileName: string
+    ): Promise<void> => {
+      // 生成任务 ID
+      const taskId = `transfer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // 创建任务
+      const task: TransferTask = {
+        id: taskId,
+        fileName,
+        fileSize: '-', // 初始未知，等待服务器推送
+        fileSizeBytes: 0,
+        progress: 0,
+        status: 'transferring',
+        type: 'transfer',
+        startTime: Date.now(),
+        sourceServer: sourceServerName,
+        targetServer: targetServerName,
+      };
+
+      setTasks(prev => [...prev, task]);
+
+      // WebSocket 连接
+      let wsConnection: WebSocket | null = null;
+      // 标记传输是否已完成（用于区分正常关闭和异常关闭）
+      let transferFinished = false;
+
+      try {
+        // 建立 WebSocket 连接获取进度
+        const params = new URLSearchParams();
+        const accessToken = getCurrentAccessToken();
+        if (accessToken) {
+          params.set('token', accessToken);
+        }
+        const qs = params.toString();
+        const wsUrl = getWsUrl(
+          qs ? `/api/v1/sftp/transfer/ws/${taskId}?${qs}` : `/api/v1/sftp/transfer/ws/${taskId}`
+        );
+
+        wsConnection = new WebSocket(wsUrl);
+        wsRefs.current.set(taskId, wsConnection);
+
+        // 创建传输完成 Promise（需要在连接建立前设置，以便捕获所有事件）
+        let resolveTransfer: () => void;
+        let rejectTransfer: (error: Error) => void;
+        const transferComplete = new Promise<void>((resolve, reject) => {
+          resolveTransfer = resolve;
+          rejectTransfer = reject;
+        });
+
+        // 设置所有事件处理器（在连接建立前就设置好）
+        wsConnection.onmessage = (event) => {
+          try {
+            const msg: TransferProgressMessage = JSON.parse(event.data);
+
+            if (msg.type === 'started') {
+              updateTask(taskId, {
+                status: 'transferring',
+              });
+            } else if (msg.type === 'progress') {
+              updateTask(taskId, {
+                progress: msg.progress,
+                bytesTransferred: msg.bytes_copied,
+                fileSizeBytes: msg.bytes_total,
+                fileSize: msg.bytes_total > 0 ? formatBytesString(msg.bytes_total) : '-',
+                speed: msg.speed_bps > 0 ? formatSpeed(msg.speed_bps) : undefined,
+                timeRemaining: msg.eta || undefined,
+                transferMethod: msg.method,
+              });
+            } else if (msg.type === 'complete') {
+              transferFinished = true;
+              updateTask(taskId, {
+                progress: 100,
+                status: 'completed',
+                transferMethod: msg.method,
+              });
+              resolveTransfer();
+            } else if (msg.type === 'error') {
+              transferFinished = true;
+              updateTask(taskId, {
+                status: 'failed',
+                error: msg.message || '传输失败',
+                transferMethod: msg.method,
+              });
+              rejectTransfer(new Error(msg.message || '传输失败'));
+            } else if (msg.type === 'cancelled') {
+              transferFinished = true;
+              updateTask(taskId, {
+                status: 'cancelled',
+                error: '已取消',
+                transferMethod: msg.method,
+              });
+              resolveTransfer(); // 取消不视为错误
+            }
+          } catch (err) {
+            console.error('[useFileTransfer] Failed to parse WS message:', err);
+          }
+        };
+
+        wsConnection.onerror = (err) => {
+          console.error('[useFileTransfer] WebSocket error:', err);
+        };
+
+        wsConnection.onclose = (event) => {
+          // WebSocket 关闭时，如果传输还未完成，视为失败
+          // 但如果已经收到了完成/错误/取消消息，则不处理
+          if (!transferFinished) {
+            console.warn('[useFileTransfer] WebSocket closed unexpectedly:', event.code, event.reason);
+            setTasks(prev => {
+              const currentTask = prev.find(t => t.id === taskId);
+              if (currentTask && currentTask.status === 'transferring') {
+                return prev.map(t =>
+                  t.id === taskId
+                    ? { ...t, status: 'failed' as const, error: '连接断开' }
+                    : t
+                );
+              }
+              return prev;
+            });
+            rejectTransfer(new Error('连接断开'));
+          }
+        };
+
+        // 等待 WebSocket 连接建立
+        await new Promise<void>((resolve, reject) => {
+          if (!wsConnection) {
+            reject(new Error('WebSocket not initialized'));
+            return;
+          }
+
+          // 如果已经打开（理论上不太可能，但以防万一）
+          if (wsConnection.readyState === WebSocket.OPEN) {
+            resolve();
+            return;
+          }
+
+          const timeout = setTimeout(() => {
+            reject(new Error('WebSocket 连接超时'));
+          }, 5000);
+
+          const originalOnopen = wsConnection.onopen;
+          wsConnection.onopen = (event) => {
+            clearTimeout(timeout);
+            resolve();
+            // 恢复原来的 onopen（如果有的话）
+            if (originalOnopen) {
+              originalOnopen.call(wsConnection, event);
+            }
+          };
+
+          const originalOnerror = wsConnection.onerror;
+          const errorHandler = (event: Event) => {
+            clearTimeout(timeout);
+            reject(new Error('WebSocket 连接失败'));
+            // 恢复原来的 onerror
+            if (wsConnection) {
+              wsConnection.onerror = originalOnerror;
+            }
+          };
+          wsConnection.onerror = errorHandler;
+        });
+
+        // 发起直连传输请求
+        await sftpApi.directTransfer(
+          sourceServerId,
+          sourcePath,
+          targetServerId,
+          targetPath,
+          taskId
+        );
+
+        // 等待传输完成
+        await transferComplete;
+
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isCancelled = message.includes('取消') || message.includes('cancelled');
+
+        if (!isCancelled && !transferFinished) {
+          updateTask(taskId, {
+            status: 'failed',
+            error: message || '传输失败',
+          });
+          throw error;
+        }
+      } finally {
+        // 清理 WebSocket 连接
+        if (wsConnection) {
+          if (wsConnection.readyState === WebSocket.OPEN) {
+            wsConnection.close();
+          }
+          wsRefs.current.delete(taskId);
+        }
+      }
+    },
+    [updateTask]
+  );
+
+  /**
+   * 取消直连传输任务
+   */
+  const cancelDirectTransfer = useCallback(async (taskId: string) => {
+    // 通过 WebSocket 发送取消消息
+    const ws = wsRefs.current.get(taskId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'cancel', task_id: taskId }));
+      } catch (err) {
+        console.error('[useFileTransfer] Failed to send cancel message via WebSocket:', err);
+      }
+    }
+
+    // 同时调用 API 取消（双保险）
+    try {
+      await sftpApi.cancelTransfer(taskId);
+    } catch (err) {
+      console.error('[useFileTransfer] Failed to cancel transfer via API:', err);
+    }
+
+    updateTask(taskId, {
+      status: 'cancelled',
+      error: '已取消',
+    });
+  }, [updateTask]);
+
   return {
     tasks,
     uploadFile,
@@ -365,5 +602,8 @@ export function useFileTransfer() {
     createTransferTask,
     addTask,
     updateTask,
+    // 直连传输相关
+    directTransfer,
+    cancelDirectTransfer,
   };
 }

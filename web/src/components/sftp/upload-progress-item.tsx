@@ -156,15 +156,79 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
         </div>
       )}
 
-      {/* 非上传类型或待处理状态的简单进度条 */}
-      {(task.type !== 'upload' || isPending) && isActive && (
-        <Progress value={task.progress} className="h-1 mb-1.5" />
-      )}
+      {/* 跨服务器传输两阶段进度指示器 */}
+      {task.type === 'transfer' && (task.status === 'transferring' || isCompleted || isFailed || isCancelled) && (
+        <div className="mb-2">
+          {/* 阶段步骤指示器 */}
+          <div className="flex items-center gap-1 mb-1.5">
+            {/* 阶段一：读取源服务器 */}
+            <div className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
+              task.status === 'transferring' && task.progress < 100 && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+              (isCompleted || task.progress === 100) && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+              isFailed && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+              isCancelled && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+            )}>
+              {isFailed || isCancelled ? (
+                <XCircle className="h-3.5 w-3.5 text-red-500" />
+              ) : isCompleted ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+              )}
+              <Server className="h-3 w-3" />
+              <span>{tSftp("transferStageRead")}</span>
+            </div>
 
-      {/* 跨服务器传输的 indeterminate 进度条 */}
-      {task.status === "transferring" && (
-        <div className="h-1.5 mb-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-          <div className="h-full w-1/3 bg-blue-500 rounded-full animate-indeterminate" />
+            {/* 箭头 */}
+            <ArrowRight className={cn(
+              "h-3 w-3 transition-colors",
+              task.status === 'transferring' || isCompleted ? "text-blue-500" : "text-zinc-300 dark:text-zinc-600"
+            )} />
+
+            {/* 阶段二：写入目标服务器 */}
+            <div className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
+              task.status === 'transferring' && task.progress < 100 && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+              isCompleted && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+              isFailed && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+              isCancelled && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+            )}>
+              {isFailed || isCancelled ? (
+                <XCircle className="h-3.5 w-3.5 text-red-500" />
+              ) : isCompleted ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+              )}
+              <Server className="h-3 w-3" />
+              <span>{tSftp("transferStageWrite")}</span>
+            </div>
+          </div>
+
+          {/* 组合进度条 - 两边同步显示相同进度 */}
+          <div className="flex gap-0.5">
+            {/* 读取进度 */}
+            <div className="flex-1 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-l-full overflow-hidden">
+              <div
+                className={cn(
+                  "h-full transition-all duration-300 ease-out",
+                  isCompleted ? "bg-green-500" : "bg-blue-500"
+                )}
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+            {/* 写入进度 */}
+            <div className="flex-1 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-r-full overflow-hidden">
+              <div
+                className={cn(
+                  "h-full transition-all duration-300 ease-out",
+                  isCompleted ? "bg-green-500" : "bg-blue-500"
+                )}
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -195,9 +259,23 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
               )}
             </>
           ) : task.status === "transferring" ? (
-            <span className="text-blue-600 dark:text-blue-400">
-              {tSftp("transferStatusTransferring")}
-            </span>
+            <>
+              <span className="text-blue-600 dark:text-blue-400 font-medium">
+                {tSftp("transferStatusTransferring")}
+              </span>
+              {task.speed && (
+                <>
+                  <span className="text-zinc-400">•</span>
+                  <span>{task.speed}</span>
+                </>
+              )}
+              {task.timeRemaining && (
+                <>
+                  <span className="text-zinc-400">•</span>
+                  <span>{task.timeRemaining}</span>
+                </>
+              )}
+            </>
           ) : isCompleted ? (
             <span className="text-green-600 dark:text-green-400">
               {tSftp("transferStatusCompleted")} {task.fileSize !== '-' && `• ${task.fileSize}`}
@@ -223,9 +301,13 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
           {isActive && task.type !== 'upload' && (
             <span className="font-mono text-[10px]">{task.progress}%</span>
           )}
+          {/* 跨服务器传输进度百分比 */}
+          {task.status === "transferring" && (
+            <span className="font-mono text-[10px]">{Math.round(task.progress)}%</span>
+          )}
 
           {/* 取消按钮 */}
-          {onCancel && isActive && (
+          {onCancel && (isActive || task.status === "transferring") && (
             <button
               type="button"
               onClick={() => onCancel(task.id)}
