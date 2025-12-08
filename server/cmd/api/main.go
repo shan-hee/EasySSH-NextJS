@@ -561,6 +561,13 @@ func main() {
 			sftpWSRoutes.GET("/:task_id", sftpUploadWSHandler.HandleUploadWebSocket) // 上传进度 WebSocket
 		}
 
+		// SFTP 跨服务器传输路由（需要认证）
+		sftpTransferRoutes := v1.Group("/sftp")
+		sftpTransferRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			sftpTransferRoutes.POST("/transfer", sftpHandler.Transfer) // 跨服务器文件传输
+		}
+
 		// 监控路由（需要认证）
 		monitoringRoutes := v1.Group("/monitoring")
 		monitoringRoutes.Use(middleware.AuthMiddleware(jwtService))

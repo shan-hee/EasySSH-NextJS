@@ -85,6 +85,7 @@ import { FileActionMenu, type FileAction } from "@/components/sftp/file-action-m
 import { useFileListVirtualizer } from "@/hooks/use-file-list-virtualizer"
 import { toast } from "sonner"
 import { computeFloatingPosition } from "@/lib/overlay-position"
+import { setDragSourceSessionId } from "@/lib/drag-state"
 
 interface FileItem {
   name: string
@@ -504,19 +505,28 @@ export function SftpManager(props: SftpManagerProps) {
     }
     e.dataTransfer.setData('application/json', JSON.stringify(dragData))
     e.dataTransfer.setData('text/plain', fileName)
+
+    // 设置全局拖拽源会话ID（用于跨会话拖拽时判断是否是源会话）
+    setDragSourceSessionId(sessionId)
   }
 
   const handleNativeDragEnd = () => {
     setDraggedFileName(null)
     setDragOverFolder(null)
+    // 清除全局拖拽源会话ID
+    setDragSourceSessionId(null)
   }
 
   const handleNativeDragOver = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory") => {
     e.preventDefault()
-    e.stopPropagation()
 
     // 检查是否是跨会话拖拽
     const isFileFromOtherSession = e.dataTransfer.types.includes('application/json') && !draggedFileName
+
+    // 跨会话拖拽时不阻止冒泡，让父级 SortableSession 也能收到事件
+    if (!isFileFromOtherSession) {
+      e.stopPropagation()
+    }
 
     // 不能拖到自己身上
     if (targetFileName === draggedFileName && !isFileFromOtherSession) {
@@ -536,17 +546,15 @@ export function SftpManager(props: SftpManagerProps) {
 
   const handleNativeDrop = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory") => {
     e.preventDefault()
-    e.stopPropagation()
 
     // 检查是否是跨会话拖拽
     try {
       const jsonData = e.dataTransfer.getData('application/json')
       if (jsonData) {
         const dragData = JSON.parse(jsonData)
-        // 跨会话拖拽到文件夹
-        if (dragData.sourceSessionId !== sessionId && targetType === "directory") {
-          const targetPath = `${currentPath}/${targetFileName}`.replace(/\/+/g, "/")
-          // TODO: 这里需要页面层级实现跨会话上传逻辑
+        // 跨会话拖拽
+        if (dragData.sourceSessionId !== sessionId) {
+          // 跨会话拖拽: 不阻止冒泡，让事件传递到父级 SortableSession 处理
           setDragOverFolder(null)
           return
         }
@@ -554,6 +562,9 @@ export function SftpManager(props: SftpManagerProps) {
     } catch {
       // 不是JSON数据,继续处理本会话拖拽
     }
+
+    // 非跨会话拖拽才阻止冒泡
+    e.stopPropagation()
 
     // 本会话内拖拽
     if (!draggedFileName || draggedFileName === targetFileName) {
@@ -665,8 +676,22 @@ export function SftpManager(props: SftpManagerProps) {
     e.preventDefault()
     e.stopPropagation()
 
-    // 只有外部文件才显示上传提示
-    if (!draggedFileName && e.dataTransfer.types.includes('Files')) {
+    // 跨会话拖拽（从其他服务器窗口拖入）时不显示上传遮罩
+    // 判断依据：有 application/json 且是服务器内部文件拖拽
+    const hasJsonData = e.dataTransfer.types.includes('application/json')
+    if (hasJsonData) {
+      // 跨会话拖拽由父级 SortableSession 处理
+      return
+    }
+
+    // 内部文件拖拽也不显示上传遮罩
+    if (draggedFileName) {
+      return
+    }
+
+    // 只有外部文件（本地文件系统）才显示上传提示
+    const hasFiles = e.dataTransfer.types.includes('Files')
+    if (hasFiles) {
       setDragCounter(prev => prev + 1)
       setIsDragging(true)
     }
@@ -676,23 +701,36 @@ export function SftpManager(props: SftpManagerProps) {
     e.preventDefault()
     e.stopPropagation()
 
-    setDragCounter(prev => {
-      const newCount = prev - 1
-      if (newCount === 0) {
-        setIsDragging(false)
-      }
-      return newCount
-    })
+    // 使用 relatedTarget 检测：如果 relatedTarget 仍在 dropZone 内，则不算离开
+    const relatedTarget = e.relatedTarget as Node | null
+    if (relatedTarget && dropZoneRef.current?.contains(relatedTarget)) {
+      // 鼠标移动到了子元素，不重置状态
+      return
+    }
+
+    // 鼠标真正离开了容器，立即重置
+    setIsDragging(false)
+    setDragCounter(0)
   }
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
-    e.stopPropagation()
+    // 检查是否是跨会话拖拽
+    try {
+      // 无法在 dragOver 中读取 getData，但可以检查 types
+      const hasJsonData = e.dataTransfer.types.includes('application/json')
+      const isFileFromOtherSession = hasJsonData && !draggedFileName
+      // 跨会话拖拽时不阻止冒泡
+      if (!isFileFromOtherSession) {
+        e.stopPropagation()
+      }
+    } catch {
+      e.stopPropagation()
+    }
   }
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
-    e.stopPropagation()
     setIsDragging(false)
     setDragCounter(0) // 重置计数器
 
@@ -702,13 +740,16 @@ export function SftpManager(props: SftpManagerProps) {
       if (jsonData) {
         const dragData = JSON.parse(jsonData)
         if (dragData.sourceSessionId && dragData.sourceSessionId !== sessionId) {
-          // TODO: 实现跨会话上传逻辑
+          // 跨会话拖拽: 不阻止冒泡，让事件传递到父级 SortableSession 处理
           return
         }
       }
     } catch {
       // 不是JSON数据,继续检查其他类型
     }
+
+    // 非跨会话拖拽才阻止冒泡
+    e.stopPropagation()
 
     // 如果是内部文件拖拽到空白区，取消拖拽
     if (draggedFileName) {
@@ -1574,13 +1615,29 @@ export function SftpManager(props: SftpManagerProps) {
                           >
                             {task.type === "upload"
                               ? tSftp("transferTypeUpload")
+                              : task.type === "transfer"
+                              ? tSftp("transferTypeTransfer")
                               : tSftp("transferTypeDownload")}
                           </Badge>
                         </div>
 
+                        {/* 跨服务器传输信息 */}
+                        {task.type === "transfer" && task.sourceServer && task.targetServer && (
+                          <div className="text-xs text-muted-foreground mb-1.5 truncate">
+                            {task.sourceServer} → {task.targetServer}
+                          </div>
+                        )}
+
                         {/* 进度条 */}
-                        {task.status !== "completed" && task.status !== "failed" && (
-                          <Progress value={task.progress} className="h-1 mb-1.5" />
+                        {task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled" && (
+                          task.status === "transferring" ? (
+                            // 跨服务器传输使用 indeterminate 进度条
+                            <div className="h-1 mb-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                              <div className="h-full w-1/3 bg-blue-500 rounded-full animate-indeterminate" />
+                            </div>
+                          ) : (
+                            <Progress value={task.progress} className="h-1 mb-1.5" />
+                          )
                         )}
 
                         {/* 详细信息 + 取消操作 */}
@@ -1600,12 +1657,16 @@ export function SftpManager(props: SftpManagerProps) {
                               <span>•</span>
                               <span>{task.timeRemaining}</span>
                             </>
+                          ) : task.status === "transferring" ? (
+                            <span className="text-blue-600 dark:text-blue-400">
+                              {tSftp("transferStatusTransferring")}
+                            </span>
                           ) : task.status === "completed" ? (
                             <span className="text-green-600 dark:text-green-400">
-                              {tSftp("transferStatusCompleted")}
+                              {tSftp("transferStatusCompleted")} {task.fileSize !== '-' && `• ${task.fileSize}`}
                             </span>
                           ) : task.status === "failed" ? (
-                            <span className="text-red-600 dark:text-red-400">
+                            <span className="text-red-600 dark:text-red-400" title={task.error}>
                               {tSftp("transferStatusFailed")}
                             </span>
                           ) : task.status === "cancelled" ? (
@@ -1615,7 +1676,7 @@ export function SftpManager(props: SftpManagerProps) {
                           ) : null}
                         </div>
                           <div className="flex items-center gap-2">
-                            <span>{task.progress}%</span>
+                            {task.status !== "transferring" && <span>{task.progress}%</span>}
                             {onCancelTransfer && (task.status === "uploading" || task.status === "downloading") && (
                               <button
                                 type="button"
@@ -1786,13 +1847,13 @@ export function SftpManager(props: SftpManagerProps) {
           >
             {/* 拖拽遮罩 */}
             {isDragging && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm border-2 border-dashed border-blue-500 m-4 rounded-lg">
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-[2px] border-2 border-dashed border-blue-500 m-1 rounded-lg pointer-events-none animate-in fade-in-0 duration-200">
                 <div className="text-center">
-                  <Upload className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-                  <p className="text-lg font-semibold text-blue-500">
+                  <Upload className="h-10 w-10 text-blue-500 mx-auto mb-3 animate-bounce" />
+                  <p className="text-base font-semibold text-blue-600 dark:text-blue-400">
                     {tSftp("overlayDropTitle")}
                   </p>
-                  <p className="text-sm text-muted-foreground mt-2">
+                  <p className="text-xs text-blue-500/70 dark:text-blue-400/70 mt-1">
                     {tSftp("overlayDropDescription")}
                   </p>
                 </div>

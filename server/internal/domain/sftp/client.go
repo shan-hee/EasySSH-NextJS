@@ -489,3 +489,21 @@ func (c *Client) GetDiskUsage(path string) (*DiskUsage, error) {
 		UsedPercent: usedPercent,
 	}, nil
 }
+
+// OpenFile 打开文件进行读取（用于跨服务器传输）
+func (c *Client) OpenFile(path string) (*sftp.File, error) {
+	file, err := c.sftpClient.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	return file, nil
+}
+
+// CreateFile 创建文件进行写入（用于跨服务器传输）
+func (c *Client) CreateFile(path string) (*sftp.File, error) {
+	file, err := c.sftpClient.Create(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file: %w", err)
+	}
+	return file, nil
+}

@@ -365,4 +365,37 @@ export const sftpApi = {
     document.body.removeChild(a)
     window.URL.revokeObjectURL(downloadUrl)
   },
+
+  /**
+   * 跨服务器文件传输（流式中转）
+   * 用于在两个不同服务器之间传输文件
+   */
+  async transferBetweenServers(
+    sourceServerId: string,
+    sourcePath: string,
+    targetServerId: string,
+    targetPath: string
+  ): Promise<TransferResponse> {
+    return apiFetch<TransferResponse>(`/sftp/transfer`, {
+      method: "POST",
+      body: {
+        source_server_id: sourceServerId,
+        source_path: sourcePath,
+        target_server_id: targetServerId,
+        target_path: targetPath,
+      },
+      timeout: 600000, // 10分钟超时（大文件传输可能需要更长时间）
+      retry: false,    // 禁用重试（传输操作不应重试）
+    })
+  },
+}
+
+/**
+ * 跨服务器传输响应
+ */
+export interface TransferResponse {
+  success: boolean
+  message: string
+  bytes_copied: number
+  file_name: string
 }

@@ -13,14 +13,17 @@ export interface TransferTask {
   fileSize: string;
   fileSizeBytes: number;
   progress: number;
-  status: 'pending' | 'uploading' | 'downloading' | 'completed' | 'failed' | 'cancelled';
-  type: 'upload' | 'download';
+  status: 'pending' | 'uploading' | 'downloading' | 'transferring' | 'completed' | 'failed' | 'cancelled';
+  type: 'upload' | 'download' | 'transfer'; // transfer = 跨服务器传输
   speed?: string;
   timeRemaining?: string;
   error?: string;
   startTime?: number;
   bytesTransferred?: number;
   stage?: 'http' | 'sftp'; // 当前传输阶段
+  // 跨服务器传输专用字段
+  sourceServer?: string;
+  targetServer?: string;
 }
 
 /**
@@ -311,6 +314,46 @@ export function useFileTransfer() {
     setTasks([]);
   }, [tasks]);
 
+  /**
+   * 创建跨服务器传输任务
+   */
+  const createTransferTask = useCallback((
+    fileName: string,
+    sourceServer: string,
+    targetServer: string
+  ): TransferTask => {
+    return {
+      id: `transfer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      fileName,
+      fileSize: '-',
+      fileSizeBytes: 0,
+      progress: 0, // 跨服务器传输暂不支持进度，显示为 indeterminate
+      status: 'transferring',
+      type: 'transfer',
+      startTime: Date.now(),
+      sourceServer,
+      targetServer,
+    };
+  }, []);
+
+  /**
+   * 添加传输任务到列表
+   */
+  const addTask = useCallback((task: TransferTask) => {
+    setTasks(prev => [...prev, task]);
+  }, []);
+
+  /**
+   * 更新任务状态
+   */
+  const updateTask = useCallback((taskId: string, update: Partial<TransferTask>) => {
+    setTasks(prev =>
+      prev.map(task =>
+        task.id === taskId ? { ...task, ...update } : task
+      )
+    );
+  }, []);
+
   return {
     tasks,
     uploadFile,
@@ -318,5 +361,9 @@ export function useFileTransfer() {
     removeTask,
     clearCompleted,
     clearAll,
+    // 跨服务器传输相关
+    createTransferTask,
+    addTask,
+    updateTask,
   };
 }

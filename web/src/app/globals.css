@@ -247,6 +247,20 @@
     to { opacity: 1; }
   }
 
+  /* Indeterminate 进度条动画 */
+  @keyframes indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
+  .animate-indeterminate {
+    animation: indeterminate 1.5s ease-in-out infinite;
+  }
+
   /* Logo 和 Icon 优化 */
   img[src*="logo.svg"],
   img[src*="icon.svg"] {

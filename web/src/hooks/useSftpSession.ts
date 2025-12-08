@@ -32,11 +32,23 @@ export interface FileItem {
 }
 
 /**
+ * 简化版文件项接口(SFTP页面使用)
+ * 与 FileItem 的主要区别是没有 sizeBytes 字段
+ */
+export interface SimpleFileItem {
+  name: string;
+  type: 'file' | 'directory';
+  size: string;
+  modified: string;
+  permissions: string;
+}
+
+/**
  * 在当前文件列表中插入或更新单个文件项
  * - 如果已存在同名项,则覆盖
  * - 否则在末尾追加(具体排序由 UI 层再处理)
  */
-const upsertFileItem = (items: FileItem[], item: FileItem): FileItem[] => {
+export const upsertFileItem = <T extends { name: string }>(items: T[], item: T): T[] => {
   const index = items.findIndex(f => f.name === item.name);
   if (index === -1) {
     return [...items, item];
@@ -45,6 +57,306 @@ const upsertFileItem = (items: FileItem[], item: FileItem): FileItem[] => {
   next[index] = item;
   return next;
 };
+
+// ============================================
+// 通用 SFTP 操作函数 (可被 useSftpSession 和 SFTP 页面共用)
+// ============================================
+
+/**
+ * i18n 翻译函数类型
+ */
+type TranslateFunction = (key: string, params?: Record<string, string | number>) => string;
+
+/**
+ * 通用删除操作配置
+ */
+export interface DeleteOperationConfig<T extends { name: string }> {
+  serverId: string;
+  currentPath: string;
+  fileName: string;
+  t: TranslateFunction;
+  setFiles: React.Dispatch<React.SetStateAction<T[]>>;
+}
+
+/**
+ * 执行删除文件/目录操作 (带 toast.promise 和差异更新)
+ */
+export async function performDelete<T extends { name: string }>({
+  serverId,
+  currentPath,
+  fileName,
+  t,
+  setFiles,
+}: DeleteOperationConfig<T>): Promise<void> {
+  const fullPath = currentPath.endsWith('/')
+    ? `${currentPath}${fileName}`
+    : `${currentPath}/${fileName}`;
+
+  const deletePromise = sftpApi.delete(serverId, fullPath).then(() => {
+    setFiles(prev => prev.filter(f => f.name !== fileName));
+  });
+
+  toast.promise(deletePromise, {
+    loading: t("toastDeleteLoading", { file: fileName }),
+    success: t("toastDeleteSuccessSingle", { file: fileName }),
+    error: (err) => getErrorMessage(err, t("toastDeleteFailed", { message: "" })),
+  });
+
+  return deletePromise;
+}
+
+/**
+ * 通用创建文件夹操作配置
+ */
+export interface CreateFolderOperationConfig<T extends { name: string }> {
+  serverId: string;
+  currentPath: string;
+  name: string;
+  t: TranslateFunction;
+  setFiles: React.Dispatch<React.SetStateAction<T[]>>;
+  convertFileInfo: (info: FileInfo) => T;
+}
+
+/**
+ * 执行创建文件夹操作 (带 toast.promise 和差异更新)
+ */
+export async function performCreateFolder<T extends { name: string }>({
+  serverId,
+  currentPath,
+  name,
+  t,
+  setFiles,
+  convertFileInfo,
+}: CreateFolderOperationConfig<T>): Promise<void> {
+  const fullPath = currentPath.endsWith('/')
+    ? `${currentPath}${name}`
+    : `${currentPath}/${name}`;
+
+  const createPromise = sftpApi.createDirectory(serverId, fullPath).then((info) => {
+    const item = convertFileInfo(info);
+    setFiles(prev => upsertFileItem(prev, item));
+  });
+
+  toast.promise(createPromise, {
+    loading: t("toastCreateFolderLoading", { name }),
+    success: t("toastCreateFolderSuccess", { name }),
+    error: (err) => getErrorMessage(err, t("toastCreateFolderFailed")),
+  });
+
+  return createPromise;
+}
+
+/**
+ * 通用创建文件操作配置
+ */
+export interface CreateFileOperationConfig<T extends { name: string }> {
+  serverId: string;
+  currentPath: string;
+  name: string;
+  t: TranslateFunction;
+  setFiles: React.Dispatch<React.SetStateAction<T[]>>;
+  convertFileInfo: (info: FileInfo) => T;
+}
+
+/**
+ * 执行创建文件操作 (带 toast.promise 和差异更新)
+ */
+export async function performCreateFile<T extends { name: string }>({
+  serverId,
+  currentPath,
+  name,
+  t,
+  setFiles,
+  convertFileInfo,
+}: CreateFileOperationConfig<T>): Promise<void> {
+  const fullPath = currentPath.endsWith('/')
+    ? `${currentPath}${name}`
+    : `${currentPath}/${name}`;
+
+  const createPromise = sftpApi.writeFile(serverId, fullPath, '').then((info) => {
+    const item = convertFileInfo(info);
+    setFiles(prev => upsertFileItem(prev, item));
+  });
+
+  toast.promise(createPromise, {
+    loading: t("toastSaveFileLoading", { file: name }),
+    success: t("toastSaveFileSuccess", { file: name }),
+    error: (err) => getErrorMessage(err, t("toastSaveFileFailed")),
+  });
+
+  return createPromise;
+}
+
+/**
+ * 通用重命名操作配置
+ */
+export interface RenameOperationConfig<T extends { name: string }> {
+  serverId: string;
+  currentPath: string;
+  oldName: string;
+  newName: string;
+  t: TranslateFunction;
+  setFiles: React.Dispatch<React.SetStateAction<T[]>>;
+}
+
+/**
+ * 执行重命名文件/目录操作 (带 toast.promise 和差异更新)
+ */
+export async function performRename<T extends { name: string }>({
+  serverId,
+  currentPath,
+  oldName,
+  newName,
+  t,
+  setFiles,
+}: RenameOperationConfig<T>): Promise<void> {
+  const oldPath = currentPath.endsWith('/')
+    ? `${currentPath}${oldName}`
+    : `${currentPath}/${oldName}`;
+
+  const newPath = currentPath.endsWith('/')
+    ? `${currentPath}${newName}`
+    : `${currentPath}/${newName}`;
+
+  const renamePromise = sftpApi.rename(serverId, oldPath, newPath).then(() => {
+    setFiles(prev =>
+      prev.map(f =>
+        f.name === oldName
+          ? { ...f, name: newName }
+          : f
+      )
+    );
+  });
+
+  toast.promise(renamePromise, {
+    loading: t("toastRenameLoading", { oldName }),
+    success: t("toastRenameSuccess", { oldName, newName }),
+    error: (err) => getErrorMessage(err, t("toastRenameFailed")),
+  });
+
+  return renamePromise;
+}
+
+/**
+ * 通用保存文件操作配置
+ */
+export interface SaveFileOperationConfig<T extends { name: string }> {
+  serverId: string;
+  currentPath: string;
+  fileName: string;
+  content: string;
+  t: TranslateFunction;
+  setFiles: React.Dispatch<React.SetStateAction<T[]>>;
+  convertFileInfo: (info: FileInfo) => T;
+}
+
+/**
+ * 执行保存文件操作 (带 toast.promise 和差异更新)
+ */
+export async function performSaveFile<T extends { name: string }>({
+  serverId,
+  currentPath,
+  fileName,
+  content,
+  t,
+  setFiles,
+  convertFileInfo,
+}: SaveFileOperationConfig<T>): Promise<void> {
+  const fullPath = currentPath.endsWith('/')
+    ? `${currentPath}${fileName}`
+    : `${currentPath}/${fileName}`;
+
+  const savePromise = sftpApi.writeFile(serverId, fullPath, content).then((info) => {
+    const updated = convertFileInfo(info);
+    setFiles(prev => upsertFileItem(prev, updated));
+  });
+
+  toast.promise(savePromise, {
+    loading: t("toastSaveFileLoading", { file: fileName }),
+    success: t("toastSaveFileSuccess", { file: fileName }),
+    error: (err) => getErrorMessage(err, t("toastSaveFileFailed")),
+  });
+
+  return savePromise;
+}
+
+/**
+ * 通用批量删除操作配置
+ */
+export interface BatchDeleteOperationConfig<T extends { name: string }> {
+  serverId: string;
+  currentPath: string;
+  fileNames: string[];
+  t: TranslateFunction;
+  setFiles: React.Dispatch<React.SetStateAction<T[]>>;
+}
+
+/**
+ * 批量删除结果类型
+ */
+export interface BatchDeleteResult {
+  success: string[];
+  failed: Array<{ path: string; error: string }>;
+  total: number;
+}
+
+/**
+ * 执行批量删除操作 (带 toast.promise 和差异更新)
+ */
+export async function performBatchDelete<T extends { name: string }>({
+  serverId,
+  currentPath,
+  fileNames,
+  t,
+  setFiles,
+}: BatchDeleteOperationConfig<T>): Promise<BatchDeleteResult> {
+  const fullPaths = fileNames.map((fileName) =>
+    currentPath.endsWith('/')
+      ? `${currentPath}${fileName}`
+      : `${currentPath}/${fileName}`
+  );
+
+  const batchDeletePromise = sftpApi.batchDelete(serverId, fullPaths).then((result) => {
+    // 获取成功删除的文件名
+    const successNames = new Set(
+      result.success.map(p => {
+        const parts = p.split('/');
+        return parts[parts.length - 1] || p;
+      })
+    );
+
+    // 差异更新
+    setFiles(prev => prev.filter(f => !successNames.has(f.name)));
+
+    // 部分失败提示
+    if (result.failed.length > 0) {
+      const failedNames = result.failed.map(f => {
+        const parts = f.path.split('/');
+        return parts[parts.length - 1] || f.path;
+      }).join(', ');
+      toast.error(
+        t("toastBatchDeletePartialFailed", {
+          count: result.failed.length,
+          names: failedNames,
+        })
+      );
+    }
+
+    // 返回包含 total 的结果
+    return {
+      ...result,
+      total: fileNames.length,
+    };
+  });
+
+  toast.promise(batchDeletePromise, {
+    loading: t("toastBatchDeleteLoading", { count: fileNames.length }),
+    success: (result) => t("toastBatchDeleteSuccess", { count: result.success.length }),
+    error: (err) => getErrorMessage(err, t("toastBatchDeleteFailed")),
+  });
+
+  return batchDeletePromise;
+}
 
 /**
  * useSftpSession Hook
@@ -218,112 +530,61 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
   );
 
   /**
-   * 删除文件或目录
+   * 删除文件或目录 (使用通用函数)
    */
   const deleteFile = useCallback(
-    async (fileName: string) => {
-      const fullPath = currentPath.endsWith('/')
-        ? `${currentPath}${fileName}`
-        : `${currentPath}/${fileName}`;
-
-      const deletePromise = sftpApi.delete(serverId, fullPath).then(() => {
-        // 差异更新: 本地移除对应项
-        setFiles(prev => prev.filter(f => f.name !== fileName));
-      });
-
-      toast.promise(deletePromise, {
-        loading: tSftp("toastDeleteLoading", { file: fileName }),
-        success: tSftp("toastDeleteSuccessSingle", { file: fileName }),
-        error: (err) => getErrorMessage(err, tSftp("toastDeleteFailed", { message: "" })),
-      });
-
-      return deletePromise;
-    },
+    (fileName: string) => performDelete({
+      serverId,
+      currentPath,
+      fileName,
+      t: tSftp,
+      setFiles,
+    }),
     [serverId, currentPath, tSftp]
   );
 
   /**
-   * 创建文件夹
+   * 创建文件夹 (使用通用函数)
    */
   const createFolder = useCallback(
-    async (name: string) => {
-      const fullPath = currentPath.endsWith('/')
-        ? `${currentPath}${name}`
-        : `${currentPath}/${name}`;
-
-      const createPromise = sftpApi.createDirectory(serverId, fullPath).then((info) => {
-        const item = convertFileInfo(info);
-        setFiles(prev => upsertFileItem(prev, item));
-      });
-
-      toast.promise(createPromise, {
-        loading: tSftp("toastCreateFolderLoading", { name }),
-        success: tSftp("toastCreateFolderSuccess", { name }),
-        error: (err) => getErrorMessage(err, tSftp("toastCreateFolderFailed")),
-      });
-
-      return createPromise;
-    },
+    (name: string) => performCreateFolder({
+      serverId,
+      currentPath,
+      name,
+      t: tSftp,
+      setFiles,
+      convertFileInfo,
+    }),
     [serverId, currentPath, convertFileInfo, tSftp]
   );
 
   /**
-   * 创建文件
+   * 创建文件 (使用通用函数)
    */
   const createFile = useCallback(
-    async (name: string) => {
-      const fullPath = currentPath.endsWith('/')
-        ? `${currentPath}${name}`
-        : `${currentPath}/${name}`;
-
-      const createPromise = sftpApi.writeFile(serverId, fullPath, '').then((info) => {
-        const item = convertFileInfo(info);
-        setFiles(prev => upsertFileItem(prev, item));
-      });
-
-      toast.promise(createPromise, {
-        loading: tSftp("toastSaveFileLoading", { file: name }),
-        success: tSftp("toastSaveFileSuccess", { file: name }),
-        error: (err) => getErrorMessage(err, tSftp("toastSaveFileFailed")),
-      });
-
-      return createPromise;
-    },
+    (name: string) => performCreateFile({
+      serverId,
+      currentPath,
+      name,
+      t: tSftp,
+      setFiles,
+      convertFileInfo,
+    }),
     [serverId, currentPath, convertFileInfo, tSftp]
   );
 
   /**
-   * 重命名文件或目录
+   * 重命名文件或目录 (使用通用函数)
    */
   const renameFile = useCallback(
-    async (oldName: string, newName: string) => {
-      const oldPath = currentPath.endsWith('/')
-        ? `${currentPath}${oldName}`
-        : `${currentPath}/${oldName}`;
-
-      const newPath = currentPath.endsWith('/')
-        ? `${currentPath}${newName}`
-        : `${currentPath}/${newName}`;
-
-      const renamePromise = sftpApi.rename(serverId, oldPath, newPath).then(() => {
-        // 差异更新: 本地仅更新名称(大小/时间通常保持不变)
-        setFiles(prev =>
-          prev.map(f =>
-            f.name === oldName
-              ? { ...f, name: newName }
-              : f
-          )
-        );
-      });
-
-      toast.promise(renamePromise, {
-        loading: tSftp("toastRenameLoading", { oldName }),
-        success: tSftp("toastRenameSuccess", { oldName, newName }),
-        error: (err) => getErrorMessage(err, tSftp("toastRenameFailed")),
-      });
-
-      return renamePromise;
-    },
+    (oldName: string, newName: string) => performRename({
+      serverId,
+      currentPath,
+      oldName,
+      newName,
+      t: tSftp,
+      setFiles,
+    }),
     [serverId, currentPath, tSftp]
   );
 
@@ -350,106 +611,32 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
   );
 
   /**
-   * 保存文件内容
+   * 保存文件内容 (使用通用函数)
    */
   const saveFile = useCallback(
-    async (fileName: string, content: string) => {
-      const fullPath = currentPath.endsWith('/')
-        ? `${currentPath}${fileName}`
-        : `${currentPath}/${fileName}`;
-
-      const savePromise = sftpApi.writeFile(serverId, fullPath, content).then((info) => {
-        const updated = convertFileInfo(info);
-        // 差异更新: 仅更新对应文件的大小/时间/权限等字段
-        setFiles(prev =>
-          prev.map(f =>
-            f.name === fileName
-              ? {
-                  ...f,
-                  size: updated.size,
-                  sizeBytes: updated.sizeBytes,
-                  modified: updated.modified,
-                  permissions: updated.permissions,
-                }
-              : f
-          )
-        );
-      });
-
-      toast.promise(savePromise, {
-        loading: tSftp("toastSaveFileLoading", { file: fileName }),
-        success: tSftp("toastSaveFileSuccess", { file: fileName }),
-        error: (err) => getErrorMessage(err, tSftp("toastSaveFileFailed")),
-      });
-
-      return savePromise;
-    },
+    (fileName: string, content: string) => performSaveFile({
+      serverId,
+      currentPath,
+      fileName,
+      content,
+      t: tSftp,
+      setFiles,
+      convertFileInfo,
+    }),
     [serverId, currentPath, convertFileInfo, tSftp]
   );
 
   /**
-   * 批量删除文件或目录
+   * 批量删除文件或目录 (使用通用函数)
    */
   const batchDeleteFiles = useCallback(
-    async (fileNames: string[]) => {
-      // 构建完整路径
-      const fullPaths = fileNames.map((fileName) =>
-        currentPath.endsWith('/')
-          ? `${currentPath}${fileName}`
-          : `${currentPath}/${fileName}`
-      );
-
-      // 显示loading状态
-      const toastId = toast.loading(
-        tSftp("toastBatchDeleteLoading", { count: fileNames.length })
-      );
-
-      try {
-        // 调用批量删除 API
-        const result = await sftpApi.batchDelete(serverId, fullPaths);
-
-        // 差异更新: 仅移除删除成功的条目
-        const successNames = new Set(
-          result.success.map(p => {
-            const parts = p.split('/');
-            return parts[parts.length - 1] || p;
-          })
-        );
-
-        setFiles(prev => prev.filter(f => !successNames.has(f.name)));
-
-        // 显示结果
-        if (result.failed.length > 0) {
-          const failedNames = result.failed.map(f => {
-            const parts = f.path.split('/');
-            return parts[parts.length - 1] || f.path;
-          }).join(', ');
-          toast.error(
-            tSftp("toastBatchDeletePartialFailed", {
-              count: result.failed.length,
-              names: failedNames,
-            }),
-            { id: toastId }
-          );
-        } else if (result.success.length > 0) {
-          toast.success(
-            tSftp("toastBatchDeleteSuccess", {
-              count: result.success.length,
-            }),
-            { id: toastId }
-          );
-        } else {
-          toast.dismiss(toastId);
-        }
-
-        // 返回结果供调用者处理
-        return result;
-      } catch (error) {
-        console.error('[useSftpSession] 批量删除失败:', error);
-        toast.error(getErrorMessage(error, tSftp("toastBatchDeleteFailed")), { id: toastId });
-        throw error;
-      }
-    },
+    (fileNames: string[]) => performBatchDelete({
+      serverId,
+      currentPath,
+      fileNames,
+      t: tSftp,
+      setFiles,
+    }),
     [serverId, currentPath, tSftp]
   );
 

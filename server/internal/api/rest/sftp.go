@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1107,4 +1108,212 @@ func (h *SFTPHandler) addDirToZip(sftpClient *sftp.Client, zipWriter *zip.Writer
 	}
 
 	return nil
+}
+
+// ======================================
+// 跨服务器文件传输 API
+// ======================================
+
+// TransferRequest 跨服务器传输请求
+type TransferRequest struct {
+	SourceServerID string `json:"source_server_id" binding:"required"`
+	SourcePath     string `json:"source_path" binding:"required"`
+	TargetServerID string `json:"target_server_id" binding:"required"`
+	TargetPath     string `json:"target_path" binding:"required"`
+}
+
+// TransferResponse 跨服务器传输响应
+type TransferResponse struct {
+	Success     bool   `json:"success"`
+	Message     string `json:"message"`
+	BytesCopied int64  `json:"bytes_copied"`
+	FileName    string `json:"file_name"`
+}
+
+// Transfer 跨服务器文件传输（流式中转）
+// POST /api/v1/sftp/transfer
+func (h *SFTPHandler) Transfer(c *gin.Context) {
+	// 解析请求
+	var req TransferRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 解析服务器 ID
+	sourceServerID, err := uuid.Parse(req.SourceServerID)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_source_server_id", "Invalid source server ID")
+		return
+	}
+
+	targetServerID, err := uuid.Parse(req.TargetServerID)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_target_server_id", "Invalid target server ID")
+		return
+	}
+
+	// 不允许同一服务器内传输（应使用 rename/copy）
+	if sourceServerID == targetServerID {
+		RespondError(c, http.StatusBadRequest, "same_server", "Cannot transfer between the same server, use rename instead")
+		return
+	}
+
+	startTime := time.Now()
+	fmt.Printf("[SFTP Transfer] Starting transfer: source=%s:%s -> target=%s:%s\n",
+		req.SourceServerID, req.SourcePath, req.TargetServerID, req.TargetPath)
+
+	// 创建源服务器 SFTP 客户端
+	sourceClient, _, err := h.createSFTPClient(c, sourceServerID)
+	if err != nil {
+		fmt.Printf("[SFTP Transfer] Failed to connect to source server: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "source_connection_failed", fmt.Sprintf("Failed to connect to source server: %v", err))
+		return
+	}
+	defer sourceClient.Close()
+
+	// 创建目标服务器 SFTP 客户端
+	targetClient, _, err := h.createSFTPClient(c, targetServerID)
+	if err != nil {
+		fmt.Printf("[SFTP Transfer] Failed to connect to target server: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "target_connection_failed", fmt.Sprintf("Failed to connect to target server: %v", err))
+		return
+	}
+	defer targetClient.Close()
+
+	// 获取源文件信息
+	sourceInfo, err := sourceClient.GetFileInfo(req.SourcePath)
+	if err != nil {
+		fmt.Printf("[SFTP Transfer] Source file not found: %s, error: %v\n", req.SourcePath, err)
+		RespondError(c, http.StatusNotFound, "source_not_found", fmt.Sprintf("Source file not found: %v", err))
+		return
+	}
+
+	// 计算目标路径（如果目标是目录，则追加源文件名）
+	targetPath := req.TargetPath
+	targetInfo, err := targetClient.GetFileInfo(targetPath)
+	if err == nil && targetInfo.IsDir {
+		// 目标是已存在的目录，追加源文件名
+		targetPath = filepath.Join(targetPath, sourceInfo.Name)
+	}
+
+	var bytesCopied int64
+
+	if sourceInfo.IsDir {
+		// 目录传输：递归复制
+		bytesCopied, err = h.transferDirectory(sourceClient, targetClient, req.SourcePath, targetPath)
+	} else {
+		// 单文件传输：流式复制
+		bytesCopied, err = h.transferFile(sourceClient, targetClient, req.SourcePath, targetPath)
+	}
+
+	if err != nil {
+		fmt.Printf("[SFTP Transfer] Transfer failed: %v\n", err)
+		RespondError(c, http.StatusInternalServerError, "transfer_failed", err.Error())
+		return
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("[SFTP Transfer] Transfer completed in %v: %d bytes copied\n", elapsed, bytesCopied)
+
+	RespondSuccess(c, TransferResponse{
+		Success:     true,
+		Message:     fmt.Sprintf("Transfer completed in %v", elapsed),
+		BytesCopied: bytesCopied,
+		FileName:    sourceInfo.Name,
+	})
+}
+
+// transferFile 流式传输单个文件（源 -> 内存缓冲 -> 目标）
+func (h *SFTPHandler) transferFile(sourceClient, targetClient *sftp.Client, sourcePath, targetPath string) (int64, error) {
+	// 打开源文件进行读取
+	reader, err := sourceClient.OpenFile(sourcePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer reader.Close()
+
+	// 在目标服务器创建文件
+	writer, err := targetClient.CreateFile(targetPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create target file: %w", err)
+	}
+	defer writer.Close()
+
+	// 流式复制（使用 32KB 缓冲区）
+	buf := make([]byte, 32*1024)
+	var totalCopied int64
+
+	for {
+		n, readErr := reader.Read(buf)
+		if n > 0 {
+			written, writeErr := writer.Write(buf[:n])
+			if writeErr != nil {
+				return totalCopied, fmt.Errorf("failed to write to target: %w", writeErr)
+			}
+			totalCopied += int64(written)
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			return totalCopied, fmt.Errorf("failed to read from source: %w", readErr)
+		}
+	}
+
+	return totalCopied, nil
+}
+
+// transferDirectory 递归传输目录
+func (h *SFTPHandler) transferDirectory(sourceClient, targetClient *sftp.Client, sourcePath, targetPath string) (int64, error) {
+	var totalCopied int64
+
+	// 在目标服务器创建目录
+	if err := targetClient.CreateDirectories(targetPath); err != nil {
+		return 0, fmt.Errorf("failed to create target directory: %w", err)
+	}
+
+	// 列出源目录内容
+	listing, err := sourceClient.ListDirectory(sourcePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list source directory: %w", err)
+	}
+
+	for _, file := range listing.Files {
+		// 跳过 . 和 ..
+		if file.Name == "." || file.Name == ".." {
+			continue
+		}
+
+		// 跳过符号链接
+		if file.Mode&os.ModeSymlink != 0 {
+			fmt.Printf("[SFTP Transfer] Skip symlink: %s\n", file.Path)
+			continue
+		}
+
+		srcPath := filepath.Join(sourcePath, file.Name)
+		dstPath := filepath.Join(targetPath, file.Name)
+
+		if file.IsDir {
+			// 递归传输子目录
+			copied, err := h.transferDirectory(sourceClient, targetClient, srcPath, dstPath)
+			if err != nil {
+				fmt.Printf("[SFTP Transfer] Failed to transfer subdirectory %s: %v\n", srcPath, err)
+				// 继续处理其他文件
+			} else {
+				totalCopied += copied
+			}
+		} else {
+			// 传输文件
+			copied, err := h.transferFile(sourceClient, targetClient, srcPath, dstPath)
+			if err != nil {
+				fmt.Printf("[SFTP Transfer] Failed to transfer file %s: %v\n", srcPath, err)
+				// 继续处理其他文件
+			} else {
+				totalCopied += copied
+			}
+		}
+	}
+
+	return totalCopied, nil
 }
