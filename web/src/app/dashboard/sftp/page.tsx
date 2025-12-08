@@ -831,7 +831,7 @@ export default function SftpPage() {
  }
 
  const onlineServers = servers.filter(s => s.status === "online")
- const offlineServers = servers.filter(s => s.status === "offline")
+ const offlineServers = servers.filter(s => s.status !== "online")
 
  // 虚拟化滚动 - 仅在会话数量 >= 10 时启用
  const useVirtualization = sessions.length >= 10
@@ -991,7 +991,7 @@ export default function SftpPage() {
  className="group rounded-lg border cursor-pointer transition-all duration-200 p-4 flex flex-col items-center text-center space-y-2.5 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/30 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700/40"
  >
  <div className="w-12 h-12 rounded-lg flex items-center justify-center transition-all bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900">
- <Server className="h-6 w-6 transition-colors text-zinc-600 dark:text-zinc-400 group-hover:text-green-500" />
+ <Server className="h-6 w-6 transition-colors text-zinc-600 dark:text-zinc-400 group-hover:text-green-500 dark:group-hover:text-green-400" />
  </div>
  <div className="space-y-0.5 w-full">
  <h3 className="font-medium text-xs truncate transition-colors text-zinc-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400">
@@ -1000,12 +1000,6 @@ export default function SftpPage() {
  <p className="text-[10px] text-zinc-600 dark:text-zinc-600 font-mono truncate">
  {server.host}
  </p>
- </div>
- <div className="flex items-center gap-1 text-[10px]">
- <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
- <span className="text-green-600 dark:text-green-400">
- {tSftp("statusOnline")}
- </span>
  </div>
  </div>
  ))}
@@ -1038,12 +1032,6 @@ export default function SftpPage() {
  <p className="text-[10px] text-zinc-600 dark:text-zinc-600 font-mono truncate">
  {server.host}
  </p>
- </div>
- <div className="flex items-center gap-1 text-[10px]">
- <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-600" />
- <span className="text-zinc-500 dark:text-zinc-600">
- {tSftp("statusOffline")}
- </span>
  </div>
  </div>
  ))}

@@ -236,13 +236,13 @@ function ServerResourceCard({ server }: { server: ServerResource }) {
             <ResourceMetricRow
               icon={MemoryStick}
               label="内存"
-              value={`${server.memory.usage}%`}
+              value={`${server.memory.used}GB/${server.memory.usage}%`}
               usage={server.memory.usage}
             />
             <ResourceMetricRow
               icon={HardDrive}
               label="磁盘"
-              value={`${server.disk.usage}%`}
+              value={`${server.disk.used}GB/${server.disk.usage}%`}
               usage={server.disk.usage}
             />
             {/* 网络流量 */}
