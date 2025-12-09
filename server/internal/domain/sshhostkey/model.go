@@ -13,11 +13,11 @@ type SSHHostKey struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
-	Host        string         `gorm:"type:varchar(255);not null;index:idx_host_port" json:"host"`
-	Port        int            `gorm:"not null;index:idx_host_port" json:"port"`
+	Host        string         `gorm:"type:varchar(255);not null;uniqueIndex:idx_host_port" json:"host"`
+	Port        int            `gorm:"not null;uniqueIndex:idx_host_port" json:"port"`
 	KeyType     string         `gorm:"type:varchar(50);not null" json:"key_type"` // ssh-rsa, ecdsa-sha2-nistp256, ssh-ed25519
 	PublicKey   string         `gorm:"type:text;not null" json:"public_key"`      // Base64编码的公钥
-	Fingerprint string         `gorm:"type:varchar(100);not null;uniqueIndex" json:"fingerprint"` // SHA256指纹
+	Fingerprint string         `gorm:"type:varchar(100);not null;index" json:"fingerprint"` // SHA256指纹（同一服务器多地址可共享）
 	FirstSeen   time.Time      `gorm:"not null" json:"first_seen"`
 	LastSeen    time.Time      `gorm:"not null" json:"last_seen"`
 	TrustStatus string         `gorm:"type:varchar(20);not null;default:'trusted'" json:"trust_status"` // trusted, changed, revoked
