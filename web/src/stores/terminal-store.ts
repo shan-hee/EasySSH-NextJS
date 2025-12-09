@@ -131,14 +131,16 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
         if (instance.wsConnection) {
           instance.wsConnection.disconnect()
         }
-        instance.terminal.dispose()
       } catch (error) {
         console.error(`[TerminalStore] 清理会话 ${sessionId} 失败:`, error)
       }
     })
 
-    // 清空映射
-    set({ terminals: new Map() })
+    // 注意：这里不再主动清空 terminals 映射或调用 terminal.dispose()
+    // 场景是浏览器刷新 / 关闭前的 beforeunload：
+    // - 调用 wsConnection.disconnect() 可以优雅地通知服务端关闭会话
+    // - 终端实例和 DOM 很快会随页面卸载一起被浏览器回收
+    // - 避免在刷新前一瞬间调用 dispose() 导致终端 UI 立即被清空，看起来“闪一下”
   }
 }))
 

@@ -324,6 +324,11 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
       try {
         if (connection.ws.readyState === WebSocket.OPEN ||
             connection.ws.readyState === WebSocket.CONNECTING) {
+          // 应用刷新/关闭场景:
+          // - 只需优雅关闭 WebSocket，服务端会在会话结束后自行清理
+          // - 避免触发 ws.onclose 回调里的 setStatus( DISCONNECTED ) 等状态更新，
+          //   否则在刷新瞬间 MonitorPanel 会切换成断开/骨架屏，看起来像“瞬间消失”
+          connection.ws.onclose = null
           connection.ws.close(1000, '应用关闭')
         }
       } catch (error) {

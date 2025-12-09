@@ -328,42 +328,29 @@ export const sftpApi = {
   },
 
   /**
-   * 单文件下载（通过 fetch + Blob，支持附带 Bearer Token）
+   * 单文件下载（直接触发浏览器下载，使用浏览器原生下载管理器显示进度）
    */
-  async downloadFile(serverId: string, path: string, fileName?: string): Promise<void> {
+  downloadFile(serverId: string, path: string, fileName?: string): void {
     const apiUrl = getApiUrl()
-    const url = `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(path)}`
-
-    const headers: HeadersInit = {}
     const token = getCurrentAccessToken()
+
+    // 构建下载 URL，附带 token 参数用于认证
+    const params = new URLSearchParams()
+    params.set('path', path)
     if (token) {
-      ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+      params.set('token', token)
     }
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers,
-    })
+    const url = `${apiUrl}/sftp/${serverId}/download?${params.toString()}`
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: "Download failed" }))
-      throw new Error(error.message || "Download failed")
-    }
-
-    const blob = await response.blob()
-    const downloadUrl = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = downloadUrl
-    a.download =
-      fileName ||
-      (() => {
-        const parts = path.split("/").filter(Boolean)
-        return parts[parts.length - 1] || "download"
-      })()
+    // 使用 <a> 标签触发下载，避免页面跳转
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName || path.split('/').pop() || 'download'
+    a.style.display = 'none'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    window.URL.revokeObjectURL(downloadUrl)
   },
 
   /**

@@ -206,19 +206,25 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		// 进度跟踪变量
 		var (
 			lastProgressTime = time.Now()
-			lastLoaded       int64
 			totalSize        = header.Size
+			startTime        = time.Now()
 		)
 
 		// 上传文件并报告进度
 		err = sftpClient.UploadFileWithProgressWithContext(ctx, file, remotePath, func(loaded int64) {
 			now := time.Now()
-			elapsed := now.Sub(lastProgressTime).Seconds()
+
+			// 每 500ms 或完成时发送进度（与跨服务器传输保持一致）
+			if now.Sub(lastProgressTime) < 500*time.Millisecond && loaded < totalSize {
+				return
+			}
+
+			elapsed := now.Sub(startTime).Seconds()
 
 			// 计算速度（字节/秒）
 			var speedBps int64
 			if elapsed > 0 {
-				speedBps = int64(float64(loaded-lastLoaded) / elapsed)
+				speedBps = int64(float64(loaded) / elapsed)
 			}
 
 			// 发送进度消息
@@ -232,7 +238,6 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 			})
 
 			lastProgressTime = now
-			lastLoaded = loaded
 		})
 
 		if err != nil {

@@ -670,6 +670,8 @@ export function SftpManager(props: SftpManagerProps) {
     if (files) {
       handleFileUpload(files)
     }
+    // 重置 input value，允许再次选择相同文件
+    event.target.value = ''
   }
 
   // 拖拽上传处理

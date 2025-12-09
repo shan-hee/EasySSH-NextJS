@@ -514,7 +514,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    * 下载文件（使用浏览器原生下载）
    */
   const downloadFile = useCallback(
-    async (fileName: string) => {
+    (fileName: string) => {
       const file = files.find((f) => f.name === fileName);
       if (!file || file.type === 'directory') return;
 
@@ -522,11 +522,11 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         ? `${currentPath}${fileName}`
         : `${currentPath}/${fileName}`;
 
-      await sftpApi.downloadFile(serverId, fullPath, fileName);
-      // 下载开始提示
+      // 直接触发浏览器下载，由浏览器自带下载管理器处理
+      sftpApi.downloadFile(serverId, fullPath, fileName);
       toast.success(tSftp("toastDownloadStartSingle", { file: fileName }));
     },
-    [serverId, currentPath, files]
+    [serverId, currentPath, files, tSftp]
   );
 
   /**

@@ -773,19 +773,15 @@ export default function SftpPage() {
  }
 
  // 下载文件
- const handleDownload = async (sessionId: string, fileName: string) => {
+ const handleDownload = (sessionId: string, fileName: string) => {
  const session = sessions.find(s => s.id === sessionId)
  if (!session || !session.isConnected) return
 
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
- try {
-   await sftpApi.downloadFile(session.serverId, filePath, fileName)
-   toast.success(tSftp("toastDownloadStartSingle", { file: fileName }))
- } catch (error: unknown) {
-   console.error("Failed to download:", error)
-   toast.error(getErrorMessage(error, tSftp("toastDownloadFailed")))
- }
+ // 直接触发浏览器下载，由浏览器自带下载管理器处理
+ sftpApi.downloadFile(session.serverId, filePath, fileName)
+ toast.success(tSftp("toastDownloadStartSingle", { file: fileName }))
  }
 
  /**
