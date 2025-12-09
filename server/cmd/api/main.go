@@ -393,15 +393,6 @@ func main() {
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）
 
-	// OAuth 2.0 相关端点（Authorization Code + PKCE）
-	oauth := r.Group("/oauth")
-	{
-		oauth.POST("/authorize", authHandler.OAuthAuthorize)
-		oauth.POST("/token", authHandler.OAuthToken)
-		// Google OAuth ID Token 验证（与 /api/v1/oauth/google/verify 保持一致，方便前端通过 /oauth 路径访问）
-		oauth.POST("/google/verify", oauthHandler.GoogleVerify)
-	}
-
 	// API v1 路由组
 	v1 := r.Group("/api/v1")
 	{
@@ -458,6 +449,9 @@ func main() {
 		// OAuth 路由（公开）
 		oauthRoutes := v1.Group("/oauth")
 		{
+			// 与 /oauth 前缀下的端点保持一一对应，便于前端统一通过 /api/v1 调用
+			oauthRoutes.POST("/authorize", authHandler.OAuthAuthorize)    // 开发版 PKCE 授权码端点
+			oauthRoutes.POST("/token", authHandler.OAuthToken)            // 交换/刷新 access_token
 			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify) // 验证 Google ID Token
 		}
 

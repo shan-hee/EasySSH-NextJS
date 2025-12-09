@@ -79,8 +79,8 @@ func setAuthCookies(c *gin.Context, refreshToken string, securityService securit
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     RefreshTokenCookieName,
 		Value:    refreshToken,
-		// 将 refresh_token Cookie 限定在 /oauth 路径下，仅用于令牌刷新相关端点
-		Path:     "/oauth",
+		// 将 refresh_token Cookie 限定在 /api/v1/oauth 路径下，仅用于令牌刷新相关端点
+		Path:     "/api/v1/oauth",
 		Domain:   domain,
 		MaxAge:   refreshTokenMaxAge,
 		Secure:   secure,
@@ -93,11 +93,11 @@ func setAuthCookies(c *gin.Context, refreshToken string, securityService securit
 func clearAuthCookies(c *gin.Context, securityService security.Service) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
 
-	// 清理当前使用的 /oauth 路径上的 refresh_token Cookie
+	// 清理当前使用的 /api/v1/oauth 路径上的 refresh_token Cookie
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     RefreshTokenCookieName,
 		Value:    "",
-		Path:     "/oauth",
+		Path:     "/api/v1/oauth",
 		Domain:   domain,
 		MaxAge:   -1,
 		Secure:   secure,
@@ -523,7 +523,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 // OAuthAuthorize 使用用户名密码 + PKCE 创建授权码（开发版：JSON 接口，不做浏览器跳转）
-// POST /oauth/authorize
+// POST /api/v1/oauth/authorize
 func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 	var req OAuthAuthorizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -554,7 +554,7 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 		return
 	}
 
-	// 认证用户（使用邮箱，此处不创建会话，真正创建会话发生在 /oauth/token 中）
+	// 认证用户（使用邮箱，此处不创建会话，真正创建会话发生在 /api/v1/oauth/token 中）
 	user, err := h.authService.AuthenticateUser(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
@@ -612,7 +612,7 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 }
 
 // OAuthToken OAuth Token 端点
-// POST /oauth/token
+// POST /api/v1/oauth/token
 func (h *AuthHandler) OAuthToken(c *gin.Context) {
 	var req OAuthTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

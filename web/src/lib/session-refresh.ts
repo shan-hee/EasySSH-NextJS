@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/stores/auth-store"
+import { getApiUrl } from "@/lib/config"
 
 export interface RefreshTokenResult {
   accessToken: string
@@ -18,9 +19,11 @@ export async function performRefreshToken(): Promise<RefreshTokenResult> {
     throw new Error("Refresh not supported on server")
   }
 
-  // 统一使用当前站点下的 /oauth/token 端点
-  const url = "/oauth/token"
-  const credentials: RequestCredentials = "same-origin"
+  // 统一走 API 前缀 /api/v1，后端在 /api/v1/oauth/token 暴露刷新端点
+  const apiBase = getApiUrl()
+  const url = `${apiBase}/oauth/token`
+  // 为兼容开发环境跨端口直连，始终使用 include 携带 Cookie
+  const credentials: RequestCredentials = "include"
 
   const res = await fetch(url, {
     method: "POST",

@@ -6,18 +6,22 @@
  */
 
 /**
+ * 开发环境默认后端地址（不包含 /api/v1）
+ * - 开发脚本 scripts/dev.sh 会根据 .env 中的 PORT 自动更新此常量
+ * - 如需手动修改端口或主机名，可直接编辑这里
+ */
+const DEV_BACKEND_BASE_URL = "http://localhost:2580"
+
+/**
  * 获取 API URL (带 /api/v1 路径)
  *
  * 开发模式：使用完整 URL 指向后端服务器
  * 生产模式：使用相对路径（前端由后端托管，同域）
  */
 export function getApiUrl(): string {
-  // 开发环境：使用环境变量配置的后端地址
-  if (process.env.NEXT_PUBLIC_API_BASE) {
-    return `${process.env.NEXT_PUBLIC_API_BASE}/api/v1`
+  if (process.env.NODE_ENV !== 'production') {
+    return `${DEV_BACKEND_BASE_URL}/api/v1`
   }
-
-  // 生产环境：使用相对路径
   return '/api/v1'
 }
 
@@ -37,11 +41,10 @@ export function getWsHost(): string {
     return envWsHost.trim()
   }
 
-  // 开发环境：如果配置了 API_BASE，从中提取 host
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE
-  if (apiBase) {
+  // 开发环境：优先使用 DEV_BACKEND_BASE_URL 的 host（scripts/dev.sh 会自动更新）
+  if (process.env.NODE_ENV !== 'production') {
     try {
-      const url = new URL(apiBase)
+      const url = new URL(DEV_BACKEND_BASE_URL)
       return url.host
     } catch {
       // 解析失败，继续使用默认逻辑

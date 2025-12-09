@@ -46,28 +46,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // 开发环境：通过 rewrites 将 /api 与 /oauth 代理到 Go 后端
-  // 这样浏览器始终与当前 origin 通信，避免 SameSite=None + 非 HTTPS 的限制
-  async rewrites() {
-    if (isProd) {
-      return []
-    }
-
-    // 开发环境后端端口：由 scripts/dev.sh 通过 BACKEND_PORT 注入
-    const backendPort = process.env.BACKEND_PORT || "2580"
-
-    return [
-      {
-        source: "/api/:path*",
-        destination: `http://localhost:${backendPort}/api/:path*`,
-      },
-      {
-        source: "/oauth/:path*",
-        destination: `http://localhost:${backendPort}/oauth/:path*`,
-      },
-    ]
-  },
-
   // 自定义响应头：支持 Google OAuth
   async headers() {
     return [

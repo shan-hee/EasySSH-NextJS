@@ -25,7 +25,7 @@ fi
 BACKEND_PORT=${PORT:-8521}
 FRONTEND_PORT=${WEB_PORT:-8520}
 
-# 导出端口配置给前端（Next rewrites 使用 BACKEND_PORT）
+# 导出端口配置给前端/后端脚本使用
 export BACKEND_PORT
 export FRONTEND_PORT
 
@@ -104,11 +104,7 @@ set_kv ENV development
 set_kv COOKIE_SECURE false
 set_kv COOKIE_SAMESITE lax
 
-# 3) API 基础地址（Next 重写 & SSR 使用）
-# 开发环境通过 Next rewrites 代理到后端，这里留空走相对路径 /api,/oauth
-set_kv NEXT_PUBLIC_API_BASE ""
-
-# 4) WS Origin 白名单（可选，明确本机前端端口）
+# 3) WS Origin 白名单（可选，明确本机前端端口）
 if ! grep -qE '^ALLOWED_ORIGINS=' .env 2>/dev/null || [[ -z "${ALLOWED_ORIGINS:-}" ]]; then
   set_kv ALLOWED_ORIGINS http://localhost:${FRONTEND_PORT},http://127.0.0.1:${FRONTEND_PORT}
 fi
@@ -120,6 +116,15 @@ export COOKIE_SAMESITE=lax
 echo -e "${GREEN}✅ 已更新 .env。${NC}"
 if [[ "${COOKIE_SECURE}" == "true" ]]; then
   echo -e "${YELLOW}⚠️  当前 COOKIE_SECURE=true 可能导致 HTTP 下 Cookie 被拒收，已建议写入 false。${NC}"
+fi
+
+# 4) 根据 .env 中后端端口,自动更新前端开发配置中的后端地址
+DEV_BACKEND_URL="http://localhost:${BACKEND_PORT}"
+CONFIG_FILE="web/src/lib/config.ts"
+if [ -f "${CONFIG_FILE}" ]; then
+  echo -e "${BLUE}🔧 更新前端开发后端地址为: ${DEV_BACKEND_URL}${NC}"
+  # 将 DEV_BACKEND_BASE_URL 常量替换为当前后端地址
+  sed -i "s#^const DEV_BACKEND_BASE_URL = \".*\"#const DEV_BACKEND_BASE_URL = \"${DEV_BACKEND_URL}\"#" "${CONFIG_FILE}" || true
 fi
 # 检查前端依赖
 if [ ! -d "web/node_modules" ]; then

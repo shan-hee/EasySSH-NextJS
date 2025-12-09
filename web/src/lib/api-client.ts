@@ -201,13 +201,8 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   let url: string
   if (path.startsWith("http")) {
     url = path
-  } else if (path.startsWith("/oauth/")) {
-    // OAuth 端点始终走当前 origin（Next dev 可通过 rewrites 代理到后端）
-    url = path
   } else {
     const apiUrl = getApiUrl()
-    // getApiUrl() 在客户端返回相对路径 /api
-    // 在服务端返回完整 URL http://backend:8521/api/v1
     url = `${apiUrl}${path}`
   }
 
