@@ -61,11 +61,19 @@ export function useFileTransfer() {
       prev.map(task => {
         if (task.id !== taskId) return task;
 
-        const updatedTask = { ...task, ...update };
+        const stageChanged = update.stage && update.stage !== task.stage;
+        const now = Date.now();
+
+        const updatedTask: TransferTask = {
+          ...task,
+          ...update,
+          // 当阶段从 HTTP 切换到 SFTP（或反之）时，重置计时起点，避免不同阶段混算平均速度
+          startTime: stageChanged ? now : task.startTime,
+        };
 
         // 计算速度和剩余时间
         if (updatedTask.bytesTransferred !== undefined && updatedTask.startTime) {
-          const elapsedSeconds = (Date.now() - updatedTask.startTime) / 1000;
+          const elapsedSeconds = (now - updatedTask.startTime) / 1000;
           if (elapsedSeconds > 0) {
             const speed = updatedTask.bytesTransferred / elapsedSeconds;
             updatedTask.speed = formatSpeed(speed);
