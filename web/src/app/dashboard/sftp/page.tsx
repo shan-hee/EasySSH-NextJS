@@ -566,10 +566,8 @@ export default function SftpPage() {
  const server = servers.find(s => s.id === serverId)
  if (!server) return
 
- if (server.status !== "online") {
- toast.error(tTerminal("errorServerOffline"))
- return
- }
+ // 不限制离线服务器的连接，让用户尝试连接
+ // 连接失败时会显示错误信息
 
  const sessionId = `session-${nextSessionId}`
  // 在SFTP页面使用根目录，在终端页面使用用户主目录
@@ -1063,8 +1061,8 @@ export default function SftpPage() {
  {offlineServers.map(server => (
  <DropdownMenuItem
  key={server.id}
- disabled
- className="gap-2 opacity-50"
+ onClick={() => handleQuickConnect(server.id)}
+ className="gap-2 opacity-70 hover:opacity-100"
  >
  <Server className="h-4 w-4 text-zinc-400" />
  <div className="flex-1 min-w-0">
@@ -1166,7 +1164,8 @@ export default function SftpPage() {
  {offlineServers.map(server => (
  <div
  key={server.id}
- className="group rounded-lg border bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/30 p-4 flex flex-col items-center text-center space-y-2.5 opacity-60"
+ onClick={() => handleQuickConnect(server.id)}
+ className="group rounded-lg border bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/30 p-4 flex flex-col items-center text-center space-y-2.5 opacity-70 hover:opacity-100 cursor-pointer transition-all hover:border-zinc-300 dark:hover:border-zinc-700"
  >
  <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900">
  <Server className="h-6 w-6 text-zinc-400 dark:text-zinc-600" />

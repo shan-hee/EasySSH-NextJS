@@ -17,13 +17,12 @@ const (
 )
 
 // ServerStatus 服务器状态
+// 只有两种状态：online（上次连接成功）和 offline（从未连接或上次连接失败）
 type ServerStatus string
 
 const (
 	StatusOnline  ServerStatus = "online"
 	StatusOffline ServerStatus = "offline"
-	StatusError   ServerStatus = "error"
-	StatusUnknown ServerStatus = "unknown"
 )
 
 // Server 服务器模型
@@ -39,7 +38,7 @@ type Server struct {
 	PrivateKey    string         `gorm:"type:text" json:"-"`       // 加密存储，不在 JSON 中返回
 	Group         string         `gorm:"size:50" json:"group"`
 	Tags          pq.StringArray `gorm:"type:text[]" json:"tags"`
-	Status        ServerStatus   `gorm:"type:varchar(20);default:'unknown'" json:"status"`
+	Status        ServerStatus   `gorm:"type:varchar(20);default:'offline'" json:"status"`
 	LastConnected *time.Time     `json:"last_connected,omitempty"`
 	Description   string         `gorm:"type:text" json:"description"`
 	SortOrder     int            `gorm:"default:0;index" json:"sort_order"` // 用户自定义排序顺序

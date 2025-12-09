@@ -7,8 +7,10 @@ export type AuthMethod = "password" | "key"
 
 /**
  * 服务器状态
+ * online: 上次连接成功
+ * offline: 从未连接或上次连接失败
  */
-export type ServerStatus = "online" | "offline" | "error" | "unknown"
+export type ServerStatus = "online" | "offline"
 
 /**
  * 服务器信息
@@ -87,8 +89,6 @@ export interface ServerStatisticsResponse {
   total: number
   online: number
   offline: number
-  error: number
-  unknown: number
   by_group: Record<string, number>
   by_tag: Record<string, number>
 }

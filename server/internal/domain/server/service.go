@@ -72,13 +72,11 @@ type UpdateServerRequest struct {
 
 // ServerStatistics 服务器统计
 type ServerStatistics struct {
-	Total   int64              `json:"total"`
-	Online  int64              `json:"online"`
-	Offline int64              `json:"offline"`
-	Error   int64              `json:"error"`
-	Unknown int64              `json:"unknown"`
-	ByGroup map[string]int64   `json:"by_group"`
-	ByTag   map[string]int64   `json:"by_tag"`
+	Total   int64            `json:"total"`
+	Online  int64            `json:"online"`
+	Offline int64            `json:"offline"`
+	ByGroup map[string]int64 `json:"by_group"`
+	ByTag   map[string]int64 `json:"by_tag"`
 }
 
 // serverService 服务器服务实现
@@ -126,7 +124,7 @@ func (s *serverService) Create(ctx context.Context, userID uuid.UUID, req *Creat
 		Group:       req.Group,
 		Tags:        req.Tags,
 		Description: req.Description,
-		Status:      StatusUnknown,
+		Status:      StatusOffline, // 新建服务器默认为离线状态
 	}
 
 	// 加密密码
@@ -266,16 +264,13 @@ func (s *serverService) GetStatistics(ctx context.Context, userID uuid.UUID) (*S
 	}
 
 	for _, server := range servers {
-		// 统计状态
+		// 统计状态：只有 online 和 offline 两种
 		switch server.Status {
 		case StatusOnline:
 			stats.Online++
-		case StatusOffline:
-			stats.Offline++
-		case StatusError:
-			stats.Error++
 		default:
-			stats.Unknown++
+			// 包括 offline 以及任何其他未知状态都算作离线
+			stats.Offline++
 		}
 
 		// 统计分组

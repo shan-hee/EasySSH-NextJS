@@ -31,7 +31,7 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
   const offlineServers = servers.filter((s) => s.status === "offline")
 
   // 按最后连接时间排序（最近连接的排在前面）
-  const sortedOnlineServers = onlineServers.sort((a, b) => {
+  const sortByLastConnected = (a: QuickServer, b: QuickServer) => {
     // 如果两者都有 last_connected，比较时间
     if (a.last_connected && b.last_connected) {
       return new Date(b.last_connected).getTime() - new Date(a.last_connected).getTime()
@@ -46,7 +46,11 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
     }
     // 如果两者都没有，保持原顺序
     return 0
-  })
+  }
+
+  // 在线和离线服务器分别按最后连接时间排序
+  const sortedOnlineServers = [...onlineServers].sort(sortByLastConnected)
+  const sortedOfflineServers = [...offlineServers].sort(sortByLastConnected)
 
   return (
     <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-white dark:bg-black"}>
@@ -131,16 +135,22 @@ export function QuickConnect({ servers, isLoading, onSelectServer }: QuickConnec
             </div>
           )}
 
-          {!isLoading && offlineServers.length > 0 && (
+          {!isLoading && sortedOfflineServers.length > 0 && (
             <div className={"rounded-lg border p-3 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/30 dark:border-zinc-800/30"}>
               <div className={"text-xs mb-2 text-zinc-600 dark:text-zinc-500"}>
                 {tTerminal("quickConnectOfflineSectionTitle")}
               </div>
               <AnimatedList className="space-y-1.5">
-                {offlineServers.map((server) => (
-                  <div key={server.id} className={"flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-600"}>
+                {sortedOfflineServers.map((server) => (
+                  <div
+                    key={server.id}
+                    onClick={() => onSelectServer(server)}
+                    className={"group flex items-center gap-2 p-2 rounded cursor-pointer transition-all duration-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"}
+                  >
                     <div className={"w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"}></div>
-                    {server.name || server.host} <span className="font-mono">({server.host})</span>
+                    <span className={"text-xs text-zinc-500 dark:text-zinc-600 group-hover:text-zinc-700 dark:group-hover:text-zinc-400 transition-colors"}>
+                      {server.name || server.host} <span className="font-mono">({server.host})</span>
+                    </span>
                   </div>
                 ))}
               </AnimatedList>

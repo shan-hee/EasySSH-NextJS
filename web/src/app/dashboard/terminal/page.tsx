@@ -102,8 +102,8 @@ function TerminalPageContent() {
    // 查找服务器信息
    const server = servers.find(s => s.id.toString() === serverId)
 
-   if (server && server.status === "online") {
-     // 服务器在线，更新会话信息
+   if (server) {
+     // 服务器存在，更新会话信息（不限制在线/离线状态）
      setSessions(prev => {
        const updated = prev.map(s => {
          // 只更新我们初始创建的 auto- 会话
@@ -130,12 +130,8 @@ function TerminalPageContent() {
        return updated
      })
    } else {
-     // 服务器不存在或离线，回退到快速连接
-     if (!server) {
-       toast.error(t("errorServerNotFound"))
-     } else {
-       toast.error(t("errorServerOffline"))
-     }
+     // 服务器不存在，回退到快速连接
+     toast.error(t("errorServerNotFound"))
 
      const now = Date.now()
      setSessions([{

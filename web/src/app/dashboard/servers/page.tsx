@@ -217,7 +217,7 @@ export default function ServersPage() {
  if (activeTab === 'online') {
  filtered = filtered.filter(s => s.status === 'online')
  } else if (activeTab === 'offline') {
- filtered = filtered.filter(s => s.status === 'offline' || s.status === 'error' || s.status === 'unknown')
+ filtered = filtered.filter(s => s.status === 'offline')
  } else if (activeTab !== 'all') {
  // 用户自定义标签过滤
  filtered = filtered.filter(s => s.tags && s.tags.includes(activeTab))
@@ -509,7 +509,7 @@ export default function ServersPage() {
  className="h-8"
  >
  <div className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />
- {t("tabOffline")} ({statistics.offline + statistics.error + statistics.unknown})
+ {t("tabOffline")} ({statistics.offline})
  </Button>
  {statistics.by_tag && Object.entries(statistics.by_tag).map(([tag, count]) => (
  <Button
