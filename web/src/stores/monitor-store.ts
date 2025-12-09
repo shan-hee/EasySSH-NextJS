@@ -4,6 +4,7 @@
  */
 
 import { create } from 'zustand'
+import type { DockerDataResponse } from '@/components/terminal/docker/types'
 
 /**
  * 监控数据结构（从 useMonitorWebSocket.ts 复制）
@@ -51,6 +52,12 @@ export interface MonitorMetrics {
   localLatencyMs?: number
   localLatencySmoothedMs?: number
   localLatencyJitter?: number
+  // Docker 容器统计
+  docker?: {
+    containersRunning: number
+    containersTotal: number
+    dockerInstalled: boolean
+  }
 }
 
 /**
@@ -85,6 +92,11 @@ export interface MonitorConnectionState {
 type SubscriberCallback = (metrics: MonitorMetrics) => void
 
 /**
+ * Docker 请求回调类型
+ */
+type DockerRequestCallback = (data: DockerDataResponse) => void
+
+/**
  * 监控 Store 状态
  */
 interface MonitorStoreState {
@@ -97,6 +109,10 @@ interface MonitorStoreState {
 
   // 引用计数 serverId -> count（记录有多少个页签在使用此连接）
   refCount: Map<string, number>
+
+  // ==================== Docker 请求管理 ====================
+  // Docker 请求回调映射 requestId -> callback
+  dockerRequests: Map<string, DockerRequestCallback>
 
   // 获取监控连接
   getConnection: (serverId: string) => MonitorConnectionState | undefined
@@ -129,6 +145,13 @@ interface MonitorStoreState {
 
   // 清理所有连接（应用关闭时调用）
   destroyAll: () => void
+
+  // ==================== Docker 数据请求 ====================
+  // 请求 Docker 数据（返回 Promise）
+  requestDockerData: (serverId: string) => Promise<DockerDataResponse>
+
+  // 处理 Docker 响应（WebSocket 收到 docker_response 时调用）
+  handleDockerResponse: (requestId: string, data: DockerDataResponse) => void
 }
 
 /**
@@ -138,6 +161,7 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
   connections: new Map<string, MonitorConnectionState>(),
   subscribers: new Map<string, Set<SubscriberCallback>>(),
   refCount: new Map<string, number>(),
+  dockerRequests: new Map<string, DockerRequestCallback>(),
 
   getConnection: (serverId: string) => {
     return get().connections.get(serverId)
@@ -340,8 +364,73 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
     set({
       connections: new Map(),
       subscribers: new Map(),
-      refCount: new Map()
+      refCount: new Map(),
+      dockerRequests: new Map()
     })
+  },
+
+  // ==================== Docker 数据请求实现 ====================
+  requestDockerData: (serverId: string) => {
+    return new Promise<DockerDataResponse>((resolve, reject) => {
+      const connection = get().connections.get(serverId)
+      if (!connection?.ws || connection.ws.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket not connected'))
+        return
+      }
+
+      // 生成唯一请求 ID
+      const requestId = `docker_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
+      // 设置超时（15 秒）
+      const timeout = setTimeout(() => {
+        set((s) => {
+          const newRequests = new Map(s.dockerRequests)
+          newRequests.delete(requestId)
+          return { dockerRequests: newRequests }
+        })
+        reject(new Error('Docker request timeout'))
+      }, 15000)
+
+      // 注册回调
+      const callback: DockerRequestCallback = (data) => {
+        clearTimeout(timeout)
+        set((s) => {
+          const newRequests = new Map(s.dockerRequests)
+          newRequests.delete(requestId)
+          return { dockerRequests: newRequests }
+        })
+        resolve(data)
+      }
+
+      set((s) => {
+        const newRequests = new Map(s.dockerRequests)
+        newRequests.set(requestId, callback)
+        return { dockerRequests: newRequests }
+      })
+
+      // 发送请求
+      try {
+        connection.ws.send(JSON.stringify({
+          type: 'docker_request',
+          requestId
+        }))
+      } catch (error) {
+        clearTimeout(timeout)
+        set((s) => {
+          const newRequests = new Map(s.dockerRequests)
+          newRequests.delete(requestId)
+          return { dockerRequests: newRequests }
+        })
+        reject(error)
+      }
+    })
+  },
+
+  handleDockerResponse: (requestId: string, data: DockerDataResponse) => {
+    const callback = get().dockerRequests.get(requestId)
+    if (callback) {
+      callback(data)
+    }
   }
 }))
 

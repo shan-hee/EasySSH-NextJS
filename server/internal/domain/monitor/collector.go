@@ -109,6 +109,18 @@ hostname
 cat /proc/cpuinfo | grep "model name" | head -n1 | cut -d':' -f2
 uname -m
 cat /proc/cpuinfo | grep "^processor" | wc -l
+
+echo "=== DOCKER ==="
+# 快速获取 Docker 容器统计（仅容器数量）
+if command -v docker >/dev/null 2>&1; then
+  echo "installed"
+  docker ps -q 2>/dev/null | wc -l
+  docker ps -aq 2>/dev/null | wc -l
+else
+  echo "not_installed"
+  echo "0"
+  echo "0"
+fi
 `
 
 	output, err := c.sshExec(script)
@@ -146,6 +158,11 @@ cat /proc/cpuinfo | grep "^processor" | wc -l
 		loadData := sections["LOAD"]
 		uptimeData := sections["UPTIME"]
 		metrics.SystemInfo = c.parseSystemInfo(sysData, loadData, uptimeData)
+	}
+
+	// 解析 Docker 统计
+	if dockerData, ok := sections["DOCKER"]; ok {
+		metrics.Docker = c.parseDocker(dockerData)
 	}
 
 	// 设置 SSH 延迟
@@ -426,4 +443,22 @@ func (c *Collector) calculateTotalDiskPercent(disks []*pb.DiskMetrics) float64 {
 	}
 
 	return (float64(totalUsed) / float64(totalSize)) * 100.0
+}
+
+// parseDocker 解析 Docker 统计数据
+func (c *Collector) parseDocker(data string) *pb.DockerStats {
+	lines := strings.Split(strings.TrimSpace(data), "\n")
+	if len(lines) < 3 {
+		return &pb.DockerStats{DockerInstalled: false}
+	}
+
+	installed := strings.TrimSpace(lines[0]) == "installed"
+	running := uint32(parseUint64(strings.TrimSpace(lines[1])))
+	total := uint32(parseUint64(strings.TrimSpace(lines[2])))
+
+	return &pb.DockerStats{
+		DockerInstalled:     installed,
+		ContainersRunning:   running,
+		ContainersTotal:     total,
+	}
 }

@@ -42,6 +42,13 @@ message DiskMetrics {
   uint64 total_bytes = 3;     // 总字节数
 }
 
+// Docker 容器统计（轻量级，仅用于工具栏显示）
+message DockerStats {
+  uint32 containers_running = 1; // 运行中的容器数
+  uint32 containers_total = 2;   // 容器总数
+  bool docker_installed = 3;     // Docker 是否已安装
+}
+
 // 完整的系统指标数据
 message SystemMetrics {
   SystemInfo system_info = 1;     // 系统信息
@@ -52,4 +59,5 @@ message SystemMetrics {
   int64 timestamp = 6;            // 时间戳（Unix 秒）
   double disk_total_percent = 7;  // 磁盘总使用率 0-100
   int64 ssh_latency_ms = 8;       // SSH 命令延迟（毫秒）
+  DockerStats docker = 9;         // Docker 容器统计
 }

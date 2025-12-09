@@ -1,6 +1,5 @@
-/* eslint-disable */
 import * as $protobuf from "protobufjs";
-import type Long from "long";
+import Long = require("long");
 /** Namespace monitor. */
 export namespace monitor {
 
@@ -567,6 +566,115 @@ export namespace monitor {
         public static getTypeUrl(typeUrlPrefix?: string): string;
     }
 
+    /** Properties of a DockerStats. */
+    interface IDockerStats {
+
+        /** DockerStats containersRunning */
+        containersRunning?: (number|null);
+
+        /** DockerStats containersTotal */
+        containersTotal?: (number|null);
+
+        /** DockerStats dockerInstalled */
+        dockerInstalled?: (boolean|null);
+    }
+
+    /** Represents a DockerStats. */
+    class DockerStats implements IDockerStats {
+
+        /**
+         * Constructs a new DockerStats.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: monitor.IDockerStats);
+
+        /** DockerStats containersRunning. */
+        public containersRunning: number;
+
+        /** DockerStats containersTotal. */
+        public containersTotal: number;
+
+        /** DockerStats dockerInstalled. */
+        public dockerInstalled: boolean;
+
+        /**
+         * Creates a new DockerStats instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns DockerStats instance
+         */
+        public static create(properties?: monitor.IDockerStats): monitor.DockerStats;
+
+        /**
+         * Encodes the specified DockerStats message. Does not implicitly {@link monitor.DockerStats.verify|verify} messages.
+         * @param message DockerStats message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: monitor.IDockerStats, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified DockerStats message, length delimited. Does not implicitly {@link monitor.DockerStats.verify|verify} messages.
+         * @param message DockerStats message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: monitor.IDockerStats, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a DockerStats message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns DockerStats
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): monitor.DockerStats;
+
+        /**
+         * Decodes a DockerStats message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns DockerStats
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): monitor.DockerStats;
+
+        /**
+         * Verifies a DockerStats message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a DockerStats message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns DockerStats
+         */
+        public static fromObject(object: { [k: string]: any }): monitor.DockerStats;
+
+        /**
+         * Creates a plain object from a DockerStats message. Also converts values to other types if specified.
+         * @param message DockerStats
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: monitor.DockerStats, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this DockerStats to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for DockerStats
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
+    }
+
     /** Properties of a SystemMetrics. */
     interface ISystemMetrics {
 
@@ -593,6 +701,9 @@ export namespace monitor {
 
         /** SystemMetrics sshLatencyMs */
         sshLatencyMs?: (number|Long|null);
+
+        /** SystemMetrics docker */
+        docker?: (monitor.IDockerStats|null);
     }
 
     /** Represents a SystemMetrics. */
@@ -627,6 +738,9 @@ export namespace monitor {
 
         /** SystemMetrics sshLatencyMs. */
         public sshLatencyMs: (number|Long);
+
+        /** SystemMetrics docker. */
+        public docker?: (monitor.IDockerStats|null);
 
         /**
          * Creates a new SystemMetrics instance using the specified properties.

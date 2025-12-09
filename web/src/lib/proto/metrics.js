@@ -1,22 +1,20 @@
- 
-"use strict";
-
+/*eslint-disable block-scoped-var, id-length, no-control-regex, no-magic-numbers, no-prototype-builtins, no-redeclare, no-shadow, no-var, sort-vars*/
 import * as $protobuf from "protobufjs/minimal";
 
 // Common aliases
-var $Reader = $protobuf.Reader, $Writer = $protobuf.Writer, $util = $protobuf.util;
+const $Reader = $protobuf.Reader, $Writer = $protobuf.Writer, $util = $protobuf.util;
 
 // Exported root namespace
-var $root = $protobuf.roots["default"] || ($protobuf.roots["default"] = {});
+const $root = $protobuf.roots["default"] || ($protobuf.roots["default"] = {});
 
-$root.monitor = (function() {
+export const monitor = $root.monitor = (() => {
 
     /**
      * Namespace monitor.
      * @exports monitor
      * @namespace
      */
-    var monitor = {};
+    const monitor = {};
 
     monitor.SystemInfo = (function() {
 
@@ -43,7 +41,7 @@ $root.monitor = (function() {
          */
         function SystemInfo(properties) {
             if (properties)
-                for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
                         this[keys[i]] = properties[keys[i]];
         }
@@ -172,9 +170,9 @@ $root.monitor = (function() {
         SystemInfo.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.SystemInfo();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.SystemInfo();
             while (reader.pos < end) {
-                var tag = reader.uint32();
+                let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
@@ -276,7 +274,7 @@ $root.monitor = (function() {
         SystemInfo.fromObject = function fromObject(object) {
             if (object instanceof $root.monitor.SystemInfo)
                 return object;
-            var message = new $root.monitor.SystemInfo();
+            let message = new $root.monitor.SystemInfo();
             if (object.os != null)
                 message.os = String(object.os);
             if (object.hostname != null)
@@ -313,7 +311,7 @@ $root.monitor = (function() {
         SystemInfo.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
-            var object = {};
+            let object = {};
             if (options.defaults) {
                 object.os = "";
                 object.hostname = "";
@@ -321,7 +319,7 @@ $root.monitor = (function() {
                 object.arch = "";
                 object.loadAvg = "";
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.uptimeSeconds = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.uptimeSeconds = options.longs === String ? "0" : 0;
@@ -396,7 +394,7 @@ $root.monitor = (function() {
          */
         function CPUMetrics(properties) {
             if (properties)
-                for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
                         this[keys[i]] = properties[keys[i]];
         }
@@ -475,9 +473,9 @@ $root.monitor = (function() {
         CPUMetrics.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.CPUMetrics();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.CPUMetrics();
             while (reader.pos < end) {
-                var tag = reader.uint32();
+                let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
@@ -544,7 +542,7 @@ $root.monitor = (function() {
         CPUMetrics.fromObject = function fromObject(object) {
             if (object instanceof $root.monitor.CPUMetrics)
                 return object;
-            var message = new $root.monitor.CPUMetrics();
+            let message = new $root.monitor.CPUMetrics();
             if (object.usagePercent != null)
                 message.usagePercent = Number(object.usagePercent);
             if (object.coreCount != null)
@@ -564,7 +562,7 @@ $root.monitor = (function() {
         CPUMetrics.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
-            var object = {};
+            let object = {};
             if (options.defaults) {
                 object.usagePercent = 0;
                 object.coreCount = 0;
@@ -627,7 +625,7 @@ $root.monitor = (function() {
          */
         function MemoryMetrics(properties) {
             if (properties)
-                for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
                         this[keys[i]] = properties[keys[i]];
         }
@@ -726,9 +724,9 @@ $root.monitor = (function() {
         MemoryMetrics.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.MemoryMetrics();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.MemoryMetrics();
             while (reader.pos < end) {
-                var tag = reader.uint32();
+                let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
@@ -809,7 +807,7 @@ $root.monitor = (function() {
         MemoryMetrics.fromObject = function fromObject(object) {
             if (object instanceof $root.monitor.MemoryMetrics)
                 return object;
-            var message = new $root.monitor.MemoryMetrics();
+            let message = new $root.monitor.MemoryMetrics();
             if (object.ramUsedBytes != null)
                 if ($util.Long)
                     (message.ramUsedBytes = $util.Long.fromValue(object.ramUsedBytes)).unsigned = true;
@@ -861,25 +859,25 @@ $root.monitor = (function() {
         MemoryMetrics.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
-            var object = {};
+            let object = {};
             if (options.defaults) {
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.ramUsedBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.ramUsedBytes = options.longs === String ? "0" : 0;
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.ramTotalBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.ramTotalBytes = options.longs === String ? "0" : 0;
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.swapUsedBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.swapUsedBytes = options.longs === String ? "0" : 0;
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.swapTotalBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.swapTotalBytes = options.longs === String ? "0" : 0;
@@ -956,7 +954,7 @@ $root.monitor = (function() {
          */
         function NetworkMetrics(properties) {
             if (properties)
-                for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
                         this[keys[i]] = properties[keys[i]];
         }
@@ -1035,9 +1033,9 @@ $root.monitor = (function() {
         NetworkMetrics.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.NetworkMetrics();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.NetworkMetrics();
             while (reader.pos < end) {
-                var tag = reader.uint32();
+                let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
@@ -1104,7 +1102,7 @@ $root.monitor = (function() {
         NetworkMetrics.fromObject = function fromObject(object) {
             if (object instanceof $root.monitor.NetworkMetrics)
                 return object;
-            var message = new $root.monitor.NetworkMetrics();
+            let message = new $root.monitor.NetworkMetrics();
             if (object.bytesRecvPerSec != null)
                 if ($util.Long)
                     (message.bytesRecvPerSec = $util.Long.fromValue(object.bytesRecvPerSec)).unsigned = true;
@@ -1138,15 +1136,15 @@ $root.monitor = (function() {
         NetworkMetrics.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
-            var object = {};
+            let object = {};
             if (options.defaults) {
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.bytesRecvPerSec = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.bytesRecvPerSec = options.longs === String ? "0" : 0;
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.bytesSentPerSec = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.bytesSentPerSec = options.longs === String ? "0" : 0;
@@ -1214,7 +1212,7 @@ $root.monitor = (function() {
          */
         function DiskMetrics(properties) {
             if (properties)
-                for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
                         this[keys[i]] = properties[keys[i]];
         }
@@ -1303,9 +1301,9 @@ $root.monitor = (function() {
         DiskMetrics.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.DiskMetrics();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.DiskMetrics();
             while (reader.pos < end) {
-                var tag = reader.uint32();
+                let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
@@ -1379,7 +1377,7 @@ $root.monitor = (function() {
         DiskMetrics.fromObject = function fromObject(object) {
             if (object instanceof $root.monitor.DiskMetrics)
                 return object;
-            var message = new $root.monitor.DiskMetrics();
+            let message = new $root.monitor.DiskMetrics();
             if (object.mountPoint != null)
                 message.mountPoint = String(object.mountPoint);
             if (object.usedBytes != null)
@@ -1415,16 +1413,16 @@ $root.monitor = (function() {
         DiskMetrics.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
-            var object = {};
+            let object = {};
             if (options.defaults) {
                 object.mountPoint = "";
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.usedBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.usedBytes = options.longs === String ? "0" : 0;
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, true);
+                    let long = new $util.Long(0, 0, true);
                     object.totalBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.totalBytes = options.longs === String ? "0" : 0;
@@ -1473,6 +1471,258 @@ $root.monitor = (function() {
         return DiskMetrics;
     })();
 
+    monitor.DockerStats = (function() {
+
+        /**
+         * Properties of a DockerStats.
+         * @memberof monitor
+         * @interface IDockerStats
+         * @property {number|null} [containersRunning] DockerStats containersRunning
+         * @property {number|null} [containersTotal] DockerStats containersTotal
+         * @property {boolean|null} [dockerInstalled] DockerStats dockerInstalled
+         */
+
+        /**
+         * Constructs a new DockerStats.
+         * @memberof monitor
+         * @classdesc Represents a DockerStats.
+         * @implements IDockerStats
+         * @constructor
+         * @param {monitor.IDockerStats=} [properties] Properties to set
+         */
+        function DockerStats(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * DockerStats containersRunning.
+         * @member {number} containersRunning
+         * @memberof monitor.DockerStats
+         * @instance
+         */
+        DockerStats.prototype.containersRunning = 0;
+
+        /**
+         * DockerStats containersTotal.
+         * @member {number} containersTotal
+         * @memberof monitor.DockerStats
+         * @instance
+         */
+        DockerStats.prototype.containersTotal = 0;
+
+        /**
+         * DockerStats dockerInstalled.
+         * @member {boolean} dockerInstalled
+         * @memberof monitor.DockerStats
+         * @instance
+         */
+        DockerStats.prototype.dockerInstalled = false;
+
+        /**
+         * Creates a new DockerStats instance using the specified properties.
+         * @function create
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {monitor.IDockerStats=} [properties] Properties to set
+         * @returns {monitor.DockerStats} DockerStats instance
+         */
+        DockerStats.create = function create(properties) {
+            return new DockerStats(properties);
+        };
+
+        /**
+         * Encodes the specified DockerStats message. Does not implicitly {@link monitor.DockerStats.verify|verify} messages.
+         * @function encode
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {monitor.IDockerStats} message DockerStats message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        DockerStats.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.containersRunning != null && Object.hasOwnProperty.call(message, "containersRunning"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.containersRunning);
+            if (message.containersTotal != null && Object.hasOwnProperty.call(message, "containersTotal"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.containersTotal);
+            if (message.dockerInstalled != null && Object.hasOwnProperty.call(message, "dockerInstalled"))
+                writer.uint32(/* id 3, wireType 0 =*/24).bool(message.dockerInstalled);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified DockerStats message, length delimited. Does not implicitly {@link monitor.DockerStats.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {monitor.IDockerStats} message DockerStats message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        DockerStats.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a DockerStats message from the specified reader or buffer.
+         * @function decode
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {monitor.DockerStats} DockerStats
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        DockerStats.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.DockerStats();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.containersRunning = reader.uint32();
+                        break;
+                    }
+                case 2: {
+                        message.containersTotal = reader.uint32();
+                        break;
+                    }
+                case 3: {
+                        message.dockerInstalled = reader.bool();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a DockerStats message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {monitor.DockerStats} DockerStats
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        DockerStats.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a DockerStats message.
+         * @function verify
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        DockerStats.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.containersRunning != null && message.hasOwnProperty("containersRunning"))
+                if (!$util.isInteger(message.containersRunning))
+                    return "containersRunning: integer expected";
+            if (message.containersTotal != null && message.hasOwnProperty("containersTotal"))
+                if (!$util.isInteger(message.containersTotal))
+                    return "containersTotal: integer expected";
+            if (message.dockerInstalled != null && message.hasOwnProperty("dockerInstalled"))
+                if (typeof message.dockerInstalled !== "boolean")
+                    return "dockerInstalled: boolean expected";
+            return null;
+        };
+
+        /**
+         * Creates a DockerStats message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {monitor.DockerStats} DockerStats
+         */
+        DockerStats.fromObject = function fromObject(object) {
+            if (object instanceof $root.monitor.DockerStats)
+                return object;
+            let message = new $root.monitor.DockerStats();
+            if (object.containersRunning != null)
+                message.containersRunning = object.containersRunning >>> 0;
+            if (object.containersTotal != null)
+                message.containersTotal = object.containersTotal >>> 0;
+            if (object.dockerInstalled != null)
+                message.dockerInstalled = Boolean(object.dockerInstalled);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a DockerStats message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {monitor.DockerStats} message DockerStats
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        DockerStats.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.containersRunning = 0;
+                object.containersTotal = 0;
+                object.dockerInstalled = false;
+            }
+            if (message.containersRunning != null && message.hasOwnProperty("containersRunning"))
+                object.containersRunning = message.containersRunning;
+            if (message.containersTotal != null && message.hasOwnProperty("containersTotal"))
+                object.containersTotal = message.containersTotal;
+            if (message.dockerInstalled != null && message.hasOwnProperty("dockerInstalled"))
+                object.dockerInstalled = message.dockerInstalled;
+            return object;
+        };
+
+        /**
+         * Converts this DockerStats to JSON.
+         * @function toJSON
+         * @memberof monitor.DockerStats
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        DockerStats.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for DockerStats
+         * @function getTypeUrl
+         * @memberof monitor.DockerStats
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        DockerStats.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/monitor.DockerStats";
+        };
+
+        return DockerStats;
+    })();
+
     monitor.SystemMetrics = (function() {
 
         /**
@@ -1487,6 +1737,7 @@ $root.monitor = (function() {
          * @property {number|Long|null} [timestamp] SystemMetrics timestamp
          * @property {number|null} [diskTotalPercent] SystemMetrics diskTotalPercent
          * @property {number|Long|null} [sshLatencyMs] SystemMetrics sshLatencyMs
+         * @property {monitor.IDockerStats|null} [docker] SystemMetrics docker
          */
 
         /**
@@ -1500,7 +1751,7 @@ $root.monitor = (function() {
         function SystemMetrics(properties) {
             this.disks = [];
             if (properties)
-                for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
                         this[keys[i]] = properties[keys[i]];
         }
@@ -1570,6 +1821,14 @@ $root.monitor = (function() {
         SystemMetrics.prototype.sshLatencyMs = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
         /**
+         * SystemMetrics docker.
+         * @member {monitor.IDockerStats|null|undefined} docker
+         * @memberof monitor.SystemMetrics
+         * @instance
+         */
+        SystemMetrics.prototype.docker = null;
+
+        /**
          * Creates a new SystemMetrics instance using the specified properties.
          * @function create
          * @memberof monitor.SystemMetrics
@@ -1602,7 +1861,7 @@ $root.monitor = (function() {
             if (message.network != null && Object.hasOwnProperty.call(message, "network"))
                 $root.monitor.NetworkMetrics.encode(message.network, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
             if (message.disks != null && message.disks.length)
-                for (var i = 0; i < message.disks.length; ++i)
+                for (let i = 0; i < message.disks.length; ++i)
                     $root.monitor.DiskMetrics.encode(message.disks[i], writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
             if (message.timestamp != null && Object.hasOwnProperty.call(message, "timestamp"))
                 writer.uint32(/* id 6, wireType 0 =*/48).int64(message.timestamp);
@@ -1610,6 +1869,8 @@ $root.monitor = (function() {
                 writer.uint32(/* id 7, wireType 1 =*/57).double(message.diskTotalPercent);
             if (message.sshLatencyMs != null && Object.hasOwnProperty.call(message, "sshLatencyMs"))
                 writer.uint32(/* id 8, wireType 0 =*/64).int64(message.sshLatencyMs);
+            if (message.docker != null && Object.hasOwnProperty.call(message, "docker"))
+                $root.monitor.DockerStats.encode(message.docker, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
             return writer;
         };
 
@@ -1640,9 +1901,9 @@ $root.monitor = (function() {
         SystemMetrics.decode = function decode(reader, length, error) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.SystemMetrics();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.monitor.SystemMetrics();
             while (reader.pos < end) {
-                var tag = reader.uint32();
+                let tag = reader.uint32();
                 if (tag === error)
                     break;
                 switch (tag >>> 3) {
@@ -1678,6 +1939,10 @@ $root.monitor = (function() {
                     }
                 case 8: {
                         message.sshLatencyMs = reader.int64();
+                        break;
+                    }
+                case 9: {
+                        message.docker = $root.monitor.DockerStats.decode(reader, reader.uint32());
                         break;
                     }
                 default:
@@ -1716,30 +1981,30 @@ $root.monitor = (function() {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.systemInfo != null && message.hasOwnProperty("systemInfo")) {
-                var error = $root.monitor.SystemInfo.verify(message.systemInfo);
+                let error = $root.monitor.SystemInfo.verify(message.systemInfo);
                 if (error)
                     return "systemInfo." + error;
             }
             if (message.cpu != null && message.hasOwnProperty("cpu")) {
-                var error = $root.monitor.CPUMetrics.verify(message.cpu);
+                let error = $root.monitor.CPUMetrics.verify(message.cpu);
                 if (error)
                     return "cpu." + error;
             }
             if (message.memory != null && message.hasOwnProperty("memory")) {
-                var error = $root.monitor.MemoryMetrics.verify(message.memory);
+                let error = $root.monitor.MemoryMetrics.verify(message.memory);
                 if (error)
                     return "memory." + error;
             }
             if (message.network != null && message.hasOwnProperty("network")) {
-                var error = $root.monitor.NetworkMetrics.verify(message.network);
+                let error = $root.monitor.NetworkMetrics.verify(message.network);
                 if (error)
                     return "network." + error;
             }
             if (message.disks != null && message.hasOwnProperty("disks")) {
                 if (!Array.isArray(message.disks))
                     return "disks: array expected";
-                for (var i = 0; i < message.disks.length; ++i) {
-                    var error = $root.monitor.DiskMetrics.verify(message.disks[i]);
+                for (let i = 0; i < message.disks.length; ++i) {
+                    let error = $root.monitor.DiskMetrics.verify(message.disks[i]);
                     if (error)
                         return "disks." + error;
                 }
@@ -1753,6 +2018,11 @@ $root.monitor = (function() {
             if (message.sshLatencyMs != null && message.hasOwnProperty("sshLatencyMs"))
                 if (!$util.isInteger(message.sshLatencyMs) && !(message.sshLatencyMs && $util.isInteger(message.sshLatencyMs.low) && $util.isInteger(message.sshLatencyMs.high)))
                     return "sshLatencyMs: integer|Long expected";
+            if (message.docker != null && message.hasOwnProperty("docker")) {
+                let error = $root.monitor.DockerStats.verify(message.docker);
+                if (error)
+                    return "docker." + error;
+            }
             return null;
         };
 
@@ -1767,7 +2037,7 @@ $root.monitor = (function() {
         SystemMetrics.fromObject = function fromObject(object) {
             if (object instanceof $root.monitor.SystemMetrics)
                 return object;
-            var message = new $root.monitor.SystemMetrics();
+            let message = new $root.monitor.SystemMetrics();
             if (object.systemInfo != null) {
                 if (typeof object.systemInfo !== "object")
                     throw TypeError(".monitor.SystemMetrics.systemInfo: object expected");
@@ -1792,7 +2062,7 @@ $root.monitor = (function() {
                 if (!Array.isArray(object.disks))
                     throw TypeError(".monitor.SystemMetrics.disks: array expected");
                 message.disks = [];
-                for (var i = 0; i < object.disks.length; ++i) {
+                for (let i = 0; i < object.disks.length; ++i) {
                     if (typeof object.disks[i] !== "object")
                         throw TypeError(".monitor.SystemMetrics.disks: object expected");
                     message.disks[i] = $root.monitor.DiskMetrics.fromObject(object.disks[i]);
@@ -1818,6 +2088,11 @@ $root.monitor = (function() {
                     message.sshLatencyMs = object.sshLatencyMs;
                 else if (typeof object.sshLatencyMs === "object")
                     message.sshLatencyMs = new $util.LongBits(object.sshLatencyMs.low >>> 0, object.sshLatencyMs.high >>> 0).toNumber();
+            if (object.docker != null) {
+                if (typeof object.docker !== "object")
+                    throw TypeError(".monitor.SystemMetrics.docker: object expected");
+                message.docker = $root.monitor.DockerStats.fromObject(object.docker);
+            }
             return message;
         };
 
@@ -1833,7 +2108,7 @@ $root.monitor = (function() {
         SystemMetrics.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
-            var object = {};
+            let object = {};
             if (options.arrays || options.defaults)
                 object.disks = [];
             if (options.defaults) {
@@ -1842,16 +2117,17 @@ $root.monitor = (function() {
                 object.memory = null;
                 object.network = null;
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, false);
+                    let long = new $util.Long(0, 0, false);
                     object.timestamp = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.timestamp = options.longs === String ? "0" : 0;
                 object.diskTotalPercent = 0;
                 if ($util.Long) {
-                    var long = new $util.Long(0, 0, false);
+                    let long = new $util.Long(0, 0, false);
                     object.sshLatencyMs = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
                     object.sshLatencyMs = options.longs === String ? "0" : 0;
+                object.docker = null;
             }
             if (message.systemInfo != null && message.hasOwnProperty("systemInfo"))
                 object.systemInfo = $root.monitor.SystemInfo.toObject(message.systemInfo, options);
@@ -1863,7 +2139,7 @@ $root.monitor = (function() {
                 object.network = $root.monitor.NetworkMetrics.toObject(message.network, options);
             if (message.disks && message.disks.length) {
                 object.disks = [];
-                for (var j = 0; j < message.disks.length; ++j)
+                for (let j = 0; j < message.disks.length; ++j)
                     object.disks[j] = $root.monitor.DiskMetrics.toObject(message.disks[j], options);
             }
             if (message.timestamp != null && message.hasOwnProperty("timestamp"))
@@ -1878,6 +2154,8 @@ $root.monitor = (function() {
                     object.sshLatencyMs = options.longs === String ? String(message.sshLatencyMs) : message.sshLatencyMs;
                 else
                     object.sshLatencyMs = options.longs === String ? $util.Long.prototype.toString.call(message.sshLatencyMs) : options.longs === Number ? new $util.LongBits(message.sshLatencyMs.low >>> 0, message.sshLatencyMs.high >>> 0).toNumber() : message.sshLatencyMs;
+            if (message.docker != null && message.hasOwnProperty("docker"))
+                object.docker = $root.monitor.DockerStats.toObject(message.docker, options);
             return object;
         };
 
@@ -1913,5 +2191,4 @@ $root.monitor = (function() {
     return monitor;
 })();
 
-export const monitor = $root.monitor;
-export default $root;
+export { $root as default };

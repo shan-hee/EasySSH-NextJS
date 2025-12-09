@@ -358,6 +358,8 @@ func main() {
 	notificationConfigHandler := rest.NewNotificationConfigHandler(notificationConfigService)
 	aiConfigHandler := rest.NewAIConfigHandler(aiConfigService)
 	userAIConfigHandler := rest.NewUserAIConfigHandler(userAIConfigService)
+	// Docker 处理器
+	dockerHandler := rest.NewDockerHandler(serverService, serverRepo, encryptor, sshHostKeyService.GetHostKeyCallback())
 	// 其他处理器
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 	avatarHandler := rest.NewAvatarHandler()
@@ -520,6 +522,24 @@ func main() {
 			sshRoutes.GET("/sessions/:id", sshHandler.GetSession)      // 会话详情
 			sshRoutes.DELETE("/sessions/:id", sshHandler.CloseSession) // 关闭会话
 			sshRoutes.GET("/statistics", sshHandler.GetStatistics)     // 统计信息
+		}
+
+		// Docker 路由（需要认证）
+		dockerRoutes := v1.Group("/docker/:serverId")
+		dockerRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			dockerRoutes.GET("/all", dockerHandler.GetAllData)                         // 获取所有数据
+			dockerRoutes.GET("/containers", dockerHandler.ListContainers)              // 容器列表
+			dockerRoutes.GET("/containers/:id/logs", dockerHandler.GetContainerLogs)   // 容器日志
+			dockerRoutes.POST("/containers/:id/start", dockerHandler.StartContainer)   // 启动容器
+			dockerRoutes.POST("/containers/:id/stop", dockerHandler.StopContainer)     // 停止容器
+			dockerRoutes.POST("/containers/:id/restart", dockerHandler.RestartContainer) // 重启容器
+			dockerRoutes.POST("/containers/:id/pause", dockerHandler.PauseContainer)   // 暂停容器
+			dockerRoutes.POST("/containers/:id/unpause", dockerHandler.UnpauseContainer) // 恢复容器
+			dockerRoutes.DELETE("/containers/:id", dockerHandler.RemoveContainer)      // 删除容器
+			dockerRoutes.GET("/images", dockerHandler.ListImages)                      // 镜像列表
+			dockerRoutes.GET("/system", dockerHandler.GetSystemInfo)                   // 系统信息
+			dockerRoutes.GET("/stats", dockerHandler.GetStats)                         // 容器统计
 		}
 
 		// 监控 WebSocket 路由（需要认证）

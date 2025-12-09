@@ -45,6 +45,12 @@ export interface MonitorMetrics {
   diskTotalPercent: number;
   sshLatencyMs: number;
   timestamp: number;
+  // Docker 容器统计
+  docker?: {
+    containersRunning: number;
+    containersTotal: number;
+    dockerInstalled: boolean;
+  };
 }
 
 interface UseMonitorWebSocketOptions {
@@ -110,6 +116,7 @@ export function useMonitorWebSocket({
   const updateStatus = useMonitorStore(state => state.updateStatus)
   const subscribe = useMonitorStore(state => state.subscribe)
   const notifySubscribers = useMonitorStore(state => state.notifySubscribers)
+  const handleDockerResponse = useMonitorStore(state => state.handleDockerResponse)
 
   // ==================== 订阅监控数据更新 ====================
   useEffect(() => {
@@ -323,6 +330,12 @@ export function useMonitorWebSocket({
               diskTotalPercent: metricsData.diskTotalPercent || 0,
               sshLatencyMs: Number(metricsData.sshLatencyMs || 0),
               timestamp: Number(metricsData.timestamp || 0),
+              // Docker 容器统计
+              docker: metricsData.docker ? {
+                containersRunning: metricsData.docker.containersRunning || 0,
+                containersTotal: metricsData.docker.containersTotal || 0,
+                dockerInstalled: metricsData.docker.dockerInstalled || false,
+              } : undefined,
             };
 
             // 更新历史数据队列（最多保留 20 个数据点）
@@ -367,6 +380,7 @@ export function useMonitorWebSocket({
               },
               timestamp: formattedMetrics.timestamp,
               sshLatencyMs: formattedMetrics.sshLatencyMs,
+              docker: formattedMetrics.docker,
             }
 
             // 更新 Store（用于新订阅者获取最新数据）
@@ -474,6 +488,12 @@ export function useMonitorWebSocket({
                   });
                 }
               }
+
+              // 处理 Docker 响应消息
+              if (msg && msg.type === 'docker_response' && msg.requestId && msg.data) {
+                handleDockerResponse(msg.requestId, msg.data)
+                return
+              }
             } catch { /* ignore */ }
           }
         } catch (error) {
@@ -529,7 +549,7 @@ export function useMonitorWebSocket({
       onStatusChange?.(WSStatus.ERROR);
       onError?.(error as Error);
     }
-  }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs, getConnection, setConnection, updateMetrics, updateLocalLatency, updateStatus, notifySubscribers]); // 添加 Store 依赖
+  }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs, getConnection, setConnection, updateMetrics, updateLocalLatency, updateStatus, notifySubscribers, handleDockerResponse]); // 添加 Store 依赖
 
   // 断开连接
   const disconnect = useCallback(() => {

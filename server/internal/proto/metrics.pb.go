@@ -350,6 +350,67 @@ func (x *DiskMetrics) GetTotalBytes() uint64 {
 	return 0
 }
 
+// Docker 容器统计（轻量级，仅用于工具栏显示）
+type DockerStats struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ContainersRunning uint32                 `protobuf:"varint,1,opt,name=containers_running,json=containersRunning,proto3" json:"containers_running,omitempty"` // 运行中的容器数
+	ContainersTotal   uint32                 `protobuf:"varint,2,opt,name=containers_total,json=containersTotal,proto3" json:"containers_total,omitempty"`       // 容器总数
+	DockerInstalled   bool                   `protobuf:"varint,3,opt,name=docker_installed,json=dockerInstalled,proto3" json:"docker_installed,omitempty"`       // Docker 是否已安装
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *DockerStats) Reset() {
+	*x = DockerStats{}
+	mi := &file_internal_proto_metrics_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DockerStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DockerStats) ProtoMessage() {}
+
+func (x *DockerStats) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_metrics_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DockerStats.ProtoReflect.Descriptor instead.
+func (*DockerStats) Descriptor() ([]byte, []int) {
+	return file_internal_proto_metrics_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DockerStats) GetContainersRunning() uint32 {
+	if x != nil {
+		return x.ContainersRunning
+	}
+	return 0
+}
+
+func (x *DockerStats) GetContainersTotal() uint32 {
+	if x != nil {
+		return x.ContainersTotal
+	}
+	return 0
+}
+
+func (x *DockerStats) GetDockerInstalled() bool {
+	if x != nil {
+		return x.DockerInstalled
+	}
+	return false
+}
+
 // 完整的系统指标数据
 type SystemMetrics struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -361,13 +422,14 @@ type SystemMetrics struct {
 	Timestamp        int64                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                          // 时间戳（Unix 秒）
 	DiskTotalPercent float64                `protobuf:"fixed64,7,opt,name=disk_total_percent,json=diskTotalPercent,proto3" json:"disk_total_percent,omitempty"` // 磁盘总使用率 0-100
 	SshLatencyMs     int64                  `protobuf:"varint,8,opt,name=ssh_latency_ms,json=sshLatencyMs,proto3" json:"ssh_latency_ms,omitempty"`              // SSH 命令延迟（毫秒）
+	Docker           *DockerStats           `protobuf:"bytes,9,opt,name=docker,proto3" json:"docker,omitempty"`                                                 // Docker 容器统计
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SystemMetrics) Reset() {
 	*x = SystemMetrics{}
-	mi := &file_internal_proto_metrics_proto_msgTypes[5]
+	mi := &file_internal_proto_metrics_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -379,7 +441,7 @@ func (x *SystemMetrics) String() string {
 func (*SystemMetrics) ProtoMessage() {}
 
 func (x *SystemMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_metrics_proto_msgTypes[5]
+	mi := &file_internal_proto_metrics_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -392,7 +454,7 @@ func (x *SystemMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemMetrics.ProtoReflect.Descriptor instead.
 func (*SystemMetrics) Descriptor() ([]byte, []int) {
-	return file_internal_proto_metrics_proto_rawDescGZIP(), []int{5}
+	return file_internal_proto_metrics_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SystemMetrics) GetSystemInfo() *SystemInfo {
@@ -451,6 +513,13 @@ func (x *SystemMetrics) GetSshLatencyMs() int64 {
 	return 0
 }
 
+func (x *SystemMetrics) GetDocker() *DockerStats {
+	if x != nil {
+		return x.Docker
+	}
+	return nil
+}
+
 var File_internal_proto_metrics_proto protoreflect.FileDescriptor
 
 const file_internal_proto_metrics_proto_rawDesc = "" +
@@ -484,7 +553,11 @@ const file_internal_proto_metrics_proto_rawDesc = "" +
 	"\n" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
-	"totalBytes\"\xed\x02\n" +
+	"totalBytes\"\x92\x01\n" +
+	"\vDockerStats\x12-\n" +
+	"\x12containers_running\x18\x01 \x01(\rR\x11containersRunning\x12)\n" +
+	"\x10containers_total\x18\x02 \x01(\rR\x0fcontainersTotal\x12)\n" +
+	"\x10docker_installed\x18\x03 \x01(\bR\x0fdockerInstalled\"\x9b\x03\n" +
 	"\rSystemMetrics\x124\n" +
 	"\vsystem_info\x18\x01 \x01(\v2\x13.monitor.SystemInfoR\n" +
 	"systemInfo\x12%\n" +
@@ -494,7 +567,8 @@ const file_internal_proto_metrics_proto_rawDesc = "" +
 	"\x05disks\x18\x05 \x03(\v2\x14.monitor.DiskMetricsR\x05disks\x12\x1c\n" +
 	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp\x12,\n" +
 	"\x12disk_total_percent\x18\a \x01(\x01R\x10diskTotalPercent\x12$\n" +
-	"\x0essh_latency_ms\x18\b \x01(\x03R\fsshLatencyMsB0Z.github.com/easyssh/server/internal/proto;protob\x06proto3"
+	"\x0essh_latency_ms\x18\b \x01(\x03R\fsshLatencyMs\x12,\n" +
+	"\x06docker\x18\t \x01(\v2\x14.monitor.DockerStatsR\x06dockerB0Z.github.com/easyssh/server/internal/proto;protob\x06proto3"
 
 var (
 	file_internal_proto_metrics_proto_rawDescOnce sync.Once
@@ -508,14 +582,15 @@ func file_internal_proto_metrics_proto_rawDescGZIP() []byte {
 	return file_internal_proto_metrics_proto_rawDescData
 }
 
-var file_internal_proto_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_internal_proto_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_internal_proto_metrics_proto_goTypes = []any{
 	(*SystemInfo)(nil),     // 0: monitor.SystemInfo
 	(*CPUMetrics)(nil),     // 1: monitor.CPUMetrics
 	(*MemoryMetrics)(nil),  // 2: monitor.MemoryMetrics
 	(*NetworkMetrics)(nil), // 3: monitor.NetworkMetrics
 	(*DiskMetrics)(nil),    // 4: monitor.DiskMetrics
-	(*SystemMetrics)(nil),  // 5: monitor.SystemMetrics
+	(*DockerStats)(nil),    // 5: monitor.DockerStats
+	(*SystemMetrics)(nil),  // 6: monitor.SystemMetrics
 }
 var file_internal_proto_metrics_proto_depIdxs = []int32{
 	0, // 0: monitor.SystemMetrics.system_info:type_name -> monitor.SystemInfo
@@ -523,11 +598,12 @@ var file_internal_proto_metrics_proto_depIdxs = []int32{
 	2, // 2: monitor.SystemMetrics.memory:type_name -> monitor.MemoryMetrics
 	3, // 3: monitor.SystemMetrics.network:type_name -> monitor.NetworkMetrics
 	4, // 4: monitor.SystemMetrics.disks:type_name -> monitor.DiskMetrics
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	5, // 5: monitor.SystemMetrics.docker:type_name -> monitor.DockerStats
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_metrics_proto_init() }
@@ -541,7 +617,7 @@ func file_internal_proto_metrics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_metrics_proto_rawDesc), len(file_internal_proto_metrics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

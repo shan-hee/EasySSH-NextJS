@@ -106,7 +106,7 @@ export function NetworkLatencyPopover() {
           aria-label={t("latencyAriaLabel")}
         >
           <Globe className="h-3.5 w-3.5 shrink-0" />
-          <div className="flex flex-col items-start leading-none text-left min-w-[3.5rem]">
+          <div className="flex flex-col items-start leading-none text-left min-w-[3rem]">
             <span className="text-[9px] uppercase font-semibold text-muted-foreground">
               RTT
             </span>

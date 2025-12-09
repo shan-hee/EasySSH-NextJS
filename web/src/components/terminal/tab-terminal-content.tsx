@@ -17,6 +17,7 @@ import { QuickConnect, QuickServer } from './quick-connect'
 import { ConnectionLoader } from './connection-loader'
 import { FileManagerPanel } from './file-manager-panel'
 import { AiAssistantPanel } from './ai-assistant-panel'
+import { DockerPopover } from './docker'
 import { useSftpSession } from '@/hooks/useSftpSession'
 import { cn } from '@/lib/utils'
 import { useTabUIStore } from '@/stores/tab-ui-store'
@@ -138,6 +139,11 @@ export function TabTerminalContent({
               >
                 <Activity className="h-3.5 w-3.5" />
               </Button>
+
+              <DockerPopover
+                serverId={String(session.serverId)}
+                isConnected={session.isConnected || false}
+              />
 
               <Button
                 variant="ghost"
