@@ -20,6 +20,7 @@ import {
   Info,
   Paintbrush,
   Mail,
+  Activity,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -106,13 +107,14 @@ function getErrorMessage(error: unknown, defaultMessage: string): string {
   return defaultMessage
 }
 
-type SettingsSection = "profile" | "security" | "notifications" | "sshKeys" | "ai" | "about"
+type SettingsSection = "profile" | "security" | "notifications" | "sshKeys" | "monitor" | "ai" | "about"
 
 const settingsNavItems: { id: SettingsSection; icon: typeof User }[] = [
   { id: "profile", icon: User },
   { id: "security", icon: Lock },
   { id: "notifications", icon: Bell },
   { id: "sshKeys", icon: Key },
+  { id: "monitor", icon: Activity },
   { id: "ai", icon: Paintbrush },
   { id: "about", icon: Info },
 ]
@@ -223,12 +225,29 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   })
   const [showResetConfirm, setShowResetConfirm] = React.useState(false)
 
+  // 监控数据源设置状态
+  // 每个数据源独立存储配置，activeSource 表示当前选中的数据源
+  const [monitorForm, setMonitorForm] = React.useState({
+    activeSource: "easyssh" as string,  // 当前选中的数据源
+    // Nezha 配置
+    nezhaEndpoint: "" as string,
+    nezhaToken: "" as string,
+    nezhaTokenSet: false,  // 服务器是否已设置 token
+    // Komari 配置
+    komariEndpoint: "" as string,
+    komariToken: "" as string,
+    komariTokenSet: false,  // 服务器是否已设置 token
+  })
+  const [monitorLoading, setMonitorLoading] = React.useState(false)
+  const [monitorTestLoading, setMonitorTestLoading] = React.useState(false)
+
   // 当用户数据加载时，初始化表单
   React.useEffect(() => {
     if (user) {
       setProfileForm({
         username: user.username || "",
         email: user.email || "",
+        verificationCode: "",
       })
       // 设置头像预览（清除之前的文件选择）
       setAvatarFile(null)
@@ -243,6 +262,18 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setPreferencesForm({
         language: user.language || config?.default_language || "zh-CN",
         timezone: user.timezone || config?.default_timezone || "Asia/Shanghai",
+      })
+      // 初始化监控数据源设置
+      setMonitorForm({
+        activeSource: user.monitor_data_source || "easyssh",
+        // Nezha 配置
+        nezhaEndpoint: user.nezha_api_endpoint || "",
+        nezhaToken: "", // Token 不从服务器获取，只在更新时发送
+        nezhaTokenSet: user.nezha_api_token_set || false,
+        // Komari 配置
+        komariEndpoint: user.komari_api_endpoint || "",
+        komariToken: "", // Token 不从服务器获取，只在更新时发送
+        komariTokenSet: user.komari_api_token_set || false,
       })
     }
   }, [user, config])
@@ -457,6 +488,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
           return tAccount("navNotifications")
         case "sshKeys":
           return tAccount("navSSHKeys")
+        case "monitor":
+          return tAccount("navMonitor")
         case "ai":
           return tAccount("aiTitle")
         case "about":
@@ -859,6 +892,121 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setAiLoading(false)
     }
   }, [tAccount])
+
+  // 测试监控数据源连接
+  const handleTestMonitorConnection = React.useCallback(async () => {
+    const activeSource = monitorForm.activeSource
+
+    // EasySSH 不需要测试连接
+    if (activeSource === "easyssh") {
+      toast.info(tAccount("monitorEasySSHNoTest"))
+      return
+    }
+
+    // 获取当前数据源的配置
+    let endpoint = ""
+    let token = ""
+    if (activeSource === "nezha") {
+      endpoint = monitorForm.nezhaEndpoint
+      token = monitorForm.nezhaToken
+    } else if (activeSource === "komari") {
+      endpoint = monitorForm.komariEndpoint
+      token = monitorForm.komariToken
+    }
+
+    // 验证必填字段
+    if (!endpoint) {
+      toast.error(tAccount("monitorEndpointRequired"))
+      return
+    }
+
+    setMonitorTestLoading(true)
+    try {
+      await authApi.testMonitorDataSourceConnection({
+        type: activeSource,
+        endpoint: endpoint || undefined,
+        token: token || undefined,
+      })
+      toast.success(tAccount("monitorTestSuccess"))
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, tAccount("monitorTestFailed")))
+    } finally {
+      setMonitorTestLoading(false)
+    }
+  }, [monitorForm, tAccount])
+
+  // 保存监控数据源设置
+  const handleSaveMonitorSettings = React.useCallback(async () => {
+    const activeSource = monitorForm.activeSource
+
+    // 获取当前数据源的配置
+    let endpoint = ""
+    let token = ""
+    if (activeSource === "nezha") {
+      endpoint = monitorForm.nezhaEndpoint
+      token = monitorForm.nezhaToken
+    } else if (activeSource === "komari") {
+      endpoint = monitorForm.komariEndpoint
+      token = monitorForm.komariToken
+    }
+
+    // 验证必填字段（非 EasySSH 需要 endpoint）
+    if (activeSource !== "easyssh" && !endpoint) {
+      toast.error(tAccount("monitorEndpointRequired"))
+      return
+    }
+
+    setMonitorLoading(true)
+    try {
+      await authApi.updateMonitorDataSource({
+        data_source: activeSource,
+        endpoint: endpoint || undefined,
+        token: token || undefined,
+        set_active: true,  // 设为当前激活的数据源
+      })
+      toast.success(tAccount("monitorSaveSuccess"))
+      refreshUser() // 刷新用户数据
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, tAccount("monitorSaveFailed")))
+    } finally {
+      setMonitorLoading(false)
+    }
+  }, [monitorForm, refreshUser, tAccount])
+
+  // 仅保存数据源配置（不切换激活状态）
+  const handleSaveMonitorConfig = React.useCallback(async (dsType: "nezha" | "komari") => {
+    let endpoint = ""
+    let token = ""
+    if (dsType === "nezha") {
+      endpoint = monitorForm.nezhaEndpoint
+      token = monitorForm.nezhaToken
+    } else if (dsType === "komari") {
+      endpoint = monitorForm.komariEndpoint
+      token = monitorForm.komariToken
+    }
+
+    // 验证必填字段
+    if (!endpoint) {
+      toast.error(tAccount("monitorEndpointRequired"))
+      return
+    }
+
+    setMonitorLoading(true)
+    try {
+      await authApi.updateMonitorDataSource({
+        data_source: dsType,
+        endpoint: endpoint || undefined,
+        token: token || undefined,
+        set_active: false,  // 仅保存配置，不切换激活状态
+      })
+      toast.success(tAccount("monitorSaveSuccess"))
+      refreshUser() // 刷新用户数据
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, tAccount("monitorSaveFailed")))
+    } finally {
+      setMonitorLoading(false)
+    }
+  }, [monitorForm, refreshUser, tAccount])
 
   // 保存AI配置
   const handleSaveAIConfig = React.useCallback(async () => {
@@ -1900,6 +2048,189 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         )}
                       </DialogContent>
                     </Dialog>
+                  </div>
+                )}
+                {activeSection === "monitor" && (
+                  <div className="space-y-4">
+                    <div className="bg-muted/50 rounded-xl p-4">
+                      <h4 className="font-medium mb-2">
+                        {tAccount("monitorTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("monitorDescription")}
+                      </p>
+
+                      <div className="space-y-4">
+                        {/* 数据源类型选择 */}
+                        <div className="space-y-2">
+                          <Label htmlFor="monitor-datasource">
+                            {tAccount("monitorDataSourceLabel")}
+                          </Label>
+                          <Select
+                            value={monitorForm.activeSource}
+                            onValueChange={(value) =>
+                              setMonitorForm(prev => ({ ...prev, activeSource: value }))
+                            }
+                          >
+                            <SelectTrigger id="monitor-datasource">
+                              <SelectValue placeholder={tAccount("monitorDataSourcePlaceholder")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="easyssh">
+                                EasySSH ({tAccount("monitorDataSourceEasySSHDesc")})
+                              </SelectItem>
+                              <SelectItem value="nezha">
+                                Nezha ({tAccount("monitorDataSourceNezhaDesc")})
+                              </SelectItem>
+                              <SelectItem value="komari">
+                                Komari ({tAccount("monitorDataSourceKomariDesc")})
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {tAccount("monitorDataSourceHint")}
+                          </p>
+                        </div>
+
+                        {/* Nezha 数据源配置 */}
+                        {monitorForm.activeSource === "nezha" && (
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <div className="space-y-2">
+                              <Label htmlFor="nezha-endpoint">
+                                {tAccount("monitorEndpointLabel")} <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                id="nezha-endpoint"
+                                type="url"
+                                value={monitorForm.nezhaEndpoint}
+                                onChange={(e) =>
+                                  setMonitorForm(prev => ({ ...prev, nezhaEndpoint: e.target.value }))
+                                }
+                                placeholder="https://nezha.example.com"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                {tAccount("monitorEndpointNezhaHint")}
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="nezha-token">
+                                {tAccount("monitorTokenLabel")}
+                              </Label>
+                              <Input
+                                id="nezha-token"
+                                type="password"
+                                value={monitorForm.nezhaToken}
+                                onChange={(e) =>
+                                  setMonitorForm(prev => ({ ...prev, nezhaToken: e.target.value }))
+                                }
+                                placeholder={
+                                  monitorForm.nezhaTokenSet
+                                    ? tAccount("monitorTokenSetPlaceholder")
+                                    : tAccount("monitorTokenPlaceholder")
+                                }
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                {tAccount("monitorTokenHint")}
+                              </p>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={handleTestMonitorConnection}
+                                disabled={monitorTestLoading}
+                              >
+                                {monitorTestLoading && (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                )}
+                                {tAccount("monitorTestConnection")}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Komari 数据源配置 */}
+                        {monitorForm.activeSource === "komari" && (
+                          <div className="space-y-4 p-4 bg-background rounded-lg border">
+                            <div className="space-y-2">
+                              <Label htmlFor="komari-endpoint">
+                                {tAccount("monitorEndpointLabel")} <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                id="komari-endpoint"
+                                type="url"
+                                value={monitorForm.komariEndpoint}
+                                onChange={(e) =>
+                                  setMonitorForm(prev => ({ ...prev, komariEndpoint: e.target.value }))
+                                }
+                                placeholder="https://komari.example.com"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                {tAccount("monitorEndpointKomariHint")}
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="komari-token">
+                                {tAccount("monitorTokenLabel")}
+                              </Label>
+                              <Input
+                                id="komari-token"
+                                type="password"
+                                value={monitorForm.komariToken}
+                                onChange={(e) =>
+                                  setMonitorForm(prev => ({ ...prev, komariToken: e.target.value }))
+                                }
+                                placeholder={
+                                  monitorForm.komariTokenSet
+                                    ? tAccount("monitorTokenSetPlaceholder")
+                                    : tAccount("monitorTokenPlaceholder")
+                                }
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                {tAccount("monitorTokenHint")}
+                              </p>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={handleTestMonitorConnection}
+                                disabled={monitorTestLoading}
+                              >
+                                {monitorTestLoading && (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                )}
+                                {tAccount("monitorTestConnection")}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* EasySSH 说明 */}
+                        {monitorForm.activeSource === "easyssh" && (
+                          <div className="p-4 bg-background rounded-lg border">
+                            <p className="text-sm text-muted-foreground">
+                              {tAccount("monitorEasySSHHint")}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* 保存按钮 */}
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={handleSaveMonitorSettings}
+                            disabled={monitorLoading}
+                          >
+                            {monitorLoading && (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            )}
+                            {tAccount("monitorSave")}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {activeSection === "ai" && (

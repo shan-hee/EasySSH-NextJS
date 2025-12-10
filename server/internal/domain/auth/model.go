@@ -17,6 +17,15 @@ const (
 	RoleViewer UserRole = "viewer"
 )
 
+// MonitorDataSourceType 监控数据源类型
+type MonitorDataSourceType string
+
+const (
+	MonitorDataSourceEasySSH MonitorDataSourceType = "easyssh" // SSH 直连采集（默认）
+	MonitorDataSourceNezha   MonitorDataSourceType = "nezha"   // Nezha Dashboard API
+	MonitorDataSourceKomari  MonitorDataSourceType = "komari"  // Komari Monitor REST API
+)
+
 // User 用户模型
 type User struct {
 	ID               uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
@@ -33,9 +42,20 @@ type User struct {
 	BackupCodes      string         `gorm:"type:text" json:"-"` // 备份码列表（JSON 格式），不在 JSON 中返回
 
 	// 通知设置
-	NotifyEmailLogin  bool `gorm:"default:true" json:"notify_email_login"`   // 登录邮件通知
-	NotifyEmailAlert  bool `gorm:"default:true" json:"notify_email_alert"`   // 告警邮件通知
-	NotifyBrowser     bool `gorm:"default:true" json:"notify_browser"`       // 浏览器通知
+	NotifyEmailLogin bool `gorm:"default:true" json:"notify_email_login"` // 登录邮件通知
+	NotifyEmailAlert bool `gorm:"default:true" json:"notify_email_alert"` // 告警邮件通知
+	NotifyBrowser    bool `gorm:"default:true" json:"notify_browser"`     // 浏览器通知
+
+	// 监控数据源设置
+	// MonitorDataSource: 当前选中的数据源类型 (easyssh/nezha/komari)
+	// 每个外部数据源单独存储配置，切换时配置不会丢失
+	MonitorDataSource     string `gorm:"size:20;default:'easyssh'" json:"monitor_data_source"` // 当前选中的数据源
+	// Nezha 数据源配置
+	NezhaAPIEndpoint      string `gorm:"type:text" json:"nezha_api_endpoint"`                  // Nezha API 地址
+	NezhaAPIToken         string `gorm:"type:text" json:"-"`                                   // Nezha API Token（加密存储）
+	// Komari 数据源配置
+	KomariAPIEndpoint     string `gorm:"type:text" json:"komari_api_endpoint"`                 // Komari API 地址
+	KomariAPIToken        string `gorm:"type:text" json:"-"`                                   // Komari API Token（加密存储）
 
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
@@ -84,19 +104,26 @@ func (u *User) IsViewer() bool {
 // ToPublic 转换为公开信息（不包含密码和敏感信息）
 func (u *User) ToPublic() map[string]interface{} {
 	return map[string]interface{}{
-		"id":                 u.ID,
-		"username":           u.Username,
-		"email":              u.Email,
-		"role":               u.Role,
-		"avatar":             u.Avatar,
-		"language":           u.Language,
-		"timezone":           u.Timezone,
-		"two_factor_enabled": u.TwoFactorEnabled,
-		"notify_email_login": u.NotifyEmailLogin,
-		"notify_email_alert": u.NotifyEmailAlert,
-		"notify_browser":     u.NotifyBrowser,
-		"created_at":         u.CreatedAt,
-		"updated_at":         u.UpdatedAt,
+		"id":                     u.ID,
+		"username":               u.Username,
+		"email":                  u.Email,
+		"role":                   u.Role,
+		"avatar":                 u.Avatar,
+		"language":               u.Language,
+		"timezone":               u.Timezone,
+		"two_factor_enabled":     u.TwoFactorEnabled,
+		"notify_email_login":     u.NotifyEmailLogin,
+		"notify_email_alert":     u.NotifyEmailAlert,
+		"notify_browser":         u.NotifyBrowser,
+		"monitor_data_source":    u.MonitorDataSource,
+		// Nezha 配置
+		"nezha_api_endpoint":     u.NezhaAPIEndpoint,
+		"nezha_api_token_set":    u.NezhaAPIToken != "",
+		// Komari 配置
+		"komari_api_endpoint":    u.KomariAPIEndpoint,
+		"komari_api_token_set":   u.KomariAPIToken != "",
+		"created_at":             u.CreatedAt,
+		"updated_at":             u.UpdatedAt,
 	}
 }
 

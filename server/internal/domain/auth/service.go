@@ -100,6 +100,12 @@ type Service interface {
 	// UpdateNotificationSettings 更新通知设置
 	UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser *bool) error
 
+	// Monitor Data Source settings
+
+	// UpdateMonitorDataSource 更新监控数据源设置
+	// setActive: 是否将此数据源设为当前激活的数据源
+	UpdateMonitorDataSource(ctx context.Context, userID uuid.UUID, dataSource, endpoint, token string, setActive bool) error
+
 	// Authorization Code + PKCE
 
 	// CreateAuthorizationCode 为指定用户创建授权码
@@ -1047,6 +1053,58 @@ func (s *authService) UpdateNotificationSettings(ctx context.Context, userID uui
 	}
 	if browser != nil {
 		user.NotifyBrowser = *browser
+	}
+
+	return s.repo.Update(ctx, user)
+}
+
+// UpdateMonitorDataSource 更新监控数据源设置
+// dataSource: 要更新的数据源类型 (easyssh/nezha/komari)
+// endpoint: API 端点地址（仅 nezha/komari 有效）
+// token: API Token（仅 nezha/komari 有效）
+// setActive: 是否将此数据源设为当前激活的数据源
+func (s *authService) UpdateMonitorDataSource(ctx context.Context, userID uuid.UUID, dataSource, endpoint, token string, setActive bool) error {
+	// 查找用户
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// 验证数据源类型
+	dsType := MonitorDataSourceType(dataSource)
+	switch dsType {
+	case MonitorDataSourceEasySSH:
+		// EasySSH 无需额外配置，只需设置为当前数据源
+		if setActive {
+			user.MonitorDataSource = dataSource
+		}
+
+	case MonitorDataSourceNezha:
+		// 更新 Nezha 配置
+		if endpoint != "" {
+			user.NezhaAPIEndpoint = endpoint
+		}
+		if token != "" {
+			user.NezhaAPIToken = token
+		}
+		if setActive {
+			user.MonitorDataSource = dataSource
+		}
+
+	case MonitorDataSourceKomari:
+		// 更新 Komari 配置
+		if endpoint != "" {
+			user.KomariAPIEndpoint = endpoint
+		}
+		if token != "" {
+			user.KomariAPIToken = token
+		}
+		if setActive {
+			user.MonitorDataSource = dataSource
+		}
+
+	default:
+		return fmt.Errorf("invalid data source type: %s", dataSource)
 	}
 
 	return s.repo.Update(ctx, user)

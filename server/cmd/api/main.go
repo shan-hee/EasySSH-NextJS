@@ -344,7 +344,7 @@ func main() {
 	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), securityService, completionService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
-	monitoringHandler := rest.NewMonitoringHandler(monitoringService)
+	monitoringHandler := rest.NewMonitoringHandler(monitoringService, authService)
 	scriptHandler := rest.NewScriptHandler(scriptService)
 	batchTaskHandler := rest.NewBatchTaskHandler(batchTaskService)
 	scheduledTaskHandler := rest.NewScheduledTaskHandler(scheduledTaskService)
@@ -478,6 +478,9 @@ func main() {
 			// 通知设置路由
 			userRoutes.PUT("/me/notifications", authHandler.UpdateNotificationSettings) // 更新通知设置
 
+			// 监控数据源设置路由
+			userRoutes.PUT("/me/monitor-datasource", authHandler.UpdateMonitorDataSource) // 更新监控数据源设置
+
 			// 用户AI配置路由
 			userRoutes.GET("/me/ai-config", userAIConfigHandler.GetUserAIConfig)       // 获取用户AI配置
 			userRoutes.PUT("/me/ai-config", userAIConfigHandler.SaveUserAIConfig)      // 保存用户AI配置
@@ -605,8 +608,9 @@ func main() {
 		monitoringRoutes := v1.Group("/monitoring")
 		monitoringRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			monitoringRoutes.GET("/resources", monitoringHandler.GetAllResources)        // 所有服务器资源概览
-			monitoringRoutes.GET("/resources/stream", monitoringHandler.StreamResources) // 流式获取服务器资源（SSE）
+			monitoringRoutes.GET("/resources", monitoringHandler.GetAllResources)                  // 所有服务器资源概览
+			monitoringRoutes.GET("/resources/stream", monitoringHandler.StreamResources)          // 流式获取服务器资源（SSE）
+			monitoringRoutes.POST("/datasource/test", monitoringHandler.TestDataSourceConnection) // 测试数据源连接
 		}
 
 		// 审计日志路由（需要认证）

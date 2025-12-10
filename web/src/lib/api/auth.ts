@@ -16,6 +16,14 @@ export interface User {
   notify_email_login?: boolean
   notify_email_alert?: boolean
   notify_browser?: boolean
+  // 监控数据源设置（支持独立配置每个数据源，但只选择一个生效）
+  monitor_data_source?: string  // 当前选中的数据源: easyssh, nezha, komari
+  // Nezha 配置
+  nezha_api_endpoint?: string
+  nezha_api_token_set?: boolean
+  // Komari 配置
+  komari_api_endpoint?: string
+  komari_api_token_set?: boolean
   created_at: string
   updated_at: string
 }
@@ -294,6 +302,39 @@ export const authApi = {
       body: {
         id_token: idToken,
       },
+    })
+  },
+
+  /**
+   * 更新监控数据源设置
+   * @param data_source 数据源类型: easyssh, nezha, komari
+   * @param endpoint API 端点地址（nezha/komari 需要）
+   * @param token API Token（nezha/komari 需要）
+   * @param set_active 是否设为当前激活的数据源（默认 true）
+   */
+  async updateMonitorDataSource(data: {
+    data_source: string   // easyssh, nezha, komari
+    endpoint?: string     // API 端点
+    token?: string        // API Token
+    set_active?: boolean  // 是否设为当前激活的数据源
+  }): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>("/users/me/monitor-datasource", {
+      method: "PUT",
+      body: data,
+    })
+  },
+
+  /**
+   * 测试监控数据源连接
+   */
+  async testMonitorDataSourceConnection(data: {
+    type: string       // easyssh, nezha, komari
+    endpoint?: string  // API 端点
+    token?: string     // API Token
+  }): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>("/monitoring/datasource/test", {
+      method: "POST",
+      body: data,
     })
   },
 }

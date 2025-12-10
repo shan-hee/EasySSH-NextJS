@@ -405,8 +405,8 @@ export default function DashboardPage() {
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
   const autoRefreshRef = useRef<NodeJS.Timeout | null>(null)
 
-  // 加载统计数据
-  const loadStats = async () => {
+  // 加载统计数据（从 EasySSH 本地服务器）
+  const loadStats = useCallback(async () => {
     try {
       const data = await dashboardApi.getStats()
       setStats(data)
@@ -416,7 +416,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false)
     }
-  }
+  }, [])
 
   // 使用流式 API 加载服务器资源
   const loadServersStream = useCallback(() => {
@@ -442,6 +442,16 @@ export default function DashboardPage() {
           }
           return [...prev, transformed]
         })
+        // 更新最后采集时间（使用最新的 collected_at）
+        if (serverData.collected_at) {
+          const collectedTime = new Date(serverData.collected_at)
+          setLastUpdated((prev) => {
+            if (!prev || collectedTime > prev) {
+              return collectedTime
+            }
+            return prev
+          })
+        }
         // 收到第一条数据后取消加载状态
         setLoadingServers(false)
       },
@@ -483,15 +493,15 @@ export default function DashboardPage() {
   // 执行刷新并更新时间
   const performRefresh = useCallback(() => {
     setIsRefreshing(true)
+    setLastUpdated(null) // 重置，等待新数据的 collected_at
     loadStats()
     loadServersStream()
-    setLastUpdated(new Date())
     startCountdown()
 
     setTimeout(() => {
       setIsRefreshing(false)
     }, 500)
-  }, [loadServersStream, startCountdown])
+  }, [loadStats, loadServersStream, startCountdown])
 
   useEffect(() => {
     if (!ready) return
@@ -499,14 +509,13 @@ export default function DashboardPage() {
     // 首次加载
     loadStats()
     loadServersStream()
-    setLastUpdated(new Date())
     startCountdown()
 
     // 设置自动刷新
     autoRefreshRef.current = setInterval(() => {
+      setLastUpdated(null) // 重置，等待新数据的 collected_at
       loadStats()
       loadServersStream()
-      setLastUpdated(new Date())
     }, AUTO_REFRESH_INTERVAL)
 
     return () => {
@@ -546,7 +555,7 @@ export default function DashboardPage() {
     return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`
   }
 
-  // 计算资源汇总
+  // 计算资源汇总（从数据源的服务器状态数据）
   const resourceSummary = useMemo(() => {
     const onlineServers = servers.filter((s) => s.status === "online" || s.status === "warning")
     const count = onlineServers.length
@@ -575,7 +584,7 @@ export default function DashboardPage() {
       <PageHeader title={t("title")} />
 
       <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
-        {/* 统计概览 */}
+        {/* 统计概览（EasySSH 本地服务器） */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {loadingStats ? (
             <>
@@ -595,14 +604,14 @@ export default function DashboardPage() {
               <StatCard
                 title="平均 CPU"
                 value={`${resourceSummary.avgCpu}%`}
-                description="所有在线服务器"
+                description="数据源在线服务器"
                 icon={Cpu}
                 valueClassName={resourceSummary.avgCpu >= 70 ? "text-yellow-600" : undefined}
               />
               <StatCard
                 title="平均内存"
                 value={`${resourceSummary.avgMemory}%`}
-                description="所有在线服务器"
+                description="数据源在线服务器"
                 icon={MemoryStick}
                 valueClassName={resourceSummary.avgMemory >= 70 ? "text-yellow-600" : undefined}
               />

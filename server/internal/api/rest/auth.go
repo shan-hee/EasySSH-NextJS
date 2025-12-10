@@ -1540,3 +1540,70 @@ func (h *AuthHandler) UpdateNotificationSettings(c *gin.Context) {
 		"message": "Notification settings updated successfully",
 	})
 }
+
+// UpdateMonitorDataSourceRequest 更新监控数据源请求
+type UpdateMonitorDataSourceRequest struct {
+	DataSource string `json:"data_source"` // easyssh, nezha, komari
+	Endpoint   string `json:"endpoint"`    // API 端点
+	Token      string `json:"token"`       // API Token
+	SetActive  *bool  `json:"set_active"`  // 是否设为当前激活的数据源（nil 时默认为 true）
+}
+
+// UpdateMonitorDataSource 更新监控数据源设置
+// PUT /api/v1/users/me/monitor-datasource
+func (h *AuthHandler) UpdateMonitorDataSource(c *gin.Context) {
+	// 从上下文获取用户 ID
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User ID not found")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_user_id", "Invalid user ID")
+		return
+	}
+
+	// 解析请求
+	var req UpdateMonitorDataSourceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_request", "Invalid request body: "+err.Error())
+		return
+	}
+
+	// 验证数据源类型
+	validTypes := map[string]bool{
+		"easyssh":     true,
+		"nezha":       true,
+		"komari":      true,
+		"komari-rpc2": true,
+	}
+	if req.DataSource != "" && !validTypes[req.DataSource] {
+		RespondError(c, http.StatusBadRequest, "invalid_data_source", "Invalid data source type. Must be one of: easyssh, nezha, komari, komari-rpc2")
+		return
+	}
+
+	// 更新监控数据源设置
+	// 默认 setActive 为 true（向后兼容）
+	setActive := true
+	if req.SetActive != nil {
+		setActive = *req.SetActive
+	}
+
+	if err := h.authService.UpdateMonitorDataSource(
+		c.Request.Context(),
+		userID,
+		req.DataSource,
+		req.Endpoint,
+		req.Token,
+		setActive,
+	); err != nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to update monitor data source: "+err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"message": "Monitor data source updated successfully",
+	})
+}
