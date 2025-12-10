@@ -17,6 +17,7 @@ import (
     sshDomain "github.com/easyssh/server/internal/domain/ssh"
     pb "github.com/easyssh/server/internal/proto"
     "github.com/gin-gonic/gin"
+    "github.com/google/uuid"
     "github.com/gorilla/websocket"
     "golang.org/x/sync/singleflight"
     "google.golang.org/protobuf/proto"
@@ -29,18 +30,46 @@ const (
     wsWriteWait = 10 * time.Second
 )
 
+// wsSubscriber WebSocket 订阅者（实现 monitor.MetricsSubscriber 接口）
+type wsSubscriber struct {
+	id      string
+	conn    *websocket.Conn
+	writeMu *sync.Mutex
+}
+
+func (s *wsSubscriber) ID() string {
+	return s.id
+}
+
+func (s *wsSubscriber) OnMetrics(metrics *pb.SystemMetrics) {
+	data, err := proto.Marshal(metrics)
+	if err != nil {
+		log.Printf("[wsSubscriber] 序列化失败: %v", err)
+		return
+	}
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_ = s.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+	if err := s.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+		log.Printf("[wsSubscriber] 发送失败: %v", err)
+	}
+}
+
 // MonitorHandler WebSocket 监控处理器
 type MonitorHandler struct {
-	connectionPool  *monitor.ConnectionPool
-	securityService security.Service // 安全配置服务（用于 CORS）
-	dockerSF        singleflight.Group // Docker 数据请求合并
+	connectionPool   *monitor.ConnectionPool
+	securityService  security.Service                // 安全配置服务（用于 CORS）
+	dockerSF         singleflight.Group              // Docker 数据请求合并
+	collectorManager *monitor.SharedCollectorManager // 共享采集器管理器
 }
 
 // NewMonitorHandler 创建监控处理器
 func NewMonitorHandler(connectionPool *monitor.ConnectionPool, securityService security.Service) *MonitorHandler {
 	return &MonitorHandler{
-		connectionPool:  connectionPool,
-		securityService: securityService,
+		connectionPool:   connectionPool,
+		securityService:  securityService,
+		collectorManager: monitor.NewSharedCollectorManager(),
 	}
 }
 
@@ -205,15 +234,29 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
         return wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
     })
 
-	// 创建采集器（使用连接池中的 SSH Client）
-	collector := monitor.NewCollector(pooledConn.Client)
-
     // 创建停止通道
     done := make(chan struct{})
-    stopMonitoring := make(chan struct{})
 
     // 统一写锁，避免并发写导致报错
     var writeMu sync.Mutex
+
+	// 创建 WebSocket 订阅者并注册到共享采集器
+	subID := uuid.New().String()
+	subscriber := &wsSubscriber{
+		id:      subID,
+		conn:    wsConn,
+		writeMu: &writeMu,
+	}
+	// 使用工厂函数延迟创建 Collector，仅在首个订阅者时才实际创建
+	h.collectorManager.GetOrCreate(serverID, func() *monitor.Collector {
+		return monitor.NewCollector(pooledConn.Client)
+	}, interval, subscriber)
+
+	// 确保退出时取消订阅
+	defer func() {
+		h.collectorManager.Unsubscribe(serverID, subID)
+		log.Printf("[Monitor] 取消订阅: serverID=%s, subID=%s", serverID, subID)
+	}()
 
 	// 监听客户端消息 (处理 ping/close/docker_request)
     go func() {
@@ -281,74 +324,29 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
         }
     }()
 
-    // 定期采集和推送指标
-    ticker := time.NewTicker(interval)
-    defer ticker.Stop()
     // 定期发送 WS 控制帧 Ping（浏览器自动回 Pong）
+    // 注意：数据采集已由共享采集器处理，这里只负责心跳保活
     pingTicker := time.NewTicker(wsPingEvery)
     defer pingTicker.Stop()
 
-	// 立即发送第一次数据
-    if err := h.sendMetrics(wsConn, collector, &writeMu); err != nil {
-        log.Printf("Failed to send initial metrics: %v", err)
-        return
-    }
-
 	for {
 		select {
-        case <-ticker.C:
-            if err := h.sendMetrics(wsConn, collector, &writeMu); err != nil {
-                log.Printf("Failed to send metrics: %v", err)
-                close(stopMonitoring)
-                return
-            }
-
         case <-pingTicker.C:
             // 发送控制帧 Ping
             writeMu.Lock()
-            // 使用 WriteControl 的 deadline，另设置全局写超时
             _ = wsConn.SetWriteDeadline(time.Now().Add(wsWriteWait))
             err := wsConn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second))
             writeMu.Unlock()
             if err != nil {
                 log.Printf("Failed to send ws ping: %v", err)
-                close(stopMonitoring)
                 return
             }
 
 		case <-done:
 			log.Printf("Monitor WebSocket closed for server: %s", serverID)
 			return
-
-		case <-stopMonitoring:
-			return
 		}
 	}
-}
-
-// sendMetrics 采集并发送指标
-func (h *MonitorHandler) sendMetrics(conn *websocket.Conn, collector *monitor.Collector, writeMu *sync.Mutex) error {
-	// 采集指标
-	metrics, err := collector.Collect()
-	if err != nil {
-		return fmt.Errorf("failed to collect metrics: %w", err)
-	}
-
-	// Protobuf 序列化
-	data, err := proto.Marshal(metrics)
-	if err != nil {
-		return fmt.Errorf("failed to marshal metrics: %w", err)
-	}
-
-	// 发送二进制数据
-    writeMu.Lock()
-    defer writeMu.Unlock()
-    _ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-    if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-        return fmt.Errorf("failed to send metrics: %w", err)
-    }
-
-	return nil
 }
 
 // sendErrorMessage 发送错误消息 (JSON 格式)
