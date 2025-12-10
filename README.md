@@ -132,7 +132,7 @@ cd server && make dev
 cd web && pnpm dev
 ```
 
-访问 http://localhost:8520
+访问 http://localhost:3000
 
 ### Docker 常用命令
 

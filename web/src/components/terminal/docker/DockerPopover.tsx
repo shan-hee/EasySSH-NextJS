@@ -1,12 +1,12 @@
 /**
  * Docker 管理弹窗组件
  * - 工具栏统计：来自监控 WebSocket（实时）
- * - 弹窗详情：首次打开时获取，后续手动刷新
+ * - 弹窗详情：当检测到容器数量 > 0 时自动获取一次，后续仅手动刷新
  */
 
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { RefreshCw, AlertCircle } from 'lucide-react'
 import { DockerIcon } from './components/DockerIcon'
 import { Button } from '@/components/ui/button'
@@ -62,19 +62,18 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
     }
   }, [serverId, requestDockerData])
 
-  // 手动刷新
-  const refresh = useCallback(async () => {
-    await fetchDetailData()
-  }, [fetchDetailData])
-
-  // 弹窗打开时首次获取数据
-  const handleOpenChange = useCallback((newOpen: boolean) => {
-    setOpen(newOpen)
-    if (newOpen && !hasFetchedRef.current && isConnected) {
+  // 监听 Docker 容器数量，当数量 > 0 且尚未获取过详情时自动获取
+  useEffect(() => {
+    if (
+      isConnected &&
+      dockerStats?.dockerInstalled &&
+      dockerStats.containersTotal > 0 &&
+      !hasFetchedRef.current
+    ) {
       hasFetchedRef.current = true
       fetchDetailData()
     }
-  }, [isConnected, fetchDetailData])
+  }, [isConnected, dockerStats, fetchDetailData])
 
   // 工具栏显示：优先使用监控数据，否则显示 --/--
   const runningCount = dockerStats?.containersRunning ?? 0
@@ -90,7 +89,7 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
   }
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -120,7 +119,7 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
           data={detailData}
           loading={detailLoading}
           error={detailError}
-          refresh={refresh}
+          refresh={fetchDetailData}
           serverId={serverId}
         />
       </PopoverContent>

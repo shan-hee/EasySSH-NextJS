@@ -18,6 +18,7 @@ import (
     pb "github.com/easyssh/server/internal/proto"
     "github.com/gin-gonic/gin"
     "github.com/gorilla/websocket"
+    "golang.org/x/sync/singleflight"
     "google.golang.org/protobuf/proto"
 )
 
@@ -32,6 +33,7 @@ const (
 type MonitorHandler struct {
 	connectionPool  *monitor.ConnectionPool
 	securityService security.Service // 安全配置服务（用于 CORS）
+	dockerSF        singleflight.Group // Docker 数据请求合并
 }
 
 // NewMonitorHandler 创建监控处理器
@@ -256,9 +258,13 @@ func (h *MonitorHandler) HandleMonitor(c *gin.Context) {
                     writeMu.Unlock()
 
                 case "docker_request":
-                    // 处理 Docker 数据请求
+                    // 处理 Docker 数据请求（使用 singleflight 合并相同 serverID 的并发请求）
                     go func(requestID string) {
-                        dockerData := h.collectDockerData(pooledConn.Client)
+                        // 使用 serverID 作为 key，相同服务器的并发请求会被合并
+                        result, _, _ := h.dockerSF.Do(serverID, func() (interface{}, error) {
+                            return h.collectDockerData(pooledConn.Client), nil
+                        })
+                        dockerData := result.(*DockerDataResponse)
                         resp := map[string]any{
                             "type":      "docker_response",
                             "requestId": requestID,
