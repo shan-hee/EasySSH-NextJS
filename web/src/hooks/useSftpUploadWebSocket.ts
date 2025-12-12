@@ -5,7 +5,6 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { getWsUrl } from '@/lib/config';
-import { getCurrentAccessToken } from '@/stores/auth-store';
 
 // 上传进度消息接口
 export interface UploadProgressMessage {
@@ -98,16 +97,8 @@ export function useSftpUploadWebSocket({
     setStatus(WSStatus.CONNECTING);
 
     try {
-      // 构建 WebSocket URL，附带 access_token 作为 token 查询参数
-      const params = new URLSearchParams();
-      const accessToken = getCurrentAccessToken();
-      if (accessToken) {
-        params.set('token', accessToken);
-      }
-      const qs = params.toString();
-      const wsUrl = getWsUrl(
-        qs ? `/api/v1/sftp/upload/ws/${taskId}?${qs}` : `/api/v1/sftp/upload/ws/${taskId}`,
-      );
+      // Cookie 鉴权：不再在 URL 中附带 token
+      const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${taskId}`);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

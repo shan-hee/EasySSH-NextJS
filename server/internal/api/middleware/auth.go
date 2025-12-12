@@ -21,7 +21,14 @@ func extractBearerToken(c *gin.Context) string {
 		}
 	}
 
-	// 对于 WebSocket 等场景，允许通过 query 参数传递 token
+	// Cookie 鉴权：用于 WebSocket/下载等无法便捷设置 Header 的场景
+	if token, err := c.Cookie("easyssh_access_token"); err == nil {
+		if token = strings.TrimSpace(token); token != "" {
+			return token
+		}
+	}
+
+	// 兼容：历史原因允许通过 query 参数传递 token（不推荐，可能泄露到日志/历史记录）
 	if token := strings.TrimSpace(c.Query("token")); token != "" {
 		return token
 	}

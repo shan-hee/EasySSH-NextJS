@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"crypto/rand"
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/notification"
@@ -22,6 +23,8 @@ import (
 // Cookie 配置常量
 const (
 	RefreshTokenCookieName = "easyssh_refresh_token"
+	AccessTokenCookieName  = "easyssh_access_token"
+	CSRFTokenCookieName    = "easyssh_csrf_token"
 )
 
 // CookieConfig Cookie 配置（用于类型断言）
@@ -72,6 +75,34 @@ func getCookieConfig(c *gin.Context, securityService security.Service) (secure b
 	return secure, domain, sameSite
 }
 
+func setAccessTokenCookie(c *gin.Context, accessToken string, securityService security.Service, maxAge int) {
+	secure, domain, sameSite := getCookieConfig(c, securityService)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     AccessTokenCookieName,
+		Value:    accessToken,
+		Path:     "/api/v1",
+		Domain:   domain,
+		MaxAge:   maxAge,
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: sameSite,
+	})
+}
+
+func setCSRFCookie(c *gin.Context, csrfToken string, securityService security.Service, maxAge int) {
+	secure, domain, sameSite := getCookieConfig(c, securityService)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     CSRFTokenCookieName,
+		Value:    csrfToken,
+		Path:     "/",
+		Domain:   domain,
+		MaxAge:   maxAge,
+		Secure:   secure,
+		HttpOnly: false,
+		SameSite: sameSite,
+	})
+}
+
 // setAuthCookies 设置认证相关的 HttpOnly Cookie（仅用于 refresh_token）
 func setAuthCookies(c *gin.Context, refreshToken string, securityService security.Service, refreshTokenMaxAge int) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
@@ -102,6 +133,34 @@ func clearAuthCookies(c *gin.Context, securityService security.Service) {
 		MaxAge:   -1,
 		Secure:   secure,
 		HttpOnly: true,
+		SameSite: sameSite,
+	})
+}
+
+func clearAccessTokenCookie(c *gin.Context, securityService security.Service) {
+	secure, domain, sameSite := getCookieConfig(c, securityService)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     AccessTokenCookieName,
+		Value:    "",
+		Path:     "/api/v1",
+		Domain:   domain,
+		MaxAge:   -1,
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: sameSite,
+	})
+}
+
+func clearCSRFCookie(c *gin.Context, securityService security.Service) {
+	secure, domain, sameSite := getCookieConfig(c, securityService)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     CSRFTokenCookieName,
+		Value:    "",
+		Path:     "/",
+		Domain:   domain,
+		MaxAge:   -1,
+		Secure:   secure,
+		HttpOnly: false,
 		SameSite: sameSite,
 	})
 }
@@ -149,6 +208,14 @@ func extractDeviceInfo(c *gin.Context) (deviceType, deviceName, ipAddress, userA
 	}
 
 	return deviceType, deviceName, ipAddress, userAgent
+}
+
+func newCSRFToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // hashRefreshToken 对 refresh token 进行哈希处理
@@ -623,7 +690,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 	grantType := strings.ToLower(strings.TrimSpace(req.GrantType))
 
 	switch grantType {
-	case "authorization_code":
+		case "authorization_code":
 		// 授权码模式
 		if strings.TrimSpace(req.Code) == "" ||
 			strings.TrimSpace(req.RedirectURI) == "" ||
@@ -655,10 +722,21 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			return
 		}
 
-		// 设置 HttpOnly refresh_token Cookie
-		if refreshToken != "" {
-			setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
-		}
+			// 设置 HttpOnly refresh_token Cookie
+			if refreshToken != "" {
+				setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
+			}
+
+			// 设置 HttpOnly access_token Cookie（用于 WebSocket/下载等场景）
+			if accessToken != "" {
+				setAccessTokenCookie(c, accessToken, h.securityService, h.accessTokenTTLSeconds)
+			}
+
+			// 设置 CSRF Token Cookie（双提交：Cookie + Header/Form）
+			if csrfToken, err := newCSRFToken(); err == nil {
+				// CSRF token 生命周期与 access_token 一致即可
+				setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
+			}
 
 		// 在上下文中记录用户信息，便于审计日志使用
 		c.Set("user_id", user.ID.String())
@@ -670,7 +748,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			ExpiresIn:   h.accessTokenTTLSeconds,
 		})
 
-	case "refresh_token":
+		case "refresh_token":
 		// 刷新模式：从 HttpOnly Cookie 读取 refresh_token
 		refreshToken, err := c.Cookie(RefreshTokenCookieName)
 		if err == nil {
@@ -697,15 +775,27 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			return
 		}
 
-		// 如有轮换，更新 refresh_token Cookie
-		if newRefreshToken != "" {
-			setAuthCookies(c, newRefreshToken, h.securityService, h.refreshTokenTTLSeconds)
-		}
+			// 如有轮换，更新 refresh_token Cookie
+			if newRefreshToken != "" {
+				setAuthCookies(c, newRefreshToken, h.securityService, h.refreshTokenTTLSeconds)
+			}
 
-		RespondSuccess(c, OAuthTokenResponse{
-			AccessToken: newAccessToken,
-			TokenType:   "Bearer",
-			ExpiresIn:   h.accessTokenTTLSeconds,
+			// 同步更新 access_token Cookie
+			if newAccessToken != "" {
+				setAccessTokenCookie(c, newAccessToken, h.securityService, h.accessTokenTTLSeconds)
+			}
+
+			// 如果缺少 CSRF Cookie，则补发一个
+			if _, err := c.Cookie(CSRFTokenCookieName); err != nil {
+				if csrfToken, err := newCSRFToken(); err == nil {
+					setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
+				}
+			}
+
+			RespondSuccess(c, OAuthTokenResponse{
+				AccessToken: newAccessToken,
+				TokenType:   "Bearer",
+				ExpiresIn:   h.accessTokenTTLSeconds,
 		})
 
 	default:
@@ -725,9 +815,18 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 
+	// 兼容 Cookie 鉴权：允许从 HttpOnly Cookie 读取 access_token
+	if accessToken == "" {
+		if cookieToken, err := c.Cookie(AccessTokenCookieName); err == nil {
+			accessToken = strings.TrimSpace(cookieToken)
+		}
+	}
+
 	// 如果没有 access_token, 视为幂等登出（仅清理 Cookie）
 	if accessToken == "" {
 		clearAuthCookies(c, h.securityService)
+		clearAccessTokenCookie(c, h.securityService)
+		clearCSRFCookie(c, h.securityService)
 		RespondSuccessWithMessage(c, nil, "Logged out successfully")
 		return
 	}
@@ -749,6 +848,8 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	// 清除 HttpOnly Cookie
 	clearAuthCookies(c, h.securityService)
+	clearAccessTokenCookie(c, h.securityService)
+	clearCSRFCookie(c, h.securityService)
 
 	RespondSuccessWithMessage(c, nil, "Logged out successfully")
 }

@@ -631,6 +631,16 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     }
   }, [serverId, initialPath, loadDirectory]);
 
+  // 页面卸载/切换 serverId 时，主动关闭连接以加速资源回收
+  useEffect(() => {
+    if (!serverId) return;
+    return () => {
+      sftpApi.closeConnection(serverId).catch(() => {
+        // cleanup 阶段不打扰用户；失败时等待后端空闲回收即可
+      });
+    };
+  }, [serverId]);
+
   return {
     // 状态
     currentPath,

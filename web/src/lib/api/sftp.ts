@@ -60,6 +60,15 @@ export interface BatchDeleteResponse {
  */
 export const sftpApi = {
   /**
+   * 创建上传任务（服务端生成 task_id，用于上传进度 WebSocket）
+   */
+  async createUploadTask(): Promise<{ task_id: string }> {
+    return apiFetch<{ task_id: string }>(`/sftp/upload/task`, {
+      method: "POST",
+    })
+  },
+
+  /**
    * 列出目录内容
    */
   async listDirectory(serverId: string, path: string = "/"): Promise<DirectoryListResponse> {
@@ -150,6 +159,17 @@ export const sftpApi = {
    */
   async getDiskUsage(serverId: string, path: string = "/"): Promise<DiskUsageResponse> {
     return apiFetch<DiskUsageResponse>(`/sftp/${serverId}/disk-usage?path=${encodeURIComponent(path)}`)
+  },
+
+  /**
+   * 主动关闭指定服务器的 SFTP 连接（加速资源回收）
+   */
+  async closeConnection(serverId: string): Promise<void> {
+    await apiFetch<void>(`/sftp/${serverId}/close`, {
+      method: "POST",
+      retry: false,
+      timeout: 10000,
+    })
   },
 
   /**
@@ -282,12 +302,88 @@ export const sftpApi = {
     excludePatterns?: string[]
   ): Promise<void> {
     const apiUrl = getApiUrl()
+    const isRelativeApiUrl = apiUrl.startsWith("/")
+
+    // 生产同域：用隐藏 form 提交，让浏览器原生流式下载（避免 response.blob 占用内存）
+    if (typeof window !== "undefined" && isRelativeApiUrl) {
+      const action = `${apiUrl}/sftp/${serverId}/batch-download`
+
+      const iframeName = `easyssh-download-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const iframe = document.createElement("iframe")
+      iframe.name = iframeName
+      iframe.style.display = "none"
+      document.body.appendChild(iframe)
+
+      const form = document.createElement("form")
+      form.method = "POST"
+      form.action = action
+      form.target = iframeName
+      form.style.display = "none"
+
+      // CSRF token（Cookie + Form）
+      const csrf = document.cookie
+        .split(";")
+        .map((p) => p.trim())
+        .find((p) => p.startsWith("easyssh_csrf_token="))
+      if (csrf) {
+        const csrfValue = decodeURIComponent(csrf.split("=").slice(1).join("="))
+        const input = document.createElement("input")
+        input.type = "hidden"
+        input.name = "csrf_token"
+        input.value = csrfValue
+        form.appendChild(input)
+      }
+
+      const modeInput = document.createElement("input")
+      modeInput.type = "hidden"
+      modeInput.name = "mode"
+      modeInput.value = mode
+      form.appendChild(modeInput)
+
+      for (const p of paths) {
+        const input = document.createElement("input")
+        input.type = "hidden"
+        input.name = "paths"
+        input.value = p
+        form.appendChild(input)
+      }
+
+      for (const pattern of excludePatterns ?? []) {
+        const input = document.createElement("input")
+        input.type = "hidden"
+        input.name = "excludePatterns"
+        input.value = pattern
+        form.appendChild(input)
+      }
+
+      document.body.appendChild(form)
+      form.submit()
+      document.body.removeChild(form)
+
+      // 延迟清理 iframe（留给下载握手）
+      window.setTimeout(() => {
+        document.body.removeChild(iframe)
+      }, 30_000)
+      return
+    }
+
+    // 开发/跨域：保留 fetch 下载（注意大文件会占用内存）
     const headers: HeadersInit = {
       "Content-Type": "application/json",
     }
     const token = getCurrentAccessToken()
     if (token) {
       ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
+    }
+    // CSRF（若存在）
+    if (typeof document !== "undefined") {
+      const csrf = document.cookie
+        .split(";")
+        .map((p) => p.trim())
+        .find((p) => p.startsWith("easyssh_csrf_token="))
+      if (csrf) {
+        ;(headers as Record<string, string>)["X-CSRF-Token"] = decodeURIComponent(csrf.split("=").slice(1).join("="))
+      }
     }
 
     const response = await fetch(`${apiUrl}/sftp/${serverId}/batch-download`, {
@@ -298,6 +394,7 @@ export const sftpApi = {
         mode,
         excludePatterns,
       }),
+      credentials: "include",
     })
 
     if (!response.ok) {
@@ -315,7 +412,6 @@ export const sftpApi = {
       }
     }
 
-    // 下载文件
     const blob = await response.blob()
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -332,15 +428,9 @@ export const sftpApi = {
    */
   downloadFile(serverId: string, path: string, fileName?: string): void {
     const apiUrl = getApiUrl()
-    const token = getCurrentAccessToken()
-
-    // 构建下载 URL，附带 token 参数用于认证
+    // Cookie 鉴权：不再在 URL 中附带 token
     const params = new URLSearchParams()
-    params.set('path', path)
-    if (token) {
-      params.set('token', token)
-    }
-
+    params.set("path", path)
     const url = `${apiUrl}/sftp/${serverId}/download?${params.toString()}`
 
     // 使用 <a> 标签触发下载，避免页面跳转
@@ -386,7 +476,6 @@ export const sftpApi = {
     sourcePath: string,
     targetServerId: string,
     targetPath: string,
-    taskId?: string
   ): Promise<DirectTransferResponse> {
     return apiFetch<DirectTransferResponse>(`/sftp/transfer/direct`, {
       method: "POST",
@@ -395,7 +484,6 @@ export const sftpApi = {
         source_path: sourcePath,
         target_server_id: targetServerId,
         target_path: targetPath,
-        task_id: taskId,
       },
     })
   },
@@ -418,6 +506,10 @@ export const sftpApi = {
     const wsUrl = apiUrl.replace(/^http/, "ws")
     return `${wsUrl}/sftp/transfer/ws/${taskId}`
   },
+
+  /**
+   * 主动关闭该用户对该服务器的 SFTP 池连接
+   */
 }
 
 /**
@@ -456,4 +548,3 @@ export interface TransferProgressMessage {
   message: string
   method: "rsync" | "scp" | "sftp"
 }
-

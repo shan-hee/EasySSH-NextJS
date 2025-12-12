@@ -12,6 +12,7 @@ import (
 
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -32,17 +33,67 @@ type SFTPUploadHandler struct {
 	connections map[string]*websocket.Conn
 	// 存储每个任务的取消函数（由 REST 上传逻辑注册）
 	cancelFuncs     map[string]func()
+	// 存储任务归属与生命周期（用于强校验与回收）
+	tasks map[string]uploadTaskMeta
 	mu              sync.RWMutex
 	securityService security.Service // 安全配置服务（用于 CORS）
 }
 
+type uploadTaskMeta struct {
+	userID    string
+	createdAt time.Time
+}
+
 // NewSFTPUploadHandler 创建 SFTP 上传处理器
 func NewSFTPUploadHandler(securityService security.Service) *SFTPUploadHandler {
-	return &SFTPUploadHandler{
+	h := &SFTPUploadHandler{
 		connections:     make(map[string]*websocket.Conn),
 		cancelFuncs:     make(map[string]func()),
+		tasks:           make(map[string]uploadTaskMeta),
 		securityService: securityService,
 	}
+	go h.cleanupLoop()
+	return h
+}
+
+func (h *SFTPUploadHandler) cleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		h.cleanupExpiredTasks(60 * time.Minute)
+	}
+}
+
+func (h *SFTPUploadHandler) cleanupExpiredTasks(maxAge time.Duration) {
+	cutoff := time.Now().Add(-maxAge)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for taskID, meta := range h.tasks {
+		if meta.createdAt.After(cutoff) {
+			continue
+		}
+		// 仅在无连接且无 cancelFunc 时清理，避免误删活跃上传
+		if h.connections[taskID] == nil && h.cancelFuncs[taskID] == nil {
+			delete(h.tasks, taskID)
+		}
+	}
+}
+
+// CreateTask 创建一个服务端任务 ID，并绑定用户
+func (h *SFTPUploadHandler) CreateTask(userID string) string {
+	taskID := uuid.NewString()
+	h.mu.Lock()
+	h.tasks[taskID] = uploadTaskMeta{userID: userID, createdAt: time.Now()}
+	h.mu.Unlock()
+	return taskID
+}
+
+// ValidateTaskOwnership 校验 task 是否属于 user
+func (h *SFTPUploadHandler) ValidateTaskOwnership(userID, taskID string) bool {
+	h.mu.RLock()
+	meta, ok := h.tasks[taskID]
+	h.mu.RUnlock()
+	return ok && meta.userID == userID
 }
 
 // getUpgrader 创建 WebSocket upgrader，集成 CORS 配置
@@ -124,6 +175,12 @@ func (h *SFTPUploadHandler) HandleUploadWebSocket(c *gin.Context) {
 
 	log.Printf("[SFTPUploadWS] 连接请求: userID=%s, taskID=%s", userID, taskID)
 
+	// 强校验任务归属（防止猜测 task_id 窃听/取消他人任务）
+	if !h.ValidateTaskOwnership(userID, taskID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden", "message": "task not owned by user"})
+		return
+	}
+
 	// 升级到 WebSocket
 	upgrader := h.getUpgrader()
 	wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -191,7 +248,6 @@ func (h *SFTPUploadHandler) HandleUploadWebSocket(c *gin.Context) {
 	close(stopHeartbeat)
 	h.mu.Lock()
 	delete(h.connections, taskID)
-	delete(h.cancelFuncs, taskID)
 	h.mu.Unlock()
 	wsConn.Close()
 

@@ -191,6 +191,17 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   throw lastError
 }
 
+function getCookieValue(name: string): string | null {
+  if (typeof document === "undefined") return null
+  try {
+    const pattern = `(?:^|; )${name.replace(/[$()*+./?[\\\]^{|}-]/g, "\\$&")}=([^;]*)`
+    const match = document.cookie.match(new RegExp(pattern))
+    return match ? decodeURIComponent(match[1]) : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * 内部 fetch 实现,支持超时
  */
@@ -260,6 +271,22 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     headers,
     credentials,
     signal,
+  }
+
+  // CSRF：Cookie 鉴权下的双提交保护
+  // - 对非安全方法，自动附带 X-CSRF-Token（若客户端存在 csrf cookie）
+  const method = (options.method ?? "GET").toUpperCase()
+  const unsafe = method !== "GET" && method !== "HEAD" && method !== "OPTIONS"
+  if (unsafe) {
+    const csrf = getCookieValue("easyssh_csrf_token")
+    if (csrf) {
+      const headersRecord = headers as Record<string, string>
+      const hasCsrfHeader =
+        Object.keys(headersRecord).some((k) => k.toLowerCase() === "x-csrf-token")
+      if (!hasCsrfHeader) {
+        headersRecord["X-CSRF-Token"] = csrf
+      }
+    }
   }
 
   if (options.body !== undefined && options.body !== null) {

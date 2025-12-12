@@ -59,6 +59,8 @@ type SFTPTransferHandler struct {
 	connections map[string]*websocket.Conn
 	// 存储传输任务
 	tasks map[string]*TransferTask
+	// 存储任务最新进度，用于 WS 迟到/重连补发
+	lastProgress map[string]TransferProgressMessage
 	mu    sync.RWMutex
 
 	serverService   server.Service
@@ -66,6 +68,7 @@ type SFTPTransferHandler struct {
 	encryptor       *crypto.Encryptor
 	securityService security.Service
 	hostKeyCallback ssh.HostKeyCallback
+	defaultTaskTTL  time.Duration
 }
 
 // NewSFTPTransferHandler 创建跨服务器传输处理器
@@ -79,11 +82,13 @@ func NewSFTPTransferHandler(
 	return &SFTPTransferHandler{
 		connections:     make(map[string]*websocket.Conn),
 		tasks:           make(map[string]*TransferTask),
+		lastProgress:    make(map[string]TransferProgressMessage),
 		serverService:   serverService,
 		serverRepo:      serverRepo,
 		encryptor:       encryptor,
 		securityService: securityService,
 		hostKeyCallback: hostKeyCallback,
+		defaultTaskTTL:  30 * time.Minute,
 	}
 }
 
@@ -158,6 +163,16 @@ func (h *SFTPTransferHandler) HandleTransferWebSocket(c *gin.Context) {
 
 	log.Printf("[SFTPTransferWS] 连接请求: userID=%s, taskID=%s", userID, taskID)
 
+	// 强校验任务归属（防止猜测 task_id 窃听/取消他人任务）
+	h.mu.RLock()
+	task, ok := h.tasks[taskID]
+	last, hasLast := h.lastProgress[taskID]
+	h.mu.RUnlock()
+	if !ok || task.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden", "message": "task not owned by user"})
+		return
+	}
+
 	upgrader := h.getUpgrader()
 	wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -170,6 +185,11 @@ func (h *SFTPTransferHandler) HandleTransferWebSocket(c *gin.Context) {
 	h.mu.Unlock()
 
 	log.Printf("[SFTPTransferWS] 连接已建立: taskID=%s", taskID)
+
+	// 补发最后一条进度（支持客户端晚连接/重连）
+	if hasLast {
+		_ = h.SendProgress(taskID, last)
+	}
 
 	_ = wsConn.SetReadDeadline(time.Now().Add(wsPongWait))
 	wsConn.SetReadLimit(4 << 10) // 4KB
@@ -203,7 +223,7 @@ func (h *SFTPTransferHandler) HandleTransferWebSocket(c *gin.Context) {
 
 			if ctrl.Type == "cancel" {
 				log.Printf("[SFTPTransferWS] 收到取消指令: taskID=%s", taskID)
-				h.CancelTask(taskID)
+				h.CancelTaskForUser(userID, taskID)
 			}
 		}
 	}
@@ -236,9 +256,10 @@ func (h *SFTPTransferHandler) heartbeat(wsConn *websocket.Conn, taskID string, s
 
 // SendProgress 发送进度消息
 func (h *SFTPTransferHandler) SendProgress(taskID string, msg TransferProgressMessage) error {
-	h.mu.RLock()
+	h.mu.Lock()
+	h.lastProgress[taskID] = msg
 	wsConn, exists := h.connections[taskID]
-	h.mu.RUnlock()
+	h.mu.Unlock()
 
 	if !exists {
 		return nil
@@ -285,8 +306,12 @@ func (h *SFTPTransferHandler) StartDirectTransfer(
 		return fmt.Errorf("failed to get target server: %w", err)
 	}
 
-	// 创建传输上下文
-	transferCtx, cancel := context.WithCancel(ctx)
+	// 创建传输上下文：支持手动取消 + 自动 TTL
+	ttl := h.defaultTaskTTL
+	if ttl <= 0 {
+		ttl = 30 * time.Minute
+	}
+	transferCtx, cancel := context.WithTimeout(ctx, ttl)
 
 	// 注册任务
 	task := &TransferTask{
@@ -314,9 +339,11 @@ func (h *SFTPTransferHandler) StartDirectTransfer(
 
 	// 在后台执行传输（使用 SFTP 中转，通过后端中转数据）
 	go func() {
+		defer cancel()
 		defer func() {
 			h.mu.Lock()
 			delete(h.tasks, taskID)
+			delete(h.lastProgress, taskID)
 			h.mu.Unlock()
 		}()
 
@@ -346,16 +373,21 @@ func (h *SFTPTransferHandler) StartDirectTransfer(
 	return nil
 }
 
-// CancelTask 取消传输任务
-func (h *SFTPTransferHandler) CancelTask(taskID string) {
+// CancelTaskForUser 取消传输任务（强校验 userID）
+func (h *SFTPTransferHandler) CancelTaskForUser(userID uuid.UUID, taskID string) bool {
 	h.mu.RLock()
 	task, exists := h.tasks[taskID]
 	h.mu.RUnlock()
 
-	if exists && task.CancelFunc != nil {
-		task.CancelFunc()
-		log.Printf("[SFTPTransferWS] 任务已取消: taskID=%s", taskID)
+	if !exists || task.UserID != userID {
+		return false
 	}
+	if task.CancelFunc != nil {
+		task.CancelFunc()
+		log.Printf("[SFTPTransferWS] 任务已取消: taskID=%s, userID=%s", taskID, userID)
+		return true
+	}
+	return false
 }
 
 // executeSftpRelayTransfer 使用 SFTP 中转传输（通过后端中转，不依赖源服务器命令）
@@ -377,7 +409,7 @@ func (h *SFTPTransferHandler) executeSftpRelayTransfer(
 	}
 	defer sourceSSHClient.Close()
 
-	if err := sourceSSHClient.Connect(sourceServer.Host, sourceServer.Port); err != nil {
+	if err := sourceSSHClient.ConnectContext(ctx, sourceServer.Host, sourceServer.Port); err != nil {
 		return fmt.Errorf("failed to connect to source server: %w", err)
 	}
 
@@ -395,7 +427,7 @@ func (h *SFTPTransferHandler) executeSftpRelayTransfer(
 	}
 	defer targetSSHClient.Close()
 
-	if err := targetSSHClient.Connect(targetServer.Host, targetServer.Port); err != nil {
+	if err := targetSSHClient.ConnectContext(ctx, targetServer.Host, targetServer.Port); err != nil {
 		return fmt.Errorf("failed to connect to target server: %w", err)
 	}
 

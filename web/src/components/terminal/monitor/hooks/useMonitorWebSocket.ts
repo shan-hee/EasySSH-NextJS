@@ -224,13 +224,9 @@ export function useMonitorWebSocket({
     }
 
     try {
-      // 构建 WebSocket URL，附带 Bearer Token 作为 query 参数（token）
+      // Cookie 鉴权：不再在 URL 中附带 token
       const params = new URLSearchParams()
       params.set('interval', String(interval))
-      const accessToken = getCurrentAccessToken()
-      if (accessToken) {
-        params.set('token', accessToken)
-      }
       const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?${params.toString()}`);
 
       setStatus(WSStatus.CONNECTING);

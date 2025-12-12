@@ -17,9 +17,9 @@ import (
 // PooledClient 单次请求的 SFTP 客户端（底层 SSH 来自池）
 type PooledClient struct {
 	*Client
-	pool    *Pool
-	key     string
-	sshConn *pooledSSHConn
+	pool           *Pool
+	key            string
+	sshConn        *pooledSSHConn
 	permitAcquired bool
 	releaseOnce    sync.Once
 }
@@ -77,6 +77,36 @@ func (pc *PooledClient) IsHealthy() bool {
 		return false
 	}
 	return pc.sshConn.IsHealthy()
+}
+
+// DeleteDirectory 覆写目录删除：移动到回收站并登记后台清理
+func (pc *PooledClient) DeleteDirectory(path string) error {
+	if pc.Client == nil {
+		return fmt.Errorf("sftp client not initialized")
+	}
+	trashDir, _, err := pc.Client.MoveToTrash(path)
+	if err != nil {
+		return err
+	}
+	if pc.pool != nil && trashDir != "" {
+		pc.pool.registerTrashDir(pc.key, trashDir)
+	}
+	return nil
+}
+
+// DeleteFile 覆写文件删除：移动到回收站并登记后台清理
+func (pc *PooledClient) DeleteFile(path string) error {
+	if pc.Client == nil {
+		return fmt.Errorf("sftp client not initialized")
+	}
+	trashDir, _, err := pc.Client.MoveToTrash(path)
+	if err != nil {
+		return err
+	}
+	if pc.pool != nil && trashDir != "" {
+		pc.pool.registerTrashDir(pc.key, trashDir)
+	}
+	return nil
 }
 
 // pooledSSHConn 池化的 SSH 连接
@@ -147,6 +177,9 @@ type Pool struct {
 	maxLifeTime     time.Duration
 	maxSftpSessions int
 	semaphores      map[string]chan struct{}
+	trashDirs       map[string]map[string]time.Time // key -> trashDir -> lastCleanAt
+	trashRetention  time.Duration
+	trashCleanEvery time.Duration
 
 	stopCh   chan struct{}
 	stopped  chan struct{}
@@ -194,6 +227,9 @@ func NewPool(
 		maxLifeTime:     config.MaxLifeTime,
 		maxSftpSessions: maxSftpSessions,
 		semaphores:      make(map[string]chan struct{}),
+		trashDirs:       make(map[string]map[string]time.Time),
+		trashRetention:  7 * 24 * time.Hour,
+		trashCleanEvery: 30 * time.Minute,
 		stopCh:          make(chan struct{}),
 		stopped:         make(chan struct{}),
 	}
@@ -451,9 +487,10 @@ func (p *Pool) CloseByKey(userID, serverID uuid.UUID) {
 	}
 	p.mu.Unlock()
 
-	if exists && conn != nil && conn.Client != nil {
-		go conn.Client.Close() // 异步关闭 SSH
-		log.Printf("[SFTP Pool] 主动关闭 SSH 连接: key=%s", key)
+	// 不要直接 Close，避免误伤并发中的请求；标记 closing 并在 refCount 归零后关闭
+	if exists && conn != nil {
+		p.markClosingAndMaybeClose(conn)
+		log.Printf("[SFTP Pool] 主动关闭 SSH 连接(延迟到空闲): key=%s", key)
 	}
 }
 
@@ -509,6 +546,11 @@ func (p *Pool) cleanupOnce() {
 		key  string
 		conn *pooledSSHConn
 	}
+	var toCleanTrash []struct {
+		key  string
+		conn *pooledSSHConn
+		dirs []string
+	}
 
 	p.mu.Lock()
 	for key, conn := range p.connections {
@@ -548,6 +590,25 @@ func (p *Pool) cleanupOnce() {
 				conn *pooledSSHConn
 			}{key: key, conn: conn})
 		}
+
+		// 空闲连接上触发一次 .trash 清理（后台任务，不影响请求路径）
+		if p.trashCleanEvery > 0 && p.trashRetention > 0 {
+			if dirsMap, ok := p.trashDirs[key]; ok && len(dirsMap) > 0 {
+				var dirs []string
+				for dir, lastCleanAt := range dirsMap {
+					if lastCleanAt.IsZero() || now.Sub(lastCleanAt) >= p.trashCleanEvery {
+						dirs = append(dirs, dir)
+					}
+				}
+				if len(dirs) > 0 {
+					toCleanTrash = append(toCleanTrash, struct {
+						key  string
+						conn *pooledSSHConn
+						dirs []string
+					}{key: key, conn: conn, dirs: dirs})
+				}
+			}
+		}
 	}
 	p.mu.Unlock()
 
@@ -557,6 +618,10 @@ func (p *Pool) cleanupOnce() {
 			log.Printf("[SFTP Pool] 空闲 keepalive 失败，驱逐连接: key=%s", item.key)
 			p.evictSSHConn(item.key, item.conn)
 		}
+	}
+
+	for _, item := range toCleanTrash {
+		p.cleanupTrashDirs(item.key, item.conn, item.dirs)
 	}
 
 	for _, conn := range toClose {
@@ -627,6 +692,27 @@ func (p *Pool) acquirePermit(ctx context.Context, key string) (bool, error) {
 	}
 }
 
+func (p *Pool) tryAcquirePermit(key string) bool {
+	if p.maxSftpSessions <= 0 {
+		return true
+	}
+
+	p.mu.Lock()
+	sem, ok := p.semaphores[key]
+	if !ok {
+		sem = make(chan struct{}, p.maxSftpSessions)
+		p.semaphores[key] = sem
+	}
+	p.mu.Unlock()
+
+	select {
+	case sem <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
 // releasePermit 归还一个 SFTP 会话许可
 func (p *Pool) releasePermit(key string) {
 	if p.maxSftpSessions <= 0 {
@@ -641,6 +727,75 @@ func (p *Pool) releasePermit(key string) {
 	select {
 	case <-sem:
 	default:
+	}
+}
+
+func (p *Pool) registerTrashDir(key, dir string) {
+	if dir == "" {
+		return
+	}
+	p.mu.Lock()
+	m, ok := p.trashDirs[key]
+	if !ok {
+		m = make(map[string]time.Time)
+		p.trashDirs[key] = m
+	}
+	if _, exists := m[dir]; !exists {
+		m[dir] = time.Time{}
+	}
+	p.mu.Unlock()
+}
+
+func (p *Pool) cleanupTrashDirs(key string, conn *pooledSSHConn, dirs []string) {
+	if conn == nil || len(dirs) == 0 {
+		return
+	}
+	if !conn.IsHealthy() || conn.IsClosing() {
+		return
+	}
+
+	if !p.tryAcquirePermit(key) {
+		return
+	}
+	defer p.releasePermit(key)
+
+	// 使用现有 SSH 连接开启临时 SFTP 通道执行清理
+	sftpClient, err := NewClient(conn.Client, &server.Server{ID: uuid.Nil})
+	if err != nil {
+		return
+	}
+	defer func() { _ = sftpClient.CloseSFTP() }()
+
+	now := time.Now()
+
+	for _, trashDir := range dirs {
+		listing, err := sftpClient.ListDirectory(trashDir)
+		if err != nil {
+			continue
+		}
+
+		for _, fi := range listing.Files {
+			// 仅处理 .trash 目录下的条目；跳过特殊项
+			if fi == nil || fi.Name == "." || fi.Name == ".." {
+				continue
+			}
+			if fi.ModTime.IsZero() || now.Sub(fi.ModTime) < p.trashRetention {
+				continue
+			}
+
+			if fi.IsDir {
+				_ = sftpClient.removeAll(fi.Path)
+			} else {
+				_ = sftpClient.sftpClient.Remove(fi.Path)
+			}
+		}
+
+		// 更新 lastCleanAt
+		p.mu.Lock()
+		if m, ok := p.trashDirs[key]; ok {
+			m[trashDir] = now
+		}
+		p.mu.Unlock()
 	}
 }
 

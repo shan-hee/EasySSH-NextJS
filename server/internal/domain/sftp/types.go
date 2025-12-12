@@ -12,6 +12,8 @@ type FileInfo struct {
 	Size       int64       `json:"size"`
 	Mode       os.FileMode `json:"mode"`
 	IsDir      bool        `json:"is_dir"`
+	IsLink     bool        `json:"is_link"`
+	LinkTarget string      `json:"link_target,omitempty"`
 	ModTime    time.Time   `json:"mod_time"`
 	Permission string      `json:"permission"`
 }

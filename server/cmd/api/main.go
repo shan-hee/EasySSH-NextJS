@@ -397,11 +397,12 @@ func main() {
 	r.Use(middleware.Recovery())                                     // 错误恢复
 	r.Use(middleware.Logger())                                       // 日志记录
 	r.Use(middleware.RequestID())                                    // 请求 ID
-	r.Use(middleware.SecurityHeaders())                              // 安全响应头
-	r.Use(middleware.SecurityConfigCache(securityService))           // 安全配置缓存(避免重复查询)
-	r.Use(middleware.CORS(cfg, securityService))                     // 跨域（支持动态配置）
-	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
-	r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）
+		r.Use(middleware.SecurityHeaders())                              // 安全响应头
+		r.Use(middleware.SecurityConfigCache(securityService))           // 安全配置缓存(避免重复查询)
+		r.Use(middleware.CORS(cfg, securityService))                     // 跨域（支持动态配置）
+		r.Use(middleware.CSRFMiddleware())                               // CSRF 防护（Cookie 鉴权场景）
+		r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
+		r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）
 
 	// API v1 路由组
 	v1 := r.Group("/api/v1")
@@ -600,12 +601,19 @@ func main() {
 			sftpPoolRoutes.GET("/stats", sftpHandler.GetPoolStats) // 连接池统计
 		}
 
-		// SFTP 上传进度 WebSocket 路由（需要认证）
-		sftpWSRoutes := v1.Group("/sftp/upload/ws")
-		sftpWSRoutes.Use(middleware.AuthMiddleware(jwtService))
-		{
-			sftpWSRoutes.GET("/:task_id", sftpUploadWSHandler.HandleUploadWebSocket) // 上传进度 WebSocket
-		}
+			// SFTP 上传进度 WebSocket 路由（需要认证）
+			sftpWSRoutes := v1.Group("/sftp/upload/ws")
+			sftpWSRoutes.Use(middleware.AuthMiddleware(jwtService))
+			{
+				sftpWSRoutes.GET("/:task_id", sftpUploadWSHandler.HandleUploadWebSocket) // 上传进度 WebSocket
+			}
+
+			// SFTP 上传任务路由（需要认证）
+			sftpUploadRoutes := v1.Group("/sftp/upload")
+			sftpUploadRoutes.Use(middleware.AuthMiddleware(jwtService))
+			{
+				sftpUploadRoutes.POST("/task", sftpHandler.CreateUploadTask) // 创建上传任务（服务端生成 task_id）
+			}
 
 		// SFTP 跨服务器传输路由（需要认证）
 		sftpTransferRoutes := v1.Group("/sftp")

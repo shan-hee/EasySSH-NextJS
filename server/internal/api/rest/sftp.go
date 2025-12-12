@@ -23,15 +23,34 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+const (
+	maxTextReadBytes  = 5 << 20 // 5MB
+	maxTextWriteBytes = 5 << 20 // 5MB
+)
+
+type ctxReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *ctxReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+	}
+	return r.reader.Read(p)
+}
+
 // SFTPHandler SFTP 处理器
 type SFTPHandler struct {
-	serverService     server.Service
-	serverRepo        server.Repository
-	encryptor         *crypto.Encryptor
-	uploadWSHandler   *ws.SFTPUploadHandler
-	transferHandler   *ws.SFTPTransferHandler // 跨服务器直连传输处理器
-	hostKeyCallback   ssh.HostKeyCallback     // SSH主机密钥验证回调
-	pool              *sftp.Pool              // SFTP 连接池
+	serverService   server.Service
+	serverRepo      server.Repository
+	encryptor       *crypto.Encryptor
+	uploadWSHandler *ws.SFTPUploadHandler
+	transferHandler *ws.SFTPTransferHandler // 跨服务器直连传输处理器
+	hostKeyCallback ssh.HostKeyCallback     // SSH主机密钥验证回调
+	pool            *sftp.Pool              // SFTP 连接池
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
@@ -70,6 +89,23 @@ func (h *SFTPHandler) Close() {
 	if h.pool != nil {
 		h.pool.CloseAll()
 	}
+}
+
+// CreateUploadTask 创建一个服务端上传任务 ID（用于上传进度 WebSocket）
+// POST /api/v1/sftp/upload/task
+func (h *SFTPHandler) CreateUploadTask(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Missing user")
+		return
+	}
+	if h.uploadWSHandler == nil {
+		RespondError(c, http.StatusServiceUnavailable, "ws_not_available", "Upload WebSocket not available")
+		return
+	}
+
+	taskID := h.uploadWSHandler.CreateTask(userIDStr.(string))
+	RespondSuccess(c, gin.H{"task_id": taskID})
 }
 
 // getPooledClient 从连接池获取 SFTP 客户端
@@ -235,6 +271,13 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 
 	// 如果提供了 WebSocket 任务 ID，使用带进度跟踪的上传
 	if wsTaskID != "" && h.uploadWSHandler != nil {
+		// 校验任务归属
+		userIDStr, exists := c.Get("user_id")
+		if !exists || !h.uploadWSHandler.ValidateTaskOwnership(userIDStr.(string), wsTaskID) {
+			RespondError(c, http.StatusForbidden, "forbidden", "Invalid upload task")
+			return
+		}
+
 		// 创建可取消的上下文，并注册到 WebSocket 处理器
 		ctx, cancel := context.WithCancel(c.Request.Context())
 		defer cancel()
@@ -482,8 +525,8 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 	elapsed := time.Since(startTime)
 	fmt.Printf("[SFTP Delete] Delete completed successfully in %v: %s\n", elapsed, req.Path)
 
-	// 返回被删除文件的信息,便于前端做差异更新
-	RespondSuccessWithMessage(c, fileInfo, "Deleted successfully")
+	// 返回被删除文件的信息,便于前端做差异更新（实际语义：移动到 .trash）
+	RespondSuccessWithMessage(c, fileInfo, "Moved to trash")
 }
 
 // Rename 重命名文件或目录
@@ -603,6 +646,21 @@ func (h *SFTPHandler) ReadFile(c *gin.Context) {
 	}
 	defer sftpClient.Release()
 
+	// 读取前先做 size 限制与类型校验，避免 io.ReadAll 造成内存压力
+	fi, err := sftpClient.GetFileInfo(path)
+	if err != nil {
+		RespondError(c, http.StatusNotFound, "file_not_found", err.Error())
+		return
+	}
+	if fi.IsDir {
+		RespondError(c, http.StatusBadRequest, "not_a_file", "Path is a directory")
+		return
+	}
+	if fi.Size > maxTextReadBytes {
+		RespondError(c, http.StatusRequestEntityTooLarge, "file_too_large", fmt.Sprintf("File exceeds max size (%d bytes)", maxTextReadBytes))
+		return
+	}
+
 	// 读取文件
 	content, err := sftpClient.ReadFile(path)
 	if err != nil {
@@ -630,6 +688,10 @@ func (h *SFTPHandler) WriteFile(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	if len(req.Content) > maxTextWriteBytes {
+		RespondError(c, http.StatusRequestEntityTooLarge, "content_too_large", fmt.Sprintf("Content exceeds max size (%d bytes)", maxTextWriteBytes))
 		return
 	}
 
@@ -742,6 +804,13 @@ func (h *SFTPHandler) BatchDelete(c *gin.Context) {
 	failed := []BatchOperationError{}
 
 	for _, path := range req.Paths {
+		select {
+		case <-c.Request.Context().Done():
+			RespondError(c, http.StatusRequestTimeout, "request_cancelled", "request cancelled")
+			return
+		default:
+		}
+
 		// 获取文件信息以判断类型
 		fileInfo, err := sftpClient.GetFileInfo(path)
 		if err != nil {
@@ -789,8 +858,8 @@ func (h *SFTPHandler) BatchDelete(c *gin.Context) {
 // BatchDownloadRequest 批量下载请求
 type BatchDownloadRequest struct {
 	Paths           []string `json:"paths" binding:"required,min=1,max=100"`
-	Mode            string   `json:"mode"`             // "fast" 或 "compatible"，默认 "compatible"
-	ExcludePatterns []string `json:"excludePatterns"`  // 排除的目录名称列表
+	Mode            string   `json:"mode"`            // "fast" 或 "compatible"，默认 "compatible"
+	ExcludePatterns []string `json:"excludePatterns"` // 排除的目录名称列表
 }
 
 // BatchDownload 批量下载文件（打包为 ZIP）
@@ -803,11 +872,21 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
-	// 解析请求
+	// 解析请求：支持 JSON 与原生表单提交（用于浏览器流式下载）
 	var req BatchDownloadRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
-		return
+	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/json") {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
+	} else {
+		req.Paths = c.PostFormArray("paths")
+		req.Mode = c.PostForm("mode")
+		req.ExcludePatterns = c.PostFormArray("excludePatterns")
+		if len(req.Paths) == 0 {
+			RespondError(c, http.StatusBadRequest, "validation_error", "paths is required")
+			return
+		}
 	}
 
 	// 设置默认值
@@ -880,6 +959,12 @@ func (h *SFTPHandler) compatibleDownload(c *gin.Context, serverID uuid.UUID, req
 	excludedCount := 0
 
 	for _, path := range req.Paths {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		default:
+		}
+
 		// 获取文件信息
 		fileInfo, err := sftpClient.GetFileInfo(path)
 		if err != nil {
@@ -1029,7 +1114,7 @@ func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req Batch
 	fmt.Printf("[SFTP FastDownload] Tar completed successfully\n")
 }
 
-// shSingleQuote 将字符串按 POSIX 单引号安全包裹: ' -> '\''
+// shSingleQuote 将字符串按 POSIX 单引号安全包裹: ' -> '\”
 // 用于构造通过 shell 执行的命令参数,防止因为特殊字符导致命令注入或解析错误。
 func shSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
@@ -1326,10 +1411,10 @@ func (h *SFTPHandler) Transfer(c *gin.Context) {
 
 	if sourceInfo.IsDir {
 		// 目录传输：递归复制
-		bytesCopied, err = h.transferDirectory(sourceClient, targetClient, req.SourcePath, targetPath)
+		bytesCopied, err = h.transferDirectory(c.Request.Context(), sourceClient, targetClient, req.SourcePath, targetPath)
 	} else {
 		// 单文件传输：流式复制
-		bytesCopied, err = h.transferFile(sourceClient, targetClient, req.SourcePath, targetPath)
+		bytesCopied, err = h.transferFile(c.Request.Context(), sourceClient, targetClient, req.SourcePath, targetPath)
 	}
 
 	if err != nil {
@@ -1349,8 +1434,8 @@ func (h *SFTPHandler) Transfer(c *gin.Context) {
 	})
 }
 
-// transferFile 流式传输单个文件（源 -> 内存缓冲 -> 目标）
-func (h *SFTPHandler) transferFile(sourceClient, targetClient *sftp.Client, sourcePath, targetPath string) (int64, error) {
+// transferFile 流式传输单个文件（源 -> 目标），支持 ctx 取消，并在取消/失败时清理半文件
+func (h *SFTPHandler) transferFile(ctx context.Context, sourceClient, targetClient *sftp.Client, sourcePath, targetPath string) (int64, error) {
 	// 打开源文件进行读取
 	reader, err := sourceClient.OpenFile(sourcePath)
 	if err != nil {
@@ -1367,30 +1452,18 @@ func (h *SFTPHandler) transferFile(sourceClient, targetClient *sftp.Client, sour
 
 	// 流式复制（使用 32KB 缓冲区）
 	buf := make([]byte, 32*1024)
-	var totalCopied int64
-
-	for {
-		n, readErr := reader.Read(buf)
-		if n > 0 {
-			written, writeErr := writer.Write(buf[:n])
-			if writeErr != nil {
-				return totalCopied, fmt.Errorf("failed to write to target: %w", writeErr)
-			}
-			totalCopied += int64(written)
-		}
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return totalCopied, fmt.Errorf("failed to read from source: %w", readErr)
-		}
+	totalCopied, copyErr := io.CopyBuffer(writer, &ctxReader{ctx: ctx, reader: reader}, buf)
+	if copyErr != nil {
+		// 尝试清理半文件
+		_ = writer.Close()
+		_ = targetClient.RemoveFile(targetPath)
+		return totalCopied, copyErr
 	}
-
 	return totalCopied, nil
 }
 
 // transferDirectory 递归传输目录
-func (h *SFTPHandler) transferDirectory(sourceClient, targetClient *sftp.Client, sourcePath, targetPath string) (int64, error) {
+func (h *SFTPHandler) transferDirectory(ctx context.Context, sourceClient, targetClient *sftp.Client, sourcePath, targetPath string) (int64, error) {
 	var totalCopied int64
 
 	// 在目标服务器创建目录
@@ -1405,6 +1478,12 @@ func (h *SFTPHandler) transferDirectory(sourceClient, targetClient *sftp.Client,
 	}
 
 	for _, file := range listing.Files {
+		select {
+		case <-ctx.Done():
+			return totalCopied, ctx.Err()
+		default:
+		}
+
 		// 跳过 . 和 ..
 		if file.Name == "." || file.Name == ".." {
 			continue
@@ -1421,7 +1500,7 @@ func (h *SFTPHandler) transferDirectory(sourceClient, targetClient *sftp.Client,
 
 		if file.IsDir {
 			// 递归传输子目录
-			copied, err := h.transferDirectory(sourceClient, targetClient, srcPath, dstPath)
+			copied, err := h.transferDirectory(ctx, sourceClient, targetClient, srcPath, dstPath)
 			if err != nil {
 				fmt.Printf("[SFTP Transfer] Failed to transfer subdirectory %s: %v\n", srcPath, err)
 				// 继续处理其他文件
@@ -1430,7 +1509,7 @@ func (h *SFTPHandler) transferDirectory(sourceClient, targetClient *sftp.Client,
 			}
 		} else {
 			// 传输文件
-			copied, err := h.transferFile(sourceClient, targetClient, srcPath, dstPath)
+			copied, err := h.transferFile(ctx, sourceClient, targetClient, srcPath, dstPath)
 			if err != nil {
 				fmt.Printf("[SFTP Transfer] Failed to transfer file %s: %v\n", srcPath, err)
 				// 继续处理其他文件
@@ -1453,7 +1532,6 @@ type DirectTransferRequest struct {
 	SourcePath     string `json:"source_path" binding:"required"`
 	TargetServerID string `json:"target_server_id" binding:"required"`
 	TargetPath     string `json:"target_path" binding:"required"`
-	TaskID         string `json:"task_id,omitempty"` // 可选的任务ID，用于WebSocket进度推送
 }
 
 // DirectTransferResponse 直连传输响应
@@ -1506,22 +1584,15 @@ func (h *SFTPHandler) DirectTransfer(c *gin.Context) {
 		return
 	}
 
-	// 生成或使用提供的任务ID
-	taskID := req.TaskID
-	if taskID == "" {
-		taskID = uuid.New().String()
-	}
+	// 服务端生成任务ID（避免客户端自带 task_id 造成撞库/窃听）
+	taskID := uuid.New().String()
 
 	fmt.Printf("[SFTP DirectTransfer] Starting direct transfer: taskID=%s, source=%s:%s -> target=%s:%s\n",
 		taskID, req.SourceServerID, req.SourcePath, req.TargetServerID, req.TargetPath)
 
-	// 使用独立的 context，不受 HTTP 请求生命周期影响
-	// 传输任务会在后台 goroutine 中执行，不应随 HTTP 请求结束而取消
-	transferCtx := context.Background()
-
 	// 启动后台传输任务
 	err = h.transferHandler.StartDirectTransfer(
-		transferCtx,
+		context.Background(),
 		taskID,
 		userID,
 		sourceServerID,
@@ -1557,7 +1628,16 @@ func (h *SFTPHandler) CancelTransfer(c *gin.Context) {
 		return
 	}
 
-	h.transferHandler.CancelTask(taskID)
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	if ok := h.transferHandler.CancelTaskForUser(userID, taskID); !ok {
+		RespondError(c, http.StatusForbidden, "forbidden", "Task not owned by user")
+		return
+	}
 
 	RespondSuccess(c, gin.H{
 		"success": true,

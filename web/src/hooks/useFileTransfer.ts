@@ -2,7 +2,6 @@ import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
 import { sftpApi, type FileInfo, type TransferProgressMessage } from '@/lib/api/sftp';
 import { getWsUrl } from '@/lib/config';
-import { getCurrentAccessToken } from '@/stores/auth-store';
 
 /**
  * 传输任务接口
@@ -35,22 +34,35 @@ export function useFileTransfer() {
   const [tasks, setTasks] = useState<TransferTask[]>([]);
   const xhrRefs = useRef<Map<string, XMLHttpRequest>>(new Map());
   const wsRefs = useRef<Map<string, WebSocket>>(new Map());
+  const cancelledBeforeStartRef = useRef<Set<string>>(new Set());
 
-  /**
-   * 创建上传任务
-   */
-  const createUploadTask = useCallback((file: File): TransferTask => {
-    return {
-      id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      fileName: file.name,
-      fileSize: formatBytesString(file.size),
-      fileSizeBytes: file.size,
-      progress: 0,
-      status: 'pending',
-      type: 'upload',
-      startTime: Date.now(),
-      bytesTransferred: 0,
-    };
+  // 客户端侧并发限制：避免一次性发起过多上传压垮本地/服务端
+  const MAX_CONCURRENT_UPLOADS = 3;
+  const uploadSemaphoreRef = useRef<{ active: number; queue: Array<() => void> }>({
+    active: 0,
+    queue: [],
+  });
+
+  const acquireUploadSlot = useCallback((): Promise<() => void> => {
+    return new Promise((resolve) => {
+      const state = uploadSemaphoreRef.current;
+      const grant = () => {
+        state.active += 1;
+        let released = false;
+        resolve(() => {
+          if (released) return;
+          released = true;
+          state.active -= 1;
+          const next = state.queue.shift();
+          if (next) next();
+        });
+      };
+      if (state.active < MAX_CONCURRENT_UPLOADS) {
+        grant();
+      } else {
+        state.queue.push(grant);
+      }
+    });
   }, []);
 
   /**
@@ -102,8 +114,44 @@ export function useFileTransfer() {
       onProgress?: (loaded: number, total: number) => void,
       enableWebSocket?: boolean // 是否启用 WebSocket 进度跟踪
     ): Promise<FileInfo | null> => {
-      const task = createUploadTask(file);
+      // 服务端生成 task_id（避免客户端自带 task_id 造成撞库/窃听）
+      let taskId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      if (enableWebSocket) {
+        const created = await sftpApi.createUploadTask()
+        taskId = created.task_id
+      }
+
+      const task: TransferTask = {
+        id: taskId,
+        fileName: file.name,
+        fileSize: formatBytesString(file.size),
+        fileSizeBytes: file.size,
+        progress: 0,
+        status: 'pending',
+        type: 'upload',
+        startTime: Date.now(),
+        bytesTransferred: 0,
+      }
       setTasks(prev => [...prev, task]);
+
+      // 获取上传并发许可：排队等待，避免瞬间并发过高
+      let releaseSlot: (() => void) | null = null;
+      try {
+        releaseSlot = await acquireUploadSlot();
+      } catch {
+        // 理论上不会失败；兜底
+      }
+
+      // 如果在排队期间被用户取消，则直接结束
+      if (cancelledBeforeStartRef.current.has(task.id)) {
+        cancelledBeforeStartRef.current.delete(task.id);
+        updateTaskProgress(task.id, {
+          status: 'cancelled',
+          error: '已取消',
+        });
+        releaseSlot?.();
+        return null;
+      }
 
       // WebSocket 连接引用
       let wsConnection: WebSocket | null = null;
@@ -112,16 +160,8 @@ export function useFileTransfer() {
       try {
         // 如果启用 WebSocket，先建立连接
         if (enableWebSocket) {
-          // 使用统一的 WebSocket URL 构建函数，附带 access_token 作为 token 查询参数
-          const params = new URLSearchParams();
-          const accessToken = getCurrentAccessToken();
-          if (accessToken) {
-            params.set('token', accessToken);
-          }
-          const qs = params.toString();
-          const wsUrl = getWsUrl(
-            qs ? `/api/v1/sftp/upload/ws/${task.id}?${qs}` : `/api/v1/sftp/upload/ws/${task.id}`,
-          );
+          // Cookie 鉴权：不再在 URL 中附带 token
+          const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}`);
 
           wsConnection = new WebSocket(wsUrl);
           // 记录 WebSocket 连接,以支持取消时发送控制消息
@@ -239,6 +279,7 @@ export function useFileTransfer() {
         }
         throw error;
       } finally {
+        releaseSlot?.();
         // 清理 xhr 引用
         xhrRefs.current.delete(task.id);
         // 清理 WebSocket 连接
@@ -250,13 +291,14 @@ export function useFileTransfer() {
         }
       }
     },
-    [createUploadTask, updateTaskProgress]
+    [updateTaskProgress, acquireUploadSlot]
   );
 
   /**
    * 取消任务
    */
   const cancelTask = useCallback((taskId: string) => {
+    cancelledBeforeStartRef.current.add(taskId);
     // 先通知后端取消 SFTP 阶段（通过 WebSocket 控制消息）
     const ws = wsRefs.current.get(taskId);
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -377,10 +419,15 @@ export function useFileTransfer() {
       targetServerName: string,
       fileName: string
     ): Promise<void> => {
-      // 生成任务 ID
-      const taskId = `transfer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // 先发起任务，由服务端生成 task_id（避免客户端自带 task_id）
+      const started = await sftpApi.directTransfer(
+        sourceServerId,
+        sourcePath,
+        targetServerId,
+        targetPath,
+      )
+      const taskId = started.task_id
 
-      // 创建任务
       const task: TransferTask = {
         id: taskId,
         fileName,
@@ -403,15 +450,8 @@ export function useFileTransfer() {
 
       try {
         // 建立 WebSocket 连接获取进度
-        const params = new URLSearchParams();
-        const accessToken = getCurrentAccessToken();
-        if (accessToken) {
-          params.set('token', accessToken);
-        }
-        const qs = params.toString();
-        const wsUrl = getWsUrl(
-          qs ? `/api/v1/sftp/transfer/ws/${taskId}?${qs}` : `/api/v1/sftp/transfer/ws/${taskId}`
-        );
+        // Cookie 鉴权：不再在 URL 中附带 token
+        const wsUrl = getWsUrl(`/api/v1/sftp/transfer/ws/${taskId}`)
 
         wsConnection = new WebSocket(wsUrl);
         wsRefs.current.set(taskId, wsConnection);
@@ -499,13 +539,14 @@ export function useFileTransfer() {
 
         // 等待 WebSocket 连接建立
         await new Promise<void>((resolve, reject) => {
-          if (!wsConnection) {
+          const ws = wsConnection
+          if (!ws) {
             reject(new Error('WebSocket not initialized'));
             return;
           }
 
           // 如果已经打开（理论上不太可能，但以防万一）
-          if (wsConnection.readyState === WebSocket.OPEN) {
+          if (ws.readyState === WebSocket.OPEN) {
             resolve();
             return;
           }
@@ -514,36 +555,25 @@ export function useFileTransfer() {
             reject(new Error('WebSocket 连接超时'));
           }, 5000);
 
-          const originalOnopen = wsConnection.onopen;
-          wsConnection.onopen = (event) => {
+          const originalOnopen = ws.onopen;
+          ws.onopen = (event) => {
             clearTimeout(timeout);
             resolve();
             // 恢复原来的 onopen（如果有的话）
             if (originalOnopen) {
-              originalOnopen.call(wsConnection, event);
+              originalOnopen.call(ws, event);
             }
           };
 
-          const originalOnerror = wsConnection.onerror;
-          const errorHandler = (event: Event) => {
+          const originalOnerror = ws.onerror;
+          const errorHandler = () => {
             clearTimeout(timeout);
             reject(new Error('WebSocket 连接失败'));
             // 恢复原来的 onerror
-            if (wsConnection) {
-              wsConnection.onerror = originalOnerror;
-            }
+            ws.onerror = originalOnerror;
           };
-          wsConnection.onerror = errorHandler;
+          ws.onerror = errorHandler;
         });
-
-        // 发起直连传输请求
-        await sftpApi.directTransfer(
-          sourceServerId,
-          sourcePath,
-          targetServerId,
-          targetPath,
-          taskId
-        );
 
         // 等待传输完成
         await transferComplete;

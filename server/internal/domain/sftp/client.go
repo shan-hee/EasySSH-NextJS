@@ -1,19 +1,19 @@
 package sftp
 
 import (
-    "context"
-    "errors"
-    "fmt"
-    "io"
-    "os"
-    "path/filepath"
-    "strings"
-    "time"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
-    "github.com/easyssh/server/internal/domain/server"
-    sshDomain "github.com/easyssh/server/internal/domain/ssh"
-    "github.com/google/uuid"
-    "github.com/pkg/sftp"
+	"github.com/easyssh/server/internal/domain/server"
+	sshDomain "github.com/easyssh/server/internal/domain/ssh"
+	"github.com/google/uuid"
+	"github.com/pkg/sftp"
 )
 
 // Client SFTP 客户端封装
@@ -81,12 +81,23 @@ func (c *Client) ListDirectory(path string) (*DirectoryListing, error) {
 	files := make([]*FileInfo, 0, len(entries))
 
 	for _, entry := range entries {
+		fullPath := filepath.Join(path, entry.Name())
+		isLink := entry.Mode()&os.ModeSymlink != 0
+		var linkTarget string
+		if isLink {
+			if t, err := c.sftpClient.ReadLink(fullPath); err == nil {
+				linkTarget = t
+			}
+		}
+
 		fileInfo := &FileInfo{
 			Name:       entry.Name(),
-			Path:       filepath.Join(path, entry.Name()),
+			Path:       fullPath,
 			Size:       entry.Size(),
 			Mode:       entry.Mode(),
 			IsDir:      entry.IsDir(),
+			IsLink:     isLink,
+			LinkTarget: linkTarget,
 			ModTime:    entry.ModTime(),
 			Permission: entry.Mode().String(),
 		}
@@ -104,9 +115,18 @@ func (c *Client) ListDirectory(path string) (*DirectoryListing, error) {
 
 // GetFileInfo 获取文件信息
 func (c *Client) GetFileInfo(path string) (*FileInfo, error) {
-	stat, err := c.sftpClient.Stat(path)
+	// 使用 Lstat 保留符号链接信息（Stat 会跟随链接）
+	stat, err := c.sftpClient.Lstat(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	isLink := stat.Mode()&os.ModeSymlink != 0
+	var linkTarget string
+	if isLink {
+		if t, err := c.sftpClient.ReadLink(path); err == nil {
+			linkTarget = t
+		}
 	}
 
 	fileInfo := &FileInfo{
@@ -115,6 +135,8 @@ func (c *Client) GetFileInfo(path string) (*FileInfo, error) {
 		Size:       stat.Size(),
 		Mode:       stat.Mode(),
 		IsDir:      stat.IsDir(),
+		IsLink:     isLink,
+		LinkTarget: linkTarget,
 		ModTime:    stat.ModTime(),
 		Permission: stat.Mode().String(),
 	}
@@ -158,9 +180,9 @@ func (c *Client) UploadFileWithProgressWithContext(ctx context.Context, localRea
 
 	// 使用带进度跟踪的复制
 	reader := &progressReader{
-		reader:     localReader,
-		onProgress: onProgress,
-		lastReport: 0,
+		reader:      localReader,
+		onProgress:  onProgress,
+		lastReport:  0,
 		reportEvery: 65536, // 每 64KB 报告一次进度
 	}
 
@@ -255,101 +277,91 @@ func (c *Client) CreateDirectories(path string) error {
 
 // DeleteFile 删除文件
 func (c *Client) DeleteFile(path string) error {
-    err := c.sftpClient.Remove(path)
-    if err != nil {
-        return fmt.Errorf("failed to delete file: %w", err)
-    }
-    return nil
+	// UX 优化：仅移动到 .trash，避免请求内执行 rm -rf。
+	// 后台清理由池化层/定时任务处理（例如按保留期删除 .trash 中的旧条目）。
+	_, _, err := c.MoveToTrash(path)
+	if err != nil {
+		return fmt.Errorf("failed to move file to trash: %w", err)
+	}
+	return nil
 }
 
 // DeleteDirectory 删除目录
 func (c *Client) DeleteDirectory(path string) error {
-    // 混合策略：目录优先使用 “回收站重命名 + SSH 后台删除”；
-    // SSH 不可用或失败时回退 SFTP 递归删除。
-    if c.sshClient != nil && c.sshClient.IsConnected() {
-        if err := c.deleteDirWithTrashAndSSH(path); err == nil {
-            return nil
-        } else {
-            fmt.Printf("[SFTP DeleteDirectory] SSH trash-delete failed, fallback to SFTP: %v\n", err)
-        }
-    }
-
-    // 回退：SFTP 递归删除（较慢，但通用）
-    fmt.Printf("[SFTP DeleteDirectory] Using SFTP recursive delete: %s\n", path)
-    err := c.removeAll(path)
-    if err != nil {
-        return fmt.Errorf("failed to delete directory: %w", err)
-    }
-    fmt.Printf("[SFTP DeleteDirectory] SFTP delete completed: %s\n", path)
-    return nil
+	// UX 优化：仅移动到 .trash，避免请求内执行 rm -rf。
+	// 后台清理由池化层/定时任务处理（例如按保留期删除 .trash 中的旧条目）。
+	_, _, err := c.MoveToTrash(path)
+	if err != nil {
+		return fmt.Errorf("failed to move directory to trash: %w", err)
+	}
+	return nil
 }
 
-// deleteDirWithTrashAndSSH 目录删除：回收站重命名 + SSH 后台删除
-func (c *Client) deleteDirWithTrashAndSSH(path string) error {
-    // 1) 在同级目录下准备回收站（.trash）
-    parent := filepath.Dir(path)
-    trashDir := filepath.Join(parent, ".trash")
-    // 尝试创建回收站目录（存在即略过）
-    _ = c.sftpClient.Mkdir(trashDir)
-    if info, err := c.sftpClient.Stat(trashDir); err != nil || !info.IsDir() {
-        return fmt.Errorf("trash directory invalid: %s", trashDir)
-    }
+// RemoveFile 永久删除文件（用于清理半文件/后台清理等）
+func (c *Client) RemoveFile(path string) error {
+	if c.sftpClient == nil {
+		return fmt.Errorf("sftp client not initialized")
+	}
+	if err := c.sftpClient.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove file: %w", err)
+	}
+	return nil
+}
 
-    // 2) 生成唯一目标名，并原子重命名到回收站
-    base := filepath.Base(path)
-    uniq := fmt.Sprintf("%s-%s-%s", base, time.Now().Format("20060102-150405"), uuid.NewString()[:8])
-    trashPath := filepath.Join(trashDir, uniq)
+// MoveToTrash 将目标（文件/目录）移动到同级 .trash 下，并返回 trashDir/trashPath
+func (c *Client) MoveToTrash(path string) (trashDir string, trashPath string, err error) {
+	parent := filepath.Dir(path)
+	trashDir = filepath.Join(parent, ".trash")
 
-    if err := c.sftpClient.Rename(path, trashPath); err != nil {
-        // 如果重命名失败，回退为直接 SSH 安全删除（不进回收站）
-        fmt.Printf("[SFTP DeleteDirectory] Rename to trash failed, direct SSH delete: %v\n", err)
-        return c.directSSHSafeDelete(path)
-    }
+	// 尝试创建回收站目录（存在即略过）
+	_ = c.sftpClient.Mkdir(trashDir)
+	if info, statErr := c.sftpClient.Stat(trashDir); statErr != nil || !info.IsDir() {
+		return "", "", fmt.Errorf("trash directory invalid: %s", trashDir)
+	}
 
-    fmt.Printf("[SFTP DeleteDirectory] Moved to trash: %s -> %s\n", path, trashPath)
+	base := filepath.Base(path)
+	uniq := fmt.Sprintf("%s-%s-%s", base, time.Now().Format("20060102-150405"), uuid.NewString()[:8])
+	trashPath = filepath.Join(trashDir, uniq)
 
-    // 3) 通过 SSH 后台删除回收站中的目录
-    if err := c.backgroundSSHSafeDelete(trashPath); err != nil {
-        // 后台删除提交失败，则尝试直接 SSH 删除（同步）
-        fmt.Printf("[SFTP DeleteDirectory] Background delete submit failed, try direct SSH: %v\n", err)
-        return c.directSSHSafeDelete(trashPath)
-    }
+	if renameErr := c.sftpClient.Rename(path, trashPath); renameErr != nil {
+		return "", "", fmt.Errorf("failed to move to trash: %w", renameErr)
+	}
 
-    fmt.Printf("[SFTP DeleteDirectory] Background deletion scheduled for: %s\n", trashPath)
-    return nil
+	fmt.Printf("[SFTP Trash] Moved to trash: %s -> %s\n", path, trashPath)
+	return trashDir, trashPath, nil
 }
 
 // backgroundSSHSafeDelete 使用 SSH 启动后台安全删除（nohup + &）
 func (c *Client) backgroundSSHSafeDelete(target string) error {
-    if c.sshClient == nil || !c.sshClient.IsConnected() {
-        return fmt.Errorf("ssh client not available")
-    }
-    script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; nohup rm -rf -- \"$tgt\" >/dev/null 2>&1 &", shSingleQuote(target))
-    cmd := "sh -c " + shSingleQuote(script)
-    _, err := c.sshClient.ExecuteCommand(cmd)
-    if err != nil {
-        return fmt.Errorf("background delete failed: %w", err)
-    }
-    return nil
+	if c.sshClient == nil || !c.sshClient.IsConnected() {
+		return fmt.Errorf("ssh client not available")
+	}
+	script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; nohup rm -rf -- \"$tgt\" >/dev/null 2>&1 &", shSingleQuote(target))
+	cmd := "sh -c " + shSingleQuote(script)
+	_, err := c.sshClient.ExecuteCommand(cmd)
+	if err != nil {
+		return fmt.Errorf("background delete failed: %w", err)
+	}
+	return nil
 }
 
 // directSSHSafeDelete 使用 SSH 同步安全删除
 func (c *Client) directSSHSafeDelete(target string) error {
-    if c.sshClient == nil || !c.sshClient.IsConnected() {
-        return fmt.Errorf("ssh client not available")
-    }
-    script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; rm -rf -- \"$tgt\"", shSingleQuote(target))
-    cmd := "sh -c " + shSingleQuote(script)
-    _, err := c.sshClient.ExecuteCommand(cmd)
-    if err != nil {
-        return fmt.Errorf("direct ssh delete failed: %w", err)
-    }
-    return nil
+	if c.sshClient == nil || !c.sshClient.IsConnected() {
+		return fmt.Errorf("ssh client not available")
+	}
+	script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; rm -rf -- \"$tgt\"", shSingleQuote(target))
+	cmd := "sh -c " + shSingleQuote(script)
+	_, err := c.sshClient.ExecuteCommand(cmd)
+	if err != nil {
+		return fmt.Errorf("direct ssh delete failed: %w", err)
+	}
+	return nil
 }
 
-// shSingleQuote 将字符串按 POSIX 单引号安全包裹：' -> '\''
+// shSingleQuote 将字符串按 POSIX 单引号安全包裹：' -> '\”
 func shSingleQuote(s string) string {
-    return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // removeAll 递归删除目录（类似 os.RemoveAll）
