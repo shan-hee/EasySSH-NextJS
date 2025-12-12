@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -89,10 +89,11 @@ type DockerSystemInfo struct {
 
 // DockerHandler Docker 处理器
 type DockerHandler struct {
-	serverService     server.Service
-	serverRepo        server.Repository
-	encryptor         *crypto.Encryptor
-	hostKeyCallback   ssh.HostKeyCallback
+	serverService   server.Service
+	serverRepo      server.Repository
+	encryptor       *crypto.Encryptor
+	hostKeyCallback ssh.HostKeyCallback
+	connectionPool  *monitor.ConnectionPool // SSH 连接池（复用监控连接池）
 }
 
 // NewDockerHandler 创建 Docker 处理器
@@ -101,47 +102,40 @@ func NewDockerHandler(
 	serverRepo server.Repository,
 	encryptor *crypto.Encryptor,
 	hostKeyCallback ssh.HostKeyCallback,
+	connectionPool *monitor.ConnectionPool,
 ) *DockerHandler {
 	return &DockerHandler{
 		serverService:   serverService,
 		serverRepo:      serverRepo,
 		encryptor:       encryptor,
 		hostKeyCallback: hostKeyCallback,
+		connectionPool:  connectionPool,
 	}
 }
 
-// createSSHClient 创建 SSH 客户端连接
-func (h *DockerHandler) createSSHClient(c *gin.Context, serverID string) (*sshDomain.Client, error) {
+// getPooledConnection 从连接池获取 SSH 连接
+func (h *DockerHandler) getPooledConnection(c *gin.Context, serverID string) (*monitor.PooledConnection, error) {
 	userID, exists := c.Get("user_id")
 	if !exists {
 		return nil, fmt.Errorf("unauthorized")
 	}
 
-	userUUID, err := uuid.Parse(userID.(string))
+	// 使用连接池获取或创建连接
+	pooledConn, err := h.connectionPool.GetOrCreate(userID.(string), serverID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid user id")
+		return nil, fmt.Errorf("failed to get ssh connection: %w", err)
 	}
 
-	serverUUID, err := uuid.Parse(serverID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid server id")
-	}
+	return pooledConn, nil
+}
 
-	srv, err := h.serverService.GetByID(c.Request.Context(), userUUID, serverUUID)
-	if err != nil {
-		return nil, fmt.Errorf("server not found: %w", err)
+// releaseConnection 释放连接（减少引用计数）
+func (h *DockerHandler) releaseConnection(c *gin.Context, serverID string) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		return
 	}
-
-	client, err := sshDomain.NewClient(srv, h.encryptor, h.hostKeyCallback)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create ssh client: %w", err)
-	}
-
-	if err := client.Connect(srv.Host, srv.Port); err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
-	return client, nil
+	h.connectionPool.Release(userID.(string), serverID)
 }
 
 // executeCommand 执行 SSH 命令
@@ -165,19 +159,19 @@ func (h *DockerHandler) ListContainers(c *gin.Context) {
 	serverID := c.Param("serverId")
 	all := c.DefaultQuery("all", "true") == "true"
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := "docker ps --format '{{json .}}'"
 	if all {
 		cmd = "docker ps -a --format '{{json .}}'"
 	}
 
-	output, err := h.executeCommand(client, cmd)
+	output, err := h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -207,19 +201,19 @@ func (h *DockerHandler) ListContainersSSE(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		h.sendSSEEvent(c, "error", map[string]string{"error": err.Error()})
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := "docker ps --format '{{json .}}'"
 	if all {
 		cmd = "docker ps -a --format '{{json .}}'"
 	}
 
-	output, err := h.executeCommand(client, cmd)
+	output, err := h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		h.sendSSEEvent(c, "error", map[string]string{"error": err.Error()})
 		return
@@ -243,7 +237,7 @@ func (h *DockerHandler) ListContainersSSE(c *gin.Context) {
 
 	// 3. 逐个检查更新状态并流式返回
 	for _, container := range runningContainers {
-		status := h.checkSingleImageUpdate(client, container.ID)
+		status := h.checkSingleImageUpdate(pooledConn.Client, container.ID)
 		status.ContainerID = container.ID
 		h.sendSSEEvent(c, "update_status", status)
 		c.Writer.Flush()
@@ -270,15 +264,15 @@ func (h *DockerHandler) GetContainerLogs(c *gin.Context) {
 	containerID := c.Param("id")
 	tail := c.DefaultQuery("tail", "100")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := fmt.Sprintf("docker logs --tail %s %s 2>&1", tail, containerID)
-	output, err := h.executeCommand(client, cmd)
+	output, err := h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		// Docker logs 可能返回错误码但仍有输出
 		if output == "" {
@@ -300,15 +294,15 @@ func (h *DockerHandler) StartContainer(c *gin.Context) {
 	serverID := c.Param("serverId")
 	containerID := c.Param("id")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := fmt.Sprintf("docker start %s", containerID)
-	_, err = h.executeCommand(client, cmd)
+	_, err = h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -322,15 +316,15 @@ func (h *DockerHandler) StopContainer(c *gin.Context) {
 	serverID := c.Param("serverId")
 	containerID := c.Param("id")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := fmt.Sprintf("docker stop %s", containerID)
-	_, err = h.executeCommand(client, cmd)
+	_, err = h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -344,15 +338,15 @@ func (h *DockerHandler) RestartContainer(c *gin.Context) {
 	serverID := c.Param("serverId")
 	containerID := c.Param("id")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := fmt.Sprintf("docker restart %s", containerID)
-	_, err = h.executeCommand(client, cmd)
+	_, err = h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -366,15 +360,15 @@ func (h *DockerHandler) PauseContainer(c *gin.Context) {
 	serverID := c.Param("serverId")
 	containerID := c.Param("id")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := fmt.Sprintf("docker pause %s", containerID)
-	_, err = h.executeCommand(client, cmd)
+	_, err = h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -388,15 +382,15 @@ func (h *DockerHandler) UnpauseContainer(c *gin.Context) {
 	serverID := c.Param("serverId")
 	containerID := c.Param("id")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := fmt.Sprintf("docker unpause %s", containerID)
-	_, err = h.executeCommand(client, cmd)
+	_, err = h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -411,19 +405,19 @@ func (h *DockerHandler) RemoveContainer(c *gin.Context) {
 	containerID := c.Param("id")
 	force := c.DefaultQuery("force", "false") == "true"
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := fmt.Sprintf("docker rm %s", containerID)
 	if force {
 		cmd = fmt.Sprintf("docker rm -f %s", containerID)
 	}
 
-	_, err = h.executeCommand(client, cmd)
+	_, err = h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -436,15 +430,15 @@ func (h *DockerHandler) RemoveContainer(c *gin.Context) {
 func (h *DockerHandler) ListImages(c *gin.Context) {
 	serverID := c.Param("serverId")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := "docker images --format '{{json .}}'"
-	output, err := h.executeCommand(client, cmd)
+	output, err := h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -461,15 +455,15 @@ func (h *DockerHandler) ListImages(c *gin.Context) {
 func (h *DockerHandler) GetSystemInfo(c *gin.Context) {
 	serverID := c.Param("serverId")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := `docker info --format '{"Containers":{{.Containers}},"ContainersRunning":{{.ContainersRunning}},"ContainersPaused":{{.ContainersPaused}},"ContainersStopped":{{.ContainersStopped}},"Images":{{.Images}},"ServerVersion":"{{.ServerVersion}}","Driver":"{{.Driver}}","MemTotal":{{.MemTotal}},"NCPU":{{.NCPU}}}'`
-	output, err := h.executeCommand(client, cmd)
+	output, err := h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -485,15 +479,15 @@ func (h *DockerHandler) GetSystemInfo(c *gin.Context) {
 func (h *DockerHandler) GetStats(c *gin.Context) {
 	serverID := c.Param("serverId")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	cmd := "docker stats --no-stream --format '{{json .}}'"
-	output, err := h.executeCommand(client, cmd)
+	output, err := h.executeCommand(pooledConn.Client, cmd)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
@@ -517,15 +511,15 @@ type DockerResourcesResponse struct {
 func (h *DockerHandler) GetResources(c *gin.Context) {
 	serverID := c.Param("serverId")
 
-	client, err := h.createSSHClient(c, serverID)
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
 		return
 	}
-	defer client.Close()
+	defer h.releaseConnection(c, serverID)
 
 	// 检查 Docker 是否安装
-	checkOutput, err := h.executeCommand(client, "which docker 2>/dev/null || command -v docker 2>/dev/null")
+	checkOutput, err := h.executeCommand(pooledConn.Client, "which docker 2>/dev/null || command -v docker 2>/dev/null")
 	if err != nil || strings.TrimSpace(checkOutput) == "" {
 		RespondSuccess(c, DockerResourcesResponse{
 			DockerInstalled: false,
@@ -542,7 +536,7 @@ echo "=== INFO ==="
 docker info --format '{"Containers":{{.Containers}},"ContainersRunning":{{.ContainersRunning}},"ContainersPaused":{{.ContainersPaused}},"ContainersStopped":{{.ContainersStopped}},"Images":{{.Images}},"ServerVersion":"{{.ServerVersion}}","Driver":"{{.Driver}}","MemTotal":{{.MemTotal}},"NCPU":{{.NCPU}}}' 2>/dev/null || echo '{}'
 `
 
-	output, err := h.executeCommand(client, script)
+	output, err := h.executeCommand(pooledConn.Client, script)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
