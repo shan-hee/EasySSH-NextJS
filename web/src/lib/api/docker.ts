@@ -7,7 +7,6 @@ import type {
   ContainerStats,
   DockerImage,
   DockerSystemInfo,
-  DockerDataResponse,
 } from "@/components/terminal/docker/types"
 
 /**
@@ -36,17 +35,19 @@ export interface ContainerLogsResponse {
 }
 
 /**
+ * 资源页签响应（仅 stats + systemInfo）
+ */
+export interface ResourcesResponse {
+  stats: ContainerStats[]
+  systemInfo: DockerSystemInfo | null
+  dockerInstalled: boolean
+  error?: string
+}
+
+/**
  * Docker API 服务
  */
 export const dockerApi = {
-  /**
-   * 获取所有 Docker 数据（容器、镜像、统计、系统信息）
-   * 单次请求获取所有数据，减少网络开销
-   */
-  async getAllData(serverId: string): Promise<DockerDataResponse> {
-    return apiFetch<DockerDataResponse>(`/docker/${serverId}/all`)
-  },
-
   /**
    * 获取容器列表
    */
@@ -155,5 +156,12 @@ export const dockerApi = {
   async getSystemInfo(serverId: string): Promise<DockerSystemInfo> {
     const res = await apiFetch<{ data: DockerSystemInfo }>(`/docker/${serverId}/system`)
     return res.data
+  },
+
+  /**
+   * 获取资源页签数据（仅 stats + systemInfo）
+   */
+  async getResources(serverId: string): Promise<ResourcesResponse> {
+    return apiFetch<ResourcesResponse>(`/docker/${serverId}/resources`)
   },
 }

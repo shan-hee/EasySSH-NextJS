@@ -5,16 +5,19 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Package } from 'lucide-react'
+import { Package, RefreshCw } from 'lucide-react'
 import type { DockerImage } from '../types'
 import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 interface ImageListProps {
   images: DockerImage[]
+  onRefresh: () => void
+  isLoading?: boolean
 }
 
-export function ImageList({ images }: ImageListProps) {
+export function ImageList({ images, onRefresh, isLoading = false }: ImageListProps) {
   const t = useTranslations('terminal')
 
   // 格式化大小
@@ -57,9 +60,22 @@ export function ImageList({ images }: ImageListProps) {
 
   return (
     <div className="flex flex-col">
-      {/* 统计 */}
-      <div className="text-xs text-muted-foreground mb-2">
-        {t('dockerImagesCount', { count: images.length })}
+      {/* 统计 + 刷新按钮 */}
+      <div className="flex items-center pb-2 mb-2 border-b border-border">
+        <span className="text-xs text-muted-foreground">
+          {t('dockerImagesCount', { count: images.length })}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 ml-auto"
+          onClick={onRefresh}
+          disabled={isLoading}
+        >
+          <RefreshCw
+            className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')}
+          />
+        </Button>
       </div>
 
       {/* 镜像列表 */}

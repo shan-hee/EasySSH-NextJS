@@ -87,16 +87,6 @@ type DockerSystemInfo struct {
 	CPUs              int    `json:"cpus"`
 }
 
-// DockerDataResponse 完整 Docker 数据响应
-type DockerDataResponse struct {
-	Containers      []DockerContainer `json:"containers"`
-	Stats           []ContainerStats  `json:"stats"`
-	Images          []DockerImage     `json:"images"`
-	SystemInfo      *DockerSystemInfo `json:"systemInfo"`
-	DockerInstalled bool              `json:"dockerInstalled"`
-	Error           string            `json:"error,omitempty"`
-}
-
 // DockerHandler Docker 处理器
 type DockerHandler struct {
 	serverService     server.Service
@@ -170,78 +160,6 @@ func (h *DockerHandler) executeCommand(client *sshDomain.Client, cmd string) (st
 	return string(output), nil
 }
 
-// GetAllData 获取所有 Docker 数据
-func (h *DockerHandler) GetAllData(c *gin.Context) {
-	serverID := c.Param("serverId")
-
-	client, err := h.createSSHClient(c, serverID)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
-		return
-	}
-	defer client.Close()
-
-	// 检查 Docker 是否安装
-	checkOutput, err := h.executeCommand(client, "which docker 2>/dev/null || command -v docker 2>/dev/null")
-	if err != nil || strings.TrimSpace(checkOutput) == "" {
-		RespondSuccess(c, DockerDataResponse{
-			DockerInstalled: false,
-			Error:           "Docker not installed or not accessible",
-		})
-		return
-	}
-
-	// 批量获取 Docker 数据
-	script := `
-echo "=== CONTAINERS ==="
-docker ps -a --format '{{json .}}' 2>/dev/null || echo '[]'
-echo "=== STATS ==="
-docker stats --no-stream --format '{{json .}}' 2>/dev/null || echo '[]'
-echo "=== IMAGES ==="
-docker images --format '{{json .}}' 2>/dev/null || echo '[]'
-echo "=== INFO ==="
-docker info --format '{"Containers":{{.Containers}},"ContainersRunning":{{.ContainersRunning}},"ContainersPaused":{{.ContainersPaused}},"ContainersStopped":{{.ContainersStopped}},"Images":{{.Images}},"ServerVersion":"{{.ServerVersion}}","Driver":"{{.Driver}}","MemTotal":{{.MemTotal}},"NCPU":{{.NCPU}}}' 2>/dev/null || echo '{}'
-`
-
-	output, err := h.executeCommand(client, script)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
-		return
-	}
-
-	// 解析输出
-	sections := h.parseSections(output)
-
-	response := DockerDataResponse{
-		DockerInstalled: true,
-		Containers:      make([]DockerContainer, 0),
-		Stats:           make([]ContainerStats, 0),
-		Images:          make([]DockerImage, 0),
-	}
-
-	// 解析容器
-	if containerData, ok := sections["CONTAINERS"]; ok {
-		response.Containers = h.parseContainers(containerData)
-	}
-
-	// 解析统计
-	if statsData, ok := sections["STATS"]; ok {
-		response.Stats = h.parseStats(statsData)
-	}
-
-	// 解析镜像
-	if imageData, ok := sections["IMAGES"]; ok {
-		response.Images = h.parseImages(imageData)
-	}
-
-	// 解析系统信息
-	if infoData, ok := sections["INFO"]; ok {
-		response.SystemInfo = h.parseSystemInfo(infoData)
-	}
-
-	RespondSuccess(c, response)
-}
-
 // ListContainers 获取容器列表
 func (h *DockerHandler) ListContainers(c *gin.Context) {
 	serverID := c.Param("serverId")
@@ -270,6 +188,80 @@ func (h *DockerHandler) ListContainers(c *gin.Context) {
 		"data":  containers,
 		"total": len(containers),
 	})
+}
+
+// SSE 事件类型
+type SSEContainerEvent struct {
+	Type string      `json:"type"` // "containers" | "update_status" | "done"
+	Data interface{} `json:"data"`
+}
+
+// ListContainersSSE 获取容器列表（SSE 流式响应，包含更新检查）
+func (h *DockerHandler) ListContainersSSE(c *gin.Context) {
+	serverID := c.Param("serverId")
+	all := c.DefaultQuery("all", "true") == "true"
+
+	// 设置 SSE 响应头
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	client, err := h.createSSHClient(c, serverID)
+	if err != nil {
+		h.sendSSEEvent(c, "error", map[string]string{"error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	cmd := "docker ps --format '{{json .}}'"
+	if all {
+		cmd = "docker ps -a --format '{{json .}}'"
+	}
+
+	output, err := h.executeCommand(client, cmd)
+	if err != nil {
+		h.sendSSEEvent(c, "error", map[string]string{"error": err.Error()})
+		return
+	}
+
+	containers := h.parseContainers(output)
+
+	// 1. 先发送容器列表
+	h.sendSSEEvent(c, "containers", map[string]interface{}{
+		"data":  containers,
+		"total": len(containers),
+	})
+
+	// 2. 收集运行中的容器
+	var runningContainers []DockerContainer
+	for _, container := range containers {
+		if container.State == "running" {
+			runningContainers = append(runningContainers, container)
+		}
+	}
+
+	// 3. 逐个检查更新状态并流式返回
+	for _, container := range runningContainers {
+		status := h.checkSingleImageUpdate(client, container.ID)
+		status.ContainerID = container.ID
+		h.sendSSEEvent(c, "update_status", status)
+		c.Writer.Flush()
+	}
+
+	// 4. 发送完成事件
+	h.sendSSEEvent(c, "done", nil)
+}
+
+// sendSSEEvent 发送 SSE 事件
+func (h *DockerHandler) sendSSEEvent(c *gin.Context, eventType string, data interface{}) {
+	event := SSEContainerEvent{
+		Type: eventType,
+		Data: data,
+	}
+	jsonData, _ := json.Marshal(event)
+	c.Writer.Write([]byte("data: " + string(jsonData) + "\n\n"))
+	c.Writer.Flush()
 }
 
 // GetContainerLogs 获取容器日志
@@ -511,6 +503,70 @@ func (h *DockerHandler) GetStats(c *gin.Context) {
 	RespondSuccess(c, map[string]interface{}{
 		"data": stats,
 	})
+}
+
+// DockerResourcesResponse 资源页签响应（最小化数据）
+type DockerResourcesResponse struct {
+	Stats           []ContainerStats  `json:"stats"`
+	SystemInfo      *DockerSystemInfo `json:"systemInfo"`
+	DockerInstalled bool              `json:"dockerInstalled"`
+	Error           string            `json:"error,omitempty"`
+}
+
+// GetResources 获取资源页签数据（仅 stats + systemInfo）
+func (h *DockerHandler) GetResources(c *gin.Context) {
+	serverID := c.Param("serverId")
+
+	client, err := h.createSSHClient(c, serverID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
+		return
+	}
+	defer client.Close()
+
+	// 检查 Docker 是否安装
+	checkOutput, err := h.executeCommand(client, "which docker 2>/dev/null || command -v docker 2>/dev/null")
+	if err != nil || strings.TrimSpace(checkOutput) == "" {
+		RespondSuccess(c, DockerResourcesResponse{
+			DockerInstalled: false,
+			Error:           "Docker not installed or not accessible",
+		})
+		return
+	}
+
+	// 仅获取 stats 和 system info
+	script := `
+echo "=== STATS ==="
+docker stats --no-stream --format '{{json .}}' 2>/dev/null || echo '[]'
+echo "=== INFO ==="
+docker info --format '{"Containers":{{.Containers}},"ContainersRunning":{{.ContainersRunning}},"ContainersPaused":{{.ContainersPaused}},"ContainersStopped":{{.ContainersStopped}},"Images":{{.Images}},"ServerVersion":"{{.ServerVersion}}","Driver":"{{.Driver}}","MemTotal":{{.MemTotal}},"NCPU":{{.NCPU}}}' 2>/dev/null || echo '{}'
+`
+
+	output, err := h.executeCommand(client, script)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
+		return
+	}
+
+	// 解析输出
+	sections := h.parseSections(output)
+
+	response := DockerResourcesResponse{
+		DockerInstalled: true,
+		Stats:           make([]ContainerStats, 0),
+	}
+
+	// 解析统计
+	if statsData, ok := sections["STATS"]; ok {
+		response.Stats = h.parseStats(statsData)
+	}
+
+	// 解析系统信息
+	if infoData, ok := sections["INFO"]; ok {
+		response.SystemInfo = h.parseSystemInfo(infoData)
+	}
+
+	RespondSuccess(c, response)
 }
 
 // parseSections 解析脚本输出的各个部分
@@ -877,4 +933,83 @@ func parseSize(s string) int64 {
 
 	v, _ := strconv.ParseFloat(s, 64)
 	return int64(v * float64(multiplier))
+}
+
+// ImageUpdateStatus 镜像更新状态
+type ImageUpdateStatus struct {
+	ContainerID   string `json:"containerId,omitempty"`
+	HasUpdate     bool   `json:"hasUpdate"`
+	CurrentDigest string `json:"currentDigest,omitempty"`
+	RemoteDigest  string `json:"remoteDigest,omitempty"`
+	Error         string `json:"error,omitempty"`
+}
+
+// checkSingleImageUpdate 检查单个容器镜像更新
+func (h *DockerHandler) checkSingleImageUpdate(client *sshDomain.Client, containerID string) ImageUpdateStatus {
+	// 1. 获取容器使用的镜像名称
+	getImageCmd := fmt.Sprintf("docker inspect --format='{{.Config.Image}}' %s 2>/dev/null", containerID)
+	imageName, err := h.executeCommand(client, getImageCmd)
+	if err != nil {
+		return ImageUpdateStatus{
+			HasUpdate: false,
+			Error:     "Failed to get container image: " + err.Error(),
+		}
+	}
+	imageName = strings.TrimSpace(imageName)
+	if imageName == "" {
+		return ImageUpdateStatus{
+			HasUpdate: false,
+			Error:     "Container image name is empty",
+		}
+	}
+
+	// 2. 获取本地镜像的 digest
+	localDigestCmd := fmt.Sprintf("docker inspect --format='{{index .RepoDigests 0}}' %s 2>/dev/null || echo ''", imageName)
+	localDigestOutput, _ := h.executeCommand(client, localDigestCmd)
+	localDigest := strings.TrimSpace(localDigestOutput)
+
+	// 如果没有 RepoDigests（本地构建的镜像），使用镜像 ID
+	if localDigest == "" || localDigest == "<no value>" {
+		localIdCmd := fmt.Sprintf("docker inspect --format='{{.Id}}' %s 2>/dev/null || echo ''", imageName)
+		localIdOutput, _ := h.executeCommand(client, localIdCmd)
+		localDigest = strings.TrimSpace(localIdOutput)
+	}
+
+	// 提取 digest 部分（去掉镜像名前缀）
+	if strings.Contains(localDigest, "@") {
+		parts := strings.Split(localDigest, "@")
+		if len(parts) == 2 {
+			localDigest = parts[1]
+		}
+	}
+
+	// 3. 尝试获取远程镜像的 digest
+	remoteDigestCmd := fmt.Sprintf("docker manifest inspect %s 2>/dev/null | grep -m1 '\"digest\"' | cut -d'\"' -f4 || echo ''", imageName)
+	remoteDigestOutput, _ := h.executeCommand(client, remoteDigestCmd)
+	remoteDigest := strings.TrimSpace(remoteDigestOutput)
+
+	// 如果 manifest inspect 不可用，尝试使用 skopeo
+	if remoteDigest == "" {
+		skopeoCmd := fmt.Sprintf("skopeo inspect docker://%s 2>/dev/null | grep -m1 '\"Digest\"' | cut -d'\"' -f4 || echo ''", imageName)
+		skopeoOutput, _ := h.executeCommand(client, skopeoCmd)
+		remoteDigest = strings.TrimSpace(skopeoOutput)
+	}
+
+	// 如果无法获取远程 digest，返回未知状态
+	if remoteDigest == "" {
+		return ImageUpdateStatus{
+			HasUpdate:     false,
+			CurrentDigest: localDigest,
+			Error:         "Unable to check remote image",
+		}
+	}
+
+	// 4. 比较 digest
+	hasUpdate := localDigest != "" && remoteDigest != "" && localDigest != remoteDigest
+
+	return ImageUpdateStatus{
+		HasUpdate:     hasUpdate,
+		CurrentDigest: localDigest,
+		RemoteDigest:  remoteDigest,
+	}
 }

@@ -82,16 +82,6 @@ export type DockerAction = 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 
 // 容器筛选类型
 export type ContainerFilter = 'all' | 'running' | 'stopped'
 
-// Docker API 响应
-export interface DockerDataResponse {
-  containers: DockerContainer[]
-  stats: ContainerStats[]
-  images: DockerImage[]
-  systemInfo: DockerSystemInfo | null
-  dockerInstalled: boolean
-  error?: string
-}
-
 // 状态颜色映射
 export const STATE_COLORS: Record<ContainerState, string> = {
   running: 'bg-green-500',

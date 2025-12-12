@@ -1,12 +1,15 @@
 /**
  * 容器列表组件
+ * - 数据由父组件管理，本组件只负责展示和筛选
  */
 
 'use client'
 
 import { useState, useMemo } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { DockerIcon } from './DockerIcon'
-import type { DockerContainer, ContainerStats, ContainerFilter } from '../types'
+import { Button } from '@/components/ui/button'
+import type { DockerContainer, ContainerFilter } from '../types'
 import { ContainerItem } from './ContainerItem'
 import { ContainerLogs } from './ContainerLogs'
 import { useTranslations } from 'next-intl'
@@ -14,16 +17,16 @@ import { cn } from '@/lib/utils'
 
 interface ContainerListProps {
   containers: DockerContainer[]
-  stats: ContainerStats[]
   serverId: string
   onRefresh: () => void
+  isLoading?: boolean
 }
 
 export function ContainerList({
   containers,
-  stats,
   serverId,
   onRefresh,
+  isLoading = false,
 }: ContainerListProps) {
   const t = useTranslations('terminal')
   const [filter, setFilter] = useState<ContainerFilter>('all')
@@ -32,19 +35,6 @@ export function ContainerList({
     id: string
     name: string
   } | null>(null)
-
-  // 创建 stats 映射表
-  const statsMap = useMemo(() => {
-    const map = new Map<string, ContainerStats>()
-    stats.forEach((s) => {
-      map.set(s.containerId, s)
-      // 也用名称作为 key（有些情况下 ID 可能是短 ID）
-      if (s.name) {
-        map.set(s.name, s)
-      }
-    })
-    return map
-  }, [stats])
 
   // 根据过滤条件筛选容器
   const filteredContainers = useMemo(() => {
@@ -71,24 +61,6 @@ export function ContainerList({
     setLogsOpen(true)
   }
 
-  // 获取容器的统计数据
-  const getContainerStats = (container: DockerContainer) => {
-    // 先尝试用完整 ID
-    let stat = statsMap.get(container.id)
-    if (stat) return stat
-
-    // 尝试用短 ID（前 12 位）
-    stat = statsMap.get(container.id.slice(0, 12))
-    if (stat) return stat
-
-    // 尝试用名称
-    const name = container.names?.[0]?.replace(/^\//, '')
-    if (name) {
-      stat = statsMap.get(name)
-    }
-    return stat
-  }
-
   const filters: { key: ContainerFilter; label: string; count: number }[] = [
     { key: 'all', label: t('dockerFilterAll'), count: counts.all },
     { key: 'running', label: t('dockerFilterRunning'), count: counts.running },
@@ -97,8 +69,8 @@ export function ContainerList({
 
   return (
     <div className="flex flex-col">
-      {/* 过滤器 */}
-      <div className="flex gap-1 pb-2 mb-2 border-b border-border">
+      {/* 过滤器 + 刷新按钮 */}
+      <div className="flex items-center gap-1 pb-2 mb-2 border-b border-border">
         {filters.map((f) => (
           <button
             key={f.key}
@@ -113,6 +85,17 @@ export function ContainerList({
             {f.label} ({f.count})
           </button>
         ))}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 ml-auto"
+          onClick={onRefresh}
+          disabled={isLoading}
+        >
+          <RefreshCw
+            className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')}
+          />
+        </Button>
       </div>
 
       {/* 容器列表 */}
@@ -127,7 +110,6 @@ export function ContainerList({
             <ContainerItem
               key={container.id}
               container={container}
-              stats={getContainerStats(container)}
               serverId={serverId}
               onRefresh={onRefresh}
               onViewLogs={handleViewLogs}

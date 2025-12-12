@@ -1,13 +1,14 @@
 /**
  * Docker 管理弹窗组件
  * - 工具栏统计：来自监控 WebSocket（实时）
- * - 弹窗详情：当检测到容器数量 > 0 时自动获取一次，后续仅手动刷新
+ * - 弹窗详情：按需加载，使用 API 获取数据
+ * - 数据缓存：关闭弹窗后保留数据，再次打开显示缓存
  */
 
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { RefreshCw, AlertCircle } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { AlertCircle } from 'lucide-react'
 import { DockerIcon } from './components/DockerIcon'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,7 +24,38 @@ import { ContainerList } from './components/ContainerList'
 import { ImageList } from './components/ImageList'
 import { DockerOverview } from './components/DockerOverview'
 import { cn } from '@/lib/utils'
-import type { DockerDataResponse } from './types'
+import { dockerApi } from '@/lib/api/docker'
+import type {
+  DockerContainer,
+  DockerImage,
+  ContainerStats,
+  DockerSystemInfo,
+} from './types'
+
+// 页签类型
+type TabValue = 'containers' | 'images' | 'resources'
+
+// 容器页签数据
+interface ContainersTabData {
+  containers: DockerContainer[]
+  dockerInstalled: boolean
+  error?: string
+}
+
+// 镜像页签数据
+interface ImagesTabData {
+  images: DockerImage[]
+  dockerInstalled: boolean
+  error?: string
+}
+
+// 资源页签数据
+interface ResourcesTabData {
+  stats: ContainerStats[]
+  systemInfo: DockerSystemInfo | null
+  dockerInstalled: boolean
+  error?: string
+}
 
 interface DockerPopoverProps {
   serverId: string
@@ -39,48 +71,128 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
     (state) => state.connections.get(serverId)?.metrics?.docker
   )
 
-  // 弹窗详细数据状态
-  const [detailData, setDetailData] = useState<DockerDataResponse | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailError, setDetailError] = useState<string | null>(null)
-  const hasFetchedRef = useRef(false)
+  // 当前页签
+  const [activeTab, setActiveTab] = useState<TabValue>('containers')
 
-  const requestDockerData = useMonitorStore((state) => state.requestDockerData)
+  // 各页签数据状态（缓存）
+  const [containersData, setContainersData] = useState<ContainersTabData | null>(null)
+  const [imagesData, setImagesData] = useState<ImagesTabData | null>(null)
+  const [resourcesData, setResourcesData] = useState<ResourcesTabData | null>(null)
 
-  // 获取详细数据
-  const fetchDetailData = useCallback(async () => {
-    setDetailLoading(true)
-    setDetailError(null)
+  // 各页签加载状态
+  const [containersLoading, setContainersLoading] = useState(false)
+  const [imagesLoading, setImagesLoading] = useState(false)
+  const [resourcesLoading, setResourcesLoading] = useState(false)
+
+  // 各页签错误状态
+  const [containersError, setContainersError] = useState<string | null>(null)
+  const [imagesError, setImagesError] = useState<string | null>(null)
+  const [resourcesError, setResourcesError] = useState<string | null>(null)
+
+  // 获取容器数据
+  const fetchContainersData = useCallback(async () => {
+    setContainersLoading(true)
+    setContainersError(null)
     try {
-      const data = await requestDockerData(serverId)
-      setDetailData(data)
-      setDetailError(data.error || null)
+      const res = await dockerApi.listContainers(serverId)
+      setContainersData({
+        containers: res.data,
+        dockerInstalled: true,
+      })
     } catch (err) {
-      setDetailError(String(err))
+      const errMsg = String(err)
+      if (errMsg.includes('not installed') || errMsg.includes('not found')) {
+        setContainersData({ containers: [], dockerInstalled: false, error: errMsg })
+      } else {
+        setContainersError(errMsg)
+      }
     } finally {
-      setDetailLoading(false)
+      setContainersLoading(false)
     }
-  }, [serverId, requestDockerData])
+  }, [serverId])
 
-  // 监听 Docker 容器数量，当数量 > 0 且尚未获取过详情时自动获取
-  useEffect(() => {
-    if (
-      isConnected &&
-      dockerStats?.dockerInstalled &&
-      dockerStats.containersTotal > 0 &&
-      !hasFetchedRef.current
-    ) {
-      hasFetchedRef.current = true
-      fetchDetailData()
+  // 获取镜像数据
+  const fetchImagesData = useCallback(async () => {
+    setImagesLoading(true)
+    setImagesError(null)
+    try {
+      const res = await dockerApi.listImages(serverId)
+      setImagesData({
+        images: res.data,
+        dockerInstalled: true,
+      })
+    } catch (err) {
+      const errMsg = String(err)
+      if (errMsg.includes('not installed') || errMsg.includes('not found')) {
+        setImagesData({ images: [], dockerInstalled: false, error: errMsg })
+      } else {
+        setImagesError(errMsg)
+      }
+    } finally {
+      setImagesLoading(false)
     }
-  }, [isConnected, dockerStats, fetchDetailData])
+  }, [serverId])
 
-  // 工具栏显示：优先使用监控数据，否则显示 --/--
+  // 获取资源数据
+  const fetchResourcesData = useCallback(async () => {
+    setResourcesLoading(true)
+    setResourcesError(null)
+    try {
+      const res = await dockerApi.getResources(serverId)
+      setResourcesData({
+        stats: res.stats,
+        systemInfo: res.systemInfo,
+        dockerInstalled: res.dockerInstalled,
+      })
+    } catch (err) {
+      const errMsg = String(err)
+      if (errMsg.includes('not installed') || errMsg.includes('not found')) {
+        setResourcesData({
+          stats: [],
+          systemInfo: null,
+          dockerInstalled: false,
+          error: errMsg,
+        })
+      } else {
+        setResourcesError(errMsg)
+      }
+    } finally {
+      setResourcesLoading(false)
+    }
+  }, [serverId])
+
+  // 页签切换处理 - 按需加载（只在首次加载）
+  const handleTabChange = useCallback((value: string) => {
+    const tab = value as TabValue
+    setActiveTab(tab)
+
+    // 按需加载：只有在数据不存在时才获取
+    if (tab === 'containers' && !containersData && !containersLoading) {
+      fetchContainersData()
+    } else if (tab === 'images' && !imagesData && !imagesLoading) {
+      fetchImagesData()
+    } else if (tab === 'resources' && !resourcesData && !resourcesLoading) {
+      fetchResourcesData()
+    }
+  }, [
+    containersData, containersLoading, fetchContainersData,
+    imagesData, imagesLoading, fetchImagesData,
+    resourcesData, resourcesLoading, fetchResourcesData,
+  ])
+
+  // 弹窗打开时首次加载容器数据
+  const handleOpenChange = useCallback((isOpen: boolean) => {
+    setOpen(isOpen)
+    if (isOpen && !containersData && !containersLoading) {
+      fetchContainersData()
+    }
+  }, [containersData, containersLoading, fetchContainersData])
+
+  // 工具栏显示
   const runningCount = dockerStats?.containersRunning ?? 0
   const totalCount = dockerStats?.containersTotal ?? 0
   const dockerInstalled = dockerStats?.dockerInstalled ?? false
 
-  // 状态颜色
   const getStatusColor = () => {
     if (!isConnected || !dockerStats) return 'text-muted-foreground'
     if (!dockerInstalled) return 'text-muted-foreground'
@@ -89,7 +201,7 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -116,10 +228,20 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
         sideOffset={8}
       >
         <DockerPopoverContent
-          data={detailData}
-          loading={detailLoading}
-          error={detailError}
-          refresh={fetchDetailData}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          containersData={containersData}
+          imagesData={imagesData}
+          resourcesData={resourcesData}
+          containersLoading={containersLoading}
+          imagesLoading={imagesLoading}
+          resourcesLoading={resourcesLoading}
+          containersError={containersError}
+          imagesError={imagesError}
+          resourcesError={resourcesError}
+          fetchContainersData={fetchContainersData}
+          fetchImagesData={fetchImagesData}
+          fetchResourcesData={fetchResourcesData}
           serverId={serverId}
         />
       </PopoverContent>
@@ -129,22 +251,43 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
 
 // 弹窗内容组件
 function DockerPopoverContent({
-  data,
-  loading,
-  error,
-  refresh,
+  activeTab,
+  onTabChange,
+  containersData,
+  imagesData,
+  resourcesData,
+  containersLoading,
+  imagesLoading,
+  resourcesLoading,
+  containersError,
+  imagesError,
+  resourcesError,
+  fetchContainersData,
+  fetchImagesData,
+  fetchResourcesData,
   serverId,
 }: {
-  data: DockerDataResponse | null
-  loading: boolean
-  error: string | null
-  refresh: () => Promise<void>
+  activeTab: TabValue
+  onTabChange: (value: string) => void
+  containersData: ContainersTabData | null
+  imagesData: ImagesTabData | null
+  resourcesData: ResourcesTabData | null
+  containersLoading: boolean
+  imagesLoading: boolean
+  resourcesLoading: boolean
+  containersError: string | null
+  imagesError: string | null
+  resourcesError: string | null
+  fetchContainersData: () => Promise<void>
+  fetchImagesData: () => Promise<void>
+  fetchResourcesData: () => Promise<void>
   serverId: string
 }) {
   const t = useTranslations('terminal')
 
-  // Docker 未安装
-  if (data && !data.dockerInstalled) {
+  // 检查 Docker 是否安装
+  const anyData = containersData || imagesData || resourcesData
+  if (anyData && !anyData.dockerInstalled) {
     return (
       <div className="flex flex-col items-center justify-center py-6 text-center">
         <AlertCircle className="h-8 w-8 text-muted-foreground mb-3" />
@@ -155,95 +298,102 @@ function DockerPopoverContent({
     )
   }
 
-  // 加载中
-  if (loading && !data) {
-    return <DockerSkeleton />
-  }
-
-  // 错误状态
-  if (error && !data) {
-    return (
-      <div className="flex flex-col items-center justify-center py-6 text-center">
-        <AlertCircle className="h-8 w-8 text-destructive mb-3" />
-        <p className="text-sm text-muted-foreground mb-3">{error}</p>
-        <Button variant="outline" size="sm" onClick={refresh}>
-          {t('retry')}
-        </Button>
-      </div>
-    )
-  }
-
-  const runningCount = data?.containers.filter(c => c.state === 'running').length ?? 0
-
   return (
     <div className="space-y-4">
-      {/* 标题 - 居中对齐，与网络延迟弹窗一致 */}
-      <div className="flex items-center justify-between">
+      {/* 标题 */}
+      <div className="flex items-center">
         <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
           <DockerIcon className="h-4 w-4" />
-          {t('dockerPanelTitle')}:
-          <span className={cn(
-            'inline-block min-w-[3rem] text-center tabular-nums',
-            runningCount > 0 ? 'text-status-connected' : 'text-muted-foreground'
-          )}>
-            {runningCount} {t('dockerOverviewRunning')}
-          </span>
+          {t('dockerPanelTitle')}
         </h4>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={refresh}
-          disabled={loading}
-        >
-          <RefreshCw
-            className={cn('h-3.5 w-3.5', loading && 'animate-spin')}
-          />
-        </Button>
       </div>
 
-      {/* 标签页内容 */}
-      <Tabs defaultValue="containers" className="w-full">
+      {/* 标签页 */}
+      <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
         <TabsList className="w-full justify-start bg-muted/50 p-0.5 h-8">
           <TabsTrigger
             value="containers"
             className="text-xs px-3 py-1 h-7 data-[state=active]:bg-background"
           >
-            {t('dockerTabContainers')} ({data?.containers.length ?? 0})
+            {t('dockerTabContainers')} ({containersData?.containers.length ?? 0})
           </TabsTrigger>
           <TabsTrigger
             value="images"
             className="text-xs px-3 py-1 h-7 data-[state=active]:bg-background"
           >
-            {t('dockerTabImages')} ({data?.images.length ?? 0})
+            {t('dockerTabImages')} ({imagesData?.images.length ?? 0})
           </TabsTrigger>
           <TabsTrigger
-            value="overview"
+            value="resources"
             className="text-xs px-3 py-1 h-7 data-[state=active]:bg-background"
           >
-            {t('dockerTabOverview')}
+            {t('dockerTabResources')}
           </TabsTrigger>
         </TabsList>
 
+        {/* 容器页签 */}
         <TabsContent value="containers" className="mt-3 max-h-[320px] overflow-y-auto scrollbar-custom">
-          <ContainerList
-            containers={data?.containers ?? []}
-            stats={data?.stats ?? []}
-            serverId={serverId}
-            onRefresh={refresh}
-          />
+          {containersLoading && !containersData ? (
+            <DockerSkeleton />
+          ) : containersError && !containersData ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <AlertCircle className="h-8 w-8 text-destructive mb-3" />
+              <p className="text-sm text-muted-foreground mb-3">{containersError}</p>
+              <Button variant="outline" size="sm" onClick={fetchContainersData}>
+                {t('retry')}
+              </Button>
+            </div>
+          ) : (
+            <ContainerList
+              containers={containersData?.containers ?? []}
+              serverId={serverId}
+              onRefresh={fetchContainersData}
+              isLoading={containersLoading}
+            />
+          )}
         </TabsContent>
 
+        {/* 镜像页签 */}
         <TabsContent value="images" className="mt-3 max-h-[320px] overflow-y-auto scrollbar-custom">
-          <ImageList images={data?.images ?? []} />
+          {imagesLoading && !imagesData ? (
+            <DockerSkeleton />
+          ) : imagesError && !imagesData ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <AlertCircle className="h-8 w-8 text-destructive mb-3" />
+              <p className="text-sm text-muted-foreground mb-3">{imagesError}</p>
+              <Button variant="outline" size="sm" onClick={fetchImagesData}>
+                {t('retry')}
+              </Button>
+            </div>
+          ) : (
+            <ImageList
+              images={imagesData?.images ?? []}
+              onRefresh={fetchImagesData}
+              isLoading={imagesLoading}
+            />
+          )}
         </TabsContent>
 
-        <TabsContent value="overview" className="mt-3 max-h-[320px] overflow-y-auto scrollbar-custom">
-          <DockerOverview
-            systemInfo={data?.systemInfo ?? null}
-            containers={data?.containers ?? []}
-            stats={data?.stats ?? []}
-          />
+        {/* 资源页签 */}
+        <TabsContent value="resources" className="mt-3 max-h-[320px] overflow-y-auto scrollbar-custom">
+          {resourcesLoading && !resourcesData ? (
+            <DockerSkeleton />
+          ) : resourcesError && !resourcesData ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <AlertCircle className="h-8 w-8 text-destructive mb-3" />
+              <p className="text-sm text-muted-foreground mb-3">{resourcesError}</p>
+              <Button variant="outline" size="sm" onClick={fetchResourcesData}>
+                {t('retry')}
+              </Button>
+            </div>
+          ) : (
+            <DockerOverview
+              systemInfo={resourcesData?.systemInfo ?? null}
+              stats={resourcesData?.stats ?? []}
+              onRefresh={fetchResourcesData}
+              isLoading={resourcesLoading}
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>

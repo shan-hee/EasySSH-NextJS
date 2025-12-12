@@ -1,26 +1,28 @@
 /**
- * Docker 概览组件
+ * Docker 资源页签组件
  */
 
 'use client'
 
-import { Package, Cpu, HardDrive, Server } from 'lucide-react'
-import { DockerIcon } from './DockerIcon'
-import type { DockerSystemInfo, DockerContainer, ContainerStats } from '../types'
+import { Cpu, HardDrive, Server, Database, RefreshCw } from 'lucide-react'
+import type { DockerSystemInfo, ContainerStats } from '../types'
 import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
 import { useMemo } from 'react'
+import { Button } from '@/components/ui/button'
 
 interface DockerOverviewProps {
   systemInfo: DockerSystemInfo | null
-  containers: DockerContainer[]
   stats: ContainerStats[]
+  onRefresh: () => void
+  isLoading?: boolean
 }
 
 export function DockerOverview({
   systemInfo,
-  containers,
   stats,
+  onRefresh,
+  isLoading = false,
 }: DockerOverviewProps) {
   const t = useTranslations('terminal')
 
@@ -44,138 +46,126 @@ export function DockerOverview({
     return { cpu: totalCpu, memory: totalMemory }
   }, [stats])
 
-  // 统计卡片数据
+  // 获取运行中容器资源使用（直接从 stats 获取，stats 仅包含运行中容器）
+  const containersWithStats = useMemo(() => {
+    return stats
+      .map((s) => ({
+        id: s.containerId,
+        name: s.name || s.containerId.slice(0, 12),
+        cpu: s.cpuPercent,
+        memory: s.memoryUsage,
+      }))
+      .sort((a, b) => b.cpu - a.cpu) // 按 CPU 使用率排序
+  }, [stats])
+
+  // 顶部 4 个指标卡片
   const statCards = [
     {
-      icon: DockerIcon,
-      label: t('dockerOverviewRunning'),
-      value: systemInfo?.containersRunning ?? containers.filter(c => c.state === 'running').length,
-      color: 'text-status-connected',
-    },
-    {
-      icon: DockerIcon,
-      label: t('dockerOverviewStopped'),
-      value: systemInfo?.containersStopped ?? containers.filter(c => c.state !== 'running').length,
-      color: 'text-muted-foreground',
-    },
-    {
-      icon: Package,
-      label: t('dockerOverviewImages'),
-      value: systemInfo?.imagesCount ?? 0,
+      icon: Cpu,
+      label: t('dockerTotalCpu'),
+      value: `${resourceUsage.cpu.toFixed(1)}%`,
       color: 'text-blue-500',
+    },
+    {
+      icon: HardDrive,
+      label: t('dockerTotalMemory'),
+      value: formatMemory(resourceUsage.memory),
+      color: 'text-green-500',
+    },
+    {
+      icon: Server,
+      label: t('dockerVersion'),
+      value: systemInfo?.serverVersion ?? '-',
+      color: 'text-purple-500',
+    },
+    {
+      icon: Database,
+      label: t('dockerStorageDriver'),
+      value: systemInfo?.storageDriver ?? '-',
+      color: 'text-orange-500',
     },
   ]
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* 顶部 4 个指标卡片 */}
+      <div className="grid grid-cols-4 gap-2">
         {statCards.map((card, index) => (
           <div
             key={index}
-            className="rounded-lg border border-border p-2"
+            className="rounded-lg border border-border p-2 text-center"
           >
-            <div className="flex items-center gap-1.5 mb-1">
+            <div className="flex items-center justify-center gap-1 mb-1">
               <card.icon className={cn('h-3.5 w-3.5', card.color)} />
-              <span className="text-xs text-muted-foreground">{card.label}</span>
             </div>
-            <div className="text-lg font-semibold tabular-nums">{card.value}</div>
+            <div className="text-xs font-semibold tabular-nums truncate" title={card.value}>
+              {card.value}
+            </div>
+            <div className="text-[10px] text-muted-foreground truncate">
+              {card.label}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* 资源使用 */}
+      {/* 容器资源占用列表 */}
       <div className="rounded-lg border border-border p-2.5">
-        <h3 className="text-sm font-medium mb-2">{t('dockerOverviewResources')}</h3>
-        <div className="flex flex-col gap-2.5">
-          {/* CPU */}
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-muted-foreground flex items-center gap-1.5">
-                <Cpu className="h-3.5 w-3.5" />
-                CPU
-              </span>
-              <span className="tabular-nums">{resourceUsage.cpu.toFixed(1)}%</span>
-            </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all"
-                style={{ width: `${Math.min(resourceUsage.cpu, 100)}%` }}
-              />
-            </div>
-          </div>
-
-          {/* 内存 */}
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-muted-foreground flex items-center gap-1.5">
-                <HardDrive className="h-3.5 w-3.5" />
-                {t('dockerOverviewMemory')}
-              </span>
-              <span className="tabular-nums">{formatMemory(resourceUsage.memory)}</span>
-            </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-status-connected rounded-full transition-all"
-                style={{
-                  width: systemInfo?.totalMemory
-                    ? `${Math.min((resourceUsage.memory / systemInfo.totalMemory) * 100, 100)}%`
-                    : '0%',
-                }}
-              />
-            </div>
-          </div>
+        <div className="flex items-center mb-2">
+          <h3 className="text-sm font-medium">{t('dockerResourcesTitle')}</h3>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 ml-auto"
+            onClick={onRefresh}
+            disabled={isLoading}
+          >
+            <RefreshCw
+              className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')}
+            />
+          </Button>
         </div>
+
+        {containersWithStats.length === 0 ? (
+          <div className="text-xs text-muted-foreground text-center py-4">
+            {t('dockerNoRunningContainers')}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {containersWithStats.map((container) => (
+              <div
+                key={container.id}
+                className="flex items-center gap-3 text-xs"
+              >
+                {/* 容器名称 */}
+                <span
+                  className="w-24 truncate font-medium"
+                  title={container.name}
+                >
+                  {container.name}
+                </span>
+
+                {/* CPU 进度条 */}
+                <div className="flex-1 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all"
+                      style={{ width: `${Math.min(container.cpu, 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-12 text-right tabular-nums text-muted-foreground">
+                    {container.cpu.toFixed(1)}%
+                  </span>
+                </div>
+
+                {/* 内存 */}
+                <span className="w-16 text-right tabular-nums text-muted-foreground">
+                  {formatMemory(container.memory)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* 系统信息 */}
-      {systemInfo && (
-        <div className="rounded-lg border border-border p-2.5">
-          <h3 className="text-sm font-medium mb-2">{t('dockerOverviewSystem')}</h3>
-          <div className="flex flex-col gap-1.5 text-xs">
-            <InfoRow
-              icon={Server}
-              label={t('dockerOverviewVersion')}
-              value={systemInfo.serverVersion}
-            />
-            <InfoRow
-              icon={HardDrive}
-              label={t('dockerOverviewStorage')}
-              value={systemInfo.storageDriver}
-            />
-            <InfoRow
-              icon={Cpu}
-              label="CPUs"
-              value={String(systemInfo.cpus)}
-            />
-            <InfoRow
-              icon={HardDrive}
-              label={t('dockerOverviewTotalMemory')}
-              value={formatMemory(systemInfo.totalMemory)}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InfoRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: string
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground flex items-center gap-1.5">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </span>
-      <span className="font-medium">{value}</span>
     </div>
   )
 }

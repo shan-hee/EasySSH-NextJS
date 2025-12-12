@@ -8,7 +8,6 @@ import { useState, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import type {
   DockerContainer,
-  ContainerStats,
   DockerAction,
   ContainerState,
 } from '../types'
@@ -20,7 +19,6 @@ import { useTranslations } from 'next-intl'
 
 interface ContainerItemProps {
   container: DockerContainer
-  stats?: ContainerStats
   serverId: string
   onRefresh: () => void
   onViewLogs: (containerId: string, name: string) => void
@@ -28,7 +26,6 @@ interface ContainerItemProps {
 
 export function ContainerItem({
   container,
-  stats,
   serverId,
   onRefresh,
   onViewLogs,
@@ -41,15 +38,6 @@ export function ContainerItem({
     const name = container.names?.[0] || container.id.slice(0, 12)
     return name.startsWith('/') ? name.slice(1) : name
   }, [container.names, container.id])
-
-  // 格式化内存
-  const formatMemory = (bytes: number) => {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-  }
 
   // 格式化端口
   const formatPorts = () => {
@@ -137,18 +125,6 @@ export function ContainerItem({
         <div className="text-xs text-muted-foreground mb-1.5 pl-4">
           <span className="opacity-60">Ports: </span>
           {ports}
-        </div>
-      )}
-
-      {/* 资源使用（如果有统计数据） */}
-      {stats && (
-        <div className="flex gap-3 text-xs text-muted-foreground mb-1.5 pl-4">
-          <span>
-            CPU: <span className="text-foreground tabular-nums">{stats.cpuPercent.toFixed(1)}%</span>
-          </span>
-          <span>
-            MEM: <span className="text-foreground tabular-nums">{formatMemory(stats.memoryUsage)}</span>
-          </span>
         </div>
       )}
 

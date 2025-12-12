@@ -531,8 +531,8 @@ func main() {
 		dockerRoutes := v1.Group("/docker/:serverId")
 		dockerRoutes.Use(middleware.AuthMiddleware(jwtService))
 		{
-			dockerRoutes.GET("/all", dockerHandler.GetAllData)                         // 获取所有数据
 			dockerRoutes.GET("/containers", dockerHandler.ListContainers)              // 容器列表
+			dockerRoutes.GET("/containers/sse", dockerHandler.ListContainersSSE)       // 容器列表（SSE，含更新检查）
 			dockerRoutes.GET("/containers/:id/logs", dockerHandler.GetContainerLogs)   // 容器日志
 			dockerRoutes.POST("/containers/:id/start", dockerHandler.StartContainer)   // 启动容器
 			dockerRoutes.POST("/containers/:id/stop", dockerHandler.StopContainer)     // 停止容器
@@ -543,6 +543,7 @@ func main() {
 			dockerRoutes.GET("/images", dockerHandler.ListImages)                      // 镜像列表
 			dockerRoutes.GET("/system", dockerHandler.GetSystemInfo)                   // 系统信息
 			dockerRoutes.GET("/stats", dockerHandler.GetStats)                         // 容器统计
+			dockerRoutes.GET("/resources", dockerHandler.GetResources)                 // 资源页签数据（stats + systemInfo）
 		}
 
 		// 监控 WebSocket 路由（需要认证）

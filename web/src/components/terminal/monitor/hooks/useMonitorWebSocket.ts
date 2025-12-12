@@ -116,7 +116,6 @@ export function useMonitorWebSocket({
   const updateStatus = useMonitorStore(state => state.updateStatus)
   const subscribe = useMonitorStore(state => state.subscribe)
   const notifySubscribers = useMonitorStore(state => state.notifySubscribers)
-  const handleDockerResponse = useMonitorStore(state => state.handleDockerResponse)
 
   // ==================== 订阅监控数据更新 ====================
   useEffect(() => {
@@ -489,11 +488,6 @@ export function useMonitorWebSocket({
                 }
               }
 
-              // 处理 Docker 响应消息
-              if (msg && msg.type === 'docker_response' && msg.requestId && msg.data) {
-                handleDockerResponse(msg.requestId, msg.data)
-                return
-              }
             } catch { /* ignore */ }
           }
         } catch (error) {
@@ -549,7 +543,7 @@ export function useMonitorWebSocket({
       onStatusChange?.(WSStatus.ERROR);
       onError?.(error as Error);
     }
-  }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs, getConnection, setConnection, updateMetrics, updateLocalLatency, updateStatus, notifySubscribers, handleDockerResponse]); // 添加 Store 依赖
+  }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs, getConnection, setConnection, updateMetrics, updateLocalLatency, updateStatus, notifySubscribers]); // 添加 Store 依赖
 
   // 断开连接
   const disconnect = useCallback(() => {
