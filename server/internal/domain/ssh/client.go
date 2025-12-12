@@ -1,8 +1,10 @@
 package ssh
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net"
 	"time"
 
 	"github.com/easyssh/server/internal/domain/server"
@@ -76,6 +78,42 @@ func (c *Client) Connect(host string, port int) error {
 	}
 
 	c.conn = conn
+	c.connected = true
+	return nil
+}
+
+// ConnectContext 使用上下文连接到服务器（支持超时/取消）
+func (c *Client) ConnectContext(ctx context.Context, host string, port int) error {
+	// 如果上层没有设置 deadline，则使用客户端配置里的默认超时兜底
+	ctxToUse := ctx
+	if _, ok := ctx.Deadline(); !ok && c.config != nil && c.config.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctxToUse, cancel = context.WithTimeout(ctx, c.config.Timeout)
+		defer cancel()
+	}
+
+	addr := fmt.Sprintf("%s:%d", host, port)
+	dialer := &net.Dialer{}
+	netConn, err := dialer.DialContext(ctxToUse, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+
+	// 让 SSH 握手也受同一 deadline 控制
+	if deadline, ok := ctxToUse.Deadline(); ok {
+		_ = netConn.SetDeadline(deadline)
+	}
+
+	sshConn, chans, reqs, err := ssh.NewClientConn(netConn, addr, c.config)
+	if err != nil {
+		_ = netConn.Close()
+		return fmt.Errorf("failed to establish ssh connection: %w", err)
+	}
+
+	// 清掉握手 deadline，避免影响后续读写
+	_ = netConn.SetDeadline(time.Time{})
+
+	c.conn = ssh.NewClient(sshConn, chans, reqs)
 	c.connected = true
 	return nil
 }

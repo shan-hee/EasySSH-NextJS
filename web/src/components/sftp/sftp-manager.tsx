@@ -74,6 +74,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseFileSize } from "@/lib/format-utils"
+import type { SftpFileItem } from "@/lib/sftp-file-utils"
 import Folder from "@/components/Folder"
 import FileIcon from "@/components/File"
 import { FileEditor } from "@/components/sftp/file-editor"
@@ -88,12 +89,8 @@ import { toast } from "sonner"
 import { computeFloatingPosition } from "@/lib/overlay-position"
 import { setDragSourceSessionId } from "@/lib/drag-state"
 
-interface FileItem {
-  name: string
-  type: "file" | "directory"
-  size: string
-  modified: string
-  permissions: string
+type FileItem = Pick<SftpFileItem, "name" | "type" | "size" | "modified" | "permissions"> & {
+  sizeBytes?: number
 }
 
 type EnhancedFileItem = FileItem & {
@@ -275,7 +272,7 @@ export function SftpManager(props: SftpManagerProps) {
   const enhancedFiles = useMemo<EnhancedFileItem[]>(() => {
     return files.map((file) => ({
       ...file,
-      sizeBytes: parseFileSize(file.size),
+      sizeBytes: file.sizeBytes ?? parseFileSize(file.size),
     }))
   }, [files])
 

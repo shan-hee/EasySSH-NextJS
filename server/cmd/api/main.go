@@ -33,6 +33,7 @@ import (
 	"github.com/easyssh/server/internal/domain/taskscheduler"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
+	"github.com/easyssh/server/internal/domain/sftp"
 	"github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshhostkey"
 	"github.com/easyssh/server/internal/domain/sshkey"
@@ -339,7 +340,14 @@ func main() {
 	)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
-	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback())
+	sftpPoolConfig := &sftp.PoolConfig{
+		MaxIdleTime:            time.Duration(cfg.SFTP.MaxIdleTimeSeconds) * time.Second,
+		CleanupInterval:        time.Duration(cfg.SFTP.CleanupIntervalSeconds) * time.Second,
+		MaxLifeTime:            time.Duration(cfg.SFTP.MaxLifeTimeMinutes) * time.Minute,
+		ConnTimeout:            time.Duration(cfg.SFTP.ConnTimeoutSeconds) * time.Second,
+		MaxSFTPSessionsPerConn: cfg.SFTP.MaxSFTPSessionsPerConn,
+	}
+	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback(), sftpPoolConfig)
 	sftpHandler.SetTransferHandler(sftpTransferWSHandler) // 注入跨服务器传输处理器
 	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), securityService, completionService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService)
@@ -580,6 +588,16 @@ func main() {
 			// 文件内容
 			sftpRoutes.GET("/read", sftpHandler.ReadFile)    // 读取文件
 			sftpRoutes.POST("/write", sftpHandler.WriteFile) // 写入文件
+
+			// 连接管理
+			sftpRoutes.POST("/close", sftpHandler.CloseConnection) // 关闭连接（用户关闭 SFTP 面板时调用）
+		}
+
+		// SFTP 连接池统计路由（需要认证）
+		sftpPoolRoutes := v1.Group("/sftp/pool")
+		sftpPoolRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			sftpPoolRoutes.GET("/stats", sftpHandler.GetPoolStats) // 连接池统计
 		}
 
 		// SFTP 上传进度 WebSocket 路由（需要认证）
@@ -883,6 +901,18 @@ func main() {
 	// 停止任务调度器
 	taskScheduler.Stop()
 	log.Println("✅ Task scheduler stopped")
+
+	// 关闭 SFTP 连接池
+	if sftpHandler != nil {
+		sftpHandler.Close()
+		log.Println("✅ SFTP connection pool closed")
+	}
+
+	// 关闭监控/SSH 连接池
+	if monitorConnectionPool != nil {
+		monitorConnectionPool.Close()
+		log.Println("✅ Monitor connection pool closed")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -46,8 +46,26 @@ func NewClient(sshClient *sshDomain.Client, srv *server.Server) (*Client, error)
 
 // Close 关闭 SFTP 连接
 func (c *Client) Close() error {
+	sftpErr := c.CloseSFTP()
+
+	var sshErr error
+	if c.sshClient != nil {
+		sshErr = c.sshClient.Close()
+		c.sshClient = nil
+	}
+
+	if sftpErr != nil {
+		return sftpErr
+	}
+	return sshErr
+}
+
+// CloseSFTP 仅关闭 SFTP 通道，不关闭底层 SSH（用于 SSH 池化场景）
+func (c *Client) CloseSFTP() error {
 	if c.sftpClient != nil {
-		return c.sftpClient.Close()
+		err := c.sftpClient.Close()
+		c.sftpClient = nil
+		return err
 	}
 	return nil
 }

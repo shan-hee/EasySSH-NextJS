@@ -13,6 +13,7 @@ type Config struct {
 	Database DatabaseConfig
 	Redis    RedisConfig
 	JWT      JWTConfig
+	SFTP     SFTPConfig
 }
 
 // ServerConfig 服务器配置
@@ -56,6 +57,16 @@ type JWTConfig struct {
 	RefreshReuseDetection    bool // 复用检测
 }
 
+// SFTPConfig SFTP/SSH 池化相关配置
+// 目前使用代码默认值，不从环境变量读取
+type SFTPConfig struct {
+	MaxIdleTimeSeconds        int // SSH 空闲回收时间（秒）
+	CleanupIntervalSeconds    int // 清理/keepalive 扫描间隔（秒）
+	MaxLifeTimeMinutes        int // SSH 最大寿命（分钟，0 表示不启用）
+	ConnTimeoutSeconds        int // SSH 建连/keepalive 超时（秒）
+	MaxSFTPSessionsPerConn    int // 单条 SSH 最大并发 SFTP 会话数（0 表示不限制）
+}
+
 // Load 从环境变量加载配置
 func Load() (*Config, error) {
 	config := &Config{
@@ -90,6 +101,13 @@ func Load() (*Config, error) {
 			RefreshAbsoluteExpireDays: getEnvInt("JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS", 30),   // 30 天
 			RefreshRotate:            getEnvBool("JWT_REFRESH_ROTATE", true),               // 默认启用轮换
 			RefreshReuseDetection:    getEnvBool("JWT_REFRESH_REUSE_DETECTION", true),     // 默认启用复用检测
+		},
+		SFTP: SFTPConfig{
+			MaxIdleTimeSeconds:     120, // 2分钟
+			CleanupIntervalSeconds: 30,  // 30秒
+			MaxLifeTimeMinutes:     0,   // 默认不启用
+			ConnTimeoutSeconds:     10,  // 10秒
+			MaxSFTPSessionsPerConn: 8,   // 每条 SSH 默认最多 8 个 SFTP 会话
 		},
 	}
 
@@ -221,6 +239,23 @@ func (c *Config) Validate() error {
 	// 绝对过期必须大于等于闲置过期
 	if c.JWT.RefreshAbsoluteExpireDays < c.JWT.RefreshIdleExpireDays {
 		return fmt.Errorf("JWT refresh token absolute expiration must be greater than or equal to idle expiration")
+	}
+
+	// SFTP/SSH 池化配置验证
+	if c.SFTP.MaxIdleTimeSeconds < 5 || c.SFTP.MaxIdleTimeSeconds > 3600 {
+		return fmt.Errorf("sftp max idle time must be between 5 and 3600 seconds")
+	}
+	if c.SFTP.CleanupIntervalSeconds < 5 || c.SFTP.CleanupIntervalSeconds > 600 {
+		return fmt.Errorf("sftp cleanup interval must be between 5 and 600 seconds")
+	}
+	if c.SFTP.MaxLifeTimeMinutes < 0 || c.SFTP.MaxLifeTimeMinutes > 1440 {
+		return fmt.Errorf("sftp max life time must be between 0 and 1440 minutes")
+	}
+	if c.SFTP.ConnTimeoutSeconds < 1 || c.SFTP.ConnTimeoutSeconds > 120 {
+		return fmt.Errorf("sftp conn timeout must be between 1 and 120 seconds")
+	}
+	if c.SFTP.MaxSFTPSessionsPerConn < 0 || c.SFTP.MaxSFTPSessionsPerConn > 64 {
+		return fmt.Errorf("sftp max sessions per conn must be between 0 and 64")
 	}
 
 	return nil

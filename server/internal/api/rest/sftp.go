@@ -31,16 +31,27 @@ type SFTPHandler struct {
 	uploadWSHandler   *ws.SFTPUploadHandler
 	transferHandler   *ws.SFTPTransferHandler // 跨服务器直连传输处理器
 	hostKeyCallback   ssh.HostKeyCallback     // SSH主机密钥验证回调
+	pool              *sftp.Pool              // SFTP 连接池
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
-func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor, uploadWSHandler *ws.SFTPUploadHandler, hostKeyCallback ssh.HostKeyCallback) *SFTPHandler {
+func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor, uploadWSHandler *ws.SFTPUploadHandler, hostKeyCallback ssh.HostKeyCallback, poolConfig *sftp.PoolConfig) *SFTPHandler {
+	// 创建连接池
+	pool := sftp.NewPool(
+		poolConfig,
+		encryptor,
+		hostKeyCallback,
+		serverService,
+		serverRepo,
+	)
+
 	return &SFTPHandler{
 		serverService:   serverService,
 		serverRepo:      serverRepo,
 		encryptor:       encryptor,
 		uploadWSHandler: uploadWSHandler,
 		hostKeyCallback: hostKeyCallback,
+		pool:            pool,
 	}
 }
 
@@ -49,7 +60,34 @@ func (h *SFTPHandler) SetTransferHandler(handler *ws.SFTPTransferHandler) {
 	h.transferHandler = handler
 }
 
+// GetPool 获取连接池（用于外部访问）
+func (h *SFTPHandler) GetPool() *sftp.Pool {
+	return h.pool
+}
+
+// Close 关闭 SFTP 处理器（关闭连接池）
+func (h *SFTPHandler) Close() {
+	if h.pool != nil {
+		h.pool.CloseAll()
+	}
+}
+
+// getPooledClient 从连接池获取 SFTP 客户端
+// 调用者需要在操作完成后调用 client.Release() 释放连接
+func (h *SFTPHandler) getPooledClient(c *gin.Context, serverID uuid.UUID) (*sftp.PooledClient, error) {
+	// 从上下文获取用户 ID
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// 从连接池获取连接（继承请求 ctx）
+	return h.pool.Get(c.Request.Context(), userID, serverID)
+}
+
 // createSFTPClient 创建 SFTP 客户端（辅助方法）
+// 注意：此方法创建的是非池化连接，用于需要独立连接的场景（如跨服务器传输）
+// 对于普通的文件操作，应使用 getPooledClient
 func (h *SFTPHandler) createSFTPClient(c *gin.Context, serverID uuid.UUID) (*sftp.Client, *server.Server, error) {
 	// 从上下文获取用户 ID
 	userID, err := getUserIDFromContext(c)
@@ -69,8 +107,8 @@ func (h *SFTPHandler) createSFTPClient(c *gin.Context, serverID uuid.UUID) (*sft
 		return nil, nil, fmt.Errorf("failed to create SSH client: %w", err)
 	}
 
-	// 连接到服务器
-	if err := sshClient.Connect(srv.Host, srv.Port); err != nil {
+	// 连接到服务器（继承请求 ctx，可取消）
+	if err := sshClient.ConnectContext(c.Request.Context(), srv.Host, srv.Port); err != nil {
 		sshClient.Close() // 确保关闭连接
 		return nil, nil, fmt.Errorf("failed to connect: %w", err)
 	}
@@ -105,13 +143,13 @@ func (h *SFTPHandler) ListDirectory(c *gin.Context) {
 	// 获取路径参数
 	path := c.DefaultQuery("path", "/")
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release() // 释放回连接池，而不是关闭
 
 	// 列出目录
 	listing, err := sftpClient.ListDirectory(path)
@@ -140,13 +178,13 @@ func (h *SFTPHandler) GetFileInfo(c *gin.Context) {
 		return
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 获取文件信息
 	fileInfo, err := sftpClient.GetFileInfo(path)
@@ -187,13 +225,13 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		remotePath = filepath.Join(remotePath, header.Filename)
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 如果提供了 WebSocket 任务 ID，使用带进度跟踪的上传
 	if wsTaskID != "" && h.uploadWSHandler != nil {
@@ -306,13 +344,13 @@ func (h *SFTPHandler) DownloadFile(c *gin.Context) {
 		return
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 获取文件信息
 	fileInfo, err := sftpClient.GetFileInfo(path)
@@ -355,13 +393,13 @@ func (h *SFTPHandler) CreateDirectory(c *gin.Context) {
 		return
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 创建目录
 	if req.Recursive {
@@ -408,14 +446,14 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 	startTime := time.Now()
 	fmt.Printf("[SFTP Delete] Starting delete operation: server=%s, path=%s\n", serverID, req.Path)
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
-		fmt.Printf("[SFTP Delete] Failed to create SFTP client: %v\n", err)
+		fmt.Printf("[SFTP Delete] Failed to get SFTP client: %v\n", err)
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 获取文件信息以判断类型,同时用于删除成功后的差异更新响应
 	fileInfo, err := sftpClient.GetFileInfo(req.Path)
@@ -468,13 +506,13 @@ func (h *SFTPHandler) Rename(c *gin.Context) {
 		return
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 重命名
 	if err := sftpClient.RenameFile(req.OldPath, req.NewPath); err != nil {
@@ -520,13 +558,13 @@ func (h *SFTPHandler) Chmod(c *gin.Context) {
 		return
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 修改权限
 	if err := sftpClient.Chmod(req.Path, os.FileMode(mode)); err != nil {
@@ -557,13 +595,13 @@ func (h *SFTPHandler) ReadFile(c *gin.Context) {
 		return
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 读取文件
 	content, err := sftpClient.ReadFile(path)
@@ -595,13 +633,13 @@ func (h *SFTPHandler) WriteFile(c *gin.Context) {
 		return
 	}
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 写入文件
 	if err := sftpClient.WriteFile(req.Path, []byte(req.Content), 0644); err != nil {
@@ -632,13 +670,13 @@ func (h *SFTPHandler) GetDiskUsage(c *gin.Context) {
 	// 获取路径参数
 	path := c.DefaultQuery("path", "/")
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 获取磁盘使用情况
 	diskUsage, err := sftpClient.GetDiskUsage(path)
@@ -690,14 +728,14 @@ func (h *SFTPHandler) BatchDelete(c *gin.Context) {
 	startTime := time.Now()
 	fmt.Printf("[SFTP BatchDelete] Starting batch delete operation: server=%s, count=%d\n", serverID, len(req.Paths))
 
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
-		fmt.Printf("[SFTP BatchDelete] Failed to create SFTP client: %v\n", err)
+		fmt.Printf("[SFTP BatchDelete] Failed to get SFTP client: %v\n", err)
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 批量删除
 	success := []string{}
@@ -816,14 +854,14 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 
 // compatibleDownload 兼容下载模式（SFTP + ZIP，支持排除目录）
 func (h *SFTPHandler) compatibleDownload(c *gin.Context, serverID uuid.UUID, req BatchDownloadRequest) {
-	// 创建 SFTP 客户端
-	sftpClient, _, err := h.createSFTPClient(c, serverID)
+	// 从连接池获取 SFTP 客户端
+	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
-		fmt.Printf("[SFTP CompatibleDownload] Failed to create SFTP client: %v\n", err)
+		fmt.Printf("[SFTP CompatibleDownload] Failed to get SFTP client: %v\n", err)
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
-	defer sftpClient.Close()
+	defer sftpClient.Release()
 
 	// 设置响应头
 	timestamp := time.Now().Format("20060102-150405")
@@ -852,7 +890,7 @@ func (h *SFTPHandler) compatibleDownload(c *gin.Context, serverID uuid.UUID, req
 
 		if fileInfo.IsDir {
 			// 递归添加目录（带排除逻辑）
-			excluded, err := h.addDirToZipWithExcludes(sftpClient, zipWriter, path, filepath.Base(path), req.ExcludePatterns)
+			excluded, err := h.addDirToZipWithExcludesPooled(sftpClient, zipWriter, path, filepath.Base(path), req.ExcludePatterns)
 			excludedCount += excluded
 			if err != nil {
 				fmt.Printf("[SFTP CompatibleDownload] Failed to add directory: %s, error: %v\n", path, err)
@@ -862,7 +900,7 @@ func (h *SFTPHandler) compatibleDownload(c *gin.Context, serverID uuid.UUID, req
 			}
 		} else {
 			// 添加单个文件
-			if err := h.addFileToZip(sftpClient, zipWriter, path, filepath.Base(path)); err != nil {
+			if err := h.addFileToZipPooled(sftpClient, zipWriter, path, filepath.Base(path)); err != nil {
 				fmt.Printf("[SFTP CompatibleDownload] Failed to add file: %s, error: %v\n", path, err)
 				failedCount++
 			} else {
@@ -901,8 +939,8 @@ func (h *SFTPHandler) fastDownload(c *gin.Context, serverID uuid.UUID, req Batch
 	}
 	defer sshClient.Close()
 
-	// 连接到服务器
-	if err := sshClient.Connect(srv.Host, srv.Port); err != nil {
+	// 连接到服务器（继承请求 ctx，可取消）
+	if err := sshClient.ConnectContext(c.Request.Context(), srv.Host, srv.Port); err != nil {
 		fmt.Printf("[SFTP FastDownload] Failed to connect: %v\n", err)
 		RespondError(c, http.StatusInternalServerError, "connection_error", err.Error())
 		return
@@ -1116,6 +1154,82 @@ func (h *SFTPHandler) addDirToZip(sftpClient *sftp.Client, zipWriter *zip.Writer
 				// 继续处理其他文件，不中断整个操作
 			}
 		}
+	}
+
+	return nil
+}
+
+// ======================================
+// PooledClient 辅助方法（支持连接池）
+// ======================================
+
+// addDirToZipWithExcludesPooled 递归添加目录到 ZIP（支持排除规则，使用池化连接）
+func (h *SFTPHandler) addDirToZipWithExcludesPooled(sftpClient *sftp.PooledClient, zipWriter *zip.Writer, remotePath, baseDir string, excludePatterns []string) (int, error) {
+	excludedCount := 0
+
+	// 列出目录内容
+	listing, err := sftpClient.ListDirectory(remotePath)
+	if err != nil {
+		return excludedCount, fmt.Errorf("failed to list directory: %w", err)
+	}
+
+	for _, file := range listing.Files {
+		// 跳过 . 和 ..
+		if file.Name == "." || file.Name == ".." {
+			continue
+		}
+
+		// 跳过符号链接
+		if file.Mode&os.ModeSymlink != 0 {
+			fmt.Printf("[SFTP CompatibleDownload] Skip symlink: %s\n", file.Path)
+			continue
+		}
+
+		// 检查是否应该排除此目录
+		if file.IsDir && h.shouldExcludeDir(file.Name, excludePatterns) {
+			fmt.Printf("[SFTP CompatibleDownload] Excluded directory: %s\n", file.Path)
+			excludedCount++
+
+			// 在 ZIP 中创建占位文件说明
+			placeholderPath := filepath.Join(baseDir, file.Name, ".excluded")
+			writer, err := zipWriter.Create(placeholderPath)
+			if err == nil {
+				fmt.Fprintf(writer, "此目录已被排除：%s\n原因：匹配排除规则\n", file.Name)
+			}
+			continue
+		}
+
+		zipPath := filepath.Join(baseDir, file.Name)
+
+		if file.IsDir {
+			// 递归处理子目录
+			subExcluded, err := h.addDirToZipWithExcludesPooled(sftpClient, zipWriter, file.Path, zipPath, excludePatterns)
+			excludedCount += subExcluded
+			if err != nil {
+				fmt.Printf("[SFTP CompatibleDownload] Failed to add subdirectory: %s, error: %v\n", file.Path, err)
+			}
+		} else {
+			// 添加文件
+			if err := h.addFileToZipPooled(sftpClient, zipWriter, file.Path, zipPath); err != nil {
+				fmt.Printf("[SFTP CompatibleDownload] Failed to add file: %s, error: %v\n", file.Path, err)
+			}
+		}
+	}
+
+	return excludedCount, nil
+}
+
+// addFileToZipPooled 添加单个文件到 ZIP（使用池化连接）
+func (h *SFTPHandler) addFileToZipPooled(sftpClient *sftp.PooledClient, zipWriter *zip.Writer, remotePath, zipPath string) error {
+	// 创建 ZIP 条目
+	writer, err := zipWriter.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create ZIP entry: %w", err)
+	}
+
+	// 下载文件并写入 ZIP
+	if err := sftpClient.DownloadFile(remotePath, writer); err != nil {
+		return fmt.Errorf("failed to download file: %w", err)
 	}
 
 	return nil
@@ -1449,4 +1563,44 @@ func (h *SFTPHandler) CancelTransfer(c *gin.Context) {
 		"success": true,
 		"message": "Cancel request sent",
 	})
+}
+
+// ======================================
+// 连接池管理 API
+// ======================================
+
+// CloseConnection 关闭指定服务器的 SFTP 连接
+// POST /api/v1/sftp/:server_id/close
+// 当用户关闭 SFTP 面板时调用此接口释放连接
+func (h *SFTPHandler) CloseConnection(c *gin.Context) {
+	// 解析服务器 ID
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	// 从上下文获取用户 ID
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	// 关闭该用户对该服务器的所有连接
+	h.pool.CloseByKey(userID, serverID)
+
+	fmt.Printf("[SFTP Pool] User %s closed connections for server %s\n", userID, serverID)
+
+	RespondSuccess(c, gin.H{
+		"success": true,
+		"message": "Connection closed",
+	})
+}
+
+// GetPoolStats 获取连接池统计信息
+// GET /api/v1/sftp/pool/stats
+func (h *SFTPHandler) GetPoolStats(c *gin.Context) {
+	stats := h.pool.Stats()
+	RespondSuccess(c, stats)
 }
