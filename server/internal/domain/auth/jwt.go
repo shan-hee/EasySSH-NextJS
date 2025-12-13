@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -379,15 +381,23 @@ func (s *jwtService) revokeTokenFamily(tokenFamily string) {
 	_ = s.redisClient.Del(ctx, familyKey).Err()
 }
 
+// hashTokenForKey 计算令牌的 SHA-256 哈希，用于 Redis Key（避免完整令牌作为 Key 影响性能）
+func hashTokenForKey(tokenString string) string {
+	hash := sha256.Sum256([]byte(tokenString))
+	return hex.EncodeToString(hash[:])
+}
+
 func (s *jwtService) BlacklistToken(tokenString string, expiration time.Duration) error {
 	ctx := context.Background()
-	key := fmt.Sprintf("blacklist:%s", tokenString)
+	// 使用令牌的 SHA-256 哈希作为 Key，避免完整令牌过长影响 Redis 性能
+	key := fmt.Sprintf("blacklist:%s", hashTokenForKey(tokenString))
 	return s.redisClient.Set(ctx, key, "1", expiration).Err()
 }
 
 func (s *jwtService) IsBlacklisted(tokenString string) (bool, error) {
 	ctx := context.Background()
-	key := fmt.Sprintf("blacklist:%s", tokenString)
+	// 使用令牌的 SHA-256 哈希作为 Key，与 BlacklistToken 保持一致
+	key := fmt.Sprintf("blacklist:%s", hashTokenForKey(tokenString))
 
 	result, err := s.redisClient.Get(ctx, key).Result()
 	if err != nil {

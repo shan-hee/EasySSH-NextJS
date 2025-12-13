@@ -413,6 +413,12 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 		return err
 	}
 
+	// 安全措施：密码修改后撤销所有会话，强制用户重新登录
+	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		// 记录错误但不阻止密码修改成功
+		fmt.Printf("Warning: failed to revoke all sessions after password change for user %s: %v\n", userID, err)
+	}
+
 	// 异步发送密码修改通知邮件
 	if s.emailService != nil {
 		go func() {
@@ -454,6 +460,13 @@ func (s *authService) ResetPassword(ctx context.Context, userID uuid.UUID, newPa
 	// 更新用户
 	if err := s.repo.Update(ctx, user); err != nil {
 		return fmt.Errorf("update user failed: %w", err)
+	}
+
+	// 安全措施：密码重置后撤销所有会话，强制用户重新登录
+	// 这确保了即使攻击者有之前的有效会话，也无法继续使用
+	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		// 记录错误但不阻止密码重置成功
+		fmt.Printf("Warning: failed to revoke all sessions after password reset for user %s: %v\n", userID, err)
 	}
 
 	// 异步发送密码修改通知邮件
@@ -605,7 +618,7 @@ func (s *authService) InitializeAdmin(ctx context.Context, username, email, pass
 			Location:     "", // TODO: 可以集成 IP 地理位置服务
 			UserAgent:    sessionInfo.UserAgent,
 			LastActivity: time.Now(),
-			ExpiresAt:    time.Now().Add(7 * 24 * time.Hour), // 7天过期
+			ExpiresAt:    time.Now().Add(s.sessionIdleDuration), // 使用统一的会话闲置过期时间
 		}
 
 		if err := s.repo.CreateSession(ctx, session); err != nil {

@@ -90,20 +90,11 @@ func setAccessTokenCookie(c *gin.Context, accessToken string, securityService se
 	})
 }
 
+// setCSRFCookie 设置 CSRF Token Cookie
+// 注意：CSRF Cookie 必须设置 HttpOnly=false，以便前端 JavaScript 能够读取并附加到请求头
+// 这是双提交 Cookie 防护模式（Double Submit Cookie）的必要条件
 func setCSRFCookie(c *gin.Context, csrfToken string, securityService security.Service, maxAge int) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
-	// 清理历史遗留：如果旧版本曾将 CSRF Cookie 设在 /api/v1 下，会导致同名 Cookie 多 Path 共存，
-	// 从而出现“浏览器 JS 读到的值”和“请求中服务端读到的值”不一致，触发 csrf_invalid。
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     CSRFTokenCookieName,
-		Value:    "",
-		Path:     "/api/v1",
-		Domain:   domain,
-		MaxAge:   -1,
-		Secure:   secure,
-		HttpOnly: false,
-		SameSite: sameSite,
-	})
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CSRFTokenCookieName,
 		Value:    csrfToken,
@@ -111,7 +102,7 @@ func setCSRFCookie(c *gin.Context, csrfToken string, securityService security.Se
 		Domain:   domain,
 		MaxAge:   maxAge,
 		Secure:   secure,
-		HttpOnly: false,
+		HttpOnly: false, // 必须为 false，前端 JS 需要读取此值并附加到 X-CSRF-Token 请求头
 		SameSite: sameSite,
 	})
 }
@@ -166,17 +157,6 @@ func clearAccessTokenCookie(c *gin.Context, securityService security.Service) {
 
 func clearCSRFCookie(c *gin.Context, securityService security.Service) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
-	// 同时清理 /api/v1 下的历史遗留 CSRF Cookie
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     CSRFTokenCookieName,
-		Value:    "",
-		Path:     "/api/v1",
-		Domain:   domain,
-		MaxAge:   -1,
-		Secure:   secure,
-		HttpOnly: false,
-		SameSite: sameSite,
-	})
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CSRFTokenCookieName,
 		Value:    "",
