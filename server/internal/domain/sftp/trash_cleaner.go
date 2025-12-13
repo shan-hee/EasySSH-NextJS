@@ -34,6 +34,7 @@ type TrashCleanerConfig struct {
 	Concurrency    int
 	ConnectTimeout time.Duration
 	JobTimeout     time.Duration
+	MaxJobTimeout  time.Duration // 大目录清理的最大超时时间
 	BaseRetryDelay time.Duration
 	MaxRetryDelay  time.Duration
 }
@@ -84,6 +85,9 @@ func NewTrashCleaner(cfg TrashCleanerConfig, deps TrashCleanerDeps) *TrashCleane
 	}
 	if cfg.JobTimeout <= 0 {
 		cfg.JobTimeout = 2 * time.Minute
+	}
+	if cfg.MaxJobTimeout <= 0 {
+		cfg.MaxJobTimeout = 10 * time.Minute // 大目录清理最大允许 10 分钟
 	}
 	if cfg.BaseRetryDelay <= 0 {
 		cfg.BaseRetryDelay = 1 * time.Minute
@@ -244,7 +248,10 @@ func (c *TrashCleaner) runOnce(ctx context.Context) {
 				}
 			}()
 
-			jobCtx, cancel := context.WithTimeout(ctx, c.cfg.JobTimeout)
+			// 动态计算超时时间：基于目录数量估算
+			// 每个目录基础时间 + 额外缓冲时间
+			estimatedTimeout := c.calculateDynamicTimeout(len(items))
+			jobCtx, cancel := context.WithTimeout(ctx, estimatedTimeout)
 			defer cancel()
 
 			c.cleanServer(jobCtx, gk.userID, gk.serverID, items, now)
@@ -252,6 +259,25 @@ func (c *TrashCleaner) runOnce(ctx context.Context) {
 	}
 
 	wg.Wait()
+}
+
+// calculateDynamicTimeout 根据目录数量动态计算超时时间
+func (c *TrashCleaner) calculateDynamicTimeout(dirCount int) time.Duration {
+	// 基础超时时间
+	baseTimeout := c.cfg.JobTimeout
+
+	// 每个目录额外增加 30 秒
+	extraTime := time.Duration(dirCount) * 30 * time.Second
+
+	// 总超时 = 基础 + 额外时间
+	totalTimeout := baseTimeout + extraTime
+
+	// 不超过最大超时时间
+	if totalTimeout > c.cfg.MaxJobTimeout {
+		totalTimeout = c.cfg.MaxJobTimeout
+	}
+
+	return totalTimeout
 }
 
 func (c *TrashCleaner) cleanServer(ctx context.Context, userID, serverID uuid.UUID, items []TrashDir, now time.Time) {
@@ -397,48 +423,82 @@ func (c *TrashCleaner) validateTrashItemConsistency(ctx context.Context, userID,
 		return
 	}
 
-	// 每次最多检查 100 条记录
 	const batchSize = 100
-	items, err := c.itemRepo.ListActiveByServer(ctx, userID, serverID, batchSize, 0)
-	if err != nil {
-		c.log.Warn("consistency check: list failed",
-			logger.String("userID", userID.String()),
-			logger.String("serverID", serverID.String()),
-			logger.Err(err))
-		return
-	}
+	const maxTotalChecks = 1000 // 单次最多检查 1000 条，防止无限循环
+	offset := 0
+	totalChecked := 0
+	var allMissingIDs []uuid.UUID
 
-	if len(items) == 0 {
-		return
-	}
-
-	var missingIDs []uuid.UUID
-	for _, item := range items {
+	for {
+		// 检查上下文是否已取消
 		select {
 		case <-ctx.Done():
 			// 超时，保存当前进度
-			if len(missingIDs) > 0 {
-				_ = c.itemRepo.MarkMissingBatch(ctx, missingIDs, now)
+			if len(allMissingIDs) > 0 {
+				_ = c.itemRepo.MarkMissingBatch(ctx, allMissingIDs, now)
 			}
 			return
 		default:
 		}
 
-		// 检查文件是否存在
-		if _, err := sftpClient.Stat(item.TrashPath); err != nil {
-			// 文件不存在，标记为 missing
-			missingIDs = append(missingIDs, item.ID)
+		// 检查是否达到最大检查数量
+		if totalChecked >= maxTotalChecks {
+			c.log.Debug("consistency check: reached max checks limit",
+				logger.Int("checked", totalChecked),
+				logger.String("serverID", serverID.String()))
+			break
 		}
+
+		items, err := c.itemRepo.ListActiveByServer(ctx, userID, serverID, batchSize, offset)
+		if err != nil {
+			c.log.Warn("consistency check: list failed",
+				logger.String("userID", userID.String()),
+				logger.String("serverID", serverID.String()),
+				logger.Int("offset", offset),
+				logger.Err(err))
+			break
+		}
+
+		if len(items) == 0 {
+			break
+		}
+
+		for _, item := range items {
+			select {
+			case <-ctx.Done():
+				// 超时，保存当前进度
+				if len(allMissingIDs) > 0 {
+					_ = c.itemRepo.MarkMissingBatch(ctx, allMissingIDs, now)
+				}
+				return
+			default:
+			}
+
+			// 检查文件是否存在
+			if _, err := sftpClient.Stat(item.TrashPath); err != nil {
+				// 文件不存在，标记为 missing
+				allMissingIDs = append(allMissingIDs, item.ID)
+			}
+			totalChecked++
+		}
+
+		// 如果本批次数量小于 batchSize，说明没有更多数据了
+		if len(items) < batchSize {
+			break
+		}
+
+		offset += batchSize
 	}
 
-	if len(missingIDs) > 0 {
-		if err := c.itemRepo.MarkMissingBatch(ctx, missingIDs, now); err != nil {
+	if len(allMissingIDs) > 0 {
+		if err := c.itemRepo.MarkMissingBatch(ctx, allMissingIDs, now); err != nil {
 			c.log.Warn("consistency check: mark missing failed",
-				logger.Int("count", len(missingIDs)),
+				logger.Int("count", len(allMissingIDs)),
 				logger.Err(err))
 		} else {
 			c.log.Info("consistency check: marked items as missing",
-				logger.Int("count", len(missingIDs)),
+				logger.Int("count", len(allMissingIDs)),
+				logger.Int("totalChecked", totalChecked),
 				logger.String("serverID", serverID.String()))
 		}
 	}
@@ -716,10 +776,27 @@ func (c *TrashCleaner) cleanOneTrashDir(ctx context.Context, userID, serverID uu
 		shouldDelete = shouldDelete[:policy.maxDeletesPerDir]
 	}
 
+	// 大目录删除进度日志
+	totalToDelete := len(shouldDelete)
+	if totalToDelete > 100 {
+		c.log.Info("starting large batch delete",
+			logger.String("trashDir", trashDir),
+			logger.Int("totalItems", totalToDelete),
+			logger.String("userID", userID.String()),
+			logger.String("serverID", serverID.String()))
+	}
+
 	var firstErr error
-	for _, it := range shouldDelete {
+	deletedCount := 0
+	for i, it := range shouldDelete {
 		select {
 		case <-ctx.Done():
+			// 超时时记录进度，便于下次继续
+			c.log.Warn("batch delete interrupted due to timeout",
+				logger.String("trashDir", trashDir),
+				logger.Int("deleted", deletedCount),
+				logger.Int("total", totalToDelete),
+				logger.Int("remaining", totalToDelete-deletedCount))
 			if firstErr == nil {
 				firstErr = ctx.Err()
 			}
@@ -728,9 +805,30 @@ func (c *TrashCleaner) cleanOneTrashDir(ctx context.Context, userID, serverID uu
 		}
 
 		delErr := c.deleteTrashEntryWithLock(ctx, userID, serverID, sftpClient, it)
-		if delErr != nil && firstErr == nil {
-			firstErr = delErr
+		if delErr != nil {
+			if firstErr == nil {
+				firstErr = delErr
+			}
+		} else {
+			deletedCount++
 		}
+
+		// 每删除 100 个条目记录一次进度（仅大目录）
+		if totalToDelete > 100 && (i+1)%100 == 0 {
+			c.log.Debug("batch delete progress",
+				logger.String("trashDir", trashDir),
+				logger.Int("progress", i+1),
+				logger.Int("total", totalToDelete))
+		}
+	}
+
+	// 完成日志（仅大目录）
+	if totalToDelete > 100 {
+		c.log.Info("batch delete completed",
+			logger.String("trashDir", trashDir),
+			logger.Int("deleted", deletedCount),
+			logger.Int("total", totalToDelete),
+			logger.Int("errors", totalToDelete-deletedCount))
 	}
 
 	return firstErr

@@ -65,7 +65,16 @@ func (pc *PooledClient) DeleteDirectory(path string) error {
 	if pc.Client == nil {
 		return fmt.Errorf("sftp client not initialized")
 	}
-	info, _ := pc.Client.GetFileInfo(path)
+
+	// 先获取文件信息，用于记录准确的元数据
+	// 即使获取失败也继续删除，但会记录警告日志
+	info, infoErr := pc.Client.GetFileInfo(path)
+	if infoErr != nil && pc.pool != nil {
+		pc.pool.log.Warn("failed to get file info before delete, metadata may be incomplete",
+			logger.String("path", path),
+			logger.Err(infoErr))
+	}
+
 	trashDir, trashPath, err := pc.Client.MoveToTrash(path)
 	if err != nil {
 		return err
@@ -83,7 +92,16 @@ func (pc *PooledClient) DeleteFile(path string) error {
 	if pc.Client == nil {
 		return fmt.Errorf("sftp client not initialized")
 	}
-	info, _ := pc.Client.GetFileInfo(path)
+
+	// 先获取文件信息，用于记录准确的元数据
+	// 即使获取失败也继续删除，但会记录警告日志
+	info, infoErr := pc.Client.GetFileInfo(path)
+	if infoErr != nil && pc.pool != nil {
+		pc.pool.log.Warn("failed to get file info before delete, metadata may be incomplete",
+			logger.String("path", path),
+			logger.Err(infoErr))
+	}
+
 	trashDir, trashPath, err := pc.Client.MoveToTrash(path)
 	if err != nil {
 		return err
@@ -726,6 +744,17 @@ func (p *Pool) registerTrashItem(userID, serverID uuid.UUID, originalPath, trash
 		return
 	}
 	parentDir := filepath.Dir(originalPath)
+
+	// 从 info 中安全提取字段，避免 nil 时字段为零值
+	var isDir bool
+	var size int64
+	var mode uint32
+	if info != nil {
+		isDir = info.IsDir
+		size = info.Size
+		mode = uint32(info.Mode)
+	}
+
 	item := TrashItem{
 		UserID:       userID,
 		ServerID:     serverID,
@@ -735,29 +764,21 @@ func (p *Pool) registerTrashItem(userID, serverID uuid.UUID, originalPath, trash
 		TrashDir:     trashDir,
 		TrashPath:    trashPath,
 		TrashName:    filepath.Base(trashPath),
-		IsDir:        info != nil && info.IsDir,
-		Size:         0,
-		Mode:         0,
+		IsDir:        isDir,
+		Size:         size,
+		Mode:         mode,
 		DeletedAt:    deletedAt,
 		Status:       TrashItemStatusActive,
+		Version:      1, // 显式初始化版本号，确保乐观锁正常工作
 		RestoredPath: "",
 		RestoredAt:   nil,
 		PurgedAt:     nil,
 	}
-	if info != nil {
-		item.Size = info.Size
-		item.Mode = uint32(info.Mode)
-	}
 
 	// 审计日志：记录文件移动到回收站
-	isDir := info != nil && info.IsDir
 	itemType := "file"
 	if isDir {
 		itemType = "directory"
-	}
-	size := int64(0)
-	if info != nil {
-		size = info.Size
 	}
 	p.log.Info("item moved to trash",
 		logger.String("type", itemType),
