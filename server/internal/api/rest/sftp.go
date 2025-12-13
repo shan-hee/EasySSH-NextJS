@@ -7,9 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +23,7 @@ import (
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	sftpPkg "github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -44,13 +48,15 @@ func (r *ctxReader) Read(p []byte) (int, error) {
 
 // SFTPHandler SFTP 处理器
 type SFTPHandler struct {
-	serverService   server.Service
-	serverRepo      server.Repository
-	encryptor       *crypto.Encryptor
-	uploadWSHandler *ws.SFTPUploadHandler
-	transferHandler *ws.SFTPTransferHandler // 跨服务器直连传输处理器
-	hostKeyCallback ssh.HostKeyCallback     // SSH主机密钥验证回调
-	pool            *sftp.Pool              // SFTP 连接池
+	serverService     server.Service
+	serverRepo        server.Repository
+	encryptor         *crypto.Encryptor
+	uploadWSHandler   *ws.SFTPUploadHandler
+	transferHandler   *ws.SFTPTransferHandler // 跨服务器直连传输处理器
+	hostKeyCallback   ssh.HostKeyCallback     // SSH主机密钥验证回调
+	pool              *sftp.Pool              // SFTP 连接池
+	trashItemRepo     sftp.TrashItemRepository
+	trashSettingsRepo sftp.TrashSettingsRepository
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
@@ -77,6 +83,14 @@ func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, 
 // SetTransferHandler 设置跨服务器传输处理器
 func (h *SFTPHandler) SetTransferHandler(handler *ws.SFTPTransferHandler) {
 	h.transferHandler = handler
+}
+
+func (h *SFTPHandler) SetTrashItemRepository(repo sftp.TrashItemRepository) {
+	h.trashItemRepo = repo
+}
+
+func (h *SFTPHandler) SetTrashSettingsRepository(repo sftp.TrashSettingsRepository) {
+	h.trashSettingsRepo = repo
 }
 
 // GetPool 获取连接池（用于外部访问）
@@ -484,6 +498,10 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
+	if containsDotDotSegment(req.Path) {
+		RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
+		return
+	}
 
 	// 记录删除操作开始
 	startTime := time.Now()
@@ -516,6 +534,10 @@ func (h *SFTPHandler) Delete(c *gin.Context) {
 	}
 
 	if err != nil {
+		if errors.Is(err, sftp.ErrTrashPathNotAllowed) {
+			RespondError(c, http.StatusBadRequest, "invalid_path", err.Error())
+			return
+		}
 		elapsed := time.Since(startTime)
 		fmt.Printf("[SFTP Delete] Delete failed after %v: %v\n", elapsed, err)
 		RespondError(c, http.StatusInternalServerError, "delete_failed", err.Error())
@@ -811,6 +833,15 @@ func (h *SFTPHandler) BatchDelete(c *gin.Context) {
 		default:
 		}
 
+		if containsDotDotSegment(path) {
+			failed = append(failed, BatchOperationError{
+				Path:    path,
+				Error:   "invalid_path",
+				Message: "Path must not contain '..'",
+			})
+			continue
+		}
+
 		// 获取文件信息以判断类型
 		fileInfo, err := sftpClient.GetFileInfo(path)
 		if err != nil {
@@ -835,6 +866,14 @@ func (h *SFTPHandler) BatchDelete(c *gin.Context) {
 
 		if deleteErr != nil {
 			fmt.Printf("[SFTP BatchDelete] Delete failed: %s, error: %v\n", path, deleteErr)
+			if errors.Is(deleteErr, sftp.ErrTrashPathNotAllowed) {
+				failed = append(failed, BatchOperationError{
+					Path:    path,
+					Error:   "invalid_path",
+					Message: deleteErr.Error(),
+				})
+				continue
+			}
 			failed = append(failed, BatchOperationError{
 				Path:    path,
 				Error:   "delete_failed",
@@ -1683,4 +1722,1020 @@ func (h *SFTPHandler) CloseConnection(c *gin.Context) {
 func (h *SFTPHandler) GetPoolStats(c *gin.Context) {
 	stats := h.pool.Stats()
 	RespondSuccess(c, stats)
+}
+
+// ======================================
+// 回收站（.trash）API
+// ======================================
+
+// ListTrash 列出指定目录同级 .trash 下的条目
+// GET /api/v1/sftp/:server_id/trash/list?path=/path/to/dir
+func (h *SFTPHandler) ListTrash(c *gin.Context) {
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	parentDir := c.DefaultQuery("path", "/")
+	if containsDotDotSegment(parentDir) {
+		RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
+		return
+	}
+	parentDir = filepath.Clean(parentDir)
+	trashDir := filepath.Join(parentDir, ".trash")
+
+	sftpClient, err := h.getPooledClient(c, serverID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer sftpClient.Release()
+
+	listing, err := sftpClient.ListDirectory(trashDir)
+	if err != nil {
+		// .trash 不存在视为“空”，其他错误透出
+		if isSFTPNoSuchFile(err) {
+			RespondSuccess(c, sftp.TrashListing{
+				ParentDir: parentDir,
+				TrashDir:  trashDir,
+				Items:     []sftp.TrashEntry{},
+				Total:     0,
+			})
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "trash_list_failed", err.Error())
+		return
+	}
+
+	items := make([]sftp.TrashEntry, 0, len(listing.Files))
+	for _, fi := range listing.Files {
+		if fi == nil || fi.Name == "." || fi.Name == ".." {
+			continue
+		}
+
+		originalName, _ := parseOriginalNameFromTrashName(fi.Name)
+		restorePath := filepath.Join(parentDir, originalName)
+
+		items = append(items, sftp.TrashEntry{
+			TrashName:    fi.Name,
+			TrashPath:    fi.Path,
+			OriginalName: originalName,
+			RestorePath:  restorePath,
+			Size:         fi.Size,
+			Mode:         fi.Mode,
+			IsDir:        fi.IsDir,
+			IsLink:       fi.IsLink,
+			ModTime:      fi.ModTime,
+			Permission:   fi.Permission,
+		})
+	}
+
+	// 默认按“删除时间（mtime）倒序”展示
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ModTime.After(items[j].ModTime)
+	})
+
+	RespondSuccess(c, sftp.TrashListing{
+		ParentDir: parentDir,
+		TrashDir:  trashDir,
+		Items:     items,
+		Total:     len(items),
+	})
+}
+
+type restoreTrashRequest struct {
+	TrashPath         string `json:"trash_path" binding:"required"`
+	RenameIfExists    bool   `json:"rename_if_exists"`
+	CustomRestorePath string `json:"custom_restore_path"` // 用户指定的恢复路径（可选）
+}
+
+// RestoreTrash 将回收站条目恢复到同级目录
+// POST /api/v1/sftp/:server_id/trash/restore
+//
+// 冲突处理策略：
+// 1. 默认：如果目标路径已存在，返回 409 Conflict 并附带冲突详情和建议路径
+// 2. rename_if_exists=true：自动重命名为 {name}.restored-{uuid}
+// 3. custom_restore_path：恢复到用户指定的路径
+func (h *SFTPHandler) RestoreTrash(c *gin.Context) {
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	var req restoreTrashRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	if containsDotDotSegment(req.TrashPath) {
+		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must not contain '..'")
+		return
+	}
+	trashPath := filepath.Clean(req.TrashPath)
+	if !isTrashEntryPath(trashPath) {
+		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must point to an entry under .trash")
+		return
+	}
+
+	// 验证自定义恢复路径
+	if req.CustomRestorePath != "" {
+		if containsDotDotSegment(req.CustomRestorePath) {
+			RespondError(c, http.StatusBadRequest, "invalid_restore_path", "restore path must not contain '..'")
+			return
+		}
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	sftpClient, err := h.getPooledClient(c, serverID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer sftpClient.Release()
+
+	trashName := filepath.Base(trashPath)
+	originalName, _ := parseOriginalNameFromTrashName(trashName)
+	parentDir := filepath.Dir(filepath.Dir(trashPath)) // .../<parent>/.trash/<entry>
+
+	// 确定恢复路径
+	restorePath := filepath.Join(parentDir, originalName)
+	if req.CustomRestorePath != "" {
+		restorePath = filepath.Clean(req.CustomRestorePath)
+	}
+
+	// 生成建议的备选路径
+	suggestPath := filepath.Join(parentDir, fmt.Sprintf("%s.restored-%s", originalName, uuid.NewString()[:8]))
+
+	// 检查目标路径是否存在冲突
+	existingFile, err := sftpClient.GetFileInfo(restorePath)
+	if err == nil {
+		// 目标路径已存在
+		if !req.RenameIfExists && req.CustomRestorePath == "" {
+			// 返回详细的冲突信息，帮助用户决策
+			RespondErrorWithDetails(c, http.StatusConflict, "restore_conflict", "restore path already exists", gin.H{
+				"restore_path":  restorePath,
+				"suggest_path":  suggestPath,
+				"existing_file": existingFile,
+				"options": []string{
+					"Set rename_if_exists=true to auto-rename",
+					"Set custom_restore_path to specify a different path",
+				},
+			})
+			return
+		}
+		// 自动重命名
+		if req.RenameIfExists && req.CustomRestorePath == "" {
+			restorePath = suggestPath
+		}
+		// 如果 custom_restore_path 指定的路径也存在冲突，报错
+		if req.CustomRestorePath != "" {
+			RespondErrorWithDetails(c, http.StatusConflict, "restore_conflict", "custom restore path already exists", gin.H{
+				"restore_path":  restorePath,
+				"suggest_path":  suggestPath,
+				"existing_file": existingFile,
+			})
+			return
+		}
+	}
+
+	if err := sftpClient.RenameFile(trashPath, restorePath); err != nil {
+		RespondError(c, http.StatusInternalServerError, "restore_failed", err.Error())
+		return
+	}
+
+	// 同步回写全局索引（如存在），避免目录级操作导致全局回收站视图漂移
+	if h.trashItemRepo != nil {
+		now := time.Now()
+		_ = h.trashItemRepo.MarkRestoredByTrashPath(c.Request.Context(), userID, serverID, trashPath, now, restorePath)
+	}
+
+	info, _ := sftpClient.GetFileInfo(restorePath)
+	RespondSuccess(c, gin.H{
+		"success":       true,
+		"trash_path":    trashPath,
+		"restore_path":  restorePath,
+		"original_name": originalName,
+		"file":          info,
+	})
+}
+
+type purgeTrashRequest struct {
+	TrashPath string `json:"trash_path" binding:"required"`
+}
+
+// PurgeTrash 永久删除回收站条目（不会再次进入 .trash）
+// DELETE /api/v1/sftp/:server_id/trash/purge
+func (h *SFTPHandler) PurgeTrash(c *gin.Context) {
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	var req purgeTrashRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	if containsDotDotSegment(req.TrashPath) {
+		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must not contain '..'")
+		return
+	}
+	trashPath := filepath.Clean(req.TrashPath)
+	if !isTrashEntryPath(trashPath) {
+		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must point to an entry under .trash")
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	sftpClient, err := h.getPooledClient(c, serverID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer sftpClient.Release()
+
+	fi, err := sftpClient.GetFileInfo(trashPath)
+	if err != nil {
+		if h.trashItemRepo != nil {
+			now := time.Now()
+			_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, serverID, trashPath, now, sftp.TrashItemStatusMissing)
+		}
+		RespondError(c, http.StatusNotFound, "not_found", err.Error())
+		return
+	}
+
+	if fi.IsDir {
+		if err := sftpClient.RemoveAll(trashPath); err != nil {
+			RespondError(c, http.StatusInternalServerError, "purge_failed", err.Error())
+			return
+		}
+	} else {
+		if err := sftpClient.RemoveFile(trashPath); err != nil {
+			RespondError(c, http.StatusInternalServerError, "purge_failed", err.Error())
+			return
+		}
+	}
+
+	if h.trashItemRepo != nil {
+		now := time.Now()
+		_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, serverID, trashPath, now, sftp.TrashItemStatusPurged)
+	}
+
+	RespondSuccess(c, gin.H{
+		"success":    true,
+		"trash_path": trashPath,
+	})
+}
+
+type emptyTrashRequest struct {
+	Path           string `json:"path" binding:"required"`
+	MaxDeletes     int    `json:"max_deletes"`
+	OlderThanHours int    `json:"older_than_hours"`
+}
+
+// EmptyTrash 清空指定目录同级 .trash（可选仅清理超过一定时间的条目）
+// POST /api/v1/sftp/:server_id/trash/empty
+func (h *SFTPHandler) EmptyTrash(c *gin.Context) {
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	var req emptyTrashRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	if containsDotDotSegment(req.Path) {
+		RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
+		return
+	}
+	parentDir := filepath.Clean(req.Path)
+	trashDir := filepath.Join(parentDir, ".trash")
+
+	maxDeletes := req.MaxDeletes
+	if maxDeletes <= 0 {
+		maxDeletes = 500
+	}
+
+	cutoff := time.Time{}
+	if req.OlderThanHours > 0 {
+		cutoff = time.Now().Add(-time.Duration(req.OlderThanHours) * time.Hour)
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	sftpClient, err := h.getPooledClient(c, serverID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer sftpClient.Release()
+
+	listing, err := sftpClient.ListDirectory(trashDir)
+	if err != nil {
+		if isSFTPNoSuchFile(err) {
+			RespondSuccess(c, gin.H{
+				"success": true,
+				"deleted": 0,
+				"failed":  []interface{}{},
+			})
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "trash_empty_failed", err.Error())
+		return
+	}
+
+	deleted := 0
+	var failed []map[string]string
+
+	for _, fi := range listing.Files {
+		if fi == nil || fi.Name == "." || fi.Name == ".." {
+			continue
+		}
+		if deleted >= maxDeletes {
+			break
+		}
+		if !cutoff.IsZero() && !fi.ModTime.IsZero() && fi.ModTime.After(cutoff) {
+			continue
+		}
+
+		select {
+		case <-c.Request.Context().Done():
+			RespondError(c, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		default:
+		}
+
+		if !isTrashEntryPath(fi.Path) {
+			continue
+		}
+
+		if fi.IsDir {
+			if err := sftpClient.RemoveAll(fi.Path); err != nil {
+				failed = append(failed, map[string]string{"path": fi.Path, "error": err.Error()})
+				continue
+			}
+		} else {
+			if err := sftpClient.RemoveFile(fi.Path); err != nil {
+				failed = append(failed, map[string]string{"path": fi.Path, "error": err.Error()})
+				continue
+			}
+		}
+		deleted++
+
+		if h.trashItemRepo != nil {
+			now := time.Now()
+			_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, serverID, fi.Path, now, sftp.TrashItemStatusPurged)
+		}
+	}
+
+	RespondSuccess(c, gin.H{
+		"success":   true,
+		"trash_dir": trashDir,
+		"deleted":   deleted,
+		"failed":    failed,
+	})
+}
+
+// ======================================
+// 全局回收站（索引表）
+// ======================================
+
+// ListTrashItems 列出该用户的回收站索引条目（不需要遍历目录）
+// GET /api/v1/sftp/trash/items?status=active&server_id=...&parent_dir=...&limit=50&offset=0
+func (h *SFTPHandler) ListTrashItems(c *gin.Context) {
+	if h.trashItemRepo == nil {
+		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+		}
+	}
+
+	var filters sftp.TrashItemFilters
+
+	if v := c.Query("server_id"); v != "" {
+		if sid, err := uuid.Parse(v); err == nil {
+			filters.ServerID = &sid
+		}
+	}
+	if v := c.Query("parent_dir"); v != "" {
+		parent := filepath.Clean(v)
+		filters.ParentDir = &parent
+	}
+	if v := c.Query("status"); v != "" {
+		if !isValidTrashItemStatus(v) {
+			RespondError(c, http.StatusBadRequest, "invalid_status", "Invalid status")
+			return
+		}
+		status := sftp.TrashItemStatus(v)
+		filters.Status = &status
+	}
+
+	rows, total, err := h.trashItemRepo.List(c.Request.Context(), userID, filters, limit, offset)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "trash_list_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"items":  rows,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+type restoreTrashItemRequest struct {
+	RenameIfExists    bool   `json:"rename_if_exists"`
+	CustomRestorePath string `json:"custom_restore_path"` // 用户指定的恢复路径（可选）
+}
+
+// RestoreTrashItem 从索引条目恢复（按 item_id）
+// POST /api/v1/sftp/trash/items/:item_id/restore
+//
+// 冲突处理策略：
+// 1. 默认：如果目标路径已存在，返回 409 Conflict 并附带冲突详情和建议路径
+// 2. rename_if_exists=true：自动重命名为 {name}.restored-{uuid}
+// 3. custom_restore_path：恢复到用户指定的路径
+//
+// 使用乐观锁防止与清理器的竞态条件
+func (h *SFTPHandler) RestoreTrashItem(c *gin.Context) {
+	if h.trashItemRepo == nil {
+		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	itemID, err := uuid.Parse(c.Param("item_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_item_id", "Invalid item ID")
+		return
+	}
+
+	item, err := h.trashItemRepo.GetByIDForUser(c.Request.Context(), userID, itemID)
+	if err != nil {
+		RespondError(c, http.StatusNotFound, "not_found", "Trash item not found")
+		return
+	}
+
+	if item.Status != sftp.TrashItemStatusActive {
+		// 如果正在被清理，给出明确提示
+		if item.Status == sftp.TrashItemStatusPurging {
+			RespondError(c, http.StatusConflict, "item_being_purged", "Trash item is being purged by cleaner, please try again later")
+			return
+		}
+		// 如果正在被恢复（另一个请求），给出明确提示
+		if item.Status == sftp.TrashItemStatusRestoring {
+			RespondError(c, http.StatusConflict, "item_being_restored", "Trash item is being restored by another operation, please try again later")
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "invalid_status", fmt.Sprintf("Trash item is not active (status: %s)", item.Status))
+		return
+	}
+
+	var req restoreTrashItemRequest
+	_ = c.ShouldBindJSON(&req)
+
+	// 验证自定义恢复路径
+	if req.CustomRestorePath != "" {
+		if containsDotDotSegment(req.CustomRestorePath) {
+			RespondError(c, http.StatusBadRequest, "invalid_restore_path", "restore path must not contain '..'")
+			return
+		}
+	}
+
+	pooled, err := h.pool.Get(c.Request.Context(), userID, item.ServerID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer pooled.Release()
+
+	// 确定恢复路径
+	restorePath := item.OriginalPath
+	if req.CustomRestorePath != "" {
+		restorePath = filepath.Clean(req.CustomRestorePath)
+	}
+
+	// 生成建议的备选路径
+	suggestPath := filepath.Join(item.ParentDir, fmt.Sprintf("%s.restored-%s", item.OriginalName, uuid.NewString()[:8]))
+
+	// 检查目标路径是否存在冲突
+	existingFile, err := pooled.GetFileInfo(restorePath)
+	if err == nil {
+		// 目标路径已存在
+		if !req.RenameIfExists && req.CustomRestorePath == "" {
+			// 返回详细的冲突信息，帮助用户决策
+			RespondErrorWithDetails(c, http.StatusConflict, "restore_conflict", "restore path already exists", gin.H{
+				"restore_path":  restorePath,
+				"suggest_path":  suggestPath,
+				"existing_file": existingFile,
+				"options": []string{
+					"Set rename_if_exists=true to auto-rename",
+					"Set custom_restore_path to specify a different path",
+				},
+			})
+			return
+		}
+		// 自动重命名
+		if req.RenameIfExists && req.CustomRestorePath == "" {
+			restorePath = suggestPath
+		}
+		// 如果 custom_restore_path 指定的路径也存在冲突，报错
+		if req.CustomRestorePath != "" {
+			RespondErrorWithDetails(c, http.StatusConflict, "restore_conflict", "custom restore path already exists", gin.H{
+				"restore_path":  restorePath,
+				"suggest_path":  suggestPath,
+				"existing_file": existingFile,
+			})
+			return
+		}
+	}
+
+	// 阶段1：使用乐观锁标记为 restoring 状态（获取锁）
+	affected, err := h.trashItemRepo.TryMarkRestoring(c.Request.Context(), userID, itemID, item.Version)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if affected == 0 {
+		// 版本不匹配或状态已变更（可能正在被清理）
+		RespondError(c, http.StatusConflict, "concurrent_modification", "Trash item was modified by another operation (possibly being purged), please refresh and try again")
+		return
+	}
+
+	// 阶段2：执行物理恢复（重命名）
+	if err := pooled.RenameFile(item.TrashPath, restorePath); err != nil {
+		// 恢复失败，回滚数据库状态到 active
+		if rollbackErr := h.trashItemRepo.RollbackRestoring(c.Request.Context(), userID, itemID); rollbackErr != nil {
+			// 记录回滚失败，但仍然返回原始错误
+			log.Printf("[SFTP Trash] WARN: rollback restoring failed: itemID=%s, err=%v", itemID, rollbackErr)
+		}
+		RespondError(c, http.StatusInternalServerError, "restore_failed", err.Error())
+		return
+	}
+
+	// 阶段3：完成恢复，更新为 restored 状态
+	now := time.Now()
+	if err := h.trashItemRepo.FinishRestore(c.Request.Context(), userID, itemID, now, restorePath); err != nil {
+		// 物理操作已成功，但数据库更新失败，记录警告
+		log.Printf("[SFTP Trash] WARN: finish restore db update failed (physical restore succeeded): itemID=%s, restorePath=%s, err=%v", itemID, restorePath, err)
+	}
+
+	info, _ := pooled.GetFileInfo(restorePath)
+	RespondSuccess(c, gin.H{
+		"success":       true,
+		"item_id":       itemID,
+		"restore_path":  restorePath,
+		"original_path": item.OriginalPath,
+		"file":          info,
+	})
+}
+
+// PurgeTrashItem 永久删除索引条目对应的回收站文件（按 item_id）
+// DELETE /api/v1/sftp/trash/items/:item_id
+func (h *SFTPHandler) PurgeTrashItem(c *gin.Context) {
+	if h.trashItemRepo == nil {
+		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	itemID, err := uuid.Parse(c.Param("item_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_item_id", "Invalid item ID")
+		return
+	}
+
+	item, err := h.trashItemRepo.GetByIDForUser(c.Request.Context(), userID, itemID)
+	if err != nil {
+		RespondError(c, http.StatusNotFound, "not_found", "Trash item not found")
+		return
+	}
+
+	if item.Status != sftp.TrashItemStatusActive {
+		RespondError(c, http.StatusBadRequest, "invalid_status", "Trash item is not active")
+		return
+	}
+
+	pooled, err := h.pool.Get(c.Request.Context(), userID, item.ServerID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+		return
+	}
+	defer pooled.Release()
+
+	fi, err := pooled.GetFileInfo(item.TrashPath)
+	if err != nil {
+		now := time.Now()
+		_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, item.ServerID, item.TrashPath, now, sftp.TrashItemStatusMissing)
+		RespondSuccess(c, gin.H{"success": true, "status": "missing"})
+		return
+	}
+
+	if fi.IsDir {
+		if err := pooled.RemoveAll(item.TrashPath); err != nil {
+			RespondError(c, http.StatusInternalServerError, "purge_failed", err.Error())
+			return
+		}
+	} else {
+		if err := pooled.RemoveFile(item.TrashPath); err != nil {
+			RespondError(c, http.StatusInternalServerError, "purge_failed", err.Error())
+			return
+		}
+	}
+
+	now := time.Now()
+	_ = h.trashItemRepo.MarkPurgedByID(c.Request.Context(), userID, itemID, now)
+	RespondSuccess(c, gin.H{"success": true})
+}
+
+type emptyTrashItemsRequest struct {
+	ServerID       string `json:"server_id"`
+	ParentDir      string `json:"parent_dir"`
+	OlderThanHours int    `json:"older_than_hours"`
+	MaxDeletes     int    `json:"max_deletes"`
+}
+
+// EmptyTrashItems 按索引批量清空（默认仅 active）
+// POST /api/v1/sftp/trash/items/empty
+func (h *SFTPHandler) EmptyTrashItems(c *gin.Context) {
+	if h.trashItemRepo == nil {
+		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	var req emptyTrashItemsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	maxDeletes := req.MaxDeletes
+	if maxDeletes <= 0 {
+		maxDeletes = 500
+	}
+
+	var filters sftp.TrashItemFilters
+	status := sftp.TrashItemStatusActive
+	filters.Status = &status
+
+	if req.ServerID != "" {
+		if sid, err := uuid.Parse(req.ServerID); err == nil {
+			filters.ServerID = &sid
+		}
+	}
+	if req.ParentDir != "" {
+		parent := filepath.Clean(req.ParentDir)
+		filters.ParentDir = &parent
+	}
+	if req.OlderThanHours > 0 {
+		cutoff := time.Now().Add(-time.Duration(req.OlderThanHours) * time.Hour)
+		filters.DeletedBefore = &cutoff
+	}
+
+	items, _, err := h.trashItemRepo.List(c.Request.Context(), userID, filters, maxDeletes, 0)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "trash_list_failed", err.Error())
+		return
+	}
+
+	deleted := 0
+	var failed []map[string]string
+	for _, item := range items {
+		select {
+		case <-c.Request.Context().Done():
+			RespondError(c, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		default:
+		}
+
+		pooled, err := h.pool.Get(c.Request.Context(), userID, item.ServerID)
+		if err != nil {
+			failed = append(failed, map[string]string{"item_id": item.ID.String(), "error": err.Error()})
+			continue
+		}
+
+		fi, statErr := pooled.GetFileInfo(item.TrashPath)
+		if statErr != nil {
+			now := time.Now()
+			_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, item.ServerID, item.TrashPath, now, sftp.TrashItemStatusMissing)
+			pooled.Release()
+			deleted++
+			continue
+		}
+
+		if fi.IsDir {
+			err = pooled.RemoveAll(item.TrashPath)
+		} else {
+			err = pooled.RemoveFile(item.TrashPath)
+		}
+		pooled.Release()
+
+		if err != nil {
+			failed = append(failed, map[string]string{"item_id": item.ID.String(), "error": err.Error()})
+			continue
+		}
+
+		now := time.Now()
+		_ = h.trashItemRepo.MarkPurgedByID(c.Request.Context(), userID, item.ID, now)
+		deleted++
+	}
+
+	RespondSuccess(c, gin.H{
+		"success": true,
+		"deleted": deleted,
+		"failed":  failed,
+	})
+}
+
+func isTrashEntryPath(p string) bool {
+	p = filepath.Clean(p)
+	if strings.HasSuffix(p, "/.trash") || p == ".trash" {
+		return false
+	}
+	// 只允许操作 .trash 下的直接或间接子路径
+	return strings.Contains(p, string(filepath.Separator)+".trash"+string(filepath.Separator))
+}
+
+func containsDotDotSegment(p string) bool {
+	p = filepath.ToSlash(p)
+	for _, part := range strings.Split(p, "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+func isSFTPNoSuchFile(err error) bool {
+	var se *sftpPkg.StatusError
+	if errors.As(err, &se) {
+		return se.FxCode() == sftpPkg.ErrSSHFxNoSuchFile
+	}
+	return false
+}
+
+func isValidTrashItemStatus(v string) bool {
+	switch v {
+	case string(sftp.TrashItemStatusActive),
+		string(sftp.TrashItemStatusRestored),
+		string(sftp.TrashItemStatusPurged),
+		string(sftp.TrashItemStatusMissing):
+		return true
+	default:
+		return false
+	}
+}
+
+// parseOriginalNameFromTrashName 将 MoveToTrash 生成的 name 解析回原始文件名
+// 当前命名格式：<base>-<YYYYMMDD>-<HHMMSS>-<uuid8>
+func parseOriginalNameFromTrashName(trashName string) (string, bool) {
+	parts := strings.Split(trashName, "-")
+	if len(parts) < 4 {
+		return trashName, false
+	}
+	// 从尾部提取 uuid8 / HHMMSS / YYYYMMDD
+	uuidPart := parts[len(parts)-1]
+	timePart := parts[len(parts)-2]
+	datePart := parts[len(parts)-3]
+	if len(uuidPart) != 8 || len(timePart) != 6 || len(datePart) != 8 {
+		return trashName, false
+	}
+	if !isAllDigits(datePart) || !isAllDigits(timePart) || !isHexLower(uuidPart) {
+		return trashName, false
+	}
+	base := strings.Join(parts[:len(parts)-3], "-")
+	if base == "" {
+		base = trashName
+		return base, false
+	}
+	return base, true
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isHexLower(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		if (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// ============= 回收站设置 API =============
+
+// GetTrashSettings 获取用户回收站设置
+// GET /api/v1/sftp/trash/settings
+func (h *SFTPHandler) GetTrashSettings(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Invalid user")
+		return
+	}
+
+	if h.trashSettingsRepo == nil {
+		// 返回默认值
+		RespondSuccess(c, gin.H{
+			"retention_hours":      24,
+			"max_entries_per_dir":  5000,
+			"max_bytes_per_dir_mb": 2048,
+			"auto_clean_enabled":   true,
+			"is_default":           true,
+		})
+		return
+	}
+
+	settings, err := h.trashSettingsRepo.GetByUserID(c.Request.Context(), userID)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	if settings == nil {
+		// 未配置，返回系统默认值
+		RespondSuccess(c, gin.H{
+			"retention_hours":      24,
+			"max_entries_per_dir":  5000,
+			"max_bytes_per_dir_mb": 2048,
+			"auto_clean_enabled":   true,
+			"is_default":           true,
+		})
+		return
+	}
+
+	autoClean := settings.AutoCleanEnabled
+
+	RespondSuccess(c, gin.H{
+		"id":                   settings.ID,
+		"retention_hours":      settings.RetentionHours,
+		"max_entries_per_dir":  settings.MaxEntriesPerDir,
+		"max_bytes_per_dir_mb": settings.MaxBytesPerDirMB,
+		"auto_clean_enabled":   autoClean,
+		"is_default":           false,
+	})
+}
+
+// UpdateTrashSettings 更新用户回收站设置
+// PUT /api/v1/sftp/trash/settings
+func (h *SFTPHandler) UpdateTrashSettings(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Invalid user")
+		return
+	}
+
+	if h.trashSettingsRepo == nil {
+		RespondError(c, http.StatusServiceUnavailable, "not_available", "Trash settings not available")
+		return
+	}
+
+	var req struct {
+		RetentionHours   int  `json:"retention_hours"`
+		MaxEntriesPerDir int  `json:"max_entries_per_dir"`
+		MaxBytesPerDirMB int  `json:"max_bytes_per_dir_mb"`
+		AutoCleanEnabled bool `json:"auto_clean_enabled"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	// 校验参数范围
+	if req.RetentionHours < 0 || req.RetentionHours > 8760 { // 最多 1 年
+		RespondError(c, http.StatusBadRequest, "invalid_retention", "Retention hours must be between 0 and 8760")
+		return
+	}
+	if req.MaxEntriesPerDir < 0 || req.MaxEntriesPerDir > 100000 {
+		RespondError(c, http.StatusBadRequest, "invalid_max_entries", "Max entries per dir must be between 0 and 100000")
+		return
+	}
+	if req.MaxBytesPerDirMB < 0 || req.MaxBytesPerDirMB > 102400 { // 最多 100GB
+		RespondError(c, http.StatusBadRequest, "invalid_max_bytes", "Max bytes per dir must be between 0 and 102400 MB")
+		return
+	}
+
+	settings := sftp.TrashSettings{
+		UserID:           userID,
+		RetentionHours:   req.RetentionHours,
+		MaxEntriesPerDir: req.MaxEntriesPerDir,
+		MaxBytesPerDirMB: req.MaxBytesPerDirMB,
+		AutoCleanEnabled: req.AutoCleanEnabled,
+	}
+
+	if err := h.trashSettingsRepo.Upsert(c.Request.Context(), settings); err != nil {
+		RespondError(c, http.StatusInternalServerError, "save_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"message": "Settings saved successfully",
+	})
+}
+
+// ResetTrashSettings 重置用户回收站设置为默认值
+// DELETE /api/v1/sftp/trash/settings
+func (h *SFTPHandler) ResetTrashSettings(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Invalid user")
+		return
+	}
+
+	if h.trashSettingsRepo == nil {
+		RespondSuccess(c, gin.H{"message": "Settings reset to default"})
+		return
+	}
+
+	// 重置为系统默认值（设置所有字段为 0，表示使用默认值）
+	settings := sftp.TrashSettings{
+		UserID:           userID,
+		RetentionHours:   0,
+		MaxEntriesPerDir: 0,
+		MaxBytesPerDirMB: 0,
+		AutoCleanEnabled: true,
+	}
+
+	if err := h.trashSettingsRepo.Upsert(c.Request.Context(), settings); err != nil {
+		RespondError(c, http.StatusInternalServerError, "reset_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"message":              "Settings reset to default",
+		"retention_hours":      24,
+		"max_entries_per_dir":  5000,
+		"max_bytes_per_dir_mb": 2048,
+		"auto_clean_enabled":   true,
+		"is_default":           true,
+	})
 }

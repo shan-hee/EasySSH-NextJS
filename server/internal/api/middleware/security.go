@@ -63,7 +63,7 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("Cross-Origin-Opener-Policy", "unsafe-none")
 
 		// Cross-Origin-Embedder-Policy (COEP)
-		// 设置为 unsafe-none 以兼容 Google OAuth 和其他第三方资源
+		// 设置为 unsafe-none 以支持 Google OAuth 和其他第三方资源
 		c.Header("Cross-Origin-Embedder-Policy", "unsafe-none")
 
 		c.Next()

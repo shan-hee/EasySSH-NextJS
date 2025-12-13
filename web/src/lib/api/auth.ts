@@ -310,13 +310,13 @@ export const authApi = {
    * @param data_source 数据源类型: easyssh, nezha, komari
    * @param endpoint API 端点地址（nezha/komari 需要）
    * @param token API Token（nezha/komari 需要）
-   * @param set_active 是否设为当前激活的数据源（默认 true）
+   * @param set_active 是否设为当前激活的数据源（必须显式传入）
    */
   async updateMonitorDataSource(data: {
     data_source: string   // easyssh, nezha, komari
     endpoint?: string     // API 端点
     token?: string        // API Token
-    set_active?: boolean  // 是否设为当前激活的数据源
+    set_active: boolean   // 是否设为当前激活的数据源
   }): Promise<{ message: string }> {
     return apiFetch<{ message: string }>("/users/me/monitor-datasource", {
       method: "PUT",

@@ -49,22 +49,37 @@ type RedisConfig struct {
 
 // JWTConfig JWT 配置
 type JWTConfig struct {
-	Secret                   string
-	AccessExpireMinutes      int  // 访问令牌过期时间（分钟）
-	RefreshIdleExpireDays    int  // 刷新令牌闲置过期时间（天）
+	Secret                    string
+	AccessExpireMinutes       int  // 访问令牌过期时间（分钟）
+	RefreshIdleExpireDays     int  // 刷新令牌闲置过期时间（天）
 	RefreshAbsoluteExpireDays int  // 刷新令牌绝对过期时间（天）
-	RefreshRotate            bool // 刷新令牌轮换
-	RefreshReuseDetection    bool // 复用检测
+	RefreshRotate             bool // 刷新令牌轮换
+	RefreshReuseDetection     bool // 复用检测
 }
 
 // SFTPConfig SFTP/SSH 池化相关配置
-// 目前使用代码默认值，不从环境变量读取
 type SFTPConfig struct {
-	MaxIdleTimeSeconds        int // SSH 空闲回收时间（秒）
-	CleanupIntervalSeconds    int // 清理/keepalive 扫描间隔（秒）
-	MaxLifeTimeMinutes        int // SSH 最大寿命（分钟，0 表示不启用）
-	ConnTimeoutSeconds        int // SSH 建连/keepalive 超时（秒）
-	MaxSFTPSessionsPerConn    int // 单条 SSH 最大并发 SFTP 会话数（0 表示不限制）
+	MaxIdleTimeSeconds     int // SSH 空闲回收时间（秒）
+	CleanupIntervalSeconds int // 清理/keepalive 扫描间隔（秒）
+	MaxLifeTimeMinutes     int // SSH 最大寿命（分钟，0 表示不启用）
+	ConnTimeoutSeconds     int // SSH 建连/keepalive 超时（秒）
+	MaxSFTPSessionsPerConn int // 单条 SSH 最大并发 SFTP 会话数（0 表示不限制）
+
+	// .trash 清理 worker（独立后台任务，不依赖连接池空闲）
+	TrashCleanerEnabled         bool
+	TrashCleanIntervalSeconds   int // 扫描间隔（秒）
+	TrashSuccessCooldownSeconds int // 一次成功清理后的冷却（秒）
+	TrashRetentionHours         int // 保留期（小时）
+	TrashMaxEntriesPerTrashDir  int // 单个 .trash 目录最大条目数（0 表示不限制）
+	TrashMaxBytesPerTrashDirMB  int // 单个 .trash 目录最大占用（MB，0 表示不限制）
+	TrashMaxDeletesPerDirPerRun int // 单次对单目录最大删除条数
+	TrashMaxFailCount           int // 单个目录最大失败重试次数
+	TrashBatchSize              int // 每轮最多处理多少条记录
+	TrashConcurrency            int // 并发处理多少个 server
+	TrashConnectTimeoutSeconds  int // 单次连接超时（秒）
+	TrashJobTimeoutSeconds      int // 单个 server 清理总超时（秒）
+	TrashRetryBaseDelaySeconds  int // 失败重试基础延迟（秒）
+	TrashRetryMaxDelaySeconds   int // 失败重试最大延迟（秒）
 }
 
 // Load 从环境变量加载配置
@@ -95,19 +110,34 @@ func Load() (*Config, error) {
 			DB:       getEnvInt("REDIS_DB", 0),
 		},
 		JWT: JWTConfig{
-			Secret:                   getEnv("JWT_SECRET", "easyssh-secret-change-in-production"),
-			AccessExpireMinutes:      getEnvInt("JWT_ACCESS_EXPIRE_MINUTES", 15),           // 15 分钟
-			RefreshIdleExpireDays:    getEnvInt("JWT_REFRESH_IDLE_EXPIRE_DAYS", 7),        // 7 天
-			RefreshAbsoluteExpireDays: getEnvInt("JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS", 30),   // 30 天
-			RefreshRotate:            getEnvBool("JWT_REFRESH_ROTATE", true),               // 默认启用轮换
-			RefreshReuseDetection:    getEnvBool("JWT_REFRESH_REUSE_DETECTION", true),     // 默认启用复用检测
+			Secret:                    getEnv("JWT_SECRET", "easyssh-secret-change-in-production"),
+			AccessExpireMinutes:       getEnvInt("JWT_ACCESS_EXPIRE_MINUTES", 15),        // 15 分钟
+			RefreshIdleExpireDays:     getEnvInt("JWT_REFRESH_IDLE_EXPIRE_DAYS", 7),      // 7 天
+			RefreshAbsoluteExpireDays: getEnvInt("JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS", 30), // 30 天
+			RefreshRotate:             getEnvBool("JWT_REFRESH_ROTATE", true),            // 默认启用轮换
+			RefreshReuseDetection:     getEnvBool("JWT_REFRESH_REUSE_DETECTION", true),   // 默认启用复用检测
 		},
 		SFTP: SFTPConfig{
-			MaxIdleTimeSeconds:     120, // 2分钟
-			CleanupIntervalSeconds: 30,  // 30秒
-			MaxLifeTimeMinutes:     0,   // 默认不启用
-			ConnTimeoutSeconds:     10,  // 10秒
-			MaxSFTPSessionsPerConn: 8,   // 每条 SSH 默认最多 8 个 SFTP 会话
+			MaxIdleTimeSeconds:     getEnvInt("SFTP_MAX_IDLE_TIME_SECONDS", 120),     // 2分钟
+			CleanupIntervalSeconds: getEnvInt("SFTP_CLEANUP_INTERVAL_SECONDS", 30),   // 30秒
+			MaxLifeTimeMinutes:     getEnvInt("SFTP_MAX_LIFE_TIME_MINUTES", 0),       // 默认不启用
+			ConnTimeoutSeconds:     getEnvInt("SFTP_CONN_TIMEOUT_SECONDS", 10),       // 10秒
+			MaxSFTPSessionsPerConn: getEnvInt("SFTP_MAX_SESSIONS_PER_CONN", 8),       // 每条 SSH 默认最多 8 个 SFTP 会话
+
+			TrashCleanerEnabled:         getEnvBool("SFTP_TRASH_CLEANER_ENABLED", true),
+			TrashCleanIntervalSeconds:   getEnvInt("SFTP_TRASH_CLEAN_INTERVAL_SECONDS", 600),   // 10分钟
+			TrashSuccessCooldownSeconds: getEnvInt("SFTP_TRASH_SUCCESS_COOLDOWN_SECONDS", 600), // 10分钟
+			TrashRetentionHours:         getEnvInt("SFTP_TRASH_RETENTION_HOURS", 24),           // 默认保留 24h
+			TrashMaxEntriesPerTrashDir:  getEnvInt("SFTP_TRASH_MAX_ENTRIES_PER_DIR", 5000),
+			TrashMaxBytesPerTrashDirMB:  getEnvInt("SFTP_TRASH_MAX_BYTES_PER_DIR_MB", 2048), // 2GB
+			TrashMaxDeletesPerDirPerRun: getEnvInt("SFTP_TRASH_MAX_DELETES_PER_DIR", 500),
+			TrashMaxFailCount:           getEnvInt("SFTP_TRASH_MAX_FAIL_COUNT", 10),            // 最多重试 10 次
+			TrashBatchSize:              getEnvInt("SFTP_TRASH_BATCH_SIZE", 200),
+			TrashConcurrency:            getEnvInt("SFTP_TRASH_CONCURRENCY", 2),
+			TrashConnectTimeoutSeconds:  getEnvInt("SFTP_TRASH_CONNECT_TIMEOUT_SECONDS", 10),
+			TrashJobTimeoutSeconds:      getEnvInt("SFTP_TRASH_JOB_TIMEOUT_SECONDS", 120),
+			TrashRetryBaseDelaySeconds:  getEnvInt("SFTP_TRASH_RETRY_BASE_DELAY_SECONDS", 60),
+			TrashRetryMaxDelaySeconds:   getEnvInt("SFTP_TRASH_RETRY_MAX_DELAY_SECONDS", 3600),
 		},
 	}
 

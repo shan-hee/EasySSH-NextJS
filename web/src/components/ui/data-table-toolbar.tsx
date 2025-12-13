@@ -21,6 +21,8 @@ interface DataTableToolbarProps<TData> {
       icon?: React.ComponentType<{ className?: string }>
     }[]
   }[]
+  /** 自定义筛选器插槽（放在搜索框后面，用于服务端筛选等场景） */
+  filterSlot?: React.ReactNode
   onRefresh?: () => void
   onExport?: (format: "csv" | "json") => void
   showColumnVisibility?: boolean
@@ -35,6 +37,7 @@ export function DataTableToolbar<TData>({
   searchKey,
   searchPlaceholder,
   filters = [],
+  filterSlot,
   onRefresh,
   onExport,
   showExport = false,
@@ -75,6 +78,9 @@ export function DataTableToolbar<TData>({
             />
           ) : null
         })}
+
+        {/* 自定义筛选器插槽 */}
+        {filterSlot}
 
         {/* 清除筛选按钮 */}
         {isFiltered && (

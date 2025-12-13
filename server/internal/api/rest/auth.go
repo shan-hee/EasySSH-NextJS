@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"crypto/rand"
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/notification"
@@ -91,6 +91,18 @@ func setAccessTokenCookie(c *gin.Context, accessToken string, securityService se
 
 func setCSRFCookie(c *gin.Context, csrfToken string, securityService security.Service, maxAge int) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
+	// 清理历史遗留：如果旧版本曾将 CSRF Cookie 设在 /api/v1 下，会导致同名 Cookie 多 Path 共存，
+	// 从而出现“浏览器 JS 读到的值”和“请求中服务端读到的值”不一致，触发 csrf_invalid。
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     CSRFTokenCookieName,
+		Value:    "",
+		Path:     "/api/v1",
+		Domain:   domain,
+		MaxAge:   -1,
+		Secure:   secure,
+		HttpOnly: false,
+		SameSite: sameSite,
+	})
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CSRFTokenCookieName,
 		Value:    csrfToken,
@@ -108,8 +120,8 @@ func setAuthCookies(c *gin.Context, refreshToken string, securityService securit
 	secure, domain, sameSite := getCookieConfig(c, securityService)
 
 	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     RefreshTokenCookieName,
-		Value:    refreshToken,
+		Name:  RefreshTokenCookieName,
+		Value: refreshToken,
 		// 将 refresh_token Cookie 限定在 /api/v1/oauth 路径下，仅用于令牌刷新相关端点
 		Path:     "/api/v1/oauth",
 		Domain:   domain,
@@ -153,6 +165,17 @@ func clearAccessTokenCookie(c *gin.Context, securityService security.Service) {
 
 func clearCSRFCookie(c *gin.Context, securityService security.Service) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
+	// 同时清理 /api/v1 下的历史遗留 CSRF Cookie
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     CSRFTokenCookieName,
+		Value:    "",
+		Path:     "/api/v1",
+		Domain:   domain,
+		MaxAge:   -1,
+		Secure:   secure,
+		HttpOnly: false,
+		SameSite: sameSite,
+	})
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CSRFTokenCookieName,
 		Value:    "",
@@ -228,12 +251,12 @@ func hashRefreshToken(token string) string {
 type AuthHandler struct {
 	authService            auth.Service
 	jwtService             auth.JWTService
-	securityService        security.Service // 安全配置服务
-	accessTokenTTLSeconds  int              // Access Token 有效期（秒）
-	refreshTokenTTLSeconds int              // Refresh Token Cookie 有效期（秒）
-	systemConfigService    systemconfig.Service           // 系统配置服务（用于在 /auth/status 中返回公共配置）
-	verificationService    verification.Service           // 验证码服务
-	emailService           notification.EmailService      // 邮件服务
+	securityService        security.Service          // 安全配置服务
+	accessTokenTTLSeconds  int                       // Access Token 有效期（秒）
+	refreshTokenTTLSeconds int                       // Refresh Token Cookie 有效期（秒）
+	systemConfigService    systemconfig.Service      // 系统配置服务（用于在 /auth/status 中返回公共配置）
+	verificationService    verification.Service      // 验证码服务
+	emailService           notification.EmailService // 邮件服务
 }
 
 // NewAuthHandler 创建认证处理器
@@ -269,7 +292,7 @@ const (
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	Username         string  `json:"username"`                                   // 可选，为空时自动生成
+	Username         string  `json:"username"` // 可选，为空时自动生成
 	Email            string  `json:"email" binding:"required,email"`
 	Password         string  `json:"password" binding:"required,min=6"`
 	VerificationCode string  `json:"verification_code" binding:"required,len=6"` // 邮箱验证码
@@ -291,12 +314,12 @@ type ResetPasswordRequest struct {
 
 // UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
-	Username         string  `json:"username,omitempty"`             // 用户名（可修改）
-	Email            string  `json:"email,omitempty"`                // 新邮箱地址
-	VerificationCode string  `json:"verification_code,omitempty"`    // 邮箱验证码（修改邮箱时必需）
-	Avatar           *string `json:"avatar"`                         // 使用指针类型区分"未提供"和"空字符串"
-	Language         string  `json:"language,omitempty"`             // 用户界面语言偏好，如 zh-CN、en-US
-	Timezone         string  `json:"timezone,omitempty"`             // 用户时区偏好，如 Asia/Shanghai
+	Username         string  `json:"username,omitempty"`          // 用户名（可修改）
+	Email            string  `json:"email,omitempty"`             // 新邮箱地址
+	VerificationCode string  `json:"verification_code,omitempty"` // 邮箱验证码（修改邮箱时必需）
+	Avatar           *string `json:"avatar"`                      // 使用指针类型区分"未提供"和"空字符串"
+	Language         string  `json:"language,omitempty"`          // 用户界面语言偏好，如 zh-CN、en-US
+	Timezone         string  `json:"timezone,omitempty"`          // 用户时区偏好，如 Asia/Shanghai
 }
 
 // AuthResponse 认证响应
@@ -690,7 +713,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 	grantType := strings.ToLower(strings.TrimSpace(req.GrantType))
 
 	switch grantType {
-		case "authorization_code":
+	case "authorization_code":
 		// 授权码模式
 		if strings.TrimSpace(req.Code) == "" ||
 			strings.TrimSpace(req.RedirectURI) == "" ||
@@ -722,21 +745,21 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			return
 		}
 
-			// 设置 HttpOnly refresh_token Cookie
-			if refreshToken != "" {
-				setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
-			}
+		// 设置 HttpOnly refresh_token Cookie
+		if refreshToken != "" {
+			setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
+		}
 
-			// 设置 HttpOnly access_token Cookie（用于 WebSocket/下载等场景）
-			if accessToken != "" {
-				setAccessTokenCookie(c, accessToken, h.securityService, h.accessTokenTTLSeconds)
-			}
+		// 设置 HttpOnly access_token Cookie（用于 WebSocket/下载等场景）
+		if accessToken != "" {
+			setAccessTokenCookie(c, accessToken, h.securityService, h.accessTokenTTLSeconds)
+		}
 
-			// 设置 CSRF Token Cookie（双提交：Cookie + Header/Form）
-			if csrfToken, err := newCSRFToken(); err == nil {
-				// CSRF token 生命周期与 access_token 一致即可
-				setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
-			}
+		// 设置 CSRF Token Cookie（双提交：Cookie + Header/Form）
+		if csrfToken, err := newCSRFToken(); err == nil {
+			// CSRF token 生命周期与 access_token 一致即可
+			setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
+		}
 
 		// 在上下文中记录用户信息，便于审计日志使用
 		c.Set("user_id", user.ID.String())
@@ -748,7 +771,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			ExpiresIn:   h.accessTokenTTLSeconds,
 		})
 
-		case "refresh_token":
+	case "refresh_token":
 		// 刷新模式：从 HttpOnly Cookie 读取 refresh_token
 		refreshToken, err := c.Cookie(RefreshTokenCookieName)
 		if err == nil {
@@ -775,27 +798,27 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			return
 		}
 
-			// 如有轮换，更新 refresh_token Cookie
-			if newRefreshToken != "" {
-				setAuthCookies(c, newRefreshToken, h.securityService, h.refreshTokenTTLSeconds)
-			}
+		// 如有轮换，更新 refresh_token Cookie
+		if newRefreshToken != "" {
+			setAuthCookies(c, newRefreshToken, h.securityService, h.refreshTokenTTLSeconds)
+		}
 
-			// 同步更新 access_token Cookie
-			if newAccessToken != "" {
-				setAccessTokenCookie(c, newAccessToken, h.securityService, h.accessTokenTTLSeconds)
-			}
+		// 同步更新 access_token Cookie
+		if newAccessToken != "" {
+			setAccessTokenCookie(c, newAccessToken, h.securityService, h.accessTokenTTLSeconds)
+		}
 
-			// 如果缺少 CSRF Cookie，则补发一个
-			if _, err := c.Cookie(CSRFTokenCookieName); err != nil {
-				if csrfToken, err := newCSRFToken(); err == nil {
-					setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
-				}
+		// 如果缺少 CSRF Cookie，则补发一个
+		if _, err := c.Cookie(CSRFTokenCookieName); err != nil {
+			if csrfToken, err := newCSRFToken(); err == nil {
+				setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
 			}
+		}
 
-			RespondSuccess(c, OAuthTokenResponse{
-				AccessToken: newAccessToken,
-				TokenType:   "Bearer",
-				ExpiresIn:   h.accessTokenTTLSeconds,
+		RespondSuccess(c, OAuthTokenResponse{
+			AccessToken: newAccessToken,
+			TokenType:   "Bearer",
+			ExpiresIn:   h.accessTokenTTLSeconds,
 		})
 
 	default:
@@ -815,7 +838,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 
-	// 兼容 Cookie 鉴权：允许从 HttpOnly Cookie 读取 access_token
+	// 同时支持 Cookie：用于下载/WS 等难以设置 Header 的场景
 	if accessToken == "" {
 		if cookieToken, err := c.Cookie(AccessTokenCookieName); err == nil {
 			accessToken = strings.TrimSpace(cookieToken)
@@ -1647,7 +1670,7 @@ type UpdateMonitorDataSourceRequest struct {
 	DataSource string `json:"data_source"` // easyssh, nezha, komari
 	Endpoint   string `json:"endpoint"`    // API 端点
 	Token      string `json:"token"`       // API Token
-	SetActive  *bool  `json:"set_active"`  // 是否设为当前激活的数据源（nil 时默认为 true）
+	SetActive  *bool  `json:"set_active"`  // 是否设为当前激活的数据源（必须显式传入）
 }
 
 // UpdateMonitorDataSource 更新监控数据源设置
@@ -1686,10 +1709,9 @@ func (h *AuthHandler) UpdateMonitorDataSource(c *gin.Context) {
 	}
 
 	// 更新监控数据源设置
-	// 默认 setActive 为 true（向后兼容）
-	setActive := true
-	if req.SetActive != nil {
-		setActive = *req.SetActive
+	if req.SetActive == nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", "set_active is required")
+		return
 	}
 
 	if err := h.authService.UpdateMonitorDataSource(
@@ -1698,7 +1720,7 @@ func (h *AuthHandler) UpdateMonitorDataSource(c *gin.Context) {
 		req.DataSource,
 		req.Endpoint,
 		req.Token,
-		setActive,
+		*req.SetActive,
 	); err != nil {
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to update monitor data source: "+err.Error())
 		return

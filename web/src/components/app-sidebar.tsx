@@ -71,7 +71,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
         items: [
           { title: tNav("fileManager"), url: "/dashboard/sftp" },
           { title: tNav("transferHistory"), url: "/dashboard/transfers/history" },
-          { title: tNav("storage"), url: "/dashboard/storage" },
+          { title: tNav("trash"), url: "/dashboard/storage" },
         ],
       },
       {

@@ -13,6 +13,13 @@ type ErrorResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+// ErrorResponseWithDetails 带详细信息的错误响应结构
+type ErrorResponseWithDetails struct {
+	Error   string      `json:"error"`
+	Message string      `json:"message,omitempty"`
+	Details interface{} `json:"details,omitempty"`
+}
+
 // SuccessResponse 成功响应结构
 type SuccessResponse struct {
 	Data    interface{} `json:"data,omitempty"`
@@ -33,6 +40,16 @@ func RespondError(c *gin.Context, statusCode int, errCode string, message string
 	c.JSON(statusCode, ErrorResponse{
 		Error:   errCode,
 		Message: message,
+	})
+}
+
+// RespondErrorWithDetails 返回带详细信息的错误响应
+// 用于需要返回结构化错误详情的场景（如冲突、验证错误等）
+func RespondErrorWithDetails(c *gin.Context, statusCode int, errCode string, message string, details interface{}) {
+	c.JSON(statusCode, ErrorResponseWithDetails{
+		Error:   errCode,
+		Message: message,
+		Details: details,
 	})
 }
 

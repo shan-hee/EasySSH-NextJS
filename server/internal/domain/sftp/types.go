@@ -51,9 +51,31 @@ type FileOperationResult struct {
 
 // DiskUsage 磁盘使用情况
 type DiskUsage struct {
-	Path       string  `json:"path"`
-	Total      uint64  `json:"total"`
-	Used       uint64  `json:"used"`
-	Available  uint64  `json:"available"`
+	Path        string  `json:"path"`
+	Total       uint64  `json:"total"`
+	Used        uint64  `json:"used"`
+	Available   uint64  `json:"available"`
 	UsedPercent float64 `json:"used_percent"`
+}
+
+// TrashEntry 回收站条目（.trash 下的文件/目录）
+type TrashEntry struct {
+	TrashName    string      `json:"trash_name"`
+	TrashPath    string      `json:"trash_path"`
+	OriginalName string      `json:"original_name"`
+	RestorePath  string      `json:"restore_path"`
+	Size         int64       `json:"size"`
+	Mode         os.FileMode `json:"mode"`
+	IsDir        bool        `json:"is_dir"`
+	IsLink       bool        `json:"is_link"`
+	ModTime      time.Time   `json:"mod_time"`
+	Permission   string      `json:"permission"`
+}
+
+// TrashListing 回收站列表响应
+type TrashListing struct {
+	ParentDir string       `json:"parent_dir"`
+	TrashDir  string       `json:"trash_dir"`
+	Items     []TrashEntry `json:"items"`
+	Total     int          `json:"total"`
 }

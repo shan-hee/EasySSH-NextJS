@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// 从 Authorization 头或查询参数中提取 Bearer Token
+// 从 Authorization 头或 Cookie 中提取 Token
 func extractBearerToken(c *gin.Context) string {
 	// 优先从 Authorization 头读取：Authorization: Bearer <token>
 	authHeader := c.GetHeader("Authorization")
@@ -28,15 +28,10 @@ func extractBearerToken(c *gin.Context) string {
 		}
 	}
 
-	// 兼容：历史原因允许通过 query 参数传递 token（不推荐，可能泄露到日志/历史记录）
-	if token := strings.TrimSpace(c.Query("token")); token != "" {
-		return token
-	}
-
 	return ""
 }
 
-// AuthMiddleware JWT 认证中间件（仅接受 Bearer Token，不再从 Cookie 读取）
+// AuthMiddleware JWT 认证中间件（支持 Authorization Bearer 与 Cookie）
 func AuthMiddleware(jwtService auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractBearerToken(c)

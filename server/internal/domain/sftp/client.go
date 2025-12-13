@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/sftp"
 )
+
+var ErrTrashPathNotAllowed = errors.New("trash path not allowed")
 
 // Client SFTP 客户端封装
 type Client struct {
@@ -310,6 +313,10 @@ func (c *Client) RemoveFile(path string) error {
 
 // MoveToTrash 将目标（文件/目录）移动到同级 .trash 下，并返回 trashDir/trashPath
 func (c *Client) MoveToTrash(path string) (trashDir string, trashPath string, err error) {
+	if isTrashSelfOrChild(path) {
+		return "", "", fmt.Errorf("%w: %s", ErrTrashPathNotAllowed, path)
+	}
+
 	parent := filepath.Dir(path)
 	trashDir = filepath.Join(parent, ".trash")
 
@@ -327,41 +334,29 @@ func (c *Client) MoveToTrash(path string) (trashDir string, trashPath string, er
 		return "", "", fmt.Errorf("failed to move to trash: %w", renameErr)
 	}
 
-	fmt.Printf("[SFTP Trash] Moved to trash: %s -> %s\n", path, trashPath)
+	// 尝试把"删除时间"写入 mtime（否则可能沿用原文件 mtime，导致回收站保留期与 UI 展示不准确）
+	now := time.Now()
+	if chtErr := c.sftpClient.Chtimes(trashPath, now, now); chtErr != nil {
+		// Chtimes 失败不应阻止删除操作，但记录警告以便调试
+		log.Printf("[SFTP Trash] Warning: failed to update mtime for %s: %v (using original file mtime)", trashPath, chtErr)
+	}
+
+	log.Printf("[SFTP Trash] Moved to trash: %s -> %s", path, trashPath)
 	return trashDir, trashPath, nil
 }
 
-// backgroundSSHSafeDelete 使用 SSH 启动后台安全删除（nohup + &）
-func (c *Client) backgroundSSHSafeDelete(target string) error {
-	if c.sshClient == nil || !c.sshClient.IsConnected() {
-		return fmt.Errorf("ssh client not available")
+func isTrashSelfOrChild(p string) bool {
+	p = filepath.Clean(p)
+	if p == ".trash" || filepath.Base(p) == ".trash" {
+		return true
 	}
-	script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; nohup rm -rf -- \"$tgt\" >/dev/null 2>&1 &", shSingleQuote(target))
-	cmd := "sh -c " + shSingleQuote(script)
-	_, err := c.sshClient.ExecuteCommand(cmd)
-	if err != nil {
-		return fmt.Errorf("background delete failed: %w", err)
-	}
-	return nil
+	sep := string(filepath.Separator)
+	return strings.Contains(p, sep+".trash"+sep)
 }
 
-// directSSHSafeDelete 使用 SSH 同步安全删除
-func (c *Client) directSSHSafeDelete(target string) error {
-	if c.sshClient == nil || !c.sshClient.IsConnected() {
-		return fmt.Errorf("ssh client not available")
-	}
-	script := fmt.Sprintf("tgt=%s; case \"$tgt\" in /|/etc|/var|/usr|/bin|/sbin|/lib|/lib64|/proc|/sys|/dev) exit 1;; esac; rm -rf -- \"$tgt\"", shSingleQuote(target))
-	cmd := "sh -c " + shSingleQuote(script)
-	_, err := c.sshClient.ExecuteCommand(cmd)
-	if err != nil {
-		return fmt.Errorf("direct ssh delete failed: %w", err)
-	}
-	return nil
-}
-
-// shSingleQuote 将字符串按 POSIX 单引号安全包裹：' -> '\”
-func shSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+// RemoveAll 永久递归删除目录（类似 rm -rf），用于回收站清理/半文件清理等
+func (c *Client) RemoveAll(path string) error {
+	return c.removeAll(path)
 }
 
 // removeAll 递归删除目录（类似 os.RemoveAll）
@@ -371,7 +366,7 @@ func (c *Client) removeAll(path string) error {
 	if err != nil {
 		// 如果目录不存在或无法读取，尝试直接删除
 		// 可能是符号链接或特殊文件
-		fmt.Printf("[SFTP removeAll] Failed to read directory %s: %v, trying direct remove\n", path, err)
+		log.Printf("[SFTP removeAll] Failed to read directory %s: %v, trying direct remove", path, err)
 		// 尝试作为文件删除
 		if removeErr := c.sftpClient.Remove(path); removeErr == nil {
 			return nil
@@ -388,12 +383,12 @@ func (c *Client) removeAll(path string) error {
 		childPath := filepath.Join(path, entry.Name())
 		if entry.IsDir() {
 			if err := c.removeAll(childPath); err != nil {
-				fmt.Printf("[SFTP removeAll] Failed to remove subdirectory %s: %v\n", childPath, err)
+				log.Printf("[SFTP removeAll] Failed to remove subdirectory %s: %v", childPath, err)
 				return err
 			}
 		} else {
 			if err := c.sftpClient.Remove(childPath); err != nil {
-				fmt.Printf("[SFTP removeAll] Failed to remove file %s: %v\n", childPath, err)
+				log.Printf("[SFTP removeAll] Failed to remove file %s: %v", childPath, err)
 				return err
 			}
 		}
@@ -402,7 +397,7 @@ func (c *Client) removeAll(path string) error {
 	// 删除空目录
 	err = c.sftpClient.RemoveDirectory(path)
 	if err != nil {
-		fmt.Printf("[SFTP removeAll] Failed to remove directory %s: %v\n", path, err)
+		log.Printf("[SFTP removeAll] Failed to remove directory %s: %v", path, err)
 	}
 	return err
 }
