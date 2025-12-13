@@ -28,6 +28,18 @@ type EmailService interface {
 
 	// SendPasswordResetCode 发送密码重置验证码邮件
 	SendPasswordResetCode(ctx context.Context, email, code string) error
+
+	// SendNewDeviceAlert 发送新设备登录告警
+	SendNewDeviceAlert(ctx context.Context, email, username, deviceName, ip, location string, loginTime time.Time) error
+
+	// SendNewLocationAlert 发送新地理位置登录告警
+	SendNewLocationAlert(ctx context.Context, email, username, location, ip string, loginTime time.Time) error
+
+	// SendSuspiciousLoginAlert 发送可疑登录告警
+	SendSuspiciousLoginAlert(ctx context.Context, email, username, reason, ip, location string, loginTime time.Time) error
+
+	// SendAccountLockedAlert 发送账户锁定告警
+	SendAccountLockedAlert(ctx context.Context, email, username, reason string, unlockTime time.Time) error
 }
 
 // EmailConfig 邮件服务配置
@@ -68,6 +80,10 @@ const (
 	TemplatePasswordChange   EmailTemplate = "password_changed"
 	TemplateVerificationCode EmailTemplate = "verification_code"
 	TemplatePasswordReset    EmailTemplate = "password_reset"
+	TemplateNewDevice        EmailTemplate = "new_device"        // 新设备登录告警
+	TemplateNewLocation      EmailTemplate = "new_location"      // 新地点登录告警
+	TemplateSuspiciousLogin  EmailTemplate = "suspicious_login"  // 可疑登录告警
+	TemplateAccountLocked    EmailTemplate = "account_locked"    // 账户锁定告警
 )
 
 // EmailData 邮件数据结构

@@ -58,8 +58,11 @@ export default function UsersPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
+  const [isLockDialogOpen, setIsLockDialogOpen] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null)
+  const [lockUserId, setLockUserId] = useState<string | null>(null)
+  const [lockUsername, setLockUsername] = useState<string>("")
 
   // 新建用户表单
   const [newUser, setNewUser] = useState({
@@ -78,6 +81,17 @@ export default function UsersPage() {
 
   // 修改密码表单
   const [newPassword, setNewPassword] = useState("")
+
+  // 锁定用户表单
+  const [lockForm, setLockForm] = useState<{
+    reason: string
+    duration_minutes: number
+    custom_value?: number
+    custom_unit?: "minutes" | "hours" | "days"
+  }>({
+    reason: "",
+    duration_minutes: 60,
+  })
 
   // 加载用户列表
   const loadUsers = async () => {
@@ -244,11 +258,88 @@ export default function UsersPage() {
     setIsPasswordDialogOpen(true)
   }
 
+  // 解锁用户
+  const handleUnlock = async (userId: string, username: string) => {
+    if (!confirm(t("confirmUnlock", { username }))) {
+      return
+    }
+
+    try {
+      await usersApi.unlock(userId)
+      toast.success(t("toastUnlockSuccess"))
+      await loadUsers()
+    } catch (error: unknown) {
+      console.error("解锁用户失败:", error)
+      toast.error(getErrorMessage(error, t("toastUnlockFailed")))
+    }
+  }
+
+  // 打开锁定对话框
+  const handleOpenLockDialog = (userId: string, username: string) => {
+    setLockUserId(userId)
+    setLockUsername(username)
+    setLockForm({ reason: "", duration_minutes: 60 })
+    setIsLockDialogOpen(true)
+  }
+
+  // 锁定用户
+  const handleLockUser = async () => {
+    if (!lockUserId) return
+
+    // 计算最终锁定时长（分钟）
+    let finalDurationMinutes = lockForm.duration_minutes
+
+    // 自定义时长
+    if (lockForm.duration_minutes === -1) {
+      const customValue = lockForm.custom_value || 0
+      const customUnit = lockForm.custom_unit || "minutes"
+
+      if (customValue < 1) {
+        toast.error(t("toastLockDurationInvalid"))
+        return
+      }
+
+      switch (customUnit) {
+        case "hours":
+          finalDurationMinutes = customValue * 60
+          break
+        case "days":
+          finalDurationMinutes = customValue * 60 * 24
+          break
+        default:
+          finalDurationMinutes = customValue
+      }
+    }
+
+    if (finalDurationMinutes < 1) {
+      toast.error(t("toastLockDurationInvalid"))
+      return
+    }
+
+    try {
+      await usersApi.lock(lockUserId, {
+        reason: lockForm.reason,
+        duration_minutes: finalDurationMinutes,
+      })
+      toast.success(t("toastLockSuccess"))
+      setIsLockDialogOpen(false)
+      setLockUserId(null)
+      setLockUsername("")
+      setLockForm({ reason: "", duration_minutes: 60 })
+      await loadUsers()
+    } catch (error: unknown) {
+      console.error("锁定用户失败:", error)
+      toast.error(getErrorMessage(error, t("toastLockFailed")))
+    }
+  }
+
   // 创建列定义
   const columns = createUserColumns({
     onEdit: handleEdit,
     onDelete: handleDelete,
     onChangePassword: handleOpenPasswordDialog,
+    onLock: handleOpenLockDialog,
+    onUnlock: handleUnlock,
   })
 
   // 角色筛选选项
@@ -568,6 +659,115 @@ export default function UsersPage() {
               {t("dialogCancel")}
             </Button>
             <Button onClick={handleChangePassword}>{t("dialogPasswordSubmit")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 锁定用户对话框 */}
+      <Dialog open={isLockDialogOpen} onOpenChange={setIsLockDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("dialogLockTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("dialogLockDescription", { username: lockUsername })}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="lock-duration">
+                {t("fieldLockDuration")} <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={String(lockForm.duration_minutes)}
+                onValueChange={(value) => {
+                  const minutes = parseInt(value, 10)
+                  setLockForm({ ...lockForm, duration_minutes: minutes })
+                }}
+              >
+                <SelectTrigger id="lock-duration">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">{t("lockDuration15min")}</SelectItem>
+                  <SelectItem value="30">{t("lockDuration30min")}</SelectItem>
+                  <SelectItem value="60">{t("lockDuration1hour")}</SelectItem>
+                  <SelectItem value="180">{t("lockDuration3hours")}</SelectItem>
+                  <SelectItem value="360">{t("lockDuration6hours")}</SelectItem>
+                  <SelectItem value="720">{t("lockDuration12hours")}</SelectItem>
+                  <SelectItem value="1440">{t("lockDuration24hours")}</SelectItem>
+                  <SelectItem value="4320">{t("lockDuration3days")}</SelectItem>
+                  <SelectItem value="10080">{t("lockDuration7days")}</SelectItem>
+                  <SelectItem value="43200">{t("lockDuration30days")}</SelectItem>
+                  <SelectItem value="525600">{t("lockDurationPermanent")}</SelectItem>
+                  <SelectItem value="-1">{t("lockDurationCustom")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 自定义时长输入 */}
+            {lockForm.duration_minutes === -1 && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-duration">
+                  {t("fieldCustomDuration")} <span className="text-destructive">*</span>
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="custom-duration"
+                    type="number"
+                    min="1"
+                    placeholder={t("placeholderCustomDuration")}
+                    value={lockForm.custom_value || ""}
+                    onChange={(e) =>
+                      setLockForm({ ...lockForm, custom_value: parseInt(e.target.value, 10) || 0 })
+                    }
+                    className="flex-1"
+                  />
+                  <Select
+                    value={lockForm.custom_unit || "minutes"}
+                    onValueChange={(value) =>
+                      setLockForm({ ...lockForm, custom_unit: value as "minutes" | "hours" | "days" })
+                    }
+                  >
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="minutes">{t("unitMinutes")}</SelectItem>
+                      <SelectItem value="hours">{t("unitHours")}</SelectItem>
+                      <SelectItem value="days">{t("unitDays")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="lock-reason">{t("fieldLockReason")}</Label>
+              <Input
+                id="lock-reason"
+                placeholder={t("placeholderLockReason")}
+                value={lockForm.reason}
+                onChange={(e) => setLockForm({ ...lockForm, reason: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsLockDialogOpen(false)
+                setLockUserId(null)
+                setLockUsername("")
+                setLockForm({ reason: "", duration_minutes: 60 })
+              }}
+            >
+              {t("dialogCancel")}
+            </Button>
+            <Button variant="destructive" onClick={handleLockUser}>
+              {t("dialogLockSubmit")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

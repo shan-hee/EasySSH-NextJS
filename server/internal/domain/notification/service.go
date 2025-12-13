@@ -58,6 +58,18 @@ func (s *smtpEmailService) initTemplates() error {
 	// 密码重置验证码邮件模板
 	s.templates[TemplatePasswordReset] = template.Must(template.New("password_reset").Parse(passwordResetTemplate))
 
+	// 新设备登录告警模板
+	s.templates[TemplateNewDevice] = template.Must(template.New("new_device").Parse(newDeviceAlertTemplate))
+
+	// 新地点登录告警模板
+	s.templates[TemplateNewLocation] = template.Must(template.New("new_location").Parse(newLocationAlertTemplate))
+
+	// 可疑登录告警模板
+	s.templates[TemplateSuspiciousLogin] = template.Must(template.New("suspicious_login").Parse(suspiciousLoginAlertTemplate))
+
+	// 账户锁定告警模板
+	s.templates[TemplateAccountLocked] = template.Must(template.New("account_locked").Parse(accountLockedAlertTemplate))
+
 	return nil
 }
 
@@ -293,4 +305,97 @@ func (s *smtpEmailService) send(to string, message []byte) error {
 
 	// 不使用 TLS，直接发送
 	return smtp.SendMail(addr, auth, s.config.FromEmail, []string{to}, message)
+}
+
+// SendNewDeviceAlert 发送新设备登录告警
+func (s *smtpEmailService) SendNewDeviceAlert(ctx context.Context, email, username, deviceName, ip, location string, loginTime time.Time) error {
+	systemName := s.config.SystemName
+	if systemName == "" {
+		systemName = "EasySSH"
+	}
+
+	data := map[string]interface{}{
+		"Username":   username,
+		"DeviceName": deviceName,
+		"IPAddress":  ip,
+		"Location":   location,
+		"LoginTime":  loginTime.Format("2006-01-02 15:04:05"),
+		"SystemName": systemName,
+	}
+
+	return s.sendEmail(ctx, &EmailData{
+		To:       email,
+		Subject:  fmt.Sprintf("🆕 新设备登录告警 - %s", systemName),
+		Template: TemplateNewDevice,
+		Data:     data,
+	})
+}
+
+// SendNewLocationAlert 发送新地理位置登录告警
+func (s *smtpEmailService) SendNewLocationAlert(ctx context.Context, email, username, location, ip string, loginTime time.Time) error {
+	systemName := s.config.SystemName
+	if systemName == "" {
+		systemName = "EasySSH"
+	}
+
+	data := map[string]interface{}{
+		"Username":  username,
+		"Location":  location,
+		"IPAddress": ip,
+		"LoginTime": loginTime.Format("2006-01-02 15:04:05"),
+		"SystemName": systemName,
+	}
+
+	return s.sendEmail(ctx, &EmailData{
+		To:       email,
+		Subject:  fmt.Sprintf("📍 新地点登录告警 - %s", systemName),
+		Template: TemplateNewLocation,
+		Data:     data,
+	})
+}
+
+// SendSuspiciousLoginAlert 发送可疑登录告警
+func (s *smtpEmailService) SendSuspiciousLoginAlert(ctx context.Context, email, username, reason, ip, location string, loginTime time.Time) error {
+	systemName := s.config.SystemName
+	if systemName == "" {
+		systemName = "EasySSH"
+	}
+
+	data := map[string]interface{}{
+		"Username":  username,
+		"Reason":    reason,
+		"IPAddress": ip,
+		"Location":  location,
+		"LoginTime": loginTime.Format("2006-01-02 15:04:05"),
+		"SystemName": systemName,
+	}
+
+	return s.sendEmail(ctx, &EmailData{
+		To:       email,
+		Subject:  fmt.Sprintf("⚠️ 可疑登录告警 - %s", systemName),
+		Template: TemplateSuspiciousLogin,
+		Data:     data,
+	})
+}
+
+// SendAccountLockedAlert 发送账户锁定告警
+func (s *smtpEmailService) SendAccountLockedAlert(ctx context.Context, email, username, reason string, unlockTime time.Time) error {
+	systemName := s.config.SystemName
+	if systemName == "" {
+		systemName = "EasySSH"
+	}
+
+	data := map[string]interface{}{
+		"Username":   username,
+		"Reason":     reason,
+		"UnlockTime": unlockTime.Format("2006-01-02 15:04:05"),
+		"SystemName": systemName,
+	}
+
+	return s.sendEmail(ctx, &EmailData{
+		To:       email,
+		Subject:  fmt.Sprintf("🔒 账户已锁定 - %s", systemName),
+		Template: TemplateAccountLocked,
+		Data:     data,
+	})
 }

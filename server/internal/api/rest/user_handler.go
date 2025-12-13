@@ -2,6 +2,7 @@ package rest
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/easyssh/server/internal/domain/auth"
 	userdomain "github.com/easyssh/server/internal/domain/user"
@@ -12,13 +13,15 @@ import (
 
 // UserHandler 用户管理处理器
 type UserHandler struct {
-	userService userdomain.Service
+	userService        userdomain.Service
+	accountLockService auth.AccountLockService
 }
 
 // NewUserHandler 创建用户管理处理器
-func NewUserHandler(userService userdomain.Service) *UserHandler {
+func NewUserHandler(userService userdomain.Service, accountLockService auth.AccountLockService) *UserHandler {
 	return &UserHandler{
-		userService: userService,
+		userService:        userService,
+		accountLockService: accountLockService,
 	}
 }
 
@@ -48,6 +51,12 @@ type UpdateUserRequest struct {
 // ChangeUserPasswordRequest 修改用户密码请求（管理员用）
 type ChangeUserPasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required,min=6"`
+}
+
+// LockUserRequest 锁定用户请求
+type LockUserRequest struct {
+	Reason          string `json:"reason"`                                    // 锁定原因
+	DurationMinutes int    `json:"duration_minutes" binding:"required,min=1"` // 锁定时长（分钟）
 }
 
 // ListUsers 获取用户列表
@@ -299,9 +308,111 @@ func (h *UserHandler) GetStatistics(c *gin.Context) {
 	})
 }
 
+// LockUser 锁定用户账户
+// POST /api/v1/users/:id/lock
+func (h *UserHandler) LockUser(c *gin.Context) {
+	// 检查是否有账户锁定服务
+	if h.accountLockService == nil {
+		RespondError(c, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Account lock service not available")
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "INVALID_ID", "Invalid user ID format")
+		return
+	}
+
+	var req LockUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	// 获取当前用户ID，不能锁定自己
+	currentUserID, exists := c.Get("user_id")
+	if exists {
+		currentIDStr, ok := currentUserID.(string)
+		if ok {
+			currentID, err := uuid.Parse(currentIDStr)
+			if err == nil && currentID == id {
+				RespondError(c, http.StatusForbidden, "CANNOT_LOCK_SELF", "Cannot lock your own account")
+				return
+			}
+		}
+	}
+
+	// 获取用户信息（主要是获取邮箱）
+	user, err := h.userService.GetUser(c.Request.Context(), id)
+	if err != nil {
+		if err == userdomain.ErrUserNotFound {
+			RespondError(c, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+
+	// 设置锁定原因
+	reason := req.Reason
+	if reason == "" {
+		reason = "管理员手动锁定"
+	}
+
+	// 锁定账户
+	duration := time.Duration(req.DurationMinutes) * time.Minute
+	if err := h.accountLockService.LockAccount(c.Request.Context(), user.Email, reason, duration); err != nil {
+		RespondError(c, http.StatusInternalServerError, "LOCK_FAILED", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User account locked successfully",
+	})
+}
+
+// UnlockUser 解锁用户账户
+// POST /api/v1/users/:id/unlock
+func (h *UserHandler) UnlockUser(c *gin.Context) {
+	// 检查是否有账户锁定服务
+	if h.accountLockService == nil {
+		RespondError(c, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Account lock service not available")
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "INVALID_ID", "Invalid user ID format")
+		return
+	}
+
+	// 获取用户信息（主要是获取邮箱）
+	user, err := h.userService.GetUser(c.Request.Context(), id)
+	if err != nil {
+		if err == userdomain.ErrUserNotFound {
+			RespondError(c, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+
+	// 解锁账户
+	if err := h.accountLockService.UnlockAccount(c.Request.Context(), user.Email); err != nil {
+		RespondError(c, http.StatusInternalServerError, "UNLOCK_FAILED", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User account unlocked successfully",
+	})
+}
+
 // RegisterUserRoutes 注册用户管理路由
-func RegisterUserRoutes(r *gin.RouterGroup, userService userdomain.Service, authMiddleware gin.HandlerFunc) {
-	handler := NewUserHandler(userService)
+func RegisterUserRoutes(r *gin.RouterGroup, userService userdomain.Service, accountLockService auth.AccountLockService, authMiddleware gin.HandlerFunc) {
+	handler := NewUserHandler(userService, accountLockService)
 
 	users := r.Group("/users")
 	users.Use(authMiddleware) // 所有用户管理接口都需要认证
@@ -313,5 +424,6 @@ func RegisterUserRoutes(r *gin.RouterGroup, userService userdomain.Service, auth
 		users.PUT("/:id", handler.UpdateUser)                // 更新用户
 		users.DELETE("/:id", handler.DeleteUser)             // 删除用户
 		users.POST("/:id/password", handler.ChangePassword)  // 修改密码
+		users.POST("/:id/unlock", handler.UnlockUser)        // 解锁账户
 	}
 }

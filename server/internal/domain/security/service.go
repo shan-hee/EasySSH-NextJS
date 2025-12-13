@@ -30,6 +30,9 @@ type Service interface {
 	// GetRateLimitConfig 获取速率限制配置
 	GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, error)
 
+	// GetAccountLockConfig 获取账户锁定配置
+	GetAccountLockConfig(ctx context.Context) (*AccountLockConfig, error)
+
 	// CheckIPAllowed 检查IP是否允许访问
 	CheckIPAllowed(ctx context.Context, ip string) (bool, error)
 
@@ -92,6 +95,22 @@ func (s *service) GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, err
 		LoginLimit: config.LoginLimit,
 		APILimit:   config.APILimit,
 		TwoFALimit: twoFALimit,
+	}, nil
+}
+
+// GetAccountLockConfig 获取账户锁定配置
+func (s *service) GetAccountLockConfig(ctx context.Context) (*AccountLockConfig, error) {
+	config, err := s.Get(ctx)
+	if err != nil {
+		return DefaultAccountLockConfig(), err
+	}
+
+	return &AccountLockConfig{
+		Enabled:                    config.AccountLockEnabled,
+		MaxIPFailAttempts:          config.MaxIPFailAttempts,
+		IPLockDurationMinutes:      config.IPLockDurationMinutes,
+		MaxAccountFailAttempts:     config.MaxAccountFailAttempts,
+		AccountLockDurationMinutes: config.AccountLockDurationMinutes,
 	}, nil
 }
 

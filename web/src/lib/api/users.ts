@@ -12,6 +12,10 @@ export type UserRole = "admin" | "user" | "viewer"
 export interface UserDetail extends User {
   role: UserRole
   last_login_at?: string
+  // 账户锁定相关
+  locked_until?: string      // 锁定截止时间
+  lock_reason?: string       // 锁定原因
+  failed_login_attempts?: number  // 连续失败登录次数
 }
 
 /**
@@ -62,6 +66,14 @@ export interface UpdateUserRequest {
  */
 export interface ChangePasswordRequest {
   new_password: string
+}
+
+/**
+ * 锁定用户请求
+ */
+export interface LockUserRequest {
+  reason?: string           // 锁定原因
+  duration_minutes: number  // 锁定时长（分钟）
 }
 
 /**
@@ -144,5 +156,24 @@ export const usersApi = {
    */
   async getStatistics(): Promise<{ data: UserStatistics }> {
     return apiFetch<{ data: UserStatistics }>(`/users/statistics`)
+  },
+
+  /**
+   * 解锁用户账户
+   */
+  async unlock(userId: string): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/users/${userId}/unlock`, {
+      method: "POST",
+    })
+  },
+
+  /**
+   * 锁定用户账户
+   */
+  async lock(userId: string, data: LockUserRequest): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/users/${userId}/lock`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
   },
 }

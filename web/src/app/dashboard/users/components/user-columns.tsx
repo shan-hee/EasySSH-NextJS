@@ -22,6 +22,8 @@ import {
   Shield,
   Users,
   Eye,
+  Lock,
+  Unlock,
 } from "lucide-react"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/hooks/use-system-config"
@@ -31,6 +33,8 @@ interface UserColumnsOptions {
   onEdit?: (user: UserDetail) => void
   onDelete?: (userId: string, username: string) => void
   onChangePassword?: (userId: string) => void
+  onLock?: (userId: string, username: string) => void
+  onUnlock?: (userId: string, username: string) => void
 }
 
 export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserDetail, unknown>[] {
@@ -42,6 +46,12 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
 
   const formatDate = (value: string) =>
     formatInTimezone(value, { second: undefined }, effectiveLocale, effectiveTimezone)
+
+  // 判断用户是否被锁定
+  const isUserLocked = (user: UserDetail) => {
+    if (!user.locked_until) return false
+    return new Date(user.locked_until) > new Date()
+  }
 
   // 角色显示组件
   const RoleBadge = ({ role }: { role: UserRole }) => {
@@ -113,16 +123,31 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
       },
       cell: ({ row }) => {
         const user = row.original
+        const locked = isUserLocked(user)
         return (
           <div className="flex items-center gap-3">
-            <SmartAvatar
-              className="h-10 w-10"
-              src={user.avatar}
-              username={user.username}
-              email={user.email}
-            />
+            <div className="relative">
+              <SmartAvatar
+                className="h-10 w-10"
+                src={user.avatar}
+                username={user.username}
+                email={user.email}
+              />
+              {locked && (
+                <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-0.5">
+                  <Lock className="h-3 w-3 text-destructive-foreground" />
+                </div>
+              )}
+            </div>
             <div>
-              <div className="font-medium">{user.username}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{user.username}</span>
+                {locked && (
+                  <Badge variant="destructive" className="text-xs px-1.5 py-0">
+                    {t("statusLocked")}
+                  </Badge>
+                )}
+              </div>
               <div className="text-sm text-muted-foreground">{user.email}</div>
             </div>
           </div>
@@ -215,6 +240,7 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
       ),
       cell: ({ row }) => {
         const user = row.original
+        const locked = isUserLocked(user)
 
         return (
           <div className="text-right">
@@ -233,6 +259,23 @@ export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserD
                   <Key className="mr-2 h-4 w-4" />
                   {t("colActionChangePassword")}
                 </DropdownMenuItem>
+                {locked ? (
+                  <DropdownMenuItem
+                    onClick={() => options?.onUnlock?.(user.id, user.username)}
+                    className="text-green-600"
+                  >
+                    <Unlock className="mr-2 h-4 w-4" />
+                    {t("colActionUnlock")}
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => options?.onLock?.(user.id, user.username)}
+                    className="text-orange-600"
+                  >
+                    <Lock className="mr-2 h-4 w-4" />
+                    {t("colActionLock")}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={() => options?.onDelete?.(user.id, user.username)}
                   className="text-destructive"

@@ -184,6 +184,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   const [notifyEmailLogin, setNotifyEmailLogin] = React.useState(true)
   const [notifyEmailAlert, setNotifyEmailAlert] = React.useState(true)
   const [notifyBrowser, setNotifyBrowser] = React.useState(true)
+  const [notifyNewDevice, setNotifyNewDevice] = React.useState(true)
+  const [notifyNewLocation, setNotifyNewLocation] = React.useState(true)
+  const [notifySuspicious, setNotifySuspicious] = React.useState(true)
   const [notificationLoading, setNotificationLoading] = React.useState(false)
 
   // 个人偏好状态（语言与时区）
@@ -258,6 +261,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setNotifyEmailLogin(user.notify_email_login ?? true)
       setNotifyEmailAlert(user.notify_email_alert ?? true)
       setNotifyBrowser(user.notify_browser ?? true)
+      setNotifyNewDevice(user.notify_new_device ?? true)
+      setNotifyNewLocation(user.notify_new_location ?? true)
+      setNotifySuspicious(user.notify_suspicious ?? true)
       // 初始化个人偏好（优先使用用户配置，其次使用系统默认配置）
       setPreferencesForm({
         language: user.language || config?.default_language || "zh-CN",
@@ -764,7 +770,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 更新通知设置
   const handleUpdateNotification = React.useCallback(
-    async (field: "email_login" | "email_alert" | "browser", value: boolean) => {
+    async (field: "email_login" | "email_alert" | "browser" | "new_device" | "new_location" | "suspicious", value: boolean) => {
       setNotificationLoading(true)
       try {
         await notificationsApi.update({ [field]: value })
@@ -777,6 +783,9 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         if (field === "email_login") setNotifyEmailLogin(!value)
         if (field === "email_alert") setNotifyEmailAlert(!value)
         if (field === "browser") setNotifyBrowser(!value)
+        if (field === "new_device") setNotifyNewDevice(!value)
+        if (field === "new_location") setNotifyNewLocation(!value)
+        if (field === "suspicious") setNotifySuspicious(!value)
       } finally {
         setNotificationLoading(false)
       }
@@ -1566,43 +1575,73 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                 )}
                 {activeSection === "notifications" && (
                   <div className="space-y-4">
+                    {/* 登录安全告警 */}
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">
-                        {tAccount("notificationsOverviewTitle")}
+                        {tAccount("notificationsSecurityTitle")}
                       </h4>
                       <p className="text-sm text-muted-foreground mb-3">
-                        {tAccount("notificationsOverviewDescription")}
+                        {tAccount("notificationsSecurityDescription")}
                       </p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
-                          <Mail className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm font-medium">
-                              {tAccount("notificationsEmailCardTitle")}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {notifyEmailLogin || notifyEmailAlert
-                                ? tAccount("notificationsStatusPartial")
-                                : tAccount("notificationsStatusDisabled")}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <Label>
+                              {tAccount("notificationsNewDeviceLabel")}
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              {tAccount("notificationsNewDeviceDescription")}
                             </p>
                           </div>
+                          <Switch
+                            checked={notifyNewDevice}
+                            onCheckedChange={(checked) => {
+                              setNotifyNewDevice(checked)
+                              handleUpdateNotification("new_device", checked)
+                            }}
+                            disabled={notificationLoading}
+                          />
                         </div>
-                        <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
-                          <Bell className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm font-medium">
-                              {tAccount("notificationsBrowserCardTitle")}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {notifyBrowser
-                                ? tAccount("notificationsStatusEnabled")
-                                : tAccount("notificationsStatusDisabled")}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <Label>
+                              {tAccount("notificationsNewLocationLabel")}
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              {tAccount("notificationsNewLocationDescription")}
                             </p>
                           </div>
+                          <Switch
+                            checked={notifyNewLocation}
+                            onCheckedChange={(checked) => {
+                              setNotifyNewLocation(checked)
+                              handleUpdateNotification("new_location", checked)
+                            }}
+                            disabled={notificationLoading}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <Label>
+                              {tAccount("notificationsSuspiciousLabel")}
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              {tAccount("notificationsSuspiciousDescription")}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={notifySuspicious}
+                            onCheckedChange={(checked) => {
+                              setNotifySuspicious(checked)
+                              handleUpdateNotification("suspicious", checked)
+                            }}
+                            disabled={notificationLoading}
+                          />
                         </div>
                       </div>
                     </div>
 
+                    {/* 邮件通知 */}
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">
                         {tAccount("notificationsEmailSectionTitle")}
@@ -1613,7 +1652,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <Label htmlFor="email-login">
+                            <Label>
                               {tAccount("notificationsEmailLoginLabel")}
                             </Label>
                             <p className="text-sm text-muted-foreground">
@@ -1621,7 +1660,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             </p>
                           </div>
                           <Switch
-                            id="email-login"
                             checked={notifyEmailLogin}
                             onCheckedChange={(checked) => {
                               setNotifyEmailLogin(checked)
@@ -1632,7 +1670,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <Label htmlFor="email-alerts">
+                            <Label>
                               {tAccount("notificationsEmailAlertLabel")}
                             </Label>
                             <p className="text-sm text-muted-foreground">
@@ -1640,7 +1678,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                             </p>
                           </div>
                           <Switch
-                            id="email-alerts"
                             checked={notifyEmailAlert}
                             onCheckedChange={(checked) => {
                               setNotifyEmailAlert(checked)
@@ -1657,6 +1694,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       </div>
                     </div>
 
+                    {/* 浏览器通知 */}
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">
                         {tAccount("notificationsBrowserSectionTitle")}
@@ -1664,59 +1702,23 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       <p className="text-sm text-muted-foreground mb-3">
                         {tAccount("notificationsBrowserSectionDescription")}
                       </p>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <Label htmlFor="browser-notifications">
-                              {tAccount("notificationsBrowserToggleLabel")}
-                            </Label>
-                            <p className="text-sm text-muted-foreground">
-                              {tAccount("notificationsBrowserToggleDescription")}
-                            </p>
-                          </div>
-                          <Switch
-                            id="browser-notifications"
-                            checked={notifyBrowser}
-                            onCheckedChange={(checked) => {
-                              setNotifyBrowser(checked)
-                              handleUpdateNotification("browser", checked)
-                            }}
-                            disabled={notificationLoading}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-muted/50 rounded-xl p-4">
-                      <h4 className="font-medium mb-2">
-                        {tAccount("notificationsOtherChannelsTitle")}
-                      </h4>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        {tAccount("notificationsOtherChannelsDescription")}
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                            <p className="text-sm font-medium">
-                              {tAccount("notificationsDingtalkTitle")}
-                            </p>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {tAccount("notificationsDingtalkDescription")}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label>
+                            {tAccount("notificationsBrowserToggleLabel")}
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            {tAccount("notificationsBrowserToggleDescription")}
                           </p>
                         </div>
-                        <div className="p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                            <p className="text-sm font-medium">
-                              {tAccount("notificationsWecomTitle")}
-                            </p>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {tAccount("notificationsWecomDescription")}
-                          </p>
-                        </div>
+                        <Switch
+                          checked={notifyBrowser}
+                          onCheckedChange={(checked) => {
+                            setNotifyBrowser(checked)
+                            handleUpdateNotification("browser", checked)
+                          }}
+                          disabled={notificationLoading}
+                        />
                       </div>
                     </div>
                   </div>
@@ -2210,8 +2212,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
                         {/* EasySSH 说明 */}
                         {monitorForm.activeSource === "easyssh" && (
-                          <div className="p-4 bg-background rounded-lg border">
-                            <p className="text-sm text-muted-foreground">
+                          <div className="p-4 rounded-lg border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50">
+                            <p className="text-sm text-blue-800 dark:text-blue-200">
                               {tAccount("monitorEasySSHHint")}
                             </p>
                           </div>
@@ -2250,7 +2252,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                       ) : (
                         <div className="space-y-4">
                           {/* 使用系统配置选项 */}
-                          <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
+                          <div className="flex items-center justify-between">
                             <div className="space-y-1">
                               <Label htmlFor="use-system-config">
                                 {tAccount("aiUseSystemConfigLabel")}

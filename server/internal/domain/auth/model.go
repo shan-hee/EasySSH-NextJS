@@ -42,9 +42,18 @@ type User struct {
 	BackupCodes      string         `gorm:"type:text" json:"-"` // 备份码列表（JSON 格式），不在 JSON 中返回
 
 	// 通知设置
-	NotifyEmailLogin bool `gorm:"default:true" json:"notify_email_login"` // 登录邮件通知
-	NotifyEmailAlert bool `gorm:"default:true" json:"notify_email_alert"` // 告警邮件通知
-	NotifyBrowser    bool `gorm:"default:true" json:"notify_browser"`     // 浏览器通知
+	NotifyEmailLogin    bool `gorm:"default:true" json:"notify_email_login"`    // 登录邮件通知
+	NotifyEmailAlert    bool `gorm:"default:true" json:"notify_email_alert"`    // 告警邮件通知
+	NotifyBrowser       bool `gorm:"default:true" json:"notify_browser"`        // 浏览器通知
+	NotifyNewDevice     bool `gorm:"default:true" json:"notify_new_device"`     // 新设备登录通知
+	NotifyNewLocation   bool `gorm:"default:true" json:"notify_new_location"`   // 新地点登录通知
+	NotifySuspicious    bool `gorm:"default:true" json:"notify_suspicious"`     // 可疑登录通知
+
+	// 账户锁定相关
+	FailedLoginAttempts int        `gorm:"default:0" json:"failed_login_attempts,omitempty"`       // 连续失败登录次数
+	LastFailedLogin     *time.Time `json:"-"`                                                      // 最后一次登录失败时间
+	LockedUntil         *time.Time `gorm:"index:idx_users_locked" json:"locked_until,omitempty"`   // 锁定截止时间
+	LockReason          string     `gorm:"size:200" json:"lock_reason,omitempty"`                  // 锁定原因
 
 	// 监控数据源设置
 	// MonitorDataSource: 当前选中的数据源类型 (easyssh/nezha/komari)
@@ -115,6 +124,9 @@ func (u *User) ToPublic() map[string]interface{} {
 		"notify_email_login":     u.NotifyEmailLogin,
 		"notify_email_alert":     u.NotifyEmailAlert,
 		"notify_browser":         u.NotifyBrowser,
+		"notify_new_device":      u.NotifyNewDevice,
+		"notify_new_location":    u.NotifyNewLocation,
+		"notify_suspicious":      u.NotifySuspicious,
 		"monitor_data_source":    u.MonitorDataSource,
 		// Nezha 配置
 		"nezha_api_endpoint":     u.NezhaAPIEndpoint,
@@ -125,5 +137,25 @@ func (u *User) ToPublic() map[string]interface{} {
 		"created_at":             u.CreatedAt,
 		"updated_at":             u.UpdatedAt,
 	}
+}
+
+// IsLocked 检查账户是否被锁定
+func (u *User) IsLocked() bool {
+	if u.LockedUntil == nil {
+		return false
+	}
+	return time.Now().Before(*u.LockedUntil)
+}
+
+// GetLockRemainingTime 获取锁定剩余时间
+func (u *User) GetLockRemainingTime() time.Duration {
+	if u.LockedUntil == nil {
+		return 0
+	}
+	remaining := time.Until(*u.LockedUntil)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 

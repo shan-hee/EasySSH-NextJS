@@ -32,6 +32,13 @@ type SecurityConfig struct {
 	APILimit    int `gorm:"not null;default:100" json:"api_limit"`    // API 接口速率限制（次/分钟/IP）
 	TwoFALimit  int `gorm:"not null;default:5" json:"two_fa_limit"`   // 2FA 验证速率限制（次/分钟/IP）
 
+	// 账户锁定配置
+	AccountLockEnabled         bool `gorm:"not null;default:true" json:"account_lock_enabled"`          // 是否启用账户锁定
+	MaxIPFailAttempts          int  `gorm:"not null;default:10" json:"max_ip_fail_attempts"`            // IP 最大失败次数
+	IPLockDurationMinutes      int  `gorm:"not null;default:30" json:"ip_lock_duration_minutes"`        // IP 锁定时长（分钟）
+	MaxAccountFailAttempts     int  `gorm:"not null;default:5" json:"max_account_fail_attempts"`        // 账户最大失败次数
+	AccountLockDurationMinutes int  `gorm:"not null;default:60" json:"account_lock_duration_minutes"`   // 账户锁定时长（分钟）
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
@@ -77,4 +84,24 @@ type RateLimitConfig struct {
 	LoginLimit int `json:"login_limit"`   // 登录接口速率限制（次/分钟/IP）
 	APILimit   int `json:"api_limit"`     // API 接口速率限制（次/分钟/IP）
 	TwoFALimit int `json:"two_fa_limit"`  // 2FA 验证速率限制（次/分钟/IP）
+}
+
+// AccountLockConfig 账户锁定配置结构
+type AccountLockConfig struct {
+	Enabled                    bool `json:"enabled"`                        // 是否启用账户锁定
+	MaxIPFailAttempts          int  `json:"max_ip_fail_attempts"`           // IP 最大失败次数
+	IPLockDurationMinutes      int  `json:"ip_lock_duration_minutes"`       // IP 锁定时长（分钟）
+	MaxAccountFailAttempts     int  `json:"max_account_fail_attempts"`      // 账户最大失败次数
+	AccountLockDurationMinutes int  `json:"account_lock_duration_minutes"`  // 账户锁定时长（分钟）
+}
+
+// DefaultAccountLockConfig 默认账户锁定配置
+func DefaultAccountLockConfig() *AccountLockConfig {
+	return &AccountLockConfig{
+		Enabled:                    true,
+		MaxIPFailAttempts:          10,
+		IPLockDurationMinutes:      30,
+		MaxAccountFailAttempts:     5,
+		AccountLockDurationMinutes: 60,
+	}
 }

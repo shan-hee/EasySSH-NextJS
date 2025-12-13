@@ -13,9 +13,13 @@ export interface User {
   language?: string
   timezone?: string
   two_factor_enabled?: boolean
+  // 通知设置
   notify_email_login?: boolean
   notify_email_alert?: boolean
   notify_browser?: boolean
+  notify_new_device?: boolean      // 新设备登录通知
+  notify_new_location?: boolean    // 新地点登录通知
+  notify_suspicious?: boolean      // 可疑登录通知
   // 监控数据源设置（支持独立配置每个数据源，但只选择一个生效）
   monitor_data_source?: string  // 当前选中的数据源: easyssh, nezha, komari
   // Nezha 配置

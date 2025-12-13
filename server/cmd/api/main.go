@@ -102,7 +102,7 @@ func main() {
 		&systemconfig.SystemConfig{},             // 系统配置表
 		&security.SecurityConfig{},               // 安全配置表
 		&notificationconfig.NotificationConfig{}, // 通知配置表
-		&aiconfig.AIConfig{},                     // AI配置表
+		&aiconfig.AIConfig{},                   // AI配置表
 		&useraiconfig.UserAIConfig{},             // 用户AI配置表
 		// 其他表
 		&sshkey.SSHKey{},         // SSH密钥表
@@ -113,6 +113,11 @@ func main() {
 		&sftp.TrashDir{},                     // SFTP .trash 清理登记表
 		&sftp.TrashItem{},                    // SFTP 回收站索引表
 		&sftp.TrashSettings{},                // SFTP 回收站用户设置表
+		// 安全增强相关表
+		&auth.LoginAttempt{}, // 登录尝试记录表
+		&auth.TrustedDevice{},  // 可信设备表
+		&auth.LoginAlert{},     // 登录告警表
+		&auth.RSAKeyPair{},     // RSA 密钥对表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -201,6 +206,60 @@ func main() {
 		if setter, ok := authService.(emailServiceSetter); ok {
 			setter.SetEmailService(emailService)
 		}
+	}
+
+	// 账户锁定服务（需要 Redis 和安全配置）
+	var accountLockService auth.AccountLockService
+	if redisClient != nil {
+		// 从安全配置服务获取账户锁定配置
+		lockConfig := auth.DefaultAccountLockConfig
+		if securityConfig, err := securityService.GetAccountLockConfig(context.Background()); err == nil {
+			lockConfig = auth.AccountLockConfig{
+				Enabled:                securityConfig.Enabled,
+				MaxIPFailAttempts:      securityConfig.MaxIPFailAttempts,
+				IPLockDuration:         time.Duration(securityConfig.IPLockDurationMinutes) * time.Minute,
+				MaxAccountFailAttempts: securityConfig.MaxAccountFailAttempts,
+				AccountLockDuration:    time.Duration(securityConfig.AccountLockDurationMinutes) * time.Minute,
+				FailCountWindow:        15 * time.Minute, // 默认 15 分钟窗口
+			}
+		}
+
+		// 创建登录尝试仓储
+		loginAttemptRepo := auth.NewLoginAttemptRepository(database)
+
+		// 创建账户锁定服务
+		accountLockService = auth.NewAccountLockService(
+			redisClient.GetClient(),
+			loginAttemptRepo,
+			authRepo,
+			lockConfig,
+		)
+		log.Println("✅ Account lock service initialized")
+
+		// 注入账户锁定服务到认证服务
+		type accountLockServiceSetter interface {
+			SetAccountLockService(auth.AccountLockService)
+		}
+		if setter, ok := authService.(accountLockServiceSetter); ok {
+			setter.SetAccountLockService(accountLockService)
+		}
+	}
+
+	// 登录检测服务（需要数据库）
+	var loginDetectionService auth.LoginDetectionService
+	trustedDeviceRepo := auth.NewTrustedDeviceRepository(database)
+	loginAlertRepo := auth.NewLoginAlertRepository(database)
+	// 获取 GeoIP 客户端（已在前面通过 SetRedisClient 初始化）
+	geoipClient := geoip.NewClient()
+	loginDetectionService = auth.NewLoginDetectionService(trustedDeviceRepo, loginAlertRepo, authRepo, geoipClient, emailService)
+	log.Println("✅ Login detection service initialized")
+
+	// 注入登录检测服务到认证服务
+	type loginDetectionServiceSetter interface {
+		SetLoginDetectionService(auth.LoginDetectionService)
+	}
+	if setter, ok := authService.(loginDetectionServiceSetter); ok {
+		setter.SetLoginDetectionService(loginDetectionService)
 	}
 
 	// 验证码服务（需要 Redis）
@@ -400,7 +459,7 @@ func main() {
 	taskExecutionHandler := rest.NewTaskExecutionHandler(taskExecutionService)
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
-	userHandler := rest.NewUserHandler(userService)
+	userHandler := rest.NewUserHandler(userService, accountLockService)
 	// 新的配置处理器
 	securityHandler := rest.NewSecurityHandler(securityService)
 	systemConfigHandler := rest.NewSystemConfigHandler(systemConfigService)
@@ -548,6 +607,8 @@ func main() {
 			userManagementRoutes.PUT("/:id", userHandler.UpdateUser)               // 更新用户
 			userManagementRoutes.DELETE("/:id", userHandler.DeleteUser)            // 删除用户
 			userManagementRoutes.POST("/:id/password", userHandler.ChangePassword) // 修改密码
+			userManagementRoutes.POST("/:id/lock", userHandler.LockUser)           // 锁定账户
+			userManagementRoutes.POST("/:id/unlock", userHandler.UnlockUser)       // 解锁账户
 		}
 
 		// 服务器路由（需要认证）

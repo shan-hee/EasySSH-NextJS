@@ -635,9 +635,38 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 		return
 	}
 
-	// 认证用户（使用邮箱，此处不创建会话，真正创建会话发生在 /api/v1/oauth/token 中）
-	user, err := h.authService.AuthenticateUser(c.Request.Context(), req.Email, req.Password)
+	// 获取客户端 IP 和 User-Agent
+	clientIP := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+
+	// 认证用户（使用邮箱，支持账户锁定检查）
+	result, err := h.authService.AuthenticateUserWithContext(c.Request.Context(), req.Email, req.Password, clientIP, userAgent)
 	if err != nil {
+		// 处理 IP 锁定
+		if errors.Is(err, auth.ErrIPLocked) {
+			response := gin.H{
+				"error":   "ip_locked",
+				"message": "Too many failed login attempts from this IP address. Please try again later.",
+			}
+			if result != nil && result.UnlockAt != nil {
+				response["unlock_at"] = result.UnlockAt.Format(time.RFC3339)
+			}
+			c.JSON(http.StatusTooManyRequests, response)
+			return
+		}
+		// 处理账户锁定
+		if errors.Is(err, auth.ErrAccountLocked) {
+			response := gin.H{
+				"error":   "account_locked",
+				"message": "Account is temporarily locked due to too many failed login attempts. Please try again later.",
+			}
+			if result != nil && result.UnlockAt != nil {
+				response["unlock_at"] = result.UnlockAt.Format(time.RFC3339)
+			}
+			c.JSON(http.StatusTooManyRequests, response)
+			return
+		}
+		// 处理无效凭证
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			RespondError(c, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password")
 			return
@@ -645,6 +674,8 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
+
+	user := result.User
 
 	// 登录成功,设置用户信息到上下文,以便审计日志记录
 	c.Set("user_id", user.ID.String())
@@ -1626,9 +1657,12 @@ func (h *AuthHandler) RevokeAllOtherSessions(c *gin.Context) {
 
 // UpdateNotificationSettingsRequest 更新通知设置请求
 type UpdateNotificationSettingsRequest struct {
-	EmailLogin *bool `json:"email_login"`
-	EmailAlert *bool `json:"email_alert"`
-	Browser    *bool `json:"browser"`
+	EmailLogin  *bool `json:"email_login"`
+	EmailAlert  *bool `json:"email_alert"`
+	Browser     *bool `json:"browser"`
+	NewDevice   *bool `json:"new_device"`   // 新设备登录通知
+	NewLocation *bool `json:"new_location"` // 新地点登录通知
+	Suspicious  *bool `json:"suspicious"`   // 可疑登录通知
 }
 
 // UpdateNotificationSettings - PUT /api/v1/users/me/notifications
@@ -1673,6 +1707,9 @@ func (h *AuthHandler) UpdateNotificationSettings(c *gin.Context) {
 		req.EmailLogin,
 		req.EmailAlert,
 		req.Browser,
+		req.NewDevice,
+		req.NewLocation,
+		req.Suspicious,
 	); err != nil {
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to update notification settings: "+err.Error())
 		return

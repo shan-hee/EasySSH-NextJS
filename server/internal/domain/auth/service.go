@@ -23,6 +23,17 @@ type SessionInfo struct {
 	UserAgent  string
 }
 
+// AuthenticateResult 认证结果
+type AuthenticateResult struct {
+	User          *User      // 认证成功时返回用户
+	IPLocked      bool       // IP 是否被锁定
+	AccountLocked bool       // 账户是否被锁定
+	UnlockAt      *time.Time // 解锁时间
+	IsNewDevice   bool       // 是否为新设备
+	IsNewLocation bool       // 是否为新地点
+	Location      string     // 地理位置
+}
+
 // Service 认证服务接口
 type Service interface {
 	// Register 注册新用户（username 自动生成）
@@ -30,6 +41,10 @@ type Service interface {
 
 	// AuthenticateUser 验证邮箱和密码，返回用户（不创建会话或令牌）
 	AuthenticateUser(ctx context.Context, email, password string) (*User, error)
+
+	// AuthenticateUserWithContext 验证邮箱和密码，支持账户锁定检查和登录检测
+	// ip 和 userAgent 用于账户锁定和登录检测
+	AuthenticateUserWithContext(ctx context.Context, email, password, ip, userAgent string) (*AuthenticateResult, error)
 
 	// CreateSessionWithTokens 为已认证用户创建会话并生成访问令牌/刷新令牌
 	CreateSessionWithTokens(ctx context.Context, user *User, sessionInfo *SessionInfo) (accessToken, refreshToken string, err error)
@@ -101,7 +116,7 @@ type Service interface {
 	// Notification settings
 
 	// UpdateNotificationSettings 更新通知设置
-	UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser *bool) error
+	UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser, newDevice, newLocation, suspicious *bool) error
 
 	// Monitor Data Source settings
 
@@ -120,13 +135,15 @@ type Service interface {
 
 // authService 认证服务实现
 type authService struct {
-	repo                Repository
-	jwtService          JWTService
-	totpService         TOTPService
-	emailService        EmailService   // 可选的邮件服务
-	runMode             string         // 存储运行模式
-	sessionIdleDuration time.Duration  // 会话闲置过期时间（用于 user_sessions.ExpiresAt）
-	redisClient         *redis.Client  // Redis 客户端（用于 Authorization Code 和 2FA Token）
+	repo                  Repository
+	jwtService            JWTService
+	totpService           TOTPService
+	emailService          EmailService          // 可选的邮件服务
+	accountLockService    AccountLockService    // 账户锁定服务（可选）
+	loginDetectionService LoginDetectionService // 登录检测服务（可选）
+	runMode               string                // 存储运行模式
+	sessionIdleDuration   time.Duration         // 会话闲置过期时间（用于 user_sessions.ExpiresAt）
+	redisClient           *redis.Client         // Redis 客户端（用于 Authorization Code 和 2FA Token）
 }
 
 // EmailService 邮件服务接口（可选依赖）
@@ -134,25 +151,42 @@ type EmailService interface {
 	SendLoginNotification(ctx context.Context, email, username, ipAddress, location, deviceInfo string, loginTime time.Time) error
 	Send2FAEnabledNotification(ctx context.Context, email, username string) error
 	SendPasswordChangedNotification(ctx context.Context, email, username string, changeTime time.Time) error
+	// 登录告警相关方法
+	SendNewDeviceAlert(ctx context.Context, email, username, deviceName, ip, location string, loginTime time.Time) error
+	SendNewLocationAlert(ctx context.Context, email, username, location, ip string, loginTime time.Time) error
+	SendSuspiciousLoginAlert(ctx context.Context, email, username, reason, ip, location string, loginTime time.Time) error
+	SendAccountLockedAlert(ctx context.Context, email, username, reason string, unlockTime time.Time) error
 }
 
 // NewService 创建认证服务
 // sessionIdleDuration 用于 user_sessions.ExpiresAt，通常应与 JWT 刷新闲置过期时间保持一致
 func NewService(repo Repository, jwtService JWTService, sessionIdleDuration time.Duration, redisClient *redis.Client) Service {
 	return &authService{
-		repo:                repo,
-		jwtService:          jwtService,
-		totpService:         NewTOTPService(),
-		emailService:        nil, // 默认不启用邮件服务
-		runMode:             "production",
-		sessionIdleDuration: sessionIdleDuration,
-		redisClient:         redisClient,
+		repo:                  repo,
+		jwtService:            jwtService,
+		totpService:           NewTOTPService(),
+		emailService:          nil, // 默认不启用邮件服务
+		accountLockService:    nil, // 默认不启用账户锁定
+		loginDetectionService: nil, // 默认不启用登录检测
+		runMode:               "production",
+		sessionIdleDuration:   sessionIdleDuration,
+		redisClient:           redisClient,
 	}
 }
 
 // SetEmailService 设置邮件服务（可选）
 func (s *authService) SetEmailService(emailService EmailService) {
 	s.emailService = emailService
+}
+
+// SetAccountLockService 设置账户锁定服务（可选）
+func (s *authService) SetAccountLockService(accountLockService AccountLockService) {
+	s.accountLockService = accountLockService
+}
+
+// SetLoginDetectionService 设置登录检测服务（可选）
+func (s *authService) SetLoginDetectionService(loginDetectionService LoginDetectionService) {
+	s.loginDetectionService = loginDetectionService
 }
 
 func (s *authService) Register(ctx context.Context, email, password string, role UserRole) (*User, error) {
@@ -215,6 +249,91 @@ func (s *authService) AuthenticateUser(ctx context.Context, email, password stri
 	}
 
 	return user, nil
+}
+
+// AuthenticateUserWithContext 验证邮箱和密码，支持账户锁定检查和登录检测
+func (s *authService) AuthenticateUserWithContext(ctx context.Context, email, password, ip, userAgent string) (*AuthenticateResult, error) {
+	result := &AuthenticateResult{}
+
+	// 1. 检查 IP 是否被锁定
+	if s.accountLockService != nil {
+		ipLocked, unlockAt, err := s.accountLockService.CheckIPLock(ctx, ip)
+		if err != nil {
+			// 记录错误但不阻止登录流程
+			fmt.Printf("Warning: failed to check IP lock: %v\n", err)
+		} else if ipLocked {
+			result.IPLocked = true
+			result.UnlockAt = unlockAt
+			return result, ErrIPLocked
+		}
+	}
+
+	// 2. 检查账户是否被锁定
+	if s.accountLockService != nil {
+		accountLocked, unlockAt, err := s.accountLockService.CheckAccountLock(ctx, email)
+		if err != nil {
+			fmt.Printf("Warning: failed to check account lock: %v\n", err)
+		} else if accountLocked {
+			result.AccountLocked = true
+			result.UnlockAt = unlockAt
+			return result, ErrAccountLocked
+		}
+	}
+
+	// 3. 使用邮箱查找用户
+	user, err := s.repo.FindByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			// 记录失败尝试（即使用户不存在也记录，防止用户枚举）
+			if s.accountLockService != nil {
+				s.accountLockService.RecordFailedLogin(ctx, email, ip, userAgent, "user_not_found")
+			}
+			return result, ErrInvalidCredentials
+		}
+		return result, err
+	}
+
+	// 4. 验证密码
+	if !user.CheckPassword(password) {
+		// 记录失败尝试
+		if s.accountLockService != nil {
+			ipLocked, accountLocked, err := s.accountLockService.RecordFailedLogin(ctx, email, ip, userAgent, "invalid_password")
+			if err != nil {
+				fmt.Printf("Warning: failed to record failed login: %v\n", err)
+			}
+			if ipLocked {
+				result.IPLocked = true
+				return result, ErrIPLocked
+			}
+			if accountLocked {
+				result.AccountLocked = true
+				return result, ErrAccountLocked
+			}
+		}
+		return result, ErrInvalidCredentials
+	}
+
+	// 5. 登录成功，清除失败计数
+	if s.accountLockService != nil {
+		if err := s.accountLockService.RecordSuccessLogin(ctx, email, ip, userAgent); err != nil {
+			fmt.Printf("Warning: failed to record success login: %v\n", err)
+		}
+	}
+
+	// 6. 登录检测（新设备/新地点）
+	if s.loginDetectionService != nil {
+		// 检查是否为新地点
+		isNewLocation, location, err := s.loginDetectionService.CheckNewLocation(ctx, user.ID, ip)
+		if err != nil {
+			fmt.Printf("Warning: failed to check new location: %v\n", err)
+		} else {
+			result.IsNewLocation = isNewLocation
+			result.Location = location
+		}
+	}
+
+	result.User = user
+	return result, nil
 }
 
 // CreateSessionWithTokens 为已认证用户创建会话并生成访问/刷新令牌
@@ -1088,7 +1207,7 @@ func (s *authService) RevokeAllOtherSessions(ctx context.Context, userID uuid.UU
 // === Notification Settings ===
 
 // UpdateNotificationSettings 更新通知设置
-func (s *authService) UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser *bool) error {
+func (s *authService) UpdateNotificationSettings(ctx context.Context, userID uuid.UUID, emailLogin, emailAlert, browser, newDevice, newLocation, suspicious *bool) error {
 	// 查找用户
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -1104,6 +1223,15 @@ func (s *authService) UpdateNotificationSettings(ctx context.Context, userID uui
 	}
 	if browser != nil {
 		user.NotifyBrowser = *browser
+	}
+	if newDevice != nil {
+		user.NotifyNewDevice = *newDevice
+	}
+	if newLocation != nil {
+		user.NotifyNewLocation = *newLocation
+	}
+	if suspicious != nil {
+		user.NotifySuspicious = *suspicious
 	}
 
 	return s.repo.Update(ctx, user)

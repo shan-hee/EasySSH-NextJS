@@ -895,3 +895,176 @@ const passwordResetTemplate = `
 </body>
 </html>
 `
+
+// 新设备登录告警模板
+const newDeviceAlertTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .container { background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { text-align: center; padding-bottom: 20px; border-bottom: 2px solid #f0f0f0; }
+        .header h1 { color: #f59e0b; margin: 0; font-size: 24px; }
+        .content { padding: 20px 0; }
+        .info-box { background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .info-item { margin: 8px 0; }
+        .info-label { font-weight: 600; color: #64748b; display: inline-block; width: 100px; }
+        .footer { text-align: center; padding-top: 20px; border-top: 1px solid #f0f0f0; color: #64748b; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🆕 新设备登录告警</h1>
+        </div>
+        <div class="content">
+            <p>尊敬的 <strong>{{.Username}}</strong>，</p>
+            <p>我们检测到您的账户在一个新设备上登录：</p>
+            <div class="info-box">
+                <div class="info-item"><span class="info-label">设备名称：</span>{{.DeviceName}}</div>
+                <div class="info-item"><span class="info-label">IP 地址：</span>{{.IPAddress}}</div>
+                <div class="info-item"><span class="info-label">地理位置：</span>{{.Location}}</div>
+                <div class="info-item"><span class="info-label">登录时间：</span>{{.LoginTime}}</div>
+            </div>
+            <p>如果这是您本人的操作，请忽略此邮件。如果不是，请立即修改密码并检查账户安全。</p>
+        </div>
+        <div class="footer">
+            <p>此邮件由 {{.SystemName}} 系统自动发送，请勿直接回复。</p>
+        </div>
+    </div>
+</body>
+</html>
+`
+
+// 新地点登录告警模板
+const newLocationAlertTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .container { background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { text-align: center; padding-bottom: 20px; border-bottom: 2px solid #f0f0f0; }
+        .header h1 { color: #3b82f6; margin: 0; font-size: 24px; }
+        .content { padding: 20px 0; }
+        .info-box { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .info-item { margin: 8px 0; }
+        .info-label { font-weight: 600; color: #64748b; display: inline-block; width: 100px; }
+        .footer { text-align: center; padding-top: 20px; border-top: 1px solid #f0f0f0; color: #64748b; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📍 新地点登录告警</h1>
+        </div>
+        <div class="content">
+            <p>尊敬的 <strong>{{.Username}}</strong>，</p>
+            <p>我们检测到您的账户在一个新的地理位置登录：</p>
+            <div class="info-box">
+                <div class="info-item"><span class="info-label">地理位置：</span>{{.Location}}</div>
+                <div class="info-item"><span class="info-label">IP 地址：</span>{{.IPAddress}}</div>
+                <div class="info-item"><span class="info-label">登录时间：</span>{{.LoginTime}}</div>
+            </div>
+            <p>如果这是您本人的操作，请忽略此邮件。如果不是，请立即修改密码并检查账户安全。</p>
+        </div>
+        <div class="footer">
+            <p>此邮件由 {{.SystemName}} 系统自动发送，请勿直接回复。</p>
+        </div>
+    </div>
+</body>
+</html>
+`
+
+// 可疑登录告警模板
+const suspiciousLoginAlertTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .container { background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { text-align: center; padding-bottom: 20px; border-bottom: 2px solid #f0f0f0; }
+        .header h1 { color: #ef4444; margin: 0; font-size: 24px; }
+        .content { padding: 20px 0; }
+        .info-box { background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .info-item { margin: 8px 0; }
+        .info-label { font-weight: 600; color: #64748b; display: inline-block; width: 100px; }
+        .warning { background-color: #fef2f2; padding: 15px; border-radius: 4px; margin-top: 15px; }
+        .footer { text-align: center; padding-top: 20px; border-top: 1px solid #f0f0f0; color: #64748b; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚠️ 可疑登录告警</h1>
+        </div>
+        <div class="content">
+            <p>尊敬的 <strong>{{.Username}}</strong>，</p>
+            <p>我们检测到您的账户存在可疑登录行为：</p>
+            <div class="info-box">
+                <div class="info-item"><span class="info-label">告警原因：</span>{{.Reason}}</div>
+                <div class="info-item"><span class="info-label">IP 地址：</span>{{.IPAddress}}</div>
+                <div class="info-item"><span class="info-label">地理位置：</span>{{.Location}}</div>
+                <div class="info-item"><span class="info-label">登录时间：</span>{{.LoginTime}}</div>
+            </div>
+            <div class="warning">
+                <p><strong>建议操作：</strong></p>
+                <ul>
+                    <li>如果这不是您的操作，请立即修改密码</li>
+                    <li>启用双因子认证以增强账户安全</li>
+                    <li>检查账户的登录历史记录</li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer">
+            <p>此邮件由 {{.SystemName}} 系统自动发送，请勿直接回复。</p>
+        </div>
+    </div>
+</body>
+</html>
+`
+
+// 账户锁定告警模板
+const accountLockedAlertTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .container { background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { text-align: center; padding-bottom: 20px; border-bottom: 2px solid #f0f0f0; }
+        .header h1 { color: #dc2626; margin: 0; font-size: 24px; }
+        .content { padding: 20px 0; }
+        .info-box { background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .info-item { margin: 8px 0; }
+        .info-label { font-weight: 600; color: #64748b; display: inline-block; width: 100px; }
+        .footer { text-align: center; padding-top: 20px; border-top: 1px solid #f0f0f0; color: #64748b; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 账户已锁定</h1>
+        </div>
+        <div class="content">
+            <p>尊敬的 <strong>{{.Username}}</strong>，</p>
+            <p>由于安全原因，您的账户已被临时锁定：</p>
+            <div class="info-box">
+                <div class="info-item"><span class="info-label">锁定原因：</span>{{.Reason}}</div>
+                <div class="info-item"><span class="info-label">解锁时间：</span>{{.UnlockTime}}</div>
+            </div>
+            <p>账户将在上述时间后自动解锁。如果您认为这是误操作，请联系系统管理员。</p>
+        </div>
+        <div class="footer">
+            <p>此邮件由 {{.SystemName}} 系统自动发送，请勿直接回复。</p>
+        </div>
+    </div>
+</body>
+</html>
+`

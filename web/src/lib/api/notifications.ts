@@ -4,9 +4,15 @@ import { apiFetch } from "@/lib/api-client"
  * 通知设置
  */
 export interface NotificationSettings {
+  // 邮件通知
   email_login?: boolean
   email_alert?: boolean
+  // 浏览器通知
   browser?: boolean
+  // 登录安全告警
+  new_device?: boolean      // 新设备登录通知
+  new_location?: boolean    // 新地点登录通知
+  suspicious?: boolean      // 可疑登录通知
 }
 
 /**

@@ -15,6 +15,8 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrSessionNotFound    = errors.New("session not found or has been revoked")
 	ErrSessionExpired     = errors.New("session has expired")
+	ErrIPLocked           = errors.New("IP address is temporarily locked due to too many failed attempts")
+	ErrAccountLocked      = errors.New("account is temporarily locked due to too many failed attempts")
 )
 
 // Repository 用户数据访问接口

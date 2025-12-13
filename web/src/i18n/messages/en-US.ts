@@ -289,15 +289,21 @@ const messages = {
     notificationsUpdateSuccess: "Notification settings updated.",
     notificationsUpdateFailed:
       "Failed to update notification settings.",
-    notificationsOverviewTitle: "Notification overview",
-    notificationsOverviewDescription:
-      "Manage how and where you receive personal notifications.",
-    notificationsEmailCardTitle: "Email notifications",
-    notificationsBrowserCardTitle: "Browser notifications",
-    notificationsStatusPartial: "Partially enabled",
-    notificationsStatusDisabled: "Disabled",
-    notificationsStatusEnabled: "Enabled",
-    notificationsEmailSectionTitle: "Email notification preferences",
+    // Login security alerts
+    notificationsSecurityTitle: "Login Security Alerts",
+    notificationsSecurityDescription:
+      "Get notified when unusual login activity is detected to protect your account.",
+    notificationsNewDeviceLabel: "New device login",
+    notificationsNewDeviceDescription:
+      "Send an alert when your account is accessed from a new device.",
+    notificationsNewLocationLabel: "New location login",
+    notificationsNewLocationDescription:
+      "Send an alert when your account is accessed from a new geographic location.",
+    notificationsSuspiciousLabel: "Suspicious login",
+    notificationsSuspiciousDescription:
+      "Send an alert when suspicious login activity is detected.",
+    // Email notifications
+    notificationsEmailSectionTitle: "Email Notifications",
     notificationsEmailSectionDescription:
       "Choose which events should trigger email notifications.",
     notificationsEmailLoginLabel: "Login notifications",
@@ -308,12 +314,22 @@ const messages = {
       "Send an email when server alerts are triggered.",
     notificationsEmailServerHint:
       "Mail server is configured by the system administrator. You only need to choose which notifications you want to receive.",
-    notificationsBrowserSectionTitle: "Browser notifications",
+    // Browser notifications
+    notificationsBrowserSectionTitle: "Browser Notifications",
     notificationsBrowserSectionDescription:
       "Manage browser push notifications.",
     notificationsBrowserToggleLabel: "Enable browser notifications",
     notificationsBrowserToggleDescription:
       "Receive real-time push notifications in the browser.",
+    // Legacy fields (kept for compatibility)
+    notificationsOverviewTitle: "Notification overview",
+    notificationsOverviewDescription:
+      "Manage how and where you receive personal notifications.",
+    notificationsEmailCardTitle: "Email notifications",
+    notificationsBrowserCardTitle: "Browser notifications",
+    notificationsStatusPartial: "Partially enabled",
+    notificationsStatusDisabled: "Disabled",
+    notificationsStatusEnabled: "Enabled",
     notificationsOtherChannelsTitle: "Other channels",
     notificationsOtherChannelsDescription:
       "System administrators can configure additional channels.",
@@ -2636,6 +2652,39 @@ const messages = {
     colActionEdit: "Edit",
     colActionChangePassword: "Change password",
     colActionDelete: "Delete",
+    colActionUnlock: "Unlock account",
+    statusLocked: "Locked",
+    confirmUnlock: "Are you sure you want to unlock the account of user \"{username}\"?",
+    toastUnlockSuccess: "User account unlocked",
+    toastUnlockFailed: "Failed to unlock user account",
+    // Lock user
+    colActionLock: "Lock account",
+    dialogLockTitle: "Lock User Account",
+    dialogLockDescription: "Set the lock duration and reason for user \"{username}\"",
+    dialogLockSubmit: "Lock",
+    fieldLockDuration: "Lock duration",
+    fieldLockReason: "Lock reason",
+    placeholderLockReason: "Enter lock reason (optional)",
+    lockDuration15min: "15 minutes",
+    lockDuration30min: "30 minutes",
+    lockDuration1hour: "1 hour",
+    lockDuration3hours: "3 hours",
+    lockDuration6hours: "6 hours",
+    lockDuration12hours: "12 hours",
+    lockDuration24hours: "24 hours",
+    lockDuration3days: "3 days",
+    lockDuration7days: "7 days",
+    lockDuration30days: "30 days",
+    lockDurationPermanent: "Permanent",
+    lockDurationCustom: "Custom...",
+    fieldCustomDuration: "Custom duration",
+    placeholderCustomDuration: "Enter value",
+    unitMinutes: "Minutes",
+    unitHours: "Hours",
+    unitDays: "Days",
+    toastLockSuccess: "User account locked",
+    toastLockFailed: "Failed to lock user account",
+    toastLockDurationInvalid: "Lock duration must be greater than 0",
   },
 } as const
 
