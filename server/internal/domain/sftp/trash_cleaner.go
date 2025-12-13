@@ -3,7 +3,6 @@ package sftp
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"sort"
@@ -14,6 +13,7 @@ import (
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/pkg/crypto"
+	"github.com/easyssh/server/internal/pkg/logger"
 	"github.com/google/uuid"
 	sftpPkg "github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -40,6 +40,7 @@ type TrashCleanerConfig struct {
 
 type TrashCleaner struct {
 	cfg TrashCleanerConfig
+	log *logger.Logger
 
 	repo            TrashDirRepository
 	itemRepo        TrashItemRepository
@@ -98,7 +99,8 @@ func NewTrashCleaner(cfg TrashCleanerConfig, deps TrashCleanerDeps) *TrashCleane
 	}
 
 	return &TrashCleaner{
-		cfg:  cfg,
+		cfg: cfg,
+		log: logger.NewModule("TrashCleaner"),
 		repo: deps.Repo,
 		// item repo optional
 		// (用于将后台清理结果回写到索引表，便于全局回收站视图保持一致)
@@ -136,7 +138,9 @@ func (c *TrashCleaner) policyForUser(ctx context.Context, userID uuid.UUID) tras
 
 	settings, err := c.settingsRepo.GetByUserID(ctx, userID)
 	if err != nil {
-		log.Printf("[TrashCleaner] get user settings failed: user=%s, err=%v (using defaults)", userID, err)
+		c.log.Warn("get user settings failed, using defaults",
+			logger.String("userID", userID.String()),
+			logger.Err(err))
 		return p
 	}
 	if settings == nil {
@@ -160,16 +164,19 @@ func (c *TrashCleaner) policyForUser(ctx context.Context, userID uuid.UUID) tras
 
 func (c *TrashCleaner) Start() {
 	if !c.cfg.Enabled {
-		log.Println("[TrashCleaner] disabled")
+		c.log.Info("disabled")
 		return
 	}
 	if c.repo == nil || c.serverService == nil || c.encryptor == nil || c.hostKeyCallback == nil {
-		log.Println("[TrashCleaner] missing deps, not started")
+		c.log.Warn("missing deps, not started")
 		return
 	}
 
 	go c.loop()
-	log.Printf("[TrashCleaner] started: interval=%v, retention=%v, concurrency=%d", c.cfg.Interval, c.cfg.Retention, c.cfg.Concurrency)
+	c.log.Info("started",
+		logger.Duration("interval", c.cfg.Interval),
+		logger.Duration("retention", c.cfg.Retention),
+		logger.Int("concurrency", c.cfg.Concurrency))
 }
 
 func (c *TrashCleaner) Stop() {
@@ -201,7 +208,7 @@ func (c *TrashCleaner) runOnce(ctx context.Context) {
 	now := time.Now()
 	rows, err := c.repo.ListDue(ctx, now, c.cfg.BatchSize)
 	if err != nil {
-		log.Printf("[TrashCleaner] list due failed: %v", err)
+		c.log.Error("list due failed", logger.Err(err))
 		return
 	}
 	if len(rows) == 0 {
@@ -227,6 +234,15 @@ func (c *TrashCleaner) runOnce(ctx context.Context) {
 		go func(gk groupKey, items []TrashDir) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			// panic 恢复：防止单个任务的 panic 影响其他任务
+			defer func() {
+				if r := recover(); r != nil {
+					c.log.Error("PANIC recovered in cleanServer",
+						logger.String("userID", gk.userID.String()),
+						logger.String("serverID", gk.serverID.String()),
+						logger.Any("panic", r))
+				}
+			}()
 
 			jobCtx, cancel := context.WithTimeout(ctx, c.cfg.JobTimeout)
 			defer cancel()
@@ -245,7 +261,9 @@ func (c *TrashCleaner) cleanServer(ctx context.Context, userID, serverID uuid.UU
 		nextAttemptAt := now.Add(c.cfg.SuccessCooldown)
 		for _, item := range items {
 			if err := c.repo.MarkSkipped(ctx, item.ID, nextAttemptAt, "auto_clean_disabled"); err != nil {
-				log.Printf("[TrashCleaner] mark skipped failed: id=%s, err=%v", item.ID, err)
+				c.log.Warn("mark skipped failed",
+					logger.String("id", item.ID.String()),
+					logger.Err(err))
 			}
 		}
 		return
@@ -315,7 +333,9 @@ func (c *TrashCleaner) cleanServer(ctx context.Context, userID, serverID uuid.UU
 
 		nextAttemptAt := now.Add(c.cfg.SuccessCooldown)
 		if err := c.repo.MarkSuccess(ctx, item.ID, now, nextAttemptAt); err != nil {
-			log.Printf("[TrashCleaner] mark success failed: id=%s, err=%v", item.ID, err)
+			c.log.Warn("mark success failed",
+				logger.String("id", item.ID.String()),
+				logger.Err(err))
 		}
 	}
 
@@ -328,8 +348,12 @@ func (c *TrashCleaner) markFailure(ctx context.Context, item TrashDir, now time.
 
 	// 检查是否超过最大重试次数
 	if failCount >= c.cfg.MaxFailCount {
-		log.Printf("[TrashCleaner] ALERT: trash dir exceeded max fail count (%d), giving up: path=%s, userID=%s, serverID=%s, lastErr=%v",
-			c.cfg.MaxFailCount, item.Path, item.UserID, item.ServerID, err)
+		c.log.Error("ALERT: trash dir exceeded max fail count, giving up",
+			logger.Int("maxFailCount", c.cfg.MaxFailCount),
+			logger.String("path", item.Path),
+			logger.String("userID", item.UserID.String()),
+			logger.String("serverID", item.ServerID.String()),
+			logger.Err(err))
 		// 标记为永久失败，设置很长的下次尝试时间（实际上不会再尝试）
 		nextAttemptAt := now.Add(365 * 24 * time.Hour) // 1年后
 		lastErr := "exceeded max fail count"
@@ -340,7 +364,9 @@ func (c *TrashCleaner) markFailure(ctx context.Context, item TrashDir, now time.
 			lastErr = lastErr[:2000]
 		}
 		if upErr := c.repo.MarkFailure(ctx, item.ID, failCount, nextAttemptAt, lastErr); upErr != nil {
-			log.Printf("[TrashCleaner] mark permanent failure failed: id=%s, err=%v", item.ID, upErr)
+			c.log.Error("mark permanent failure failed",
+				logger.String("id", item.ID.String()),
+				logger.Err(upErr))
 		}
 		return
 	}
@@ -357,7 +383,9 @@ func (c *TrashCleaner) markFailure(ctx context.Context, item TrashDir, now time.
 	}
 
 	if upErr := c.repo.MarkFailure(ctx, item.ID, failCount, nextAttemptAt, lastErr); upErr != nil {
-		log.Printf("[TrashCleaner] mark failure failed: id=%s, err=%v", item.ID, upErr)
+		c.log.Warn("mark failure failed",
+			logger.String("id", item.ID.String()),
+			logger.Err(upErr))
 	}
 }
 
@@ -373,7 +401,10 @@ func (c *TrashCleaner) validateTrashItemConsistency(ctx context.Context, userID,
 	const batchSize = 100
 	items, err := c.itemRepo.ListActiveByServer(ctx, userID, serverID, batchSize, 0)
 	if err != nil {
-		log.Printf("[TrashCleaner] consistency check: list failed: user=%s, server=%s, err=%v", userID, serverID, err)
+		c.log.Warn("consistency check: list failed",
+			logger.String("userID", userID.String()),
+			logger.String("serverID", serverID.String()),
+			logger.Err(err))
 		return
 	}
 
@@ -402,9 +433,13 @@ func (c *TrashCleaner) validateTrashItemConsistency(ctx context.Context, userID,
 
 	if len(missingIDs) > 0 {
 		if err := c.itemRepo.MarkMissingBatch(ctx, missingIDs, now); err != nil {
-			log.Printf("[TrashCleaner] consistency check: mark missing failed: count=%d, err=%v", len(missingIDs), err)
+			c.log.Warn("consistency check: mark missing failed",
+				logger.Int("count", len(missingIDs)),
+				logger.Err(err))
 		} else {
-			log.Printf("[TrashCleaner] consistency check: marked %d items as missing for server=%s", len(missingIDs), serverID)
+			c.log.Info("consistency check: marked items as missing",
+				logger.Int("count", len(missingIDs)),
+				logger.String("serverID", serverID.String()))
 		}
 	}
 }
@@ -425,13 +460,23 @@ func (c *TrashCleaner) backoffDelay(failCount int) time.Duration {
 }
 
 type trashEntry struct {
-	name    string
-	full    string
-	mod     time.Time
-	size    int64
-	isDir   bool
-	isLink  bool
-	version int64 // 索引表中的版本号，用于乐观锁
+	name      string
+	full      string
+	mod       time.Time // 文件系统的 mtime
+	deletedAt time.Time // 数据库记录的删除时间（优先使用）
+	size      int64
+	isDir     bool
+	isLink    bool
+	version   int64 // 索引表中的版本号，用于乐观锁
+}
+
+// effectiveDeletedAt 返回用于过期计算的删除时间
+// 优先使用数据库记录的 DeletedAt，如果没有则回退到文件 mtime
+func (e *trashEntry) effectiveDeletedAt() time.Time {
+	if !e.deletedAt.IsZero() {
+		return e.deletedAt
+	}
+	return e.mod
 }
 
 // estimateDirSize 估算目录大小（非递归，仅一层）
@@ -510,30 +555,41 @@ func (c *TrashCleaner) cleanOneTrashDir(ctx context.Context, userID, serverID uu
 	// 大目录警告：超过 10000 条目时记录日志
 	const largeDirectoryThreshold = 10000
 	if len(entries) > largeDirectoryThreshold {
-		log.Printf("[TrashCleaner] WARNING: large trash directory detected: path=%s, entries=%d, userID=%s, serverID=%s",
-			trashDir, len(entries), userID, serverID)
+		c.log.Warn("large trash directory detected",
+			logger.String("path", trashDir),
+			logger.Int("entries", len(entries)),
+			logger.String("userID", userID.String()),
+			logger.String("serverID", serverID.String()))
 	}
 
-	// 构建索引表版本映射（用于乐观锁）
-	versionMap := make(map[string]int64)
+	// 构建索引表映射（用于乐观锁和获取准确的删除时间）
+	type itemMeta struct {
+		version   int64
+		deletedAt time.Time
+	}
+	metaMap := make(map[string]itemMeta)
 	if c.itemRepo != nil {
-		// 批量获取该目录下所有 active 状态项目的版本号
-		// 对于大目录，分批获取以避免内存问题
+		// 使用 ListActiveByTrashDir 在数据库层面过滤，优化大目录查询性能
 		batchSize := 500
 		offset := 0
 		for {
-			activeItems, err := c.itemRepo.ListActiveByServer(ctx, userID, serverID, batchSize, offset)
+			activeItems, err := c.itemRepo.ListActiveByTrashDir(ctx, userID, serverID, trashDir, batchSize, offset)
 			if err != nil {
-				log.Printf("[TrashCleaner] list active items failed: userID=%s, serverID=%s, offset=%d, err=%v", userID, serverID, offset, err)
+				c.log.Warn("list active items failed",
+					logger.String("userID", userID.String()),
+					logger.String("serverID", serverID.String()),
+					logger.String("trashDir", trashDir),
+					logger.Int("offset", offset),
+					logger.Err(err))
 				break
 			}
 			if len(activeItems) == 0 {
 				break
 			}
 			for _, item := range activeItems {
-				// 只关注当前 trashDir 下的项目
-				if strings.HasPrefix(item.TrashPath, trashDir+"/") || item.TrashDir == trashDir {
-					versionMap[item.TrashPath] = item.Version
+				metaMap[item.TrashPath] = itemMeta{
+					version:   item.Version,
+					deletedAt: item.DeletedAt,
 				}
 			}
 			if len(activeItems) < batchSize {
@@ -576,14 +632,18 @@ func (c *TrashCleaner) cleanOneTrashDir(ctx context.Context, userID, serverID uu
 			size = estimateDirSize(ctx, sftpClient, full)
 		}
 
+		// 从数据库记录获取版本号和删除时间
+		meta := metaMap[full]
+
 		items = append(items, trashEntry{
-			name:    name,
-			full:    full,
-			mod:     mod,
-			size:    size,
-			isDir:   isDir,
-			isLink:  isLink,
-			version: versionMap[full], // 可能为 0（表示无索引记录）
+			name:      name,
+			full:      full,
+			mod:       mod,
+			deletedAt: meta.deletedAt, // 从数据库获取的删除时间
+			size:      size,
+			isDir:     isDir,
+			isLink:    isLink,
+			version:   meta.version, // 可能为 0（表示无索引记录）
 		})
 
 		// 统计总字节数（包括目录）
@@ -595,9 +655,9 @@ func (c *TrashCleaner) cleanOneTrashDir(ctx context.Context, userID, serverID uu
 	}
 
 	sort.Slice(items, func(i, j int) bool {
-		// 旧的优先删除；mod 为零值时排前面（更保守）
-		mi := items[i].mod
-		mj := items[j].mod
+		// 旧的优先删除；使用 effectiveDeletedAt 获取准确的删除时间
+		mi := items[i].effectiveDeletedAt()
+		mj := items[j].effectiveDeletedAt()
 		if mi.IsZero() && !mj.IsZero() {
 			return true
 		}
@@ -609,10 +669,11 @@ func (c *TrashCleaner) cleanOneTrashDir(ctx context.Context, userID, serverID uu
 
 	shouldDelete := make([]trashEntry, 0)
 
-	// 1) 先删超出保留期的
-	for _, it := range items {
-		if it.mod.IsZero() || now.Sub(it.mod) >= policy.retention {
-			shouldDelete = append(shouldDelete, it)
+	// 1) 先删超出保留期的（使用 effectiveDeletedAt 获取准确的删除时间）
+	for i := range items {
+		deletedAt := items[i].effectiveDeletedAt()
+		if deletedAt.IsZero() || now.Sub(deletedAt) >= policy.retention {
+			shouldDelete = append(shouldDelete, items[i])
 		}
 	}
 
@@ -688,12 +749,15 @@ func (c *TrashCleaner) deleteTrashEntryWithLock(ctx context.Context, userID, ser
 		// 步骤1：尝试获取锁（CAS: active -> purging）
 		affected, err := c.itemRepo.TryMarkPurging(ctx, userID, serverID, it.full, it.version)
 		if err != nil {
-			log.Printf("[TrashCleaner] TryMarkPurging failed: path=%s, err=%v", it.full, err)
+			c.log.Warn("TryMarkPurging failed",
+				logger.String("path", it.full),
+				logger.Err(err))
 			return err
 		}
 		if affected == 0 {
 			// 版本不匹配或状态已变更（可能用户正在恢复），跳过
-			log.Printf("[TrashCleaner] skipped (version mismatch or status changed): %s", it.full)
+			c.log.Debug("skipped (version mismatch or status changed)",
+				logger.String("path", it.full))
 			return nil
 		}
 
@@ -716,8 +780,13 @@ func (c *TrashCleaner) deleteTrashEntryWithLock(ctx context.Context, userID, ser
 		if it.isDir {
 			itemType = "directory"
 		}
-		log.Printf("[TrashCleaner] purged %s: userID=%s, serverID=%s, trashPath=%s, size=%d, timestamp=%s",
-			itemType, userID, serverID, it.full, it.size, now.Format(time.RFC3339))
+		c.log.Info("purged item",
+			logger.String("type", itemType),
+			logger.String("userID", userID.String()),
+			logger.String("serverID", serverID.String()),
+			logger.String("trashPath", it.full),
+			logger.Int64("size", it.size),
+			logger.Time("timestamp", now))
 		return nil
 	}
 
@@ -734,8 +803,13 @@ func (c *TrashCleaner) deleteTrashEntryWithLock(ctx context.Context, userID, ser
 		if it.isDir {
 			itemType = "directory"
 		}
-		log.Printf("[TrashCleaner] purged unindexed %s: userID=%s, serverID=%s, trashPath=%s, size=%d, timestamp=%s",
-			itemType, userID, serverID, it.full, it.size, now.Format(time.RFC3339))
+		c.log.Info("purged unindexed item",
+			logger.String("type", itemType),
+			logger.String("userID", userID.String()),
+			logger.String("serverID", serverID.String()),
+			logger.String("trashPath", it.full),
+			logger.Int64("size", it.size),
+			logger.Time("timestamp", now))
 	}
 	return delErr
 }
@@ -745,7 +819,8 @@ func deleteTrashEntryPhysical(ctx context.Context, sftpClient *sftpPkg.Client, i
 	// 删除前再次检查文件是否存在
 	if _, err := sftpClient.Stat(it.full); err != nil {
 		// 文件已不存在（可能被恢复或已删除），跳过
-		log.Printf("[TrashCleaner] file already gone (possibly restored): %s", it.full)
+		logger.Debug("file already gone (possibly restored)",
+			logger.String("path", it.full))
 		return nil
 	}
 
@@ -799,7 +874,9 @@ func removeAllSFTPWithDepth(ctx context.Context, c *sftpPkg.Client, dir string, 
 
 	// 大目录日志提示
 	if len(entries) > 100 && depth == 0 {
-		log.Printf("[TrashCleaner] removing large directory: %s (%d entries)", dir, len(entries))
+		logger.Info("removing large directory",
+			logger.String("dir", dir),
+			logger.Int("entries", len(entries)))
 	}
 
 	deletedCount := 0
@@ -807,7 +884,10 @@ func removeAllSFTPWithDepth(ctx context.Context, c *sftpPkg.Client, dir string, 
 		// 频繁检查上下文，确保能及时响应取消
 		select {
 		case <-ctx.Done():
-			log.Printf("[TrashCleaner] removal interrupted: dir=%s, deleted=%d/%d", dir, deletedCount, len(entries))
+			logger.Warn("removal interrupted",
+				logger.String("dir", dir),
+				logger.Int("deleted", deletedCount),
+				logger.Int("total", len(entries)))
 			return ctx.Err()
 		default:
 		}

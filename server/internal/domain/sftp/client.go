@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
+	"github.com/easyssh/server/internal/pkg/logger"
 	"github.com/google/uuid"
 	"github.com/pkg/sftp"
 )
@@ -338,10 +338,14 @@ func (c *Client) MoveToTrash(path string) (trashDir string, trashPath string, er
 	now := time.Now()
 	if chtErr := c.sftpClient.Chtimes(trashPath, now, now); chtErr != nil {
 		// Chtimes 失败不应阻止删除操作，但记录警告以便调试
-		log.Printf("[SFTP Trash] Warning: failed to update mtime for %s: %v (using original file mtime)", trashPath, chtErr)
+		logger.Warn("failed to update mtime for trash path (using original file mtime)",
+			logger.String("trashPath", trashPath),
+			logger.Err(chtErr))
 	}
 
-	log.Printf("[SFTP Trash] Moved to trash: %s -> %s", path, trashPath)
+	logger.Debug("moved to trash",
+		logger.String("from", path),
+		logger.String("to", trashPath))
 	return trashDir, trashPath, nil
 }
 
@@ -366,7 +370,9 @@ func (c *Client) removeAll(path string) error {
 	if err != nil {
 		// 如果目录不存在或无法读取，尝试直接删除
 		// 可能是符号链接或特殊文件
-		log.Printf("[SFTP removeAll] Failed to read directory %s: %v, trying direct remove", path, err)
+		logger.Debug("failed to read directory, trying direct remove",
+			logger.String("path", path),
+			logger.Err(err))
 		// 尝试作为文件删除
 		if removeErr := c.sftpClient.Remove(path); removeErr == nil {
 			return nil
@@ -383,12 +389,16 @@ func (c *Client) removeAll(path string) error {
 		childPath := filepath.Join(path, entry.Name())
 		if entry.IsDir() {
 			if err := c.removeAll(childPath); err != nil {
-				log.Printf("[SFTP removeAll] Failed to remove subdirectory %s: %v", childPath, err)
+				logger.Warn("failed to remove subdirectory",
+					logger.String("path", childPath),
+					logger.Err(err))
 				return err
 			}
 		} else {
 			if err := c.sftpClient.Remove(childPath); err != nil {
-				log.Printf("[SFTP removeAll] Failed to remove file %s: %v", childPath, err)
+				logger.Warn("failed to remove file",
+					logger.String("path", childPath),
+					logger.Err(err))
 				return err
 			}
 		}
@@ -397,7 +407,9 @@ func (c *Client) removeAll(path string) error {
 	// 删除空目录
 	err = c.sftpClient.RemoveDirectory(path)
 	if err != nil {
-		log.Printf("[SFTP removeAll] Failed to remove directory %s: %v", path, err)
+		logger.Warn("failed to remove directory",
+			logger.String("path", path),
+			logger.Err(err))
 	}
 	return err
 }

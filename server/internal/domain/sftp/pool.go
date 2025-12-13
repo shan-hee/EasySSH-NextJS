@@ -3,7 +3,6 @@ package sftp
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/pkg/crypto"
+	"github.com/easyssh/server/internal/pkg/logger"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 )
@@ -158,6 +158,7 @@ type Pool struct {
 	serverService   server.Service
 	serverRepo      server.Repository
 	connTimeout     time.Duration // 连接超时时间
+	log             *logger.Logger
 
 	maxIdleTime     time.Duration
 	cleanupInterval time.Duration
@@ -208,6 +209,7 @@ func NewPool(
 		serverService:   serverService,
 		serverRepo:      serverRepo,
 		connTimeout:     connTimeout,
+		log:             logger.NewModule("SFTP Pool"),
 		maxIdleTime:     maxIdle,
 		cleanupInterval: cleanupInterval,
 		maxLifeTime:     config.MaxLifeTime,
@@ -287,7 +289,9 @@ func (p *Pool) Get(ctx context.Context, userID, serverID uuid.UUID) (client *Poo
 		// 为本次请求创建新的 SFTP 客户端（锁外）
 		sftpClient, createErr := NewClient(sshConn.Client, &server.Server{ID: serverID})
 		if createErr != nil {
-			log.Printf("[SFTP Pool] 基于现有 SSH 创建 SFTP 失败，摘除并尝试重建: key=%s, err=%v", key, createErr)
+			p.log.Warn("基于现有 SSH 创建 SFTP 失败，摘除并尝试重建",
+				logger.String("key", key),
+				logger.Err(createErr))
 			p.invalidateSSHConn(key, sshConn)
 
 			newSSH, newErr := p.createNewSSH(ctx, userID, serverID)
@@ -314,7 +318,9 @@ func (p *Pool) Get(ctx context.Context, userID, serverID uuid.UUID) (client *Poo
 			return client, nil
 		}
 
-		log.Printf("[SFTP Pool] 复用现有 SSH 连接: key=%s, refCount=%d", key, sshConn.GetRefCount())
+		p.log.Debug("复用现有 SSH 连接",
+			logger.String("key", key),
+			logger.Int("refCount", sshConn.GetRefCount()))
 		client = &PooledClient{
 			Client:         sftpClient,
 			pool:           p,
@@ -333,7 +339,8 @@ func (p *Pool) Get(ctx context.Context, userID, serverID uuid.UUID) (client *Poo
 	p.mu.Unlock()
 
 	if exists && sshConn != nil {
-		log.Printf("[SFTP Pool] SSH 连接不健康或关闭中，移除: key=%s", key)
+		p.log.Debug("SSH 连接不健康或关闭中，移除",
+			logger.String("key", key))
 		p.markClosingAndMaybeClose(sshConn)
 	}
 
@@ -370,7 +377,9 @@ func (p *Pool) createNewSSH(ctx context.Context, userID, serverID uuid.UUID) (*p
 	if existing, exists := p.connections[key]; exists && existing.IsHealthy() {
 		p.mu.Unlock()
 		existing.IncRef()
-		log.Printf("[SFTP Pool] 复用刚创建的 SSH 连接: key=%s, refCount=%d", key, existing.GetRefCount())
+		p.log.Debug("复用刚创建的 SSH 连接",
+			logger.String("key", key),
+			logger.Int("refCount", existing.GetRefCount()))
 		return existing, nil
 	}
 	p.mu.Unlock()
@@ -408,7 +417,7 @@ func (p *Pool) createNewSSH(ctx context.Context, userID, serverID uuid.UUID) (*p
 	srv.UpdateStatus(server.StatusOnline)
 	if p.serverRepo != nil {
 		if err := p.serverRepo.UpdateStatus(ctxToUse, srv.ID, srv.Status, srv.LastConnected); err != nil {
-			log.Printf("[SFTP Pool] Failed to update server status: %v", err)
+			p.log.Warn("Failed to update server status", logger.Err(err))
 		}
 	}
 
@@ -425,13 +434,17 @@ func (p *Pool) createNewSSH(ctx context.Context, userID, serverID uuid.UUID) (*p
 		p.mu.Unlock()
 		go newConn.Client.Close()
 		existing.IncRef()
-		log.Printf("[SFTP Pool] 复用其他 goroutine 创建的 SSH 连接: key=%s, refCount=%d", key, existing.GetRefCount())
+		p.log.Debug("复用其他 goroutine 创建的 SSH 连接",
+			logger.String("key", key),
+			logger.Int("refCount", existing.GetRefCount()))
 		return existing, nil
 	}
 	p.connections[key] = newConn
 	p.mu.Unlock()
 
-	log.Printf("[SFTP Pool] 创建新 SSH 连接: key=%s, serverHost=%s:%d", key, srv.Host, srv.Port)
+	p.log.Debug("创建新 SSH 连接",
+		logger.String("key", key),
+		logger.String("serverHost", fmt.Sprintf("%s:%d", srv.Host, srv.Port)))
 	return newConn, nil
 }
 
@@ -448,7 +461,9 @@ func (p *Pool) releaseSSH(key string, conn *pooledSSHConn) {
 	p.mu.RUnlock()
 
 	newRefCount := conn.DecRef()
-	log.Printf("[SFTP Pool] 释放 SSH 连接: key=%s, refCount=%d", key, newRefCount)
+	p.log.Debug("释放 SSH 连接",
+		logger.String("key", key),
+		logger.Int("refCount", newRefCount))
 
 	if newRefCount == 0 {
 		// 若不是当前池内连接或已标记关闭中，则立即关闭
@@ -458,7 +473,8 @@ func (p *Pool) releaseSSH(key string, conn *pooledSSHConn) {
 			}
 			return
 		}
-		log.Printf("[SFTP Pool] SSH 引用计数归零，进入空闲: key=%s", key)
+		p.log.Debug("SSH 引用计数归零，进入空闲",
+			logger.String("key", key))
 	}
 }
 
@@ -473,7 +489,8 @@ func (p *Pool) forceRemoveSSH(key string, conn *pooledSSHConn) {
 
 	if exists && conn != nil && conn.Client != nil {
 		_ = conn.Client.Close()
-		log.Printf("[SFTP Pool] 强制移除 SSH 连接: key=%s", key)
+		p.log.Debug("强制移除 SSH 连接",
+			logger.String("key", key))
 	}
 }
 
@@ -491,13 +508,14 @@ func (p *Pool) CloseByKey(userID, serverID uuid.UUID) {
 	// 不要直接 Close，避免误伤并发中的请求；标记 closing 并在 refCount 归零后关闭
 	if exists && conn != nil {
 		p.markClosingAndMaybeClose(conn)
-		log.Printf("[SFTP Pool] 主动关闭 SSH 连接(延迟到空闲): key=%s", key)
+		p.log.Debug("主动关闭 SSH 连接(延迟到空闲)",
+			logger.String("key", key))
 	}
 }
 
 // CloseAll 关闭所有连接（用于服务器关闭时）
 func (p *Pool) CloseAll() {
-	log.Println("[SFTP Pool] 关闭所有连接")
+	p.log.Info("关闭所有连接")
 
 	// 停止清理协程
 	p.stopOnce.Do(func() {
@@ -520,7 +538,7 @@ func (p *Pool) CloseAll() {
 		}
 	}
 
-	log.Printf("[SFTP Pool] 已关闭 %d 个连接", len(allClients))
+	p.log.Info("已关闭所有连接", logger.Int("count", len(allClients)))
 }
 
 // cleanupLoop 后台清理空闲连接
@@ -557,7 +575,10 @@ func (p *Pool) cleanupOnce() {
 				conn.mu.Lock()
 				if !conn.lifeWarned {
 					conn.lifeWarned = true
-					log.Printf("[SFTP Pool] 连接寿命超限但仍在使用: key=%s, age=%v, refCount=%d", key, now.Sub(conn.createdAt), refCount)
+					p.log.Warn("连接寿命超限但仍在使用",
+					logger.String("key", key),
+					logger.Duration("age", now.Sub(conn.createdAt)),
+					logger.Int("refCount", refCount))
 				}
 				conn.mu.Unlock()
 			}
@@ -592,7 +613,7 @@ func (p *Pool) cleanupOnce() {
 	// 锁外做 keepalive，失败则摘除连接
 	for _, item := range toProbe {
 		if !p.keepAlive(item.conn) {
-			log.Printf("[SFTP Pool] 空闲 keepalive 失败，驱逐连接: key=%s", item.key)
+			p.log.Warn("空闲 keepalive 失败，驱逐连接", logger.String("key", item.key))
 			p.evictSSHConn(item.key, item.conn)
 		}
 	}
@@ -604,7 +625,7 @@ func (p *Pool) cleanupOnce() {
 	}
 
 	if len(toClose) > 0 {
-		log.Printf("[SFTP Pool] 清理空闲连接: count=%d", len(toClose))
+		p.log.Info("清理空闲连接", logger.Int("count", len(toClose)))
 	}
 }
 
@@ -690,8 +711,14 @@ func (p *Pool) registerTrashDir(userID, serverID uuid.UUID, dir string) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), p.connTimeout)
-	_ = p.trashRepo.UpsertSeen(ctx, userID, serverID, dir, time.Now())
-	cancel()
+	defer cancel()
+	if err := p.trashRepo.UpsertSeen(ctx, userID, serverID, dir, time.Now()); err != nil {
+		p.log.Error("failed to register trash dir",
+			logger.String("userID", userID.String()),
+			logger.String("serverID", serverID.String()),
+			logger.String("dir", dir),
+			logger.Err(err))
+	}
 }
 
 func (p *Pool) registerTrashItem(userID, serverID uuid.UUID, originalPath, trashDir, trashPath string, info *FileInfo, deletedAt time.Time) {
@@ -732,12 +759,24 @@ func (p *Pool) registerTrashItem(userID, serverID uuid.UUID, originalPath, trash
 	if info != nil {
 		size = info.Size
 	}
-	log.Printf("[SFTP Trash] %s moved to trash: userID=%s, serverID=%s, originalPath=%s, trashPath=%s, size=%d, timestamp=%s",
-		itemType, userID, serverID, originalPath, trashPath, size, deletedAt.Format(time.RFC3339))
+	p.log.Info("item moved to trash",
+		logger.String("type", itemType),
+		logger.String("userID", userID.String()),
+		logger.String("serverID", serverID.String()),
+		logger.String("originalPath", originalPath),
+		logger.String("trashPath", trashPath),
+		logger.Int64("size", size),
+		logger.Time("timestamp", deletedAt))
 
 	ctx, cancel := context.WithTimeout(context.Background(), p.connTimeout)
-	_ = p.trashItemRepo.UpsertActive(ctx, item)
-	cancel()
+	defer cancel()
+	if err := p.trashItemRepo.UpsertActive(ctx, item); err != nil {
+		p.log.Error("failed to register trash item",
+			logger.String("userID", userID.String()),
+			logger.String("serverID", serverID.String()),
+			logger.String("trashPath", trashPath),
+			logger.Err(err))
+	}
 }
 
 // evictSSHConn 摘除 SSH 连接并在空闲时关闭（不回滚引用）

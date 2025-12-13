@@ -26,6 +26,9 @@ type TrashItemRepository interface {
 	MarkPurgedByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, purgedAt time.Time, status TrashItemStatus) error
 	// ListActiveByServer 列出指定服务器的活跃垃圾项（用于一致性检查）
 	ListActiveByServer(ctx context.Context, userID, serverID uuid.UUID, limit, offset int) ([]TrashItem, error)
+	// ListActiveByTrashDir 列出指定回收站目录下的活跃垃圾项（优化大目录查询性能）
+	// trashDir 参数用于筛选 trash_dir 字段匹配或 trash_path 以 trashDir+"/" 为前缀的记录
+	ListActiveByTrashDir(ctx context.Context, userID, serverID uuid.UUID, trashDir string, limit, offset int) ([]TrashItem, error)
 	// MarkMissingBatch 批量标记丢失的项目
 	MarkMissingBatch(ctx context.Context, ids []uuid.UUID, missingAt time.Time) error
 
@@ -188,6 +191,28 @@ func (r *gormTrashItemRepository) ListActiveByServer(ctx context.Context, userID
 	var rows []TrashItem
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND server_id = ? AND status = ?", userID, serverID, TrashItemStatusActive).
+		Order("deleted_at ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&rows).Error
+	return rows, err
+}
+
+// ListActiveByTrashDir 列出指定回收站目录下的活跃垃圾项
+// 在数据库层面直接过滤，避免内存中过滤整个服务器的数据
+func (r *gormTrashItemRepository) ListActiveByTrashDir(ctx context.Context, userID, serverID uuid.UUID, trashDir string, limit, offset int) ([]TrashItem, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var rows []TrashItem
+	// 查询 trash_dir 完全匹配 或 trash_path 以 trashDir+"/" 为前缀的记录
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND server_id = ? AND status = ? AND (trash_dir = ? OR trash_path LIKE ?)",
+			userID, serverID, TrashItemStatusActive, trashDir, trashDir+"/%").
 		Order("deleted_at ASC").
 		Limit(limit).
 		Offset(offset).
