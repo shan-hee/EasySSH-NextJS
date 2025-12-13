@@ -16,6 +16,7 @@ import (
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/domain/verification"
+	"github.com/easyssh/server/internal/pkg/password"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -541,6 +542,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// 验证密码强度
+	if err := password.ValidateWithDefault(req.Password); err != nil {
+		if password.IsValidationError(err) {
+			RespondError(c, http.StatusBadRequest, "password_policy_error", err.Error())
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "validation_error", "Invalid password")
+		return
+	}
+
 	// 检查是否允许注册
 	if h.systemConfigService != nil {
 		config, err := h.systemConfigService.Get(c.Request.Context())
@@ -924,6 +935,16 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
+	// 验证新密码强度
+	if err := password.ValidateWithDefault(req.NewPassword); err != nil {
+		if password.IsValidationError(err) {
+			RespondError(c, http.StatusBadRequest, "password_policy_error", err.Error())
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "validation_error", "Invalid password")
+		return
+	}
+
 	// 从上下文获取用户 ID
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -949,6 +970,16 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req ResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 验证新密码强度
+	if err := password.ValidateWithDefault(req.NewPassword); err != nil {
+		if password.IsValidationError(err) {
+			RespondError(c, http.StatusBadRequest, "password_policy_error", err.Error())
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "validation_error", "Invalid password")
 		return
 	}
 

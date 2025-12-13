@@ -28,8 +28,9 @@ type SecurityConfig struct {
 	CookieConfig string `gorm:"type:jsonb" json:"cookie_config"` // JSON: CookieConfig
 
 	// 速率限制
-	LoginLimit int `gorm:"not null;default:5" json:"login_limit"`   // 登录接口速率限制（次/分钟/IP）
-	APILimit   int `gorm:"not null;default:100" json:"api_limit"`   // API 接口速率限制（次/分钟/IP）
+	LoginLimit  int `gorm:"not null;default:5" json:"login_limit"`    // 登录接口速率限制（次/分钟/IP）
+	APILimit    int `gorm:"not null;default:100" json:"api_limit"`    // API 接口速率限制（次/分钟/IP）
+	TwoFALimit  int `gorm:"not null;default:5" json:"two_fa_limit"`   // 2FA 验证速率限制（次/分钟/IP）
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -73,6 +74,7 @@ func DefaultCookieConfig() *CookieConfig {
 
 // RateLimitConfig 速率限制配置结构
 type RateLimitConfig struct {
-	LoginLimit int `json:"login_limit"` // 登录接口速率限制（次/分钟/IP）
-	APILimit   int `json:"api_limit"`   // API 接口速率限制（次/分钟/IP）
+	LoginLimit int `json:"login_limit"`   // 登录接口速率限制（次/分钟/IP）
+	APILimit   int `json:"api_limit"`     // API 接口速率限制（次/分钟/IP）
+	TwoFALimit int `json:"two_fa_limit"`  // 2FA 验证速率限制（次/分钟/IP）
 }

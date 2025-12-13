@@ -83,9 +83,15 @@ func (s *service) GetRateLimitConfig(ctx context.Context) (*RateLimitConfig, err
 		return nil, err
 	}
 
+	twoFALimit := config.TwoFALimit
+	if twoFALimit <= 0 {
+		twoFALimit = 5 // 默认值
+	}
+
 	return &RateLimitConfig{
 		LoginLimit: config.LoginLimit,
 		APILimit:   config.APILimit,
+		TwoFALimit: twoFALimit,
 	}, nil
 }
 
@@ -177,6 +183,9 @@ func (s *service) validate(config *SecurityConfig) error {
 	}
 	if config.APILimit < 10 || config.APILimit > 10000 {
 		return errors.New("api limit must be between 10 and 10000")
+	}
+	if config.TwoFALimit < 1 || config.TwoFALimit > 20 {
+		return errors.New("2FA limit must be between 1 and 20")
 	}
 
 	// 验证CORS配置

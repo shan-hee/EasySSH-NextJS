@@ -51,18 +51,15 @@ function handleGlobalUnauthorized(error: unknown) {
   // 打一条调试日志，方便排查
   console.error("[apiFetch] Unauthorized, redirecting to /login", error)
 
-  // 避免在登录页上再次重定向自己
-  if (true) {
-    try {
-      const params = new URLSearchParams()
-      if (currentPath && currentPath !== "/") {
-        params.set("next", currentPath)
-      }
-      const query = params.toString()
-      window.location.href = query ? `/login?${query}` : "/login"
-    } catch {
-      window.location.href = "/login"
+  try {
+    const params = new URLSearchParams()
+    if (currentPath && currentPath !== "/") {
+      params.set("next", currentPath)
     }
+    const query = params.toString()
+    window.location.href = query ? `/login?${query}` : "/login"
+  } catch {
+    window.location.href = "/login"
   }
 }
 

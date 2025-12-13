@@ -30,6 +30,7 @@ type SecurityConfigDTO struct {
 	CORSConfig      *security.CORSConfig `json:"cors_config,omitempty"`
 	LoginLimit      int                  `json:"login_limit"`
 	APILimit        int                  `json:"api_limit"`
+	TwoFALimit      int                  `json:"two_fa_limit"`
 }
 
 // GetSecurityConfig 获取安全配置
@@ -154,8 +155,9 @@ func (h *SecurityHandler) GetRateLimitConfig(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"config": gin.H{
-			"login_limit": config.LoginLimit,
-			"api_limit":   config.APILimit,
+			"login_limit":  config.LoginLimit,
+			"api_limit":    config.APILimit,
+			"two_fa_limit": config.TwoFALimit,
 		},
 	})
 }
@@ -172,6 +174,7 @@ func (h *SecurityHandler) SaveRateLimitConfig(c *gin.Context) {
 	var req struct {
 		LoginLimit int `json:"login_limit"`
 		APILimit   int `json:"api_limit"`
+		TwoFALimit int `json:"two_fa_limit"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -188,6 +191,7 @@ func (h *SecurityHandler) SaveRateLimitConfig(c *gin.Context) {
 
 	config.LoginLimit = req.LoginLimit
 	config.APILimit = req.APILimit
+	config.TwoFALimit = req.TwoFALimit
 
 	if err := h.service.Save(c.Request.Context(), config); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -392,6 +396,7 @@ func (h *SecurityHandler) toDTO(config *security.SecurityConfig) *SecurityConfig
 		BlocklistIPs:    config.BlocklistIPs,
 		LoginLimit:      config.LoginLimit,
 		APILimit:        config.APILimit,
+		TwoFALimit:      config.TwoFALimit,
 	}
 
 	// 解析CORS配置
@@ -417,6 +422,7 @@ func (h *SecurityHandler) fromDTO(dto *SecurityConfigDTO) (*security.SecurityCon
 		BlocklistIPs:    dto.BlocklistIPs,
 		LoginLimit:      dto.LoginLimit,
 		APILimit:        dto.APILimit,
+		TwoFALimit:      dto.TwoFALimit,
 	}
 
 	// 序列化CORS配置

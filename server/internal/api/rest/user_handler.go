@@ -5,6 +5,7 @@ import (
 
 	"github.com/easyssh/server/internal/domain/auth"
 	userdomain "github.com/easyssh/server/internal/domain/user"
+	"github.com/easyssh/server/internal/pkg/password"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -117,6 +118,16 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	var req CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	// 验证密码强度
+	if err := password.ValidateWithDefault(req.Password); err != nil {
+		if password.IsValidationError(err) {
+			RespondError(c, http.StatusBadRequest, "PASSWORD_POLICY_ERROR", err.Error())
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "INVALID_REQUEST", "Invalid password")
 		return
 	}
 
@@ -242,6 +253,16 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 	var req ChangeUserPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	// 验证密码强度
+	if err := password.ValidateWithDefault(req.NewPassword); err != nil {
+		if password.IsValidationError(err) {
+			RespondError(c, http.StatusBadRequest, "PASSWORD_POLICY_ERROR", err.Error())
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "INVALID_REQUEST", "Invalid password")
 		return
 	}
 

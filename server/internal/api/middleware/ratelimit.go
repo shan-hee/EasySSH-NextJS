@@ -170,6 +170,40 @@ func LoginRateLimitMiddleware(securityService security.Service) gin.HandlerFunc 
 	}
 }
 
+// TwoFARateLimitMiddleware 2FA 验证接口专用速率限制
+// 默认: 5次/分钟/IP，防止暴力破解 TOTP 码
+func TwoFARateLimitMiddleware(securityService security.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 默认值: 5次/分钟
+		limit := 5
+
+		// 优先从请求上下文缓存获取配置
+		if secConfig, ok := GetSecurityConfigFromContext(c); ok && secConfig.TwoFALimit > 0 {
+			limit = secConfig.TwoFALimit
+		} else if securityService != nil {
+			// 缓存未命中，降级为查询数据库
+			if config, err := securityService.GetRateLimitConfig(c.Request.Context()); err == nil && config.TwoFALimit > 0 {
+				limit = config.TwoFALimit
+			}
+		}
+
+		// 使用 IP 地址作为限流键
+		key := "2fa:" + c.ClientIP()
+
+		// 简化的限流检查（使用内存计数）
+		if !checkRateLimit(key, limit, time.Minute) {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":   "rate_limit_exceeded",
+				"message": "Too many 2FA verification attempts, please try again later",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // APIRateLimitMiddleware API 接口通用速率限制，支持动态配置
 // 默认: 100次/分钟/IP
 func APIRateLimitMiddleware(securityService security.Service) gin.HandlerFunc {
