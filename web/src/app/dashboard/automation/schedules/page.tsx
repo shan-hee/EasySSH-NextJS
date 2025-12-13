@@ -35,7 +35,6 @@ import {
  Zap,
  Search,
  FileText,
- RefreshCw
 } from "lucide-react"
 import {
  scheduledTasksApi,
@@ -496,31 +495,6 @@ export default function AutomationSchedulesPage() {
  )}
 
  {/* 任务列表 */}
- <Card className="flex-1 min-h-0">
- <CardHeader className="flex flex-row items-center justify-between">
- <div>
- <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
- <CardDescription>
- {t("tableDescription", { count: tasks.length })}
- </CardDescription>
- </div>
- <div className="flex items-center gap-2">
- <Button
- variant="outline"
- size="sm"
- onClick={handleRefresh}
- disabled={refreshing}
- >
- <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
- {t("refresh")}
- </Button>
- <Button size="sm" onClick={() => setIsDialogOpen(true)}>
- <Plus className="mr-2 h-4 w-4" />
- {t("newTask")}
- </Button>
- </div>
- </CardHeader>
- <CardContent className="flex-1 min-h-0 p-4 pt-0">
  <DataTable
  data={tasks}
  columns={columns}
@@ -550,11 +524,17 @@ export default function AutomationSchedulesPage() {
  ],
  },
  ]}
- />
+ onRefresh={handleRefresh}
+ showRefresh={true}
+ isRefreshing={refreshing}
+ >
+ <Button size="sm" onClick={() => setIsDialogOpen(true)}>
+ <Plus className="mr-2 h-4 w-4" />
+ {t("newTask")}
+ </Button>
+ </DataTableToolbar>
  )}
  />
- </CardContent>
- </Card>
  </div>
 
  {/* 新建任务对话框 */}

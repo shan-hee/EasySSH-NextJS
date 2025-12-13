@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -417,61 +417,39 @@ export default function AutomationHistoryPage() {
         )}
 
         {/* 执行记录列表 */}
-        <Card className="flex-1 min-h-0">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
-              <CardDescription>
-                {t("tableDescription", {
-                  current: executions.length,
-                  total: totalCount,
-                })}
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={refreshing}
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                {tCommon("tableRefresh")}
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExportRecords}>
+        <DataTable
+          data={executions}
+          columns={columns}
+          loading={loading || refreshing}
+          emptyMessage={t("tableEmpty")}
+          toolbar={(table) => (
+            <DataTableToolbar
+              table={table}
+              searchKey="task_name"
+              searchPlaceholder={t("searchPlaceholder")}
+              filters={[
+                {
+                  column: "status",
+                  title: t("statusFilterPlaceholder"),
+                  options: filterOptions.status,
+                },
+                {
+                  column: "trigger_type",
+                  title: t("typeFilterPlaceholder"),
+                  options: filterOptions.trigger_type,
+                },
+              ]}
+              onRefresh={handleRefresh}
+              showRefresh={true}
+              isRefreshing={refreshing}
+            >
+              <Button variant="outline" size="sm" className="h-8" onClick={handleExportRecords}>
                 <Download className="mr-2 h-4 w-4" />
                 {t("exportButton")}
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 p-4 pt-0">
-            <DataTable
-              data={executions}
-              columns={columns}
-              loading={loading || refreshing}
-              emptyMessage={t("tableEmpty")}
-              toolbar={(table) => (
-                <DataTableToolbar
-                  table={table}
-                  searchKey="task_name"
-                  searchPlaceholder={t("searchPlaceholder")}
-                  filters={[
-                    {
-                      column: "status",
-                      title: t("statusFilterPlaceholder"),
-                      options: filterOptions.status,
-                    },
-                    {
-                      column: "trigger_type",
-                      title: t("typeFilterPlaceholder"),
-                      options: filterOptions.trigger_type,
-                    },
-                  ]}
-                />
-              )}
-            />
-          </CardContent>
-        </Card>
+            </DataTableToolbar>
+          )}
+        />
       </div>
 
       {/* 执行详情对话框 */}

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, XCircle, Shield, AlertTriangle, User } from "lucide-react"
 import { SkeletonStatsCard } from "@/components/ui/loading"
 import { auditLogsApi, type AuditLog } from "@/lib/api/audit-logs"
@@ -227,15 +227,31 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
       )}
 
       {/* 登录日志表格 */}
-      <Card className="flex-1 min-h-0">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
-            <CardDescription>
-              {t("tableDescription", { count: logs.length })}
-            </CardDescription>
-          </div>
-          <div className="flex gap-2">
+      <DataTable
+        data={logs}
+        columns={visibleColumns}
+        loading={loading}
+        pageCount={totalPages}
+        pageSize={pageSize}
+        totalRows={totalRows}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+        emptyMessage={t("emptyMessage")}
+        toolbar={(table) => (
+          <DataTableToolbar
+            table={table}
+            searchKey="username"
+            searchPlaceholder={t("searchPlaceholder")}
+            filters={[
+              {
+                column: "status",
+                title: t("filterStatusTitle"),
+                options: filterOptions.status,
+              },
+            ]}
+            onRefresh={handleRefresh}
+            showRefresh={true}
+          >
             <ColumnVisibility
               columns={[
                 { id: "created_at", label: t("columnTime") },
@@ -257,38 +273,9 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
                   })),
               }))}
             />
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 min-h-0 p-4 pt-0">
-          <DataTable
-            data={logs}
-            columns={visibleColumns}
-            loading={loading}
-            pageCount={totalPages}
-            pageSize={pageSize}
-            totalRows={totalRows}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            emptyMessage={t("emptyMessage")}
-            toolbar={(table) => (
-              <DataTableToolbar
-                table={table}
-                searchKey="username"
-                searchPlaceholder={t("searchPlaceholder")}
-                filters={[
-                  {
-                    column: "status",
-                    title: t("filterStatusTitle"),
-                    options: filterOptions.status,
-                  },
-                ]}
-                onRefresh={handleRefresh}
-                showRefresh={true}
-              />
-            )}
-          />
-        </CardContent>
-      </Card>
+          </DataTableToolbar>
+        )}
+      />
     </div>
   )
 }

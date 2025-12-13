@@ -929,7 +929,7 @@ export default function TrashPage() {
                     }}
                     disabled={isInitialLoading}
                   >
-                    <SelectTrigger className="h-8 w-[160px]">
+                    <SelectTrigger className="h-8 w-[160px] border-dashed">
                       <Server className="mr-2 h-4 w-4 text-muted-foreground" />
                       <SelectValue placeholder={t("filterServer")} />
                     </SelectTrigger>
@@ -951,7 +951,7 @@ export default function TrashPage() {
                       setCurrentPage(1)
                     }}
                   >
-                    <SelectTrigger className="h-8 w-[120px]">
+                    <SelectTrigger className="h-8 w-[140px] border-dashed">
                       <SelectValue placeholder={t("filterStatus")} />
                     </SelectTrigger>
                     <SelectContent>
