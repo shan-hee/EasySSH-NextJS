@@ -1666,6 +1666,17 @@ const messages = {
     statusRestored: "Restored",
     statusPurged: "Purged",
     statusMissing: "Missing",
+    statusPurging: "Purging",
+    statusRestoring: "Restoring",
+    // Relative time
+    timeJustNow: "Just now",
+    timeMinutesAgo: "{count} minutes ago",
+    timeHoursAgo: "{count} hours ago",
+    timeDaysAgo: "{count} days ago",
+    // Other
+    unknownServer: "Unknown Server",
+    loadServersFailed: "Failed to load server list",
+    actionUnavailable: "Unavailable",
     // Statistics
     statsTotalItems: "Total Items",
     statsTotalItemsDesc: "Files and folders in trash",

@@ -16,9 +16,30 @@ type TrashItemFilters struct {
 	DeletedBefore *time.Time
 }
 
+// TrashStatistics 回收站统计信息
+type TrashStatistics struct {
+	TotalItems   int64 `json:"total_items"`
+	TotalSize    int64 `json:"total_size"`
+	FileCount    int64 `json:"file_count"`
+	FolderCount  int64 `json:"folder_count"`
+	ActiveItems  int64 `json:"active_items"`
+	ActiveSize   int64 `json:"active_size"`
+}
+
+// BatchOperationResult 批量操作结果
+type BatchOperationResult struct {
+	ItemID  string `json:"item_id"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
 type TrashItemRepository interface {
 	UpsertActive(ctx context.Context, item TrashItem) error
 	List(ctx context.Context, userID uuid.UUID, filters TrashItemFilters, limit, offset int) ([]TrashItem, int64, error)
+	// GetStatistics 获取回收站统计信息
+	GetStatistics(ctx context.Context, userID uuid.UUID, filters TrashItemFilters) (*TrashStatistics, error)
+	// GetByIDs 批量获取项目
+	GetByIDs(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) ([]TrashItem, error)
 	GetByIDForUser(ctx context.Context, userID, id uuid.UUID) (*TrashItem, error)
 	// GetByTrashPath 按 trashPath 查询活跃的索引记录（用于目录级 API）
 	GetByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string) (*TrashItem, error)
@@ -149,6 +170,89 @@ func (r *gormTrashItemRepository) GetByIDForUser(ctx context.Context, userID, id
 		return nil, err
 	}
 	return &item, nil
+}
+
+// GetStatistics 获取回收站统计信息
+func (r *gormTrashItemRepository) GetStatistics(ctx context.Context, userID uuid.UUID, filters TrashItemFilters) (*TrashStatistics, error) {
+	stats := &TrashStatistics{}
+
+	// 构建基础查询条件
+	baseQuery := r.db.WithContext(ctx).Model(&TrashItem{}).Where("user_id = ?", userID)
+	if filters.ServerID != nil {
+		baseQuery = baseQuery.Where("server_id = ?", *filters.ServerID)
+	}
+	if filters.ParentDir != nil && *filters.ParentDir != "" {
+		baseQuery = baseQuery.Where("parent_dir = ?", *filters.ParentDir)
+	}
+
+	// 根据筛选状态获取统计，如果筛选了特定状态则只统计该状态
+	if filters.Status != nil && *filters.Status != "" {
+		statusQuery := baseQuery.Where("status = ?", *filters.Status)
+
+		// 总项目数
+		if err := statusQuery.Count(&stats.TotalItems).Error; err != nil {
+			return nil, err
+		}
+
+		// 总大小
+		if err := statusQuery.Select("COALESCE(SUM(size), 0)").Scan(&stats.TotalSize).Error; err != nil {
+			return nil, err
+		}
+
+		// 文件数
+		if err := statusQuery.Where("is_dir = ?", false).Count(&stats.FileCount).Error; err != nil {
+			return nil, err
+		}
+
+		// 目录数
+		stats.FolderCount = stats.TotalItems - stats.FileCount
+
+		// 如果筛选的是 active 状态，ActiveItems 和 ActiveSize 等于总数
+		if *filters.Status == TrashItemStatusActive {
+			stats.ActiveItems = stats.TotalItems
+			stats.ActiveSize = stats.TotalSize
+		}
+	} else {
+		// 未筛选状态时，统计所有项目
+		if err := baseQuery.Count(&stats.TotalItems).Error; err != nil {
+			return nil, err
+		}
+
+		if err := baseQuery.Session(&gorm.Session{}).Select("COALESCE(SUM(size), 0)").Scan(&stats.TotalSize).Error; err != nil {
+			return nil, err
+		}
+
+		if err := baseQuery.Session(&gorm.Session{}).Where("is_dir = ?", false).Count(&stats.FileCount).Error; err != nil {
+			return nil, err
+		}
+
+		stats.FolderCount = stats.TotalItems - stats.FileCount
+
+		// 单独统计 active 状态
+		activeQuery := baseQuery.Session(&gorm.Session{}).Where("status = ?", TrashItemStatusActive)
+		if err := activeQuery.Count(&stats.ActiveItems).Error; err != nil {
+			return nil, err
+		}
+
+		if err := activeQuery.Session(&gorm.Session{}).Select("COALESCE(SUM(size), 0)").Scan(&stats.ActiveSize).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return stats, nil
+}
+
+// GetByIDs 批量获取项目
+func (r *gormTrashItemRepository) GetByIDs(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) ([]TrashItem, error) {
+	if len(ids) == 0 {
+		return []TrashItem{}, nil
+	}
+
+	var items []TrashItem
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND id IN ?", userID, ids).
+		Find(&items).Error
+	return items, err
 }
 
 func (r *gormTrashItemRepository) MarkRestored(ctx context.Context, userID, id uuid.UUID, restoredAt time.Time, restoredPath string) error {

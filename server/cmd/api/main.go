@@ -656,6 +656,8 @@ func main() {
 			sftpTrashRoutes.POST("/items/:item_id/restore", sftpHandler.RestoreTrashItem)
 			sftpTrashRoutes.DELETE("/items/:item_id", sftpHandler.PurgeTrashItem)
 			sftpTrashRoutes.POST("/items/empty", sftpHandler.EmptyTrashItems)
+			sftpTrashRoutes.POST("/items/batch-restore", sftpHandler.BatchRestoreTrashItems)
+			sftpTrashRoutes.POST("/items/batch-purge", sftpHandler.BatchPurgeTrashItems)
 			// 回收站设置
 			sftpTrashRoutes.GET("/settings", sftpHandler.GetTrashSettings)
 			sftpTrashRoutes.PUT("/settings", sftpHandler.UpdateTrashSettings)

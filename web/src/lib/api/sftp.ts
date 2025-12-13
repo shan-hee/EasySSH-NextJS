@@ -110,6 +110,16 @@ export interface GlobalTrashListResponse {
   total: number
   limit: number
   offset: number
+  statistics: GlobalTrashStatistics
+}
+
+export interface GlobalTrashStatistics {
+  total_items: number
+  total_size: number
+  file_count: number
+  folder_count: number
+  active_items: number
+  active_size: number
 }
 
 export interface GlobalTrashFilters {
@@ -118,6 +128,20 @@ export interface GlobalTrashFilters {
   status?: TrashItemStatus
   limit?: number
   offset?: number
+}
+
+export interface BatchOperationResult {
+  item_id: string
+  success: boolean
+  error?: string
+}
+
+export interface BatchOperationResponse {
+  success: boolean
+  total: number
+  success_count: number
+  failed_count: number
+  results: BatchOperationResult[]
 }
 
 /**
@@ -677,6 +701,33 @@ export const sftpApi = {
     return apiFetch<{ message: string }>(`/sftp/trash/items/${itemId}`, {
       method: "DELETE",
       retry: false,
+    })
+  },
+
+  /**
+   * 批量恢复回收站项目
+   */
+  async batchRestoreGlobalTrashItems(itemIds: string[], renameIfExists: boolean = false): Promise<BatchOperationResponse> {
+    return apiFetch<BatchOperationResponse>(`/sftp/trash/items/batch-restore`, {
+      method: "POST",
+      body: {
+        item_ids: itemIds,
+        rename_if_exists: renameIfExists,
+      },
+      retry: false,
+      timeout: 300000,
+    })
+  },
+
+  /**
+   * 批量永久删除回收站项目
+   */
+  async batchPurgeGlobalTrashItems(itemIds: string[]): Promise<BatchOperationResponse> {
+    return apiFetch<BatchOperationResponse>(`/sftp/trash/items/batch-purge`, {
+      method: "POST",
+      body: { item_ids: itemIds },
+      retry: false,
+      timeout: 300000,
     })
   },
 

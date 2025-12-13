@@ -81,8 +81,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
-// 格式化相对时间
-function formatRelativeTime(dateStr: string): string {
+// 格式化相对时间（需要传入翻译函数）
+function formatRelativeTime(
+  dateStr: string,
+  t: (key: string, values?: Record<string, unknown>) => string
+): string {
   if (!dateStr) return "-"
   const date = new Date(dateStr)
   const now = new Date()
@@ -91,10 +94,10 @@ function formatRelativeTime(dateStr: string): string {
   const diffHours = Math.floor(diffMs / 3600000)
   const diffDays = Math.floor(diffMs / 86400000)
 
-  if (diffMins < 1) return "刚刚"
-  if (diffMins < 60) return `${diffMins} 分钟前`
-  if (diffHours < 24) return `${diffHours} 小时前`
-  if (diffDays < 30) return `${diffDays} 天前`
+  if (diffMins < 1) return t("timeJustNow")
+  if (diffMins < 60) return t("timeMinutesAgo", { count: diffMins })
+  if (diffHours < 24) return t("timeHoursAgo", { count: diffHours })
+  if (diffDays < 30) return t("timeDaysAgo", { count: diffDays })
   return date.toLocaleDateString()
 }
 
@@ -105,37 +108,37 @@ function formatFullDateTime(dateStr: string): string {
   return date.toLocaleString()
 }
 
-// 状态颜色和图标映射
-const statusConfig: Record<TrashItemStatus, { color: string; icon: React.ReactNode; label: string }> = {
+// 状态颜色和图标映射（标签需要使用翻译函数动态获取）
+const statusConfig: Record<TrashItemStatus, { color: string; icon: React.ReactNode; labelKey: string }> = {
   active: {
     color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
     icon: <Clock className="h-3.5 w-3.5" />,
-    label: "待清理",
+    labelKey: "statusActive",
   },
   restored: {
     color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-    label: "已恢复",
+    labelKey: "statusRestored",
   },
   purged: {
     color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
     icon: <XCircle className="h-3.5 w-3.5" />,
-    label: "已删除",
+    labelKey: "statusPurged",
   },
   missing: {
     color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
     icon: <AlertCircle className="h-3.5 w-3.5" />,
-    label: "文件丢失",
+    labelKey: "statusMissing",
   },
   purging: {
     color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
     icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-    label: "清理中",
+    labelKey: "statusPurging",
   },
   restoring: {
     color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
     icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-    label: "恢复中",
+    labelKey: "statusRestoring",
   },
 }
 
@@ -151,6 +154,7 @@ export default function TrashPage() {
   const [loading, setLoading] = useState(false)
   const [loadingServers, setLoadingServers] = useState(true)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+  const [batchOperating, setBatchOperating] = useState(false)
 
   // 筛选状态
   const [filterServerId, setFilterServerId] = useState<string>("all")
@@ -255,7 +259,8 @@ export default function TrashPage() {
     const loadServers = async () => {
       try {
         setLoadingServers(true)
-        const response = await serversApi.list({ limit: 100 })
+        // 获取所有服务器用于筛选下拉框，使用较大 limit 覆盖大多数场景
+        const response = await serversApi.list({ limit: 1000 })
         const serverList = response.data || []
         setServers(serverList)
         // 构建服务器映射表
@@ -263,7 +268,7 @@ export default function TrashPage() {
         serverList.forEach((server) => map.set(server.id, server))
         setServersMap(map)
       } catch (error) {
-        toast.error(getErrorMessage(error, "加载服务器列表失败"))
+        toast.error(t("loadServersFailed"))
       } finally {
         setLoadingServers(false)
       }
@@ -369,24 +374,19 @@ export default function TrashPage() {
       variant: "default",
       onConfirm: async () => {
         try {
-          const items = trashItems.filter((item) => selectedItems.has(item.id))
-          let successCount = 0
-          for (const item of items) {
-            try {
-              await sftpApi.restoreGlobalTrashItem(item.id, true)
-              successCount++
-            } catch {
-              // 继续处理其他项
-            }
-          }
-          toast.success(t("batchRestoreSuccess", { count: successCount }))
+          setBatchOperating(true)
+          const itemIds = Array.from(selectedItems)
+          const result = await sftpApi.batchRestoreGlobalTrashItems(itemIds, true)
+          toast.success(t("batchRestoreSuccess", { count: result.success_count }))
           loadTrash()
         } catch (error) {
           toast.error(t("restoreFailed", { message: getErrorMessage(error) }))
+        } finally {
+          setBatchOperating(false)
         }
       },
     })
-  }, [selectedItems, trashItems, loadTrash, t])
+  }, [selectedItems, loadTrash, t])
 
   // 批量删除
   const handleBatchDelete = useCallback(async () => {
@@ -399,24 +399,19 @@ export default function TrashPage() {
       variant: "destructive",
       onConfirm: async () => {
         try {
-          const items = trashItems.filter((item) => selectedItems.has(item.id))
-          let successCount = 0
-          for (const item of items) {
-            try {
-              await sftpApi.purgeGlobalTrashItem(item.id)
-              successCount++
-            } catch {
-              // 继续处理其他项
-            }
-          }
-          toast.success(t("batchDeleteSuccess", { count: successCount }))
+          setBatchOperating(true)
+          const itemIds = Array.from(selectedItems)
+          const result = await sftpApi.batchPurgeGlobalTrashItems(itemIds)
+          toast.success(t("batchDeleteSuccess", { count: result.success_count }))
           loadTrash()
         } catch (error) {
           toast.error(t("deleteFailed", { message: getErrorMessage(error) }))
+        } finally {
+          setBatchOperating(false)
         }
       },
     })
-  }, [selectedItems, trashItems, loadTrash, t])
+  }, [selectedItems, loadTrash, t])
 
   // 统计数据
   const statistics = useMemo(() => {
@@ -438,9 +433,9 @@ export default function TrashPage() {
       const server = serversMap.get(serverId)
       return server
         ? { name: server.name || server.host, host: server.host }
-        : { name: "未知服务器", host: "-" }
+        : { name: t("unknownServer"), host: "-" }
     },
-    [serversMap]
+    [serversMap, t]
   )
 
   // 表格列定义
@@ -554,7 +549,7 @@ export default function TrashPage() {
           return (
             <Badge className={`${config.color} gap-1`}>
               {config.icon}
-              <span>{config.label}</span>
+              <span>{t(config.labelKey)}</span>
             </Badge>
           )
         },
@@ -567,7 +562,7 @@ export default function TrashPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="text-sm text-muted-foreground">
-                  {formatRelativeTime(row.original.deleted_at)}
+                  {formatRelativeTime(row.original.deleted_at, t)}
                 </span>
               </TooltipTrigger>
               <TooltipContent>{formatFullDateTime(row.original.deleted_at)}</TooltipContent>
@@ -601,17 +596,17 @@ export default function TrashPage() {
           const canOperate = item.status === "active"
 
           if (!canOperate) {
-            const statusText = {
-              restored: "已恢复",
-              purged: "已清理",
-              missing: "文件丢失",
-              purging: "清理中...",
-              restoring: "恢复中...",
-            }[item.status] || "不可用"
+            const statusTextKey = {
+              restored: "statusRestored",
+              purged: "statusPurged",
+              missing: "statusMissing",
+              purging: "statusPurging",
+              restoring: "statusRestoring",
+            }[item.status] || "actionUnavailable"
 
             return (
               <span className="text-xs text-muted-foreground">
-                {statusText}
+                {t(statusTextKey)}
               </span>
             )
           }
@@ -1007,12 +1002,20 @@ export default function TrashPage() {
                 <span className="text-sm text-muted-foreground mr-2">
                   {t("selectedItems", { count: selectedItems.size })}
                 </span>
-                <Button variant="outline" size="sm" onClick={handleBatchRestore}>
-                  <RotateCcw className="mr-2 h-4 w-4" />
+                <Button variant="outline" size="sm" onClick={handleBatchRestore} disabled={batchOperating}>
+                  {batchOperating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                  )}
                   {t("batchRestore")}
                 </Button>
-                <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
-                  <Trash2 className="mr-2 h-4 w-4" />
+                <Button variant="destructive" size="sm" onClick={handleBatchDelete} disabled={batchOperating}>
+                  {batchOperating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
                   {t("batchDelete")}
                 </Button>
               </>

@@ -1610,6 +1610,17 @@ const messages = {
     statusRestored: "已恢复",
     statusPurged: "已删除",
     statusMissing: "文件丢失",
+    statusPurging: "清理中",
+    statusRestoring: "恢复中",
+    // 相对时间
+    timeJustNow: "刚刚",
+    timeMinutesAgo: "{count} 分钟前",
+    timeHoursAgo: "{count} 小时前",
+    timeDaysAgo: "{count} 天前",
+    // 其他
+    unknownServer: "未知服务器",
+    loadServersFailed: "加载服务器列表失败",
+    actionUnavailable: "不可用",
     // 统计
     statsTotalItems: "总项目数",
     statsTotalItemsDesc: "回收站中的文件和目录",

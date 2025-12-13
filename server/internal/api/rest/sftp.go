@@ -2183,12 +2183,16 @@ func (h *SFTPHandler) ListTrashItems(c *gin.Context) {
 	offset := 0
 	if v := c.Query("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			limit = n
+			if n > 0 && n <= 200 {
+				limit = n
+			}
 		}
 	}
 	if v := c.Query("offset"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			offset = n
+			if n >= 0 {
+				offset = n
+			}
 		}
 	}
 
@@ -2218,11 +2222,26 @@ func (h *SFTPHandler) ListTrashItems(c *gin.Context) {
 		return
 	}
 
+	// 获取统计信息
+	stats, err := h.trashItemRepo.GetStatistics(c.Request.Context(), userID, filters)
+	if err != nil {
+		// 统计失败不阻塞列表返回，使用默认值
+		stats = &sftp.TrashStatistics{}
+	}
+
 	RespondSuccess(c, gin.H{
 		"items":  rows,
 		"total":  total,
 		"limit":  limit,
 		"offset": offset,
+		"statistics": gin.H{
+			"total_items":   stats.TotalItems,
+			"total_size":    stats.TotalSize,
+			"file_count":    stats.FileCount,
+			"folder_count":  stats.FolderCount,
+			"active_items":  stats.ActiveItems,
+			"active_size":   stats.ActiveSize,
+		},
 	})
 }
 
@@ -2476,6 +2495,271 @@ func (h *SFTPHandler) PurgeTrashItem(c *gin.Context) {
 		log.Printf("[SFTP Trash] WARN: finish purge db update failed (physical purge succeeded): itemID=%s, trashPath=%s, err=%v", itemID, item.TrashPath, err)
 	}
 	RespondSuccess(c, gin.H{"success": true})
+}
+
+// BatchRestoreTrashItems 批量恢复回收站项目
+// POST /api/v1/sftp/trash/items/batch-restore
+func (h *SFTPHandler) BatchRestoreTrashItems(c *gin.Context) {
+	if h.trashItemRepo == nil {
+		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	var req struct {
+		ItemIDs        []string `json:"item_ids" binding:"required"`
+		RenameIfExists bool     `json:"rename_if_exists"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	if len(req.ItemIDs) == 0 {
+		RespondError(c, http.StatusBadRequest, "no_items", "No items to restore")
+		return
+	}
+	if len(req.ItemIDs) > 100 {
+		RespondError(c, http.StatusBadRequest, "too_many_items", "Maximum 100 items per batch")
+		return
+	}
+
+	// 解析 UUID
+	ids := make([]uuid.UUID, 0, len(req.ItemIDs))
+	for _, idStr := range req.ItemIDs {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			continue // 跳过无效的 ID
+		}
+		ids = append(ids, id)
+	}
+
+	// 批量获取项目
+	items, err := h.trashItemRepo.GetByIDs(c.Request.Context(), userID, ids)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	results := make([]sftp.BatchOperationResult, 0, len(items))
+	successCount := 0
+
+	for _, item := range items {
+		select {
+		case <-c.Request.Context().Done():
+			RespondError(c, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		default:
+		}
+
+		result := sftp.BatchOperationResult{ItemID: item.ID.String()}
+
+		// 检查状态
+		if item.Status != sftp.TrashItemStatusActive {
+			result.Success = false
+			result.Error = fmt.Sprintf("invalid status: %s", item.Status)
+			results = append(results, result)
+			continue
+		}
+
+		// 获取连接
+		pooled, err := h.pool.Get(c.Request.Context(), userID, item.ServerID)
+		if err != nil {
+			result.Success = false
+			result.Error = err.Error()
+			results = append(results, result)
+			continue
+		}
+
+		// 确定恢复路径
+		restorePath := item.OriginalPath
+		if req.RenameIfExists {
+			// 检查是否存在冲突
+			if _, err := pooled.GetFileInfo(restorePath); err == nil {
+				// 存在冲突，使用备选名称
+				restorePath = path.Join(item.ParentDir, fmt.Sprintf("%s.restored-%s", item.OriginalName, uuid.NewString()[:8]))
+			}
+		}
+
+		// 尝试获取锁
+		affected, lockErr := h.trashItemRepo.TryMarkRestoring(c.Request.Context(), userID, item.ID, item.Version)
+		if lockErr != nil || affected == 0 {
+			pooled.Release()
+			result.Success = false
+			result.Error = "concurrent modification"
+			results = append(results, result)
+			continue
+		}
+
+		// 执行恢复
+		if err := pooled.RenameFile(item.TrashPath, restorePath); err != nil {
+			_ = h.trashItemRepo.RollbackRestoring(c.Request.Context(), userID, item.ID)
+			pooled.Release()
+			result.Success = false
+			result.Error = err.Error()
+			results = append(results, result)
+			continue
+		}
+
+		// 完成恢复
+		now := time.Now()
+		_ = h.trashItemRepo.FinishRestore(c.Request.Context(), userID, item.ID, now, restorePath)
+		pooled.Release()
+
+		result.Success = true
+		results = append(results, result)
+		successCount++
+	}
+
+	RespondSuccess(c, gin.H{
+		"success":       true,
+		"total":         len(items),
+		"success_count": successCount,
+		"failed_count":  len(items) - successCount,
+		"results":       results,
+	})
+}
+
+// BatchPurgeTrashItems 批量永久删除回收站项目
+// POST /api/v1/sftp/trash/items/batch-purge
+func (h *SFTPHandler) BatchPurgeTrashItems(c *gin.Context) {
+	if h.trashItemRepo == nil {
+		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	var req struct {
+		ItemIDs []string `json:"item_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	if len(req.ItemIDs) == 0 {
+		RespondError(c, http.StatusBadRequest, "no_items", "No items to purge")
+		return
+	}
+	if len(req.ItemIDs) > 100 {
+		RespondError(c, http.StatusBadRequest, "too_many_items", "Maximum 100 items per batch")
+		return
+	}
+
+	// 解析 UUID
+	ids := make([]uuid.UUID, 0, len(req.ItemIDs))
+	for _, idStr := range req.ItemIDs {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+
+	// 批量获取项目
+	items, err := h.trashItemRepo.GetByIDs(c.Request.Context(), userID, ids)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	results := make([]sftp.BatchOperationResult, 0, len(items))
+	successCount := 0
+
+	for _, item := range items {
+		select {
+		case <-c.Request.Context().Done():
+			RespondError(c, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		default:
+		}
+
+		result := sftp.BatchOperationResult{ItemID: item.ID.String()}
+
+		// 检查状态
+		if item.Status != sftp.TrashItemStatusActive {
+			result.Success = false
+			result.Error = fmt.Sprintf("invalid status: %s", item.Status)
+			results = append(results, result)
+			continue
+		}
+
+		// 获取连接
+		pooled, err := h.pool.Get(c.Request.Context(), userID, item.ServerID)
+		if err != nil {
+			result.Success = false
+			result.Error = err.Error()
+			results = append(results, result)
+			continue
+		}
+
+		// 检查文件是否存在
+		fi, statErr := pooled.GetFileInfo(item.TrashPath)
+		if statErr != nil {
+			// 文件不存在，标记为 missing
+			now := time.Now()
+			_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, item.ServerID, item.TrashPath, now, sftp.TrashItemStatusMissing)
+			pooled.Release()
+			result.Success = true
+			results = append(results, result)
+			successCount++
+			continue
+		}
+
+		// 尝试获取锁
+		affected, lockErr := h.trashItemRepo.TryMarkPurging(c.Request.Context(), userID, item.ServerID, item.TrashPath, item.Version)
+		if lockErr != nil || affected == 0 {
+			pooled.Release()
+			result.Success = false
+			result.Error = "concurrent modification"
+			results = append(results, result)
+			continue
+		}
+
+		// 执行删除
+		var purgeErr error
+		if fi.IsDir {
+			purgeErr = pooled.RemoveAll(item.TrashPath)
+		} else {
+			purgeErr = pooled.RemoveFile(item.TrashPath)
+		}
+
+		if purgeErr != nil {
+			_ = h.trashItemRepo.RollbackPurging(c.Request.Context(), userID, item.ServerID, item.TrashPath)
+			pooled.Release()
+			result.Success = false
+			result.Error = purgeErr.Error()
+			results = append(results, result)
+			continue
+		}
+
+		// 完成清理
+		now := time.Now()
+		_ = h.trashItemRepo.FinishPurge(c.Request.Context(), userID, item.ServerID, item.TrashPath, now)
+		pooled.Release()
+
+		result.Success = true
+		results = append(results, result)
+		successCount++
+	}
+
+	RespondSuccess(c, gin.H{
+		"success":       true,
+		"total":         len(items),
+		"success_count": successCount,
+		"failed_count":  len(items) - successCount,
+		"results":       results,
+	})
 }
 
 type emptyTrashItemsRequest struct {
