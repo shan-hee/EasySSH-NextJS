@@ -493,16 +493,16 @@ func main() {
 			authRoutes.POST("/logout", authHandler.Logout)
 			// 使用可选认证中间件，支持未登录和已登录状态
 			authRoutes.GET("/status", middleware.OptionalAuth(jwtService), authHandler.CheckStatus) // 检查系统和认证状态
-			// 初始化管理员接口应用速率限制（支持动态配置）
-			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(securityService), authHandler.InitializeAdmin)
-			authRoutes.POST("/2fa/verify", middleware.TwoFARateLimitMiddleware(securityService), authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
+			// 初始化管理员接口应用速率限制（支持动态配置，使用 Redis 分布式限流）
+			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.InitializeAdmin)
+			authRoutes.POST("/2fa/verify", middleware.TwoFARateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
 		}
 
 		// OAuth 路由（公开）
 		oauthRoutes := v1.Group("/oauth")
 		{
 			// 与 /oauth 前缀下的端点保持一一对应，便于前端统一通过 /api/v1 调用
-			oauthRoutes.POST("/authorize", middleware.LoginRateLimitMiddleware(securityService), authHandler.OAuthAuthorize) // 开发版 PKCE 授权码端点（含登录验证）
+			oauthRoutes.POST("/authorize", middleware.LoginRateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.OAuthAuthorize) // 开发版 PKCE 授权码端点（含登录验证）
 			oauthRoutes.POST("/token", authHandler.OAuthToken)                                                               // 交换/刷新 access_token
 			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify)                                                    // 验证 Google ID Token
 		}

@@ -836,8 +836,14 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 
-	// 如果没有 access_token, 视为幂等登出（仅清理 Cookie）
-	if accessToken == "" {
+	// 从 Cookie 获取 refresh_token（用于完全失效）
+	var refreshToken string
+	if cookieToken, err := c.Cookie(RefreshTokenCookieName); err == nil {
+		refreshToken = strings.TrimSpace(cookieToken)
+	}
+
+	// 如果没有任何 token, 视为幂等登出（仅清理 Cookie）
+	if accessToken == "" && refreshToken == "" {
 		clearAuthCookies(c, h.securityService)
 		clearAccessTokenCookie(c, h.securityService)
 		clearCSRFCookie(c, h.securityService)
@@ -846,18 +852,19 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	// 尝试根据 access_token 中的 session_id 撤销当前会话（不会阻止后续流程）
-	if claims, err := h.jwtService.ValidateToken(accessToken); err == nil {
-		if claims.SessionID != uuid.Nil {
-			_ = h.authService.RevokeSession(c.Request.Context(), claims.UserID, claims.SessionID)
+	if accessToken != "" {
+		if claims, err := h.jwtService.ValidateToken(accessToken); err == nil {
+			if claims.SessionID != uuid.Nil {
+				_ = h.authService.RevokeSession(c.Request.Context(), claims.UserID, claims.SessionID)
+			}
 		}
 	}
 
-	// 将 access_token 加入黑名单（忽略错误以保持幂等性）
-	if accessToken != "" {
-		if err := h.authService.Logout(c.Request.Context(), accessToken); err != nil {
-			// 记录错误但不阻止后续清理
-			// 为避免泄露细节，这里不返回错误给客户端
-		}
+	// 将 access_token 和 refresh_token 同时加入黑名单（忽略错误以保持幂等性）
+	// 使用 LogoutWithRefreshToken 确保 refresh_token 也完全失效
+	if err := h.authService.LogoutWithRefreshToken(c.Request.Context(), accessToken, refreshToken); err != nil {
+		// 记录错误但不阻止后续清理
+		// 为避免泄露细节，这里不返回错误给客户端
 	}
 
 	// 清除 HttpOnly Cookie

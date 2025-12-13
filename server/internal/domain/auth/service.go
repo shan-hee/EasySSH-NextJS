@@ -37,6 +37,9 @@ type Service interface {
 	// Logout 用户登出
 	Logout(ctx context.Context, accessToken string) error
 
+	// LogoutWithRefreshToken 登出时同时将 Access Token 和 Refresh Token 加入黑名单
+	LogoutWithRefreshToken(ctx context.Context, accessToken, refreshToken string) error
+
 	// GetUserByID 根据 ID 获取用户
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error)
 
@@ -279,11 +282,46 @@ func (s *authService) hashToken(token string) string {
 }
 
 func (s *authService) Logout(ctx context.Context, accessToken string) error {
-	// 将令牌加入黑名单
+	// 将 Access Token 加入黑名单
 	// 设置过期时间为令牌的剩余有效时间
 	if err := s.jwtService.BlacklistToken(accessToken, 24*time.Hour); err != nil {
-		return fmt.Errorf("failed to blacklist token: %w", err)
+		return fmt.Errorf("failed to blacklist access token: %w", err)
 	}
+	return nil
+}
+
+// LogoutWithRefreshToken 登出时同时将 Access Token 和 Refresh Token 加入黑名单
+// 确保被撤销的 Refresh Token 无法再用于获取新的 Access Token
+func (s *authService) LogoutWithRefreshToken(ctx context.Context, accessToken, refreshToken string) error {
+	// 将 Access Token 加入黑名单
+	if accessToken != "" {
+		if err := s.jwtService.BlacklistToken(accessToken, 24*time.Hour); err != nil {
+			// 记录错误但不阻止后续操作
+			fmt.Printf("Warning: failed to blacklist access token: %v\n", err)
+		}
+	}
+
+	// 将 Refresh Token 加入黑名单
+	// Refresh Token 的有效期较长，需要使用更长的黑名单过期时间
+	if refreshToken != "" {
+		// 尝试解析 Refresh Token 获取其绝对过期时间
+		claims, err := s.jwtService.ValidateToken(refreshToken)
+		if err == nil && claims.AbsoluteExpiry > 0 {
+			// 使用 Refresh Token 的绝对过期时间作为黑名单过期时间
+			ttl := time.Until(time.Unix(claims.AbsoluteExpiry, 0))
+			if ttl > 0 {
+				if err := s.jwtService.BlacklistToken(refreshToken, ttl); err != nil {
+					fmt.Printf("Warning: failed to blacklist refresh token: %v\n", err)
+				}
+			}
+		} else {
+			// 如果无法解析，使用默认的 30 天（通常 Refresh Token 的最大有效期）
+			if err := s.jwtService.BlacklistToken(refreshToken, 30*24*time.Hour); err != nil {
+				fmt.Printf("Warning: failed to blacklist refresh token: %v\n", err)
+			}
+		}
+	}
+
 	return nil
 }
 

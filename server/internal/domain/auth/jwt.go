@@ -443,7 +443,37 @@ func (s *jwtService) GenerateTempToken(userID string) (string, error) {
 	return tokenString, nil
 }
 
-// ValidateTempToken 验证临时令牌并返回用户 ID（使用 Redis GETDEL 实现一次性使用）
+// validate2FATokenScript Lua 脚本：原子性验证并删除 2FA 临时令牌
+// 返回值：
+// - 成功：返回 userID
+// - 失败：返回空字符串
+// 参数：
+// - KEYS[1]: token key (2fa_token:<token_id>)
+// - ARGV[1]: 期望的 userID（从 JWT 解析）
+var validate2FATokenScript = redis.NewScript(`
+	local key = KEYS[1]
+	local expectedUserID = ARGV[1]
+
+	-- 获取当前值
+	local storedUserID = redis.call('GET', key)
+
+	-- 如果不存在或已过期，返回空
+	if not storedUserID then
+		return ""
+	end
+
+	-- 验证 userID 是否匹配
+	if storedUserID ~= expectedUserID then
+		return ""
+	end
+
+	-- 原子性删除并返回 userID
+	redis.call('DEL', key)
+	return storedUserID
+`)
+
+// ValidateTempToken 验证临时令牌并返回用户 ID
+// 使用 Redis Lua 脚本实现原子性验证+删除，防止竞态条件下的令牌复用
 func (s *jwtService) ValidateTempToken(tokenString string) (string, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
 		// 验证签名算法
@@ -474,21 +504,20 @@ func (s *jwtService) ValidateTempToken(tokenString string) (string, error) {
 		return "", errors.New("not a 2FA temp token")
 	}
 
-	// 从 Redis 中获取并删除 token（确保一次性使用）
+	// 使用 Lua 脚本原子性地验证并删除 token
+	// 这确保了即使在高并发场景下，每个 token 也只能被使用一次
 	ctx := context.Background()
 	key := fmt.Sprintf("2fa_token:%s", claims.ID)
-	userID, err := s.redisClient.GetDel(ctx, key).Result()
+
+	result, err := validate2FATokenScript.Run(ctx, s.redisClient, []string{key}, claims.Subject).Result()
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return "", errors.New("2FA token has already been used or expired")
-		}
 		return "", fmt.Errorf("failed to verify 2FA token in Redis: %w", err)
 	}
 
-	// 验证 Redis 中的 userID 与 JWT 中的 Subject 是否一致
-	if userID != claims.Subject {
-		return "", errors.New("2FA token user_id mismatch")
+	userID, ok := result.(string)
+	if !ok || userID == "" {
+		return "", errors.New("2FA token has already been used or expired")
 	}
 
-	return claims.Subject, nil
+	return userID, nil
 }
