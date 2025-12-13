@@ -20,6 +20,8 @@ type TrashItemRepository interface {
 	UpsertActive(ctx context.Context, item TrashItem) error
 	List(ctx context.Context, userID uuid.UUID, filters TrashItemFilters, limit, offset int) ([]TrashItem, int64, error)
 	GetByIDForUser(ctx context.Context, userID, id uuid.UUID) (*TrashItem, error)
+	// GetByTrashPath 按 trashPath 查询活跃的索引记录（用于目录级 API）
+	GetByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string) (*TrashItem, error)
 	MarkRestored(ctx context.Context, userID, id uuid.UUID, restoredAt time.Time, restoredPath string) error
 	MarkRestoredByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, restoredAt time.Time, restoredPath string) error
 	MarkPurgedByID(ctx context.Context, userID, id uuid.UUID, purgedAt time.Time) error
@@ -44,11 +46,21 @@ type TrashItemRepository interface {
 	// 用户恢复操作必须先调用此方法获取锁，再执行物理操作
 	TryMarkRestoring(ctx context.Context, userID, id uuid.UUID, expectedVersion int64) (int64, error)
 
+	// TryMarkRestoringByTrashPath 按 trashPath 尝试将 active 状态的项标记为 restoring（乐观锁 CAS 操作）
+	// 用于目录级 API 恢复操作
+	TryMarkRestoringByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, expectedVersion int64) (int64, error)
+
 	// FinishRestore 完成恢复，将 restoring 状态更新为 restored
 	FinishRestore(ctx context.Context, userID, id uuid.UUID, restoredAt time.Time, restoredPath string) error
 
+	// FinishRestoreByTrashPath 按 trashPath 完成恢复，将 restoring 状态更新为 restored
+	FinishRestoreByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, restoredAt time.Time, restoredPath string) error
+
 	// RollbackRestoring 回滚 restoring 状态到 active（恢复失败时调用）
 	RollbackRestoring(ctx context.Context, userID, id uuid.UUID) error
+
+	// RollbackRestoringByTrashPath 按 trashPath 回滚 restoring 状态到 active（恢复失败时调用）
+	RollbackRestoringByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string) error
 
 	// TryMarkRestored 尝试将 active 状态的项标记为 restored（乐观锁 CAS 操作）
 	// 返回 affected 行数：1 表示成功，0 表示版本不匹配或状态已变更（可能正在被清理）
@@ -314,6 +326,55 @@ func (r *gormTrashItemRepository) RollbackRestoring(ctx context.Context, userID,
 	return r.db.WithContext(ctx).Model(&TrashItem{}).
 		Where("id = ? AND user_id = ? AND status = ?",
 			id, userID, TrashItemStatusRestoring).
+		Updates(map[string]interface{}{
+			"status":  TrashItemStatusActive,
+			"version": gorm.Expr("version + 1"),
+		}).Error
+}
+
+// GetByTrashPath 按 trashPath 查询索引记录（用于目录级 API）
+// 只返回 active 状态的记录
+func (r *gormTrashItemRepository) GetByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string) (*TrashItem, error) {
+	var item TrashItem
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
+			userID, serverID, trashPath, TrashItemStatusActive).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+// TryMarkRestoringByTrashPath 按 trashPath 尝试将 active 状态的项标记为 restoring（乐观锁 CAS 操作）
+func (r *gormTrashItemRepository) TryMarkRestoringByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, expectedVersion int64) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&TrashItem{}).
+		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ? AND version = ?",
+			userID, serverID, trashPath, TrashItemStatusActive, expectedVersion).
+		Updates(map[string]interface{}{
+			"status":  TrashItemStatusRestoring,
+			"version": expectedVersion + 1,
+		})
+	return result.RowsAffected, result.Error
+}
+
+// FinishRestoreByTrashPath 按 trashPath 完成恢复，将 restoring 状态更新为 restored
+func (r *gormTrashItemRepository) FinishRestoreByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, restoredAt time.Time, restoredPath string) error {
+	return r.db.WithContext(ctx).Model(&TrashItem{}).
+		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
+			userID, serverID, trashPath, TrashItemStatusRestoring).
+		Updates(map[string]interface{}{
+			"status":        TrashItemStatusRestored,
+			"restored_at":   restoredAt,
+			"restored_path": restoredPath,
+			"version":       gorm.Expr("version + 1"),
+		}).Error
+}
+
+// RollbackRestoringByTrashPath 按 trashPath 回滚 restoring 状态到 active（恢复失败时调用）
+func (r *gormTrashItemRepository) RollbackRestoringByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string) error {
+	return r.db.WithContext(ctx).Model(&TrashItem{}).
+		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
+			userID, serverID, trashPath, TrashItemStatusRestoring).
 		Updates(map[string]interface{}{
 			"status":  TrashItemStatusActive,
 			"version": gorm.Expr("version + 1"),

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -272,7 +273,7 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 	if remotePath == "" {
 		remotePath = "/" + header.Filename
 	} else {
-		remotePath = filepath.Join(remotePath, header.Filename)
+		remotePath = path.Join(remotePath, header.Filename)
 	}
 
 	// 从连接池获取 SFTP 客户端
@@ -395,8 +396,8 @@ func (h *SFTPHandler) DownloadFile(c *gin.Context) {
 	}
 
 	// 获取路径参数
-	path := c.Query("path")
-	if path == "" {
+	remotePath := c.Query("path")
+	if remotePath == "" {
 		RespondError(c, http.StatusBadRequest, "missing_path", "Path parameter is required")
 		return
 	}
@@ -410,20 +411,20 @@ func (h *SFTPHandler) DownloadFile(c *gin.Context) {
 	defer sftpClient.Release()
 
 	// 获取文件信息
-	fileInfo, err := sftpClient.GetFileInfo(path)
+	fileInfo, err := sftpClient.GetFileInfo(remotePath)
 	if err != nil {
 		RespondError(c, http.StatusNotFound, "file_not_found", err.Error())
 		return
 	}
 
 	// 设置响应头
-	filename := filepath.Base(path)
+	filename := path.Base(remotePath)
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
 
 	// 下载文件
-	if err := sftpClient.DownloadFile(path, c.Writer); err != nil {
+	if err := sftpClient.DownloadFile(remotePath, c.Writer); err != nil {
 		// 如果已经开始写入响应，无法返回错误 JSON
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
@@ -1443,7 +1444,7 @@ func (h *SFTPHandler) Transfer(c *gin.Context) {
 	targetInfo, err := targetClient.GetFileInfo(targetPath)
 	if err == nil && targetInfo.IsDir {
 		// 目标是已存在的目录，追加源文件名
-		targetPath = filepath.Join(targetPath, sourceInfo.Name)
+		targetPath = path.Join(targetPath, sourceInfo.Name)
 	}
 
 	var bytesCopied int64
@@ -1534,8 +1535,8 @@ func (h *SFTPHandler) transferDirectory(ctx context.Context, sourceClient, targe
 			continue
 		}
 
-		srcPath := filepath.Join(sourcePath, file.Name)
-		dstPath := filepath.Join(targetPath, file.Name)
+		srcPath := path.Join(sourcePath, file.Name)
+		dstPath := path.Join(targetPath, file.Name)
 
 		if file.IsDir {
 			// 递归传输子目录
@@ -1742,8 +1743,8 @@ func (h *SFTPHandler) ListTrash(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
 		return
 	}
-	parentDir = filepath.Clean(parentDir)
-	trashDir := filepath.Join(parentDir, ".trash")
+	parentDir = path.Clean(parentDir)
+	trashDir := path.Join(parentDir, ".trash")
 
 	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
@@ -1775,7 +1776,7 @@ func (h *SFTPHandler) ListTrash(c *gin.Context) {
 		}
 
 		originalName, _ := parseOriginalNameFromTrashName(fi.Name)
-		restorePath := filepath.Join(parentDir, originalName)
+		restorePath := path.Join(parentDir, originalName)
 
 		items = append(items, sftp.TrashEntry{
 			TrashName:    fi.Name,
@@ -1817,6 +1818,8 @@ type restoreTrashRequest struct {
 // 1. 默认：如果目标路径已存在，返回 409 Conflict 并附带冲突详情和建议路径
 // 2. rename_if_exists=true：自动重命名为 {name}.restored-{uuid}
 // 3. custom_restore_path：恢复到用户指定的路径
+//
+// 使用乐观锁防止与清理器的竞态条件（当存在索引记录时）
 func (h *SFTPHandler) RestoreTrash(c *gin.Context) {
 	serverID, err := uuid.Parse(c.Param("server_id"))
 	if err != nil {
@@ -1833,7 +1836,7 @@ func (h *SFTPHandler) RestoreTrash(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must not contain '..'")
 		return
 	}
-	trashPath := filepath.Clean(req.TrashPath)
+	trashPath := path.Clean(req.TrashPath)
 	if !isTrashEntryPath(trashPath) {
 		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must point to an entry under .trash")
 		return
@@ -1860,18 +1863,18 @@ func (h *SFTPHandler) RestoreTrash(c *gin.Context) {
 	}
 	defer sftpClient.Release()
 
-	trashName := filepath.Base(trashPath)
+	trashName := path.Base(trashPath)
 	originalName, _ := parseOriginalNameFromTrashName(trashName)
-	parentDir := filepath.Dir(filepath.Dir(trashPath)) // .../<parent>/.trash/<entry>
+	parentDir := path.Dir(path.Dir(trashPath)) // .../<parent>/.trash/<entry>
 
 	// 确定恢复路径
-	restorePath := filepath.Join(parentDir, originalName)
+	restorePath := path.Join(parentDir, originalName)
 	if req.CustomRestorePath != "" {
-		restorePath = filepath.Clean(req.CustomRestorePath)
+		restorePath = path.Clean(req.CustomRestorePath)
 	}
 
 	// 生成建议的备选路径
-	suggestPath := filepath.Join(parentDir, fmt.Sprintf("%s.restored-%s", originalName, uuid.NewString()[:8]))
+	suggestPath := path.Join(parentDir, fmt.Sprintf("%s.restored-%s", originalName, uuid.NewString()[:8]))
 
 	// 检查目标路径是否存在冲突
 	existingFile, err := sftpClient.GetFileInfo(restorePath)
@@ -1905,15 +1908,57 @@ func (h *SFTPHandler) RestoreTrash(c *gin.Context) {
 		}
 	}
 
-	if err := sftpClient.RenameFile(trashPath, restorePath); err != nil {
-		RespondError(c, http.StatusInternalServerError, "restore_failed", err.Error())
-		return
+	// 尝试获取索引记录以使用乐观锁
+	var indexItem *sftp.TrashItem
+	if h.trashItemRepo != nil {
+		indexItem, _ = h.trashItemRepo.GetByTrashPath(c.Request.Context(), userID, serverID, trashPath)
 	}
 
-	// 同步回写全局索引（如存在），避免目录级操作导致全局回收站视图漂移
-	if h.trashItemRepo != nil {
+	if indexItem != nil {
+		// 存在索引记录，使用乐观锁机制
+
+		// 阶段1：使用乐观锁标记为 restoring 状态（获取锁）
+		affected, lockErr := h.trashItemRepo.TryMarkRestoringByTrashPath(c.Request.Context(), userID, serverID, trashPath, indexItem.Version)
+		if lockErr != nil {
+			RespondError(c, http.StatusInternalServerError, "db_error", lockErr.Error())
+			return
+		}
+		if affected == 0 {
+			// 版本不匹配或状态已变更（可能正在被清理）
+			RespondError(c, http.StatusConflict, "concurrent_modification", "Trash item was modified by another operation (possibly being purged), please refresh and try again")
+			return
+		}
+
+		// 阶段2：执行物理恢复（重命名）
+		if err := sftpClient.RenameFile(trashPath, restorePath); err != nil {
+			// 恢复失败，回滚数据库状态到 active
+			if rollbackErr := h.trashItemRepo.RollbackRestoringByTrashPath(c.Request.Context(), userID, serverID, trashPath); rollbackErr != nil {
+				log.Printf("[SFTP Trash] WARN: rollback restoring failed: trashPath=%s, err=%v", trashPath, rollbackErr)
+			}
+			RespondError(c, http.StatusInternalServerError, "restore_failed", err.Error())
+			return
+		}
+
+		// 阶段3：完成恢复，更新为 restored 状态
 		now := time.Now()
-		_ = h.trashItemRepo.MarkRestoredByTrashPath(c.Request.Context(), userID, serverID, trashPath, now, restorePath)
+		if err := h.trashItemRepo.FinishRestoreByTrashPath(c.Request.Context(), userID, serverID, trashPath, now, restorePath); err != nil {
+			// 物理操作已成功，但数据库更新失败，记录警告
+			log.Printf("[SFTP Trash] WARN: finish restore db update failed (physical restore succeeded): trashPath=%s, restorePath=%s, err=%v", trashPath, restorePath, err)
+		}
+	} else {
+		// 无索引记录，直接执行恢复（兼容无索引的旧文件）
+		if err := sftpClient.RenameFile(trashPath, restorePath); err != nil {
+			RespondError(c, http.StatusInternalServerError, "restore_failed", err.Error())
+			return
+		}
+
+		// 尝试回写索引（如果 trashItemRepo 可用）
+		if h.trashItemRepo != nil {
+			now := time.Now()
+			if markErr := h.trashItemRepo.MarkRestoredByTrashPath(c.Request.Context(), userID, serverID, trashPath, now, restorePath); markErr != nil {
+				log.Printf("[SFTP Trash] WARN: mark restored failed (no index): trashPath=%s, err=%v", trashPath, markErr)
+			}
+		}
 	}
 
 	info, _ := sftpClient.GetFileInfo(restorePath)
@@ -1948,7 +1993,7 @@ func (h *SFTPHandler) PurgeTrash(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must not contain '..'")
 		return
 	}
-	trashPath := filepath.Clean(req.TrashPath)
+	trashPath := path.Clean(req.TrashPath)
 	if !isTrashEntryPath(trashPath) {
 		RespondError(c, http.StatusBadRequest, "invalid_trash_path", "trash_path must point to an entry under .trash")
 		return
@@ -2024,8 +2069,8 @@ func (h *SFTPHandler) EmptyTrash(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
 		return
 	}
-	parentDir := filepath.Clean(req.Path)
-	trashDir := filepath.Join(parentDir, ".trash")
+	parentDir := path.Clean(req.Path)
+	trashDir := path.Join(parentDir, ".trash")
 
 	maxDeletes := req.MaxDeletes
 	if maxDeletes <= 0 {
@@ -2155,7 +2200,7 @@ func (h *SFTPHandler) ListTrashItems(c *gin.Context) {
 		}
 	}
 	if v := c.Query("parent_dir"); v != "" {
-		parent := filepath.Clean(v)
+		parent := path.Clean(v)
 		filters.ParentDir = &parent
 	}
 	if v := c.Query("status"); v != "" {
@@ -2255,11 +2300,11 @@ func (h *SFTPHandler) RestoreTrashItem(c *gin.Context) {
 	// 确定恢复路径
 	restorePath := item.OriginalPath
 	if req.CustomRestorePath != "" {
-		restorePath = filepath.Clean(req.CustomRestorePath)
+		restorePath = path.Clean(req.CustomRestorePath)
 	}
 
 	// 生成建议的备选路径
-	suggestPath := filepath.Join(item.ParentDir, fmt.Sprintf("%s.restored-%s", item.OriginalName, uuid.NewString()[:8]))
+	suggestPath := path.Join(item.ParentDir, fmt.Sprintf("%s.restored-%s", item.OriginalName, uuid.NewString()[:8]))
 
 	// 检查目标路径是否存在冲突
 	existingFile, err := pooled.GetFileInfo(restorePath)
@@ -2335,6 +2380,8 @@ func (h *SFTPHandler) RestoreTrashItem(c *gin.Context) {
 
 // PurgeTrashItem 永久删除索引条目对应的回收站文件（按 item_id）
 // DELETE /api/v1/sftp/trash/items/:item_id
+//
+// 使用乐观锁防止与清理器的竞态条件
 func (h *SFTPHandler) PurgeTrashItem(c *gin.Context) {
 	if h.trashItemRepo == nil {
 		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
@@ -2360,7 +2407,17 @@ func (h *SFTPHandler) PurgeTrashItem(c *gin.Context) {
 	}
 
 	if item.Status != sftp.TrashItemStatusActive {
-		RespondError(c, http.StatusBadRequest, "invalid_status", "Trash item is not active")
+		// 如果正在被清理，给出明确提示
+		if item.Status == sftp.TrashItemStatusPurging {
+			RespondError(c, http.StatusConflict, "item_being_purged", "Trash item is being purged by cleaner, please try again later")
+			return
+		}
+		// 如果正在被恢复，给出明确提示
+		if item.Status == sftp.TrashItemStatusRestoring {
+			RespondError(c, http.StatusConflict, "item_being_restored", "Trash item is being restored by another operation")
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "invalid_status", fmt.Sprintf("Trash item is not active (status: %s)", item.Status))
 		return
 	}
 
@@ -2371,28 +2428,53 @@ func (h *SFTPHandler) PurgeTrashItem(c *gin.Context) {
 	}
 	defer pooled.Release()
 
+	// 检查文件是否存在
 	fi, err := pooled.GetFileInfo(item.TrashPath)
 	if err != nil {
 		now := time.Now()
-		_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, item.ServerID, item.TrashPath, now, sftp.TrashItemStatusMissing)
+		if markErr := h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, item.ServerID, item.TrashPath, now, sftp.TrashItemStatusMissing); markErr != nil {
+			log.Printf("[SFTP Trash] WARN: mark missing failed: itemID=%s, err=%v", itemID, markErr)
+		}
 		RespondSuccess(c, gin.H{"success": true, "status": "missing"})
 		return
 	}
 
-	if fi.IsDir {
-		if err := pooled.RemoveAll(item.TrashPath); err != nil {
-			RespondError(c, http.StatusInternalServerError, "purge_failed", err.Error())
-			return
-		}
-	} else {
-		if err := pooled.RemoveFile(item.TrashPath); err != nil {
-			RespondError(c, http.StatusInternalServerError, "purge_failed", err.Error())
-			return
-		}
+	// 阶段1：使用乐观锁标记为 purging 状态（获取锁）
+	affected, err := h.trashItemRepo.TryMarkPurging(c.Request.Context(), userID, item.ServerID, item.TrashPath, item.Version)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if affected == 0 {
+		// 版本不匹配或状态已变更（可能正在被清理器处理或被恢复）
+		RespondError(c, http.StatusConflict, "concurrent_modification", "Trash item was modified by another operation, please refresh and try again")
+		return
 	}
 
+	// 阶段2：执行物理删除
+	var purgeErr error
+	if fi.IsDir {
+		purgeErr = pooled.RemoveAll(item.TrashPath)
+	} else {
+		purgeErr = pooled.RemoveFile(item.TrashPath)
+	}
+
+	// 阶段3：根据删除结果更新索引状态
+	if purgeErr != nil {
+		// 删除失败，回滚状态到 active
+		if rollbackErr := h.trashItemRepo.RollbackPurging(c.Request.Context(), userID, item.ServerID, item.TrashPath); rollbackErr != nil {
+			log.Printf("[SFTP Trash] WARN: rollback purging failed: itemID=%s, err=%v", itemID, rollbackErr)
+		}
+		RespondError(c, http.StatusInternalServerError, "purge_failed", purgeErr.Error())
+		return
+	}
+
+	// 删除成功，完成清理
 	now := time.Now()
-	_ = h.trashItemRepo.MarkPurgedByID(c.Request.Context(), userID, itemID, now)
+	if err := h.trashItemRepo.FinishPurge(c.Request.Context(), userID, item.ServerID, item.TrashPath, now); err != nil {
+		// 物理操作已成功，但数据库更新失败，记录警告
+		log.Printf("[SFTP Trash] WARN: finish purge db update failed (physical purge succeeded): itemID=%s, trashPath=%s, err=%v", itemID, item.TrashPath, err)
+	}
 	RespondSuccess(c, gin.H{"success": true})
 }
 
@@ -2405,6 +2487,8 @@ type emptyTrashItemsRequest struct {
 
 // EmptyTrashItems 按索引批量清空（默认仅 active）
 // POST /api/v1/sftp/trash/items/empty
+//
+// 使用乐观锁防止与清理器的竞态条件
 func (h *SFTPHandler) EmptyTrashItems(c *gin.Context) {
 	if h.trashItemRepo == nil {
 		RespondError(c, http.StatusServiceUnavailable, "trash_not_available", "trash index not available")
@@ -2438,7 +2522,7 @@ func (h *SFTPHandler) EmptyTrashItems(c *gin.Context) {
 		}
 	}
 	if req.ParentDir != "" {
-		parent := filepath.Clean(req.ParentDir)
+		parent := path.Clean(req.ParentDir)
 		filters.ParentDir = &parent
 	}
 	if req.OlderThanHours > 0 {
@@ -2453,6 +2537,7 @@ func (h *SFTPHandler) EmptyTrashItems(c *gin.Context) {
 	}
 
 	deleted := 0
+	skipped := 0
 	var failed []map[string]string
 	for _, item := range items {
 		select {
@@ -2468,46 +2553,74 @@ func (h *SFTPHandler) EmptyTrashItems(c *gin.Context) {
 			continue
 		}
 
+		// 检查文件是否存在
 		fi, statErr := pooled.GetFileInfo(item.TrashPath)
 		if statErr != nil {
 			now := time.Now()
-			_ = h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, item.ServerID, item.TrashPath, now, sftp.TrashItemStatusMissing)
+			if markErr := h.trashItemRepo.MarkPurgedByTrashPath(c.Request.Context(), userID, item.ServerID, item.TrashPath, now, sftp.TrashItemStatusMissing); markErr != nil {
+				log.Printf("[SFTP Trash] WARN: mark missing failed in batch: itemID=%s, err=%v", item.ID, markErr)
+			}
 			pooled.Release()
 			deleted++
 			continue
 		}
 
-		if fi.IsDir {
-			err = pooled.RemoveAll(item.TrashPath)
-		} else {
-			err = pooled.RemoveFile(item.TrashPath)
+		// 阶段1：使用乐观锁标记为 purging 状态（获取锁）
+		affected, lockErr := h.trashItemRepo.TryMarkPurging(c.Request.Context(), userID, item.ServerID, item.TrashPath, item.Version)
+		if lockErr != nil {
+			pooled.Release()
+			failed = append(failed, map[string]string{"item_id": item.ID.String(), "error": lockErr.Error()})
+			continue
 		}
-		pooled.Release()
-
-		if err != nil {
-			failed = append(failed, map[string]string{"item_id": item.ID.String(), "error": err.Error()})
+		if affected == 0 {
+			// 版本不匹配或状态已变更，跳过此项
+			pooled.Release()
+			skipped++
 			continue
 		}
 
+		// 阶段2：执行物理删除
+		var purgeErr error
+		if fi.IsDir {
+			purgeErr = pooled.RemoveAll(item.TrashPath)
+		} else {
+			purgeErr = pooled.RemoveFile(item.TrashPath)
+		}
+		pooled.Release()
+
+		// 阶段3：根据删除结果更新索引状态
+		if purgeErr != nil {
+			// 删除失败，回滚状态到 active
+			if rollbackErr := h.trashItemRepo.RollbackPurging(c.Request.Context(), userID, item.ServerID, item.TrashPath); rollbackErr != nil {
+				log.Printf("[SFTP Trash] WARN: rollback purging failed in batch: itemID=%s, err=%v", item.ID, rollbackErr)
+			}
+			failed = append(failed, map[string]string{"item_id": item.ID.String(), "error": purgeErr.Error()})
+			continue
+		}
+
+		// 删除成功，完成清理
 		now := time.Now()
-		_ = h.trashItemRepo.MarkPurgedByID(c.Request.Context(), userID, item.ID, now)
+		if err := h.trashItemRepo.FinishPurge(c.Request.Context(), userID, item.ServerID, item.TrashPath, now); err != nil {
+			log.Printf("[SFTP Trash] WARN: finish purge db update failed in batch: itemID=%s, err=%v", item.ID, err)
+		}
 		deleted++
 	}
 
 	RespondSuccess(c, gin.H{
 		"success": true,
 		"deleted": deleted,
+		"skipped": skipped,
 		"failed":  failed,
 	})
 }
 
 func isTrashEntryPath(p string) bool {
-	p = filepath.Clean(p)
+	p = path.Clean(p)
 	if strings.HasSuffix(p, "/.trash") || p == ".trash" {
 		return false
 	}
-	// 只允许操作 .trash 下的直接或间接子路径
-	return strings.Contains(p, string(filepath.Separator)+".trash"+string(filepath.Separator))
+	// 只允许操作 .trash 下的直接或间接子路径（SFTP 统一使用 /）
+	return strings.Contains(p, "/.trash/")
 }
 
 func containsDotDotSegment(p string) bool {
@@ -2533,7 +2646,9 @@ func isValidTrashItemStatus(v string) bool {
 	case string(sftp.TrashItemStatusActive),
 		string(sftp.TrashItemStatusRestored),
 		string(sftp.TrashItemStatusPurged),
-		string(sftp.TrashItemStatusMissing):
+		string(sftp.TrashItemStatusMissing),
+		string(sftp.TrashItemStatusPurging),
+		string(sftp.TrashItemStatusRestoring):
 		return true
 	default:
 		return false

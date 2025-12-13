@@ -127,6 +127,16 @@ const statusConfig: Record<TrashItemStatus, { color: string; icon: React.ReactNo
     icon: <AlertCircle className="h-3.5 w-3.5" />,
     label: "文件丢失",
   },
+  purging: {
+    color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
+    label: "清理中",
+  },
+  restoring: {
+    color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
+    label: "恢复中",
+  },
 }
 
 export default function TrashPage() {
@@ -591,9 +601,17 @@ export default function TrashPage() {
           const canOperate = item.status === "active"
 
           if (!canOperate) {
+            const statusText = {
+              restored: "已恢复",
+              purged: "已清理",
+              missing: "文件丢失",
+              purging: "清理中...",
+              restoring: "恢复中...",
+            }[item.status] || "不可用"
+
             return (
               <span className="text-xs text-muted-foreground">
-                {item.status === "restored" ? "已恢复" : item.status === "purged" ? "已清理" : "不可用"}
+                {statusText}
               </span>
             )
           }

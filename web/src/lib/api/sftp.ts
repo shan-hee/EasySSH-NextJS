@@ -78,7 +78,7 @@ export interface TrashListingResponse {
 /**
  * 全局回收站项目（索引表记录）
  */
-export type TrashItemStatus = "active" | "restored" | "purged" | "missing"
+export type TrashItemStatus = "active" | "restored" | "purged" | "missing" | "purging" | "restoring"
 
 export interface GlobalTrashItem {
   id: string
