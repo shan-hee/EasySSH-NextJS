@@ -428,7 +428,8 @@ export const settingsApi = {
    */
   async getAISystemConfig(): Promise<any> {
     const response = await apiFetch<any>("/settings/ai/system", { method: "GET" })
-    return response.config || {}
+    // API 直接返回配置对象，不是嵌套在 config 字段中
+    return response || {}
   },
 
   /**

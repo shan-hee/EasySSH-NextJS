@@ -64,6 +64,12 @@ func (r *repository) Save(ctx context.Context, config *UserAIConfig) error {
 
 	// 存在则更新（保留ID）
 	config.ID = existing.ID
+
+	// 如果新配置的 API Key 为空，保留原有的 API Key（避免误删除）
+	if config.CustomAPIKey == "" && existing.CustomAPIKey != "" {
+		config.CustomAPIKey = existing.CustomAPIKey
+	}
+
 	return r.db.WithContext(ctx).Save(config).Error
 }
 

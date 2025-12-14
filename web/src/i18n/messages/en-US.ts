@@ -1572,6 +1572,20 @@ const messages = {
       "Drag to expand • Double-click to expand",
     panelDragResizeTitle:
       "Drag to adjust height • Double-click to expand/collapse",
+    // New translations
+    copy: "Copy",
+    copied: "Copied",
+    regenerate: "Regenerate",
+    stopGenerating: "Stop generating",
+    thinkingLabel: "Thinking...",
+    collapseSidebar: "Collapse sidebar",
+    expandSidebar: "Expand sidebar",
+    configureAI: "Configure AI",
+    aiNotConfigured: "AI not configured",
+    aiNotConfiguredDesc: "Please configure AI service in settings first",
+    aiNotConfiguredPlaceholder: "Please configure AI service first...",
+    checkingConfig: "Checking config...",
+    chatError: "Chat request failed, please try again",
   },
   auth: {
     registerTitle: "Register {systemName} account",
@@ -2187,6 +2201,10 @@ const messages = {
     providerCustom: "Custom",
     fieldApiEndpointLabel: "API endpoint",
     fieldApiEndpointDesc: "API endpoint of the AI service",
+    fieldApiKeyLabel: "API Key",
+    fieldApiKeyDesc: "API key for the AI service",
+    fieldApiKeyDescConfigured: "API key is configured, leave empty to keep existing key",
+    fieldApiKeyPlaceholder: "Enter API key",
     fieldDefaultModelLabel: "Default model",
     fieldRateLimitLabel: "Rate limit (requests/minute)",
     alertDescription:

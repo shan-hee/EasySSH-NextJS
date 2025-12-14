@@ -37,6 +37,7 @@ export function AIConfigWrapper() {
       await settingsApi.saveAISystemConfig({
         system_enabled: data.system_enabled,
         system_provider: data.system_provider,
+        system_api_key: data.system_api_key,
         system_api_endpoint: data.system_api_endpoint,
         system_default_model: data.system_default_model,
         system_rate_limit: data.system_rate_limit,
@@ -99,6 +100,15 @@ export function AIConfigWrapper() {
                   description={t("fieldApiEndpointDesc")}
                   type="url"
                   placeholder="https://api.openai.com/v1"
+                />
+
+                <FormInput
+                  form={form}
+                  name="system_api_key"
+                  label={t("fieldApiKeyLabel")}
+                  description={form.watch("has_api_key") ? t("fieldApiKeyDescConfigured") : t("fieldApiKeyDesc")}
+                  type="password"
+                  placeholder={form.watch("has_api_key") ? "••••••••••••••••" : t("fieldApiKeyPlaceholder")}
                 />
 
                 <FormInput

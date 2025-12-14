@@ -13,6 +13,7 @@ type AIConfig struct {
 	// 系统级配置
 	SystemEnabled      bool   `gorm:"default:false" json:"system_enabled"`
 	SystemProvider     string `gorm:"size:20" json:"system_provider"`           // openai, anthropic, azure, custom
+	SystemAPIKey       string `gorm:"type:text" json:"-"`                       // API密钥（不对外输出）
 	SystemAPIEndpoint  string `gorm:"type:text" json:"system_api_endpoint"`
 	SystemDefaultModel string `gorm:"size:100" json:"system_default_model"`
 	SystemRateLimit    int    `gorm:"default:0" json:"system_rate_limit"` // 0表示无限制

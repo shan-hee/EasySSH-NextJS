@@ -4,6 +4,7 @@ import { z } from "zod"
 export const aiSystemConfigSchema = z.object({
   system_enabled: z.boolean().optional(),
   system_provider: z.enum(["openai", "anthropic", "azure", "custom"]).optional(),
+  system_api_key: z.string().optional(), // API Key (保存时发送，读取时不返回)
   system_api_endpoint: z
     .string()
     .url("settingsValidation.systemApiEndpointInvalid")
@@ -11,6 +12,7 @@ export const aiSystemConfigSchema = z.object({
     .optional(),
   system_default_model: z.string().optional(),
   system_rate_limit: z.number().min(1).max(1000).optional(),
+  has_api_key: z.boolean().optional(), // 仅读取时返回
 })
 
 // SMTP配置 Schema

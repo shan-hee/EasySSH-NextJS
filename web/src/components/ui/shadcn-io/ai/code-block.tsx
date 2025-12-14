@@ -4,12 +4,45 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import type { ComponentProps, HTMLAttributes, ReactNode } from 'react';
-import { createContext, useContext, useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import {
-  oneDark,
-  oneLight,
-} from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import Prism from 'prismjs';
+
+// 导入常用语言支持
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-go';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-cpp';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-docker';
+
+// 语言别名映射
+const languageAliases: Record<string, string> = {
+  sh: 'bash',
+  shell: 'bash',
+  js: 'javascript',
+  ts: 'typescript',
+  py: 'python',
+  yml: 'yaml',
+  md: 'markdown',
+  dockerfile: 'docker',
+};
+
+// 获取规范化的语言名称
+const normalizeLanguage = (lang: string): string => {
+  const normalized = lang.toLowerCase();
+  return languageAliases[normalized] || normalized;
+};
 
 type CodeBlockContextType = {
   code: string;
@@ -33,71 +66,80 @@ export const CodeBlock = ({
   className,
   children,
   ...props
-}: CodeBlockProps) => (
-  <CodeBlockContext.Provider value={{ code }}>
-    <div
-      className={cn(
-        'relative w-full overflow-hidden rounded-md border bg-background text-foreground',
-        className
-      )}
-      {...props}
-    >
-      <div className="relative">
-        <SyntaxHighlighter
-          className="overflow-hidden dark:hidden"
-          codeTagProps={{
-            className: 'font-mono text-sm',
-          }}
-          customStyle={{
-            margin: 0,
-            padding: '1rem',
-            fontSize: '0.875rem',
-            background: 'hsl(var(--background))',
-            color: 'hsl(var(--foreground))',
-          }}
-          language={language}
-          lineNumberStyle={{
-            color: 'hsl(var(--muted-foreground))',
-            paddingRight: '1rem',
-            minWidth: '2.5rem',
-          }}
-          showLineNumbers={showLineNumbers}
-          style={oneLight}
-        >
-          {code}
-        </SyntaxHighlighter>
-        <SyntaxHighlighter
-          className="hidden overflow-hidden dark:block"
-          codeTagProps={{
-            className: 'font-mono text-sm',
-          }}
-          customStyle={{
-            margin: 0,
-            padding: '1rem',
-            fontSize: '0.875rem',
-            background: 'hsl(var(--background))',
-            color: 'hsl(var(--foreground))',
-          }}
-          language={language}
-          lineNumberStyle={{
-            color: 'hsl(var(--muted-foreground))',
-            paddingRight: '1rem',
-            minWidth: '2.5rem',
-          }}
-          showLineNumbers={showLineNumbers}
-          style={oneDark}
-        >
-          {code}
-        </SyntaxHighlighter>
-        {children && (
-          <div className="absolute top-2 right-2 flex items-center gap-2">
-            {children}
-          </div>
+}: CodeBlockProps) => {
+  const codeRef = useRef<HTMLElement>(null);
+  const [highlightedCode, setHighlightedCode] = useState<string>('');
+  const normalizedLang = normalizeLanguage(language);
+
+  useEffect(() => {
+    // 检查语言是否支持
+    const grammar = Prism.languages[normalizedLang];
+    if (grammar) {
+      const highlighted = Prism.highlight(code, grammar, normalizedLang);
+      setHighlightedCode(highlighted);
+    } else {
+      // 不支持的语言，直接显示原始代码
+      setHighlightedCode(escapeHtml(code));
+    }
+  }, [code, normalizedLang]);
+
+  // 生成行号
+  const lines = code.split('\n');
+  const lineNumbers = showLineNumbers ? (
+    <span className="select-none pr-4 text-muted-foreground/60">
+      {lines.map((_, i) => (
+        <span key={i} className="block text-right min-w-[2rem]">
+          {i + 1}
+        </span>
+      ))}
+    </span>
+  ) : null;
+
+  return (
+    <CodeBlockContext.Provider value={{ code }}>
+      <div
+        className={cn(
+          'relative w-full overflow-hidden rounded-md border bg-background text-foreground',
+          className
         )}
+        {...props}
+      >
+        <div className="relative">
+          <pre className="overflow-x-auto p-4 font-mono text-sm leading-relaxed">
+            <div className="flex">
+              {lineNumbers}
+              <code
+                ref={codeRef}
+                className={cn(
+                  'prism-code flex-1',
+                  `language-${normalizedLang}`
+                )}
+                dangerouslySetInnerHTML={{ __html: highlightedCode }}
+              />
+            </div>
+          </pre>
+          {children && (
+            <div className="absolute top-2 right-2 flex items-center gap-2">
+              {children}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  </CodeBlockContext.Provider>
-);
+    </CodeBlockContext.Provider>
+  );
+};
+
+// HTML 转义函数
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
 
 export type CodeBlockCopyButtonProps = ComponentProps<typeof Button> & {
   onCopy?: () => void;

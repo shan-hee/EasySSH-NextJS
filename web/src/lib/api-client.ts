@@ -188,7 +188,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   throw lastError
 }
 
-function getCookieValue(name: string): string | null {
+export function getCookieValue(name: string): string | null {
   if (typeof document === "undefined") return null
   try {
     const pattern = `(?:^|; )${name.replace(/[$()*+./?[\\\]^{|}-]/g, "\\$&")}=([^;]*)`
@@ -197,6 +197,13 @@ function getCookieValue(name: string): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * 获取 CSRF Token（从 Cookie 中读取）
+ */
+export function getCsrfToken(): string | null {
+  return getCookieValue("easyssh_csrf_token")
 }
 
 /**

@@ -16,6 +16,7 @@ import (
 	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/api/rest"
 	"github.com/easyssh/server/internal/api/ws"
+	"github.com/easyssh/server/internal/domain/aichat"
 	"github.com/easyssh/server/internal/domain/aiconfig"
 	"github.com/easyssh/server/internal/domain/auditlog"
 	"github.com/easyssh/server/internal/domain/auth"
@@ -466,6 +467,9 @@ func main() {
 	notificationConfigHandler := rest.NewNotificationConfigHandler(notificationConfigService)
 	aiConfigHandler := rest.NewAIConfigHandler(aiConfigService)
 	userAIConfigHandler := rest.NewUserAIConfigHandler(userAIConfigService)
+	// AI聊天服务和处理器
+	aiChatService := aichat.NewService(aiConfigService, userAIConfigService)
+	aiChatHandler := rest.NewAIChatHandler(aiChatService)
 	// Docker 处理器（复用监控连接池）
 	dockerHandler := rest.NewDockerHandler(serverService, serverRepo, encryptor, sshHostKeyService.GetHostKeyCallback(), monitorConnectionPool)
 	// 其他处理器
@@ -917,6 +921,15 @@ func main() {
 				aiGroup.GET("/system", aiConfigHandler.GetSystemAIConfig)
 				aiGroup.POST("/system", aiConfigHandler.SaveSystemAIConfig)
 			}
+		}
+
+		// AI聊天路由（需要认证）
+		aiChatRoutes := v1.Group("/ai")
+		aiChatRoutes.Use(middleware.AuthMiddleware(jwtService))
+		{
+			aiChatRoutes.POST("/chat", aiChatHandler.Chat)              // 聊天（支持流式和非流式）
+			aiChatRoutes.POST("/chat/stream", aiChatHandler.StreamChat) // 流式聊天专用端点
+			aiChatRoutes.GET("/config", aiChatHandler.GetConfig)        // 获取AI配置状态
 		}
 
 		// 备份恢复路由（需要认证）
