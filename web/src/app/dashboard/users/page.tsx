@@ -32,7 +32,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { usersApi, type UserDetail, type UserRole } from "@/lib/api"
-import { SkeletonStatsCard } from "@/components/ui/loading"
+import { SkeletonStatsCard, SkeletonTable } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createUserColumns } from "./components/user-columns"
@@ -370,12 +370,8 @@ export default function UsersPage() {
           </div>
           {/* 表格骨架屏 */}
           <Card className="flex-1 min-h-0 flex flex-col">
-            <CardContent className="flex-1 overflow-y-auto scrollbar-custom p-8">
-              <div className="space-y-4">
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="h-12 bg-muted rounded animate-pulse" />
-                ))}
-              </div>
+            <CardContent className="flex-1 overflow-y-auto scrollbar-custom p-6">
+              <SkeletonTable rows={10} columns={5} showCheckbox showActions />
             </CardContent>
           </Card>
         </div>
