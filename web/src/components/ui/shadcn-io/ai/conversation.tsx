@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ArrowDownIcon } from 'lucide-react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ComponentPropsWithoutRef } from 'react';
 import { useCallback } from 'react';
 import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom';
 
@@ -11,7 +11,7 @@ export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
 export const Conversation = ({ className, ...props }: ConversationProps) => (
   <StickToBottom
-    className={cn('relative flex-1 overflow-y-auto', className)}
+    className={cn('relative flex-1 min-h-0 overflow-hidden', className)}
     initial="smooth"
     resize="smooth"
     role="log"
@@ -19,16 +19,38 @@ export const Conversation = ({ className, ...props }: ConversationProps) => (
   />
 );
 
-export type ConversationContentProps = ComponentProps<
-  typeof StickToBottom.Content
->;
+export type ConversationContentProps = ComponentPropsWithoutRef<'div'> & {
+  scrollClassName?: string;
+};
 
 export const ConversationContent = ({
   className,
+  scrollClassName,
   ...props
 }: ConversationContentProps) => (
-  <StickToBottom.Content className={cn('p-4', className)} {...props} />
+  <ConversationContentInner
+    className={className}
+    scrollClassName={scrollClassName}
+    {...props}
+  />
 );
+
+const ConversationContentInner = ({
+  className,
+  scrollClassName,
+  ...props
+}: ConversationContentProps) => {
+  const { scrollRef, contentRef } = useStickToBottomContext();
+
+  return (
+    <div
+      ref={scrollRef}
+      className={cn('h-full w-full overflow-y-auto scrollbar-custom', scrollClassName)}
+    >
+      <div ref={contentRef} className={cn('p-4', className)} {...props} />
+    </div>
+  );
+};
 
 export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
 

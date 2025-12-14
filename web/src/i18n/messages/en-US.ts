@@ -1586,6 +1586,10 @@ const messages = {
     aiNotConfiguredPlaceholder: "Please configure AI service first...",
     checkingConfig: "Checking config...",
     chatError: "Chat request failed, please try again",
+    searchPlaceholder: "Search conversations...",
+    noConversationsFound: "No conversations found",
+    rename: "Rename",
+    delete: "Delete",
   },
   auth: {
     registerTitle: "Register {systemName} account",

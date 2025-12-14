@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import SidebarProviderServer from "@/components/sidebar-provider-server"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
@@ -11,6 +11,7 @@ import { CompletionConfigProvider } from "@/contexts/completion-config-context"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { DashboardI18nProvider } from "@/providers/dashboard-i18n-provider"
 import type { User } from "@/lib/api/auth"
+import { cn } from "@/lib/utils"
 
 /**
  * Dashboard 布局 - Client Component
@@ -22,7 +23,9 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { authStatus, isLoading } = useSystemConfig()
+  const disableOuterScroll = pathname?.startsWith("/dashboard/ai-assistant")
 
   useEffect(() => {
     if (isLoading) return
@@ -62,7 +65,12 @@ export default function DashboardLayout({
               <AppSidebar />
               <SidebarInset>
                 {/* 添加淡入动画，使界面显示更平滑 */}
-                <div className="animate-in fade-in duration-300 flex flex-1 flex-col min-h-0 overflow-auto scrollbar-custom">
+                <div
+                  className={cn(
+                    "animate-in fade-in duration-300 flex flex-1 flex-col min-h-0 scrollbar-custom",
+                    disableOuterScroll ? "overflow-hidden" : "overflow-auto"
+                  )}
+                >
                   {children}
                 </div>
               </SidebarInset>

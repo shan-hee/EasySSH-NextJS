@@ -1527,6 +1527,10 @@ const messages = {
     aiNotConfiguredPlaceholder: "请先配置 AI 服务...",
     checkingConfig: "检查配置中...",
     chatError: "对话请求失败，请重试",
+    searchPlaceholder: "搜索对话...",
+    noConversationsFound: "未找到匹配的对话",
+    rename: "重命名",
+    delete: "删除",
   },
   auth: {
     registerTitle: "注册 {systemName} 账号",

@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Input } from "@/components/ui/input"
 import {
   Bot,
   Plus,
@@ -21,13 +21,15 @@ import {
   Download,
   Copy,
   Check,
-  PanelLeftClose,
-  PanelLeft,
   RotateCcw,
   Square,
   ChevronRight,
-  Settings,
+  ChevronDown,
   AlertCircle,
+  Search,
+  MoreHorizontal,
+  Pencil,
+  X,
 } from "lucide-react"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useAIChat } from "@/hooks/use-ai-chat"
@@ -50,15 +52,22 @@ import {
   PromptInputToolbar,
   PromptInputTools,
   PromptInputSubmit,
+  PromptInputModelSelect,
+  PromptInputModelSelectTrigger,
+  PromptInputModelSelectContent,
+  PromptInputModelSelectItem,
+  PromptInputModelSelectValue,
 } from "@/components/ui/shadcn-io/ai/prompt-input"
 import { Actions, Action } from "@/components/ui/shadcn-io/ai/actions"
-import { SmartAvatar } from "@/components/ui/smart-avatar"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu"
 
 // ========== 类型定义 ==========
 interface Message {
@@ -293,98 +302,6 @@ function WelcomePanel({
   )
 }
 
-// ========== 对话侧边栏 ==========
-function ConversationSidebar({
-  conversations,
-  currentId,
-  onSelect,
-  onDelete,
-  onNew,
-  isCollapsed,
-  onToggle,
-  t,
-}: {
-  conversations: ConversationData[]
-  currentId: string
-  onSelect: (id: string) => void
-  onDelete: (id: string) => void
-  onNew: () => void
-  isCollapsed: boolean
-  onToggle: () => void
-  t: ReturnType<typeof useTranslations<"aiAssistant">>
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col border-r bg-muted/30 transition-all duration-300",
-        isCollapsed ? "w-0 border-r-0 overflow-hidden" : "w-72"
-      )}
-    >
-      {/* 侧边栏头部 */}
-      <div className="flex items-center justify-between p-3 border-b">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">{t("sidebarTitle")}</span>
-        </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" onClick={onNew}>
-                <Plus className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("newConversation")}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      {/* 对话列表 */}
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
-          {conversations.map((conv) => (
-            <div
-              key={conv.id}
-              className={cn(
-                "group relative p-3 rounded-lg cursor-pointer transition-all duration-200",
-                conv.id === currentId
-                  ? "bg-primary/10 border border-primary/30"
-                  : "hover:bg-accent/50 border border-transparent"
-              )}
-              onClick={() => onSelect(conv.id)}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-sm truncate">{conv.title}</h4>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("sidebarMessageCount", { count: conv.messages.length })}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1 mt-1">
-                    <Clock className="h-3 w-3" />
-                    {new Date(conv.updatedAt).toLocaleDateString()}
-                  </p>
-                </div>
-                {conversations.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="opacity-0 group-hover:opacity-100 h-6 w-6 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onDelete(conv.id)
-                    }}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
-    </div>
-  )
-}
-
 // ========== 主页面组件 ==========
 export default function AIAssistantPage() {
   const t = useTranslations("aiAssistant")
@@ -393,8 +310,12 @@ export default function AIAssistantPage() {
   const [inputMessage, setInputMessage] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState("auto")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const [isNewChat, setIsNewChat] = useState(false)
   const { ready } = useAuthReady()
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -410,18 +331,11 @@ export default function AIAssistantPage() {
     clearError,
   } = useAIChat()
 
-  // 初始化对话
+  // 初始化
   useEffect(() => {
     setMounted(true)
-    const initialConv: ConversationData = {
-      id: "1",
-      title: t("newConversation"),
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-    setConversations([initialConv])
-    setCurrentConversationId("1")
+    // 初始为新聊天模式，不创建空会话
+    setIsNewChat(true)
   }, [])
 
   const currentConversation = useMemo(
@@ -429,11 +343,28 @@ export default function AIAssistantPage() {
     [conversations, currentConversationId]
   )
 
+  // 过滤后的对话列表
+  // 开发环境：显示所有会话（包括空会话，用于测试）
+  // 生产环境：只显示有消息的会话
+  const filteredConversations = useMemo(
+    () => {
+      const baseList = process.env.NODE_ENV === "development"
+        ? conversations
+        : conversations.filter((c) => c.messages.length > 0)
+      return searchQuery.trim()
+        ? baseList.filter((c) =>
+            c.title.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : baseList
+    },
+    [conversations, searchQuery]
+  )
+
   // 发送消息
   const handleSendMessage = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault()
-      if (!inputMessage.trim() || !currentConversation || isLoading) return
+      if (!inputMessage.trim() || isLoading) return
 
       // 清除之前的错误
       clearError()
@@ -454,31 +385,50 @@ export default function AIAssistantPage() {
         timestamp: Date.now(),
       }
 
-      // 添加用户消息和 AI 占位消息
-      setConversations((prev) =>
-        prev.map((conv) =>
-          conv.id === currentConversationId
-            ? {
-                ...conv,
-                messages: [...conv.messages, userMessage, assistantMessage],
-                title:
-                  conv.messages.length === 0
-                    ? inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : "")
-                    : conv.title,
-                updatedAt: Date.now(),
-              }
-            : conv
+      let targetConversationId = currentConversationId
+
+      // 如果是新聊天模式，创建新会话
+      if (isNewChat || !currentConversation) {
+        const newConv: ConversationData = {
+          id: Date.now().toString(),
+          title: inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : ""),
+          messages: [userMessage, assistantMessage],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        setConversations((prev) => [newConv, ...prev])
+        setCurrentConversationId(newConv.id)
+        setIsNewChat(false)
+        targetConversationId = newConv.id
+      } else {
+        // 添加用户消息和 AI 占位消息到现有会话
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv.id === currentConversationId
+              ? {
+                  ...conv,
+                  messages: [...conv.messages, userMessage, assistantMessage],
+                  title:
+                    conv.messages.length === 0
+                      ? inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : "")
+                      : conv.title,
+                  updatedAt: Date.now(),
+                }
+              : conv
+          )
         )
-      )
+      }
 
       setInputMessage("")
       setStreamingMessageId(assistantMessageId)
 
       // 构建历史消息
-      const historyMessages: APIChatMessage[] = currentConversation.messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }))
+      const historyMessages: APIChatMessage[] = currentConversation
+        ? currentConversation.messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          }))
+        : []
 
       // 添加当前用户消息
       historyMessages.push({
@@ -492,7 +442,7 @@ export default function AIAssistantPage() {
           // 更新 AI 消息内容
           setConversations((prev) =>
             prev.map((conv) =>
-              conv.id === currentConversationId
+              conv.id === targetConversationId
                 ? {
                     ...conv,
                     messages: conv.messages.map((msg) =>
@@ -511,7 +461,7 @@ export default function AIAssistantPage() {
         const errorMessage = error instanceof Error ? error.message : t("chatError")
         setConversations((prev) =>
           prev.map((conv) =>
-            conv.id === currentConversationId
+            conv.id === targetConversationId
               ? {
                   ...conv,
                   messages: conv.messages.map((msg) =>
@@ -527,20 +477,28 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [inputMessage, currentConversation, currentConversationId, isLoading, sendAIMessage, clearError, t]
+    [inputMessage, currentConversation, currentConversationId, isLoading, isNewChat, sendAIMessage, clearError, t]
   )
 
   // 新建对话
   const handleNewConversation = useCallback(() => {
-    const newConv: ConversationData = {
-      id: Date.now().toString(),
-      title: t("newConversation"),
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+    // 开发环境：直接创建会话（用于测试）
+    if (process.env.NODE_ENV === "development") {
+      const newConv: ConversationData = {
+        id: Date.now().toString(),
+        title: t("newConversation"),
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+      setConversations((prev) => [newConv, ...prev])
+      setCurrentConversationId(newConv.id)
+      setIsNewChat(false)
+    } else {
+      // 生产环境：进入新聊天模式，发送首条消息时才创建会话
+      setCurrentConversationId("")
+      setIsNewChat(true)
     }
-    setConversations((prev) => [newConv, ...prev])
-    setCurrentConversationId(newConv.id)
   }, [t])
 
   // 删除对话
@@ -556,6 +514,36 @@ export default function AIAssistantPage() {
     },
     [currentConversationId]
   )
+
+  // 开始重命名
+  const handleStartRename = useCallback((conv: ConversationData) => {
+    setRenamingId(conv.id)
+    setRenameValue(conv.title)
+  }, [])
+
+  // 确认重命名
+  const handleConfirmRename = useCallback(() => {
+    if (!renamingId || !renameValue.trim()) {
+      setRenamingId(null)
+      setRenameValue("")
+      return
+    }
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === renamingId
+          ? { ...conv, title: renameValue.trim(), updatedAt: Date.now() }
+          : conv
+      )
+    )
+    setRenamingId(null)
+    setRenameValue("")
+  }, [renamingId, renameValue])
+
+  // 取消重命名
+  const handleCancelRename = useCallback(() => {
+    setRenamingId(null)
+    setRenameValue("")
+  }, [])
 
   // 使用模板
   const handleUseTemplate = useCallback((prompt: string) => {
@@ -681,32 +669,139 @@ export default function AIAssistantPage() {
     return null
   }
 
-  const hasMessages = currentConversation && currentConversation.messages.length > 0
+  // 新聊天模式下没有消息，或者当前会话没有消息
+  const hasMessages = !isNewChat && currentConversation && currentConversation.messages.length > 0
 
   return (
     <>
-      <PageHeader title={t("pageTitle")}>
-        <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                >
-                  {sidebarCollapsed ? (
-                    <PanelLeft className="h-4 w-4" />
+      <PageHeader
+        title={t("pageTitle")}
+        titleDropdown={(trigger) => (
+          <div className="flex items-center gap-1">
+            <DropdownMenu onOpenChange={(open) => !open && setSearchQuery("")}>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-1 text-foreground font-normal hover:text-foreground/80 transition-colors">
+                  {t("pageTitle")}
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" alignOffset={-100} sideOffset={8} className="w-72 p-0">
+                {/* 搜索框和新建按钮 */}
+                <div className="p-2 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder={t("searchPlaceholder")}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-8 h-8 text-sm"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    className="h-8 w-8 shrink-0"
+                    onClick={handleNewConversation}
+                    title={t("newConversation")}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {/* 对话列表 */}
+                <div className="max-h-[400px] overflow-y-auto scrollbar-custom [scrollbar-gutter:stable] px-1 pb-1">
+                  {filteredConversations.length > 0 ? (
+                    filteredConversations.map((conv) => (
+                      <div
+                        key={conv.id}
+                        className={cn(
+                          "group flex items-center justify-between gap-2 cursor-pointer py-2 px-2 rounded-md hover:bg-accent",
+                          conv.id === currentConversationId && !isNewChat && "bg-accent"
+                        )}
+                        onClick={() => {
+                          if (renamingId !== conv.id) {
+                            setCurrentConversationId(conv.id)
+                            setIsNewChat(false)
+                          }
+                        }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          {renamingId === conv.id ? (
+                            <Input
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  handleConfirmRename()
+                                } else if (e.key === "Escape") {
+                                  handleCancelRename()
+                                }
+                              }}
+                              onBlur={handleCancelRename}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-5 text-sm font-medium px-1 py-0"
+                              autoFocus
+                            />
+                          ) : (
+                            <div className="font-medium text-sm truncate">{conv.title}</div>
+                          )}
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                            <span>{t("sidebarMessageCount", { count: conv.messages.length })}</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(conv.updatedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        {renamingId !== conv.id && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" sideOffset={4}>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStartRename(conv)
+                                }}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                {t("rename")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteConversation(conv.id)
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                {t("delete")}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
+                    ))
                   ) : (
-                    <PanelLeftClose className="h-4 w-4" />
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      {t("noConversationsFound")}
+                    </div>
                   )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+      >
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -716,33 +811,17 @@ export default function AIAssistantPage() {
             <Download className="mr-2 h-4 w-4" />
             {t("exportConversation")}
           </Button>
-          <Button size="sm" onClick={handleNewConversation}>
-            <Plus className="mr-2 h-4 w-4" />
-            {t("newConversation")}
-          </Button>
         </div>
       </PageHeader>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* 对话历史侧边栏 */}
-        <ConversationSidebar
-          conversations={conversations}
-          currentId={currentConversationId}
-          onSelect={setCurrentConversationId}
-          onDelete={handleDeleteConversation}
-          onNew={handleNewConversation}
-          isCollapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-          t={t}
-        />
-
         {/* 主内容区 */}
         <div className="flex-1 flex flex-col min-w-0 bg-background">
           {!hasMessages ? (
             <WelcomePanel onUseTemplate={handleUseTemplate} t={t} />
           ) : (
             <Conversation className="flex-1">
-              <ConversationContent className="space-y-6 pb-4">
+              <ConversationContent className="space-y-6 pb-4 max-w-4xl mx-auto px-4">
                 {currentConversation?.messages.map((message, index) => (
                   <MessageBubble
                     key={message.id}
@@ -762,7 +841,7 @@ export default function AIAssistantPage() {
           )}
 
           {/* 输入区域 */}
-          <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="max-w-4xl mx-auto p-4">
               {/* 快捷建议（对话进行中显示） */}
               {hasMessages && !isLoading && (
@@ -791,64 +870,113 @@ export default function AIAssistantPage() {
                 </Suggestions>
               )}
 
-              {/* 输入框 */}
-              <PromptInput
-                onSubmit={handleSendMessage}
-                className="shadow-lg border-border/50"
-              >
-                <PromptInputTextarea
-                  ref={inputRef as any}
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder={isConfigured ? t("inputPlaceholder") : t("aiNotConfiguredPlaceholder")}
-                  className="min-h-[52px]"
-                  disabled={!isConfigured}
-                />
-                <PromptInputToolbar>
-                  <PromptInputTools>
-                    {isConfigLoading ? (
-                      <Badge variant="secondary" className="text-xs font-normal gap-1">
-                        <Loader size={10} className="text-muted-foreground" />
-                        {t("checkingConfig")}
-                      </Badge>
-                    ) : isConfigured ? (
-                      <Badge variant="secondary" className="text-xs font-normal gap-1">
-                        <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                        {t("statusOnline")}
-                      </Badge>
-                    ) : (
-                      <Link href="/dashboard/settings?tab=ai">
-                        <Badge variant="destructive" className="text-xs font-normal gap-1 cursor-pointer hover:opacity-80">
-                          <AlertCircle className="h-3 w-3" />
-                          {t("aiNotConfigured")}
-                        </Badge>
-                      </Link>
-                    )}
-                  </PromptInputTools>
-                  <div className="flex items-center gap-2">
-                    {isLoading ? (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={handleStopGenerating}
-                        className="gap-1.5"
-                      >
-                        <Square className="h-3 w-3" />
-                        {t("stopGenerating")}
-                      </Button>
-                    ) : (
-                      <PromptInputSubmit
-                        disabled={!inputMessage.trim() || !isConfigured}
-                        className="h-8 w-8"
-                      />
-                    )}
-                  </div>
-                </PromptInputToolbar>
-              </PromptInput>
+              {/* 输入框容器 - 带背景光晕 */}
+              <div className="relative">
+                {/* 背景光晕效果 */}
+                <div className="absolute -inset-4 bg-gradient-to-t from-primary/20 via-primary/10 to-transparent blur-xl rounded-3xl opacity-100 animate-pulse" />
 
-              {/* 提示文字 */}
-              <p className="text-[11px] text-muted-foreground/70 text-center mt-2">
+                {/* 输入框主体 */}
+                <div className="relative">
+                  <PromptInput
+                    onSubmit={handleSendMessage}
+                    className="shadow-2xl border-primary/20 bg-background/95 backdrop-blur-xl ring-1 ring-primary/10"
+                  >
+                    <PromptInputTextarea
+                      ref={inputRef as any}
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      placeholder={isConfigured ? t("inputPlaceholder") : t("aiNotConfiguredPlaceholder")}
+                      className="min-h-[52px] text-base"
+                      disabled={!isConfigured}
+                    />
+                    <PromptInputToolbar>
+                      <PromptInputTools>
+                        {/* 模型选择器 - 仅在配置完成时显示 */}
+                        {isConfigured && (
+                          <PromptInputModelSelect value={selectedModel} onValueChange={setSelectedModel}>
+                            <PromptInputModelSelectTrigger className="gap-1.5 pl-2.5 pr-3 h-8 text-xs">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              <PromptInputModelSelectValue />
+                            </PromptInputModelSelectTrigger>
+                            <PromptInputModelSelectContent>
+                              <PromptInputModelSelectItem value="auto">
+                                Auto
+                              </PromptInputModelSelectItem>
+                              <PromptInputModelSelectItem value="gpt-4">
+                                GPT-4
+                              </PromptInputModelSelectItem>
+                              <PromptInputModelSelectItem value="claude">
+                                Claude
+                              </PromptInputModelSelectItem>
+                            </PromptInputModelSelectContent>
+                          </PromptInputModelSelect>
+                        )}
+
+                        {/* AI配置状态 Badge */}
+                        {isConfigLoading ? (
+                          <Badge variant="secondary" className="text-xs font-normal gap-1">
+                            <Loader size={10} className="text-muted-foreground" />
+                            {t("checkingConfig")}
+                          </Badge>
+                        ) : isConfigured ? (
+                          <Badge variant="secondary" className="text-xs font-normal gap-1">
+                            <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                            {t("statusOnline")}
+                          </Badge>
+                        ) : (
+                          <Link href="/dashboard/settings?tab=ai">
+                            <Badge variant="destructive" className="text-xs font-normal gap-1 cursor-pointer hover:opacity-80">
+                              <AlertCircle className="h-3 w-3" />
+                              {t("aiNotConfigured")}
+                            </Badge>
+                          </Link>
+                        )}
+                      </PromptInputTools>
+
+                      <div className="flex items-center gap-2">
+                        {/* 使用率显示 */}
+                        {isConfigured && (
+                          <span className="text-xs text-muted-foreground">52% used</span>
+                        )}
+
+                        {/* 停止生成按钮 或 提交按钮 */}
+                        {isLoading ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleStopGenerating}
+                            className="gap-1.5"
+                          >
+                            <Square className="h-3 w-3" />
+                            {t("stopGenerating")}
+                          </Button>
+                        ) : (
+                          <PromptInputSubmit
+                            disabled={!inputMessage.trim() || !isConfigured}
+                            className="h-8 w-8"
+                          />
+                        )}
+                      </div>
+                    </PromptInputToolbar>
+                  </PromptInput>
+                </div>
+              </div>
+
+              {/* 快捷键提示 */}
+              <div className="mt-2 text-center text-xs text-muted-foreground">
+                <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
+                  Enter
+                </kbd>{" "}
+                {t("panelHintSend")} •{" "}
+                <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
+                  Shift+Enter
+                </kbd>{" "}
+                {t("panelHintNewline")}
+              </div>
+
+              {/* 安全提示 */}
+              <p className="text-[11px] text-muted-foreground/70 text-center mt-1">
                 {t("safetyNotice")}
               </p>
             </div>

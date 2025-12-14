@@ -17,6 +17,11 @@ import { useBreadcrumbs } from "@/contexts/breadcrumb-context"
 interface PageHeaderProps {
   title: string
   children?: React.ReactNode
+  /**
+   * 为最后一级面包屑添加下拉菜单（可选）
+   * 传入一个渲染函数，接收 trigger 元素作为参数
+   */
+  titleDropdown?: (trigger: React.ReactNode) => React.ReactNode
 }
 
 /**
@@ -78,16 +83,28 @@ BreadcrumbItemRenderer.displayName = 'BreadcrumbItemRenderer'
  * 2. 使用 Context + useMemo 实现增量更新和缓存
  * 3. 细粒度渲染优化，仅更新变化的面包屑项
  * 4. 强制使用配置文件，移除 customBreadcrumbs 支持以保持一致性
+ * 5. 支持为最后一级面包屑添加下拉菜单
  *
  * 使用方式：
  * ```tsx
  * <PageHeader title="页面标题" />
+ * // 或带下拉菜单
+ * <PageHeader
+ *   title="页面标题"
+ *   titleDropdown={(trigger) => (
+ *     <DropdownMenu>
+ *       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+ *       <DropdownMenuContent>...</DropdownMenuContent>
+ *     </DropdownMenu>
+ *   )}
+ * />
  * ```
  *
  * @param title - 页面标题（用于生成面包屑最后一级）
  * @param children - 右侧操作区内容（可选）
+ * @param titleDropdown - 为最后一级面包屑添加下拉菜单的渲染函数（可选）
  */
-export function PageHeader({ title, children }: PageHeaderProps) {
+export function PageHeader({ title, children, titleDropdown }: PageHeaderProps) {
   // 从 Context 自动获取面包屑
   const breadcrumbs = useBreadcrumbs(title)
 
@@ -96,13 +113,32 @@ export function PageHeader({ title, children }: PageHeaderProps) {
       <div className="flex items-center gap-2 px-4 flex-1">
         <Breadcrumb>
           <BreadcrumbList>
-            {breadcrumbs.map((item, index) => (
-              <BreadcrumbItemRenderer
-                key={item.href || item.title}
-                item={item}
-                isLast={index === breadcrumbs.length - 1}
-              />
-            ))}
+            {breadcrumbs.map((item, index) => {
+              const isLast = index === breadcrumbs.length - 1
+
+              // 如果是最后一项且提供了下拉菜单，使用特殊渲染
+              if (isLast && titleDropdown) {
+                return (
+                  <React.Fragment key={item.href || item.title}>
+                    <BreadcrumbItem>
+                      {titleDropdown(
+                        <BreadcrumbPage className="cursor-pointer hover:text-foreground/80 transition-colors flex items-center gap-1">
+                          {item.title.startsWith("nav.") ? item.title.slice(4) : item.title}
+                        </BreadcrumbPage>
+                      )}
+                    </BreadcrumbItem>
+                  </React.Fragment>
+                )
+              }
+
+              return (
+                <BreadcrumbItemRenderer
+                  key={item.href || item.title}
+                  item={item}
+                  isLast={isLast}
+                />
+              )
+            })}
           </BreadcrumbList>
         </Breadcrumb>
       </div>
