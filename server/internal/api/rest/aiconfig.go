@@ -19,13 +19,12 @@ func NewAIConfigHandler(service aiconfig.Service) *AIConfigHandler {
 
 // AIConfigDTO AI系统配置DTO
 type AIConfigDTO struct {
-	SystemEnabled      bool   `json:"system_enabled"`
-	SystemProvider     string `json:"system_provider"`
-	SystemAPIKey       string `json:"system_api_key,omitempty"` // 保存时传入，读取时不返回
-	SystemAPIEndpoint  string `json:"system_api_endpoint"`
-	SystemDefaultModel string `json:"system_default_model"`
-	SystemRateLimit    int    `json:"system_rate_limit"`
-	HasAPIKey          bool   `json:"has_api_key,omitempty"` // 仅读取时返回，表示是否已配置
+	SystemEnabled     bool   `json:"system_enabled"`
+	SystemProvider    string `json:"system_provider"`
+	SystemAPIKey      string `json:"system_api_key,omitempty"` // 保存时传入，读取时不返回
+	SystemAPIEndpoint string `json:"system_api_endpoint"`
+	SystemModels      string `json:"system_models"`          // 可用模型列表（逗号分隔）
+	HasAPIKey         bool   `json:"has_api_key,omitempty"`  // 仅读取时返回，表示是否已配置
 }
 
 // GetSystemAIConfig 获取系统级AI配置
@@ -43,12 +42,11 @@ func (h *AIConfigHandler) GetSystemAIConfig(c *gin.Context) {
 	}
 
 	dto := &AIConfigDTO{
-		SystemEnabled:      config.SystemEnabled,
-		SystemProvider:     config.SystemProvider,
-		SystemAPIEndpoint:  config.SystemAPIEndpoint,
-		SystemDefaultModel: config.SystemDefaultModel,
-		SystemRateLimit:    config.SystemRateLimit,
-		HasAPIKey:          config.SystemAPIKey != "",
+		SystemEnabled:     config.SystemEnabled,
+		SystemProvider:    config.SystemProvider,
+		SystemAPIEndpoint: config.SystemAPIEndpoint,
+		SystemModels:      config.SystemModels,
+		HasAPIKey:         config.SystemAPIKey != "",
 	}
 
 	c.JSON(http.StatusOK, dto)
@@ -70,12 +68,11 @@ func (h *AIConfigHandler) SaveSystemAIConfig(c *gin.Context) {
 	}
 
 	config := &aiconfig.AIConfig{
-		SystemEnabled:      dto.SystemEnabled,
-		SystemProvider:     dto.SystemProvider,
-		SystemAPIKey:       dto.SystemAPIKey,
-		SystemAPIEndpoint:  dto.SystemAPIEndpoint,
-		SystemDefaultModel: dto.SystemDefaultModel,
-		SystemRateLimit:    dto.SystemRateLimit,
+		SystemEnabled:     dto.SystemEnabled,
+		SystemProvider:    dto.SystemProvider,
+		SystemAPIKey:      dto.SystemAPIKey,
+		SystemAPIEndpoint: dto.SystemAPIEndpoint,
+		SystemModels:      dto.SystemModels,
 	}
 
 	if err := h.service.SaveSystemConfig(c.Request.Context(), config); err != nil {

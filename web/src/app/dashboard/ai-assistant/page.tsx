@@ -30,11 +30,12 @@ import {
   MoreHorizontal,
   Pencil,
   X,
+  Brain,
 } from "lucide-react"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useAIChat } from "@/hooks/use-ai-chat"
 import { useAIConfig } from "@/hooks/use-ai-config"
-import { ChatMessage as APIChatMessage } from "@/lib/api/ai"
+import { ChatMessage } from "@/lib/api/ai"
 import { useTranslations } from "next-intl"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -68,6 +69,11 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 // ========== 类型定义 ==========
 interface Message {
@@ -88,7 +94,84 @@ interface ConversationData {
 // 快捷模板图标映射
 const quickTemplateIcons = [Terminal, Code, FileText, Zap] as const
 
-// ========== 消息气泡组件 ==========
+// ========== 解析思考内容 ==========
+interface ParsedContent {
+  thinking: string | null
+  content: string
+}
+
+/**
+ * 解析 AI 响应中的 <think> 标签
+ * 支持格式：<think>思考内容</think>正文内容
+ */
+function parseThinkingContent(text: string): ParsedContent {
+  // 匹配 <think>...</think> 标签（支持多行）
+  const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i)
+
+  if (thinkMatch) {
+    const thinking = thinkMatch[1].trim()
+    // 移除 <think>...</think> 部分，保留剩余内容
+    const content = text.replace(/<think>[\s\S]*?<\/think>/i, "").trim()
+    return { thinking, content }
+  }
+
+  // 处理未闭合的 <think> 标签（流式传输中可能出现）
+  const unclosedMatch = text.match(/<think>([\s\S]*)$/i)
+  if (unclosedMatch) {
+    return { thinking: unclosedMatch[1].trim(), content: "" }
+  }
+
+  return { thinking: null, content: text }
+}
+
+// ========== 思考内容折叠组件 ==========
+function ThinkingBlock({
+  thinking,
+  isStreaming,
+  t
+}: {
+  thinking: string
+  isStreaming?: boolean
+  t: ReturnType<typeof useTranslations<"aiAssistant">>
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
+            "bg-violet-500/10 hover:bg-violet-500/20 transition-colors",
+            "text-violet-600 dark:text-violet-400",
+            "border border-violet-500/20"
+          )}
+        >
+          <Brain className="h-4 w-4" />
+          <span className="font-medium">{t("thinkingProcess")}</span>
+          {isStreaming && (
+            <Loader size={12} className="text-violet-500" />
+          )}
+          <ChevronRight
+            className={cn(
+              "h-4 w-4 ml-auto transition-transform duration-200",
+              isOpen && "rotate-90"
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 px-3 py-2 rounded-lg bg-muted/50 border border-border/50">
+          <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+            {thinking}
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+// ========== 消息组件 ==========
 function MessageBubble({
   message,
   onCopy,
@@ -96,6 +179,7 @@ function MessageBubble({
   copiedId,
   isLast,
   isLoading,
+  isStreaming,
   t,
 }: {
   message: Message
@@ -104,61 +188,95 @@ function MessageBubble({
   copiedId: string | null
   isLast: boolean
   isLoading: boolean
+  isStreaming?: boolean
   t: ReturnType<typeof useTranslations<"aiAssistant">>
 }) {
   const isUser = message.role === "user"
 
-  return (
-    <div
-      className={cn(
-        "group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300",
-        isUser ? "flex-row-reverse" : "flex-row"
-      )}
-    >
-      {/* 头像 */}
-      {isUser ? (
+  // 解析 AI 消息中的思考内容
+  const parsedContent = useMemo(() => {
+    if (isUser) return { thinking: null, content: message.content }
+    return parseThinkingContent(message.content)
+  }, [message.content, isUser])
+
+  // 判断是否正在流式输出思考内容
+  const isThinkingStreaming = Boolean(isStreaming && parsedContent.thinking && !parsedContent.content)
+
+  // 用户消息 - 保持气泡样式
+  if (isUser) {
+    return (
+      <div className="group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 flex-row-reverse">
+        {/* 头像 */}
         <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow-sm">
           <User className="h-4 w-4 text-primary-foreground" />
         </div>
-      ) : (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-          <Bot className="h-4 w-4 text-white" />
-        </div>
-      )}
 
-      {/* 消息内容 */}
-      <div
-        className={cn(
-          "flex flex-col gap-1.5 max-w-[75%]",
-          isUser ? "items-end" : "items-start"
-        )}
-      >
-        <div
-          className={cn(
-            "rounded-2xl px-4 py-3 text-sm leading-relaxed",
-            isUser
-              ? "bg-primary text-primary-foreground rounded-br-md"
-              : "bg-muted/80 text-foreground rounded-bl-md border border-border/50"
-          )}
-        >
-          {isUser ? (
+        {/* 消息内容 */}
+        <div className="flex flex-col gap-1.5 max-w-[75%] items-end">
+          <div className="rounded-2xl px-4 py-3 text-sm leading-relaxed bg-primary text-primary-foreground rounded-br-md">
             <div className="whitespace-pre-wrap break-words">
               {message.content}
             </div>
-          ) : (
-            <Response className="prose prose-sm dark:prose-invert max-w-none">
-              {message.content}
-            </Response>
-          )}
+          </div>
+
+          {/* 消息元信息和操作 */}
+          <div className="flex items-center gap-2 px-1 flex-row-reverse">
+            <span className="text-[11px] text-muted-foreground/70">
+              {new Date(message.timestamp).toLocaleTimeString("zh-CN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+
+            <Actions className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Action
+                tooltip={copiedId === message.id ? t("copied") : t("copy")}
+                onClick={() => onCopy(message.content, message.id)}
+                className="h-6 w-6"
+              >
+                {copiedId === message.id ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Action>
+            </Actions>
+          </div>
         </div>
+      </div>
+    )
+  }
+
+  // AI 消息 - 不使用气泡，直接输出内容
+  return (
+    <div className="group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* 头像 */}
+      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm mt-1">
+        <Bot className="h-4 w-4 text-white" />
+      </div>
+
+      {/* 消息内容 */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0">
+        {/* 思考内容 - 折叠显示 */}
+        {parsedContent.thinking && (
+          <ThinkingBlock
+            thinking={parsedContent.thinking}
+            isStreaming={isThinkingStreaming}
+            t={t}
+          />
+        )}
+
+        {/* 正文内容 - 直接显示，无气泡 */}
+        {parsedContent.content && (
+          <div className="text-sm leading-relaxed text-foreground">
+            <Response className="prose prose-sm dark:prose-invert max-w-none">
+              {parsedContent.content}
+            </Response>
+          </div>
+        )}
 
         {/* 消息元信息和操作 */}
-        <div
-          className={cn(
-            "flex items-center gap-2 px-1",
-            isUser ? "flex-row-reverse" : "flex-row"
-          )}
-        >
+        <div className="flex items-center gap-2">
           <span className="text-[11px] text-muted-foreground/70">
             {new Date(message.timestamp).toLocaleTimeString("zh-CN", {
               hour: "2-digit",
@@ -166,11 +284,10 @@ function MessageBubble({
             })}
           </span>
 
-          {/* 操作按钮 */}
           <Actions className="opacity-0 group-hover:opacity-100 transition-opacity">
             <Action
               tooltip={copiedId === message.id ? t("copied") : t("copy")}
-              onClick={() => onCopy(message.content, message.id)}
+              onClick={() => onCopy(parsedContent.content || message.content, message.id)}
               className="h-6 w-6"
             >
               {copiedId === message.id ? (
@@ -179,7 +296,7 @@ function MessageBubble({
                 <Copy className="h-3 w-3" />
               )}
             </Action>
-            {!isUser && isLast && !isLoading && onRegenerate && (
+            {isLast && !isLoading && onRegenerate && (
               <Action
                 tooltip={t("regenerate")}
                 onClick={onRegenerate}
@@ -311,7 +428,7 @@ export default function AIAssistantPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState("auto")
+  const [selectedModel, setSelectedModel] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
@@ -320,7 +437,14 @@ export default function AIAssistantPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // AI 配置状态
-  const { isConfigured, isLoading: isConfigLoading } = useAIConfig()
+  const { isConfigured, isLoading: isConfigLoading, models, model: defaultModel } = useAIConfig()
+
+  // 当获取到配置时，设置默认选中模型
+  useEffect(() => {
+    if (models.length > 0 && !selectedModel) {
+      setSelectedModel(defaultModel || models[0])
+    }
+  }, [models, defaultModel, selectedModel])
 
   // AI 聊天 Hook
   const {
@@ -376,23 +500,17 @@ export default function AIAssistantPage() {
         timestamp: Date.now(),
       }
 
-      // 创建 AI 消息占位符
+      // 预生成 AI 消息 ID（用于后续流式更新）
       const assistantMessageId = (Date.now() + 1).toString()
-      const assistantMessage: Message = {
-        id: assistantMessageId,
-        role: "assistant",
-        content: "",
-        timestamp: Date.now(),
-      }
-
       let targetConversationId = currentConversationId
+      let assistantMessageCreated = false
 
-      // 如果是新聊天模式，创建新会话
+      // 如果是新聊天模式，创建新会话（只包含用户消息）
       if (isNewChat || !currentConversation) {
         const newConv: ConversationData = {
           id: Date.now().toString(),
           title: inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : ""),
-          messages: [userMessage, assistantMessage],
+          messages: [userMessage],
           createdAt: Date.now(),
           updatedAt: Date.now(),
         }
@@ -401,13 +519,13 @@ export default function AIAssistantPage() {
         setIsNewChat(false)
         targetConversationId = newConv.id
       } else {
-        // 添加用户消息和 AI 占位消息到现有会话
+        // 添加用户消息到现有会话（不添加 AI 占位符）
         setConversations((prev) =>
           prev.map((conv) =>
             conv.id === currentConversationId
               ? {
                   ...conv,
-                  messages: [...conv.messages, userMessage, assistantMessage],
+                  messages: [...conv.messages, userMessage],
                   title:
                     conv.messages.length === 0
                       ? inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : "")
@@ -423,7 +541,7 @@ export default function AIAssistantPage() {
       setStreamingMessageId(assistantMessageId)
 
       // 构建历史消息
-      const historyMessages: APIChatMessage[] = currentConversation
+      const historyMessages: ChatMessage[] = currentConversation
         ? currentConversation.messages.map((msg) => ({
             role: msg.role,
             content: msg.content,
@@ -437,47 +555,88 @@ export default function AIAssistantPage() {
       })
 
       try {
-        // 使用流式 API
+        // 使用流式 API，传入选中的模型
         await sendAIMessage(historyMessages, (delta) => {
-          // 更新 AI 消息内容
           setConversations((prev) =>
-            prev.map((conv) =>
-              conv.id === targetConversationId
-                ? {
-                    ...conv,
-                    messages: conv.messages.map((msg) =>
-                      msg.id === assistantMessageId
-                        ? { ...msg, content: msg.content + delta }
-                        : msg
-                    ),
-                    updatedAt: Date.now(),
-                  }
-                : conv
-            )
-          )
-        })
-      } catch (error) {
-        // 如果发生错误，更新消息显示错误
-        const errorMessage = error instanceof Error ? error.message : t("chatError")
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === targetConversationId
-              ? {
+            prev.map((conv) => {
+              if (conv.id !== targetConversationId) return conv
+
+              // 查找是否已存在 AI 消息
+              const existingAssistantMsg = conv.messages.find(
+                (msg) => msg.id === assistantMessageId
+              )
+
+              if (existingAssistantMsg) {
+                // 已存在，追加内容
+                return {
                   ...conv,
                   messages: conv.messages.map((msg) =>
                     msg.id === assistantMessageId
-                      ? { ...msg, content: `❌ ${errorMessage}` }
+                      ? { ...msg, content: msg.content + delta }
                       : msg
                   ),
+                  updatedAt: Date.now(),
                 }
-              : conv
+              } else {
+                // 不存在，创建新的 AI 消息
+                const newAssistantMessage: Message = {
+                  id: assistantMessageId,
+                  role: "assistant",
+                  content: delta,
+                  timestamp: Date.now(),
+                }
+                return {
+                  ...conv,
+                  messages: [...conv.messages, newAssistantMessage],
+                  updatedAt: Date.now(),
+                }
+              }
+            })
           )
+        }, selectedModel || undefined)
+      } catch (error) {
+        // 如果发生错误，创建或更新消息显示错误
+        const errorMessage = error instanceof Error ? error.message : t("chatError")
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== targetConversationId) return conv
+
+            const existingAssistantMsg = conv.messages.find(
+              (msg) => msg.id === assistantMessageId
+            )
+
+            if (existingAssistantMsg) {
+              // 已有消息，更新为错误
+              return {
+                ...conv,
+                messages: conv.messages.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: `❌ ${errorMessage}` }
+                    : msg
+                ),
+              }
+            } else {
+              // 没有消息，创建错误消息
+              return {
+                ...conv,
+                messages: [
+                  ...conv.messages,
+                  {
+                    id: assistantMessageId,
+                    role: "assistant" as const,
+                    content: `❌ ${errorMessage}`,
+                    timestamp: Date.now(),
+                  },
+                ],
+              }
+            }
+          })
         )
       } finally {
         setStreamingMessageId(null)
       }
     },
-    [inputMessage, currentConversation, currentConversationId, isLoading, isNewChat, sendAIMessage, clearError, t]
+    [inputMessage, currentConversation, currentConversationId, isLoading, isNewChat, sendAIMessage, clearError, t, selectedModel]
   )
 
   // 新建对话
@@ -596,22 +755,16 @@ export default function AIAssistantPage() {
     // 移除最后一条AI消息
     const messagesWithoutLastAI = currentConversation.messages.slice(0, -1)
 
-    // 创建新的 AI 消息占位符
+    // 预生成新的 AI 消息 ID
     const assistantMessageId = Date.now().toString()
-    const assistantMessage: Message = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: Date.now(),
-    }
 
-    // 更新对话：移除旧的 AI 消息，添加新的占位
+    // 更新对话：移除旧的 AI 消息（不添加占位符）
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === currentConversationId
           ? {
               ...conv,
-              messages: [...messagesWithoutLastAI, assistantMessage],
+              messages: messagesWithoutLastAI,
             }
           : conv
       )
@@ -620,7 +773,7 @@ export default function AIAssistantPage() {
     setStreamingMessageId(assistantMessageId)
 
     // 构建历史消息（不包含最后一条 AI 消息）
-    const historyMessages: APIChatMessage[] = messagesWithoutLastAI.map((msg) => ({
+    const historyMessages: ChatMessage[] = messagesWithoutLastAI.map((msg) => ({
       role: msg.role,
       content: msg.content,
     }))
@@ -628,41 +781,81 @@ export default function AIAssistantPage() {
     try {
       await sendAIMessage(historyMessages, (delta) => {
         setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === currentConversationId
-              ? {
-                  ...conv,
-                  messages: conv.messages.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { ...msg, content: msg.content + delta }
-                      : msg
-                  ),
-                  updatedAt: Date.now(),
-                }
-              : conv
-          )
-        )
-      })
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t("chatError")
-      setConversations((prev) =>
-        prev.map((conv) =>
-          conv.id === currentConversationId
-            ? {
+          prev.map((conv) => {
+            if (conv.id !== currentConversationId) return conv
+
+            // 查找是否已存在 AI 消息
+            const existingAssistantMsg = conv.messages.find(
+              (msg) => msg.id === assistantMessageId
+            )
+
+            if (existingAssistantMsg) {
+              // 已存在，追加内容
+              return {
                 ...conv,
                 messages: conv.messages.map((msg) =>
                   msg.id === assistantMessageId
-                    ? { ...msg, content: `❌ ${errorMessage}` }
+                    ? { ...msg, content: msg.content + delta }
                     : msg
                 ),
+                updatedAt: Date.now(),
               }
-            : conv
+            } else {
+              // 不存在，创建新的 AI 消息
+              const newAssistantMessage: Message = {
+                id: assistantMessageId,
+                role: "assistant",
+                content: delta,
+                timestamp: Date.now(),
+              }
+              return {
+                ...conv,
+                messages: [...conv.messages, newAssistantMessage],
+                updatedAt: Date.now(),
+              }
+            }
+          })
         )
+      }, selectedModel || undefined)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t("chatError")
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== currentConversationId) return conv
+
+          const existingAssistantMsg = conv.messages.find(
+            (msg) => msg.id === assistantMessageId
+          )
+
+          if (existingAssistantMsg) {
+            return {
+              ...conv,
+              messages: conv.messages.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: `❌ ${errorMessage}` }
+                  : msg
+              ),
+            }
+          } else {
+            return {
+              ...conv,
+              messages: [
+                ...conv.messages,
+                {
+                  id: assistantMessageId,
+                  role: "assistant" as const,
+                  content: `❌ ${errorMessage}`,
+                  timestamp: Date.now(),
+                },
+              ],
+            }
+          }
+        })
       )
     } finally {
       setStreamingMessageId(null)
     }
-  }, [currentConversation, currentConversationId, isLoading, sendAIMessage, t])
+  }, [currentConversation, currentConversationId, isLoading, sendAIMessage, t, selectedModel])
 
   // 加载状态
   if (!mounted || !ready) {
@@ -822,19 +1015,30 @@ export default function AIAssistantPage() {
           ) : (
             <Conversation className="flex-1">
               <ConversationContent className="space-y-6 pb-4 max-w-4xl mx-auto px-4">
-                {currentConversation?.messages.map((message, index) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    onCopy={handleCopyMessage}
-                    onRegenerate={handleRegenerate}
-                    copiedId={copiedId}
-                    isLast={index === currentConversation.messages.length - 1}
-                    isLoading={isLoading}
-                    t={t}
-                  />
-                ))}
-                {isLoading && <LoadingIndicator t={t} />}
+                {currentConversation?.messages.map((message, index) => {
+                  // 跳过空内容的 AI 消息（等待流式输出时的占位符）
+                  if (message.role === "assistant" && !message.content) {
+                    return null
+                  }
+                  return (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      onCopy={handleCopyMessage}
+                      onRegenerate={handleRegenerate}
+                      copiedId={copiedId}
+                      isLast={index === currentConversation.messages.length - 1}
+                      isLoading={isLoading}
+                      isStreaming={streamingMessageId === message.id}
+                      t={t}
+                    />
+                  )
+                })}
+                {/* 当正在加载且最后一条消息是用户消息时（AI 还没开始回复），显示加载指示器 */}
+                {isLoading && (() => {
+                  const lastMessage = currentConversation?.messages[currentConversation.messages.length - 1]
+                  return lastMessage?.role === "user"
+                })() && <LoadingIndicator t={t} />}
               </ConversationContent>
               <ConversationScrollButton />
             </Conversation>
@@ -891,25 +1095,30 @@ export default function AIAssistantPage() {
                     />
                     <PromptInputToolbar>
                       <PromptInputTools>
-                        {/* 模型选择器 - 仅在配置完成时显示 */}
-                        {isConfigured && (
-                          <PromptInputModelSelect value={selectedModel} onValueChange={setSelectedModel}>
-                            <PromptInputModelSelectTrigger className="gap-1.5 pl-2.5 pr-3 h-8 text-xs">
+                        {/* 模型选择器 - 仅在配置完成且有模型时显示 */}
+                        {isConfigured && models.length > 0 && (
+                          models.length === 1 ? (
+                            // 单个模型：只显示模型名称，不需要下拉
+                            <div className="flex items-center gap-1.5 px-2.5 h-8 text-xs text-muted-foreground">
                               <Sparkles className="h-3.5 w-3.5" />
-                              <PromptInputModelSelectValue />
-                            </PromptInputModelSelectTrigger>
-                            <PromptInputModelSelectContent>
-                              <PromptInputModelSelectItem value="auto">
-                                Auto
-                              </PromptInputModelSelectItem>
-                              <PromptInputModelSelectItem value="gpt-4">
-                                GPT-4
-                              </PromptInputModelSelectItem>
-                              <PromptInputModelSelectItem value="claude">
-                                Claude
-                              </PromptInputModelSelectItem>
-                            </PromptInputModelSelectContent>
-                          </PromptInputModelSelect>
+                              <span>{models[0]}</span>
+                            </div>
+                          ) : (
+                            // 多个模型：显示下拉选择器
+                            <PromptInputModelSelect value={selectedModel} onValueChange={setSelectedModel}>
+                              <PromptInputModelSelectTrigger className="gap-1.5 pl-2.5 pr-3 h-8 text-xs">
+                                <Sparkles className="h-3.5 w-3.5" />
+                                <PromptInputModelSelectValue />
+                              </PromptInputModelSelectTrigger>
+                              <PromptInputModelSelectContent>
+                                {models.map((model) => (
+                                  <PromptInputModelSelectItem key={model} value={model}>
+                                    {model}
+                                  </PromptInputModelSelectItem>
+                                ))}
+                              </PromptInputModelSelectContent>
+                            </PromptInputModelSelect>
+                          )
                         )}
 
                         {/* AI配置状态 Badge */}
@@ -934,11 +1143,6 @@ export default function AIAssistantPage() {
                       </PromptInputTools>
 
                       <div className="flex items-center gap-2">
-                        {/* 使用率显示 */}
-                        {isConfigured && (
-                          <span className="text-xs text-muted-foreground">52% used</span>
-                        )}
-
                         {/* 停止生成按钮 或 提交按钮 */}
                         {isLoading ? (
                           <Button

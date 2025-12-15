@@ -21,8 +21,6 @@ export function AIConfigWrapper() {
   const providerOptions = [
     { label: t("providerOpenAI"), value: "openai" },
     { label: t("providerAnthropic"), value: "anthropic" },
-    { label: t("providerAzure"), value: "azure" },
-    { label: t("providerCustom"), value: "custom" },
   ]
 
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
@@ -39,8 +37,7 @@ export function AIConfigWrapper() {
         system_provider: data.system_provider,
         system_api_key: data.system_api_key,
         system_api_endpoint: data.system_api_endpoint,
-        system_default_model: data.system_default_model,
-        system_rate_limit: data.system_rate_limit,
+        system_models: data.system_models,
       })
     },
   })
@@ -76,7 +73,7 @@ export function AIConfigWrapper() {
                     onValueChange={(val) =>
                       form.setValue(
                         "system_provider",
-                        val as "openai" | "anthropic" | "azure" | "custom",
+                        val as "openai" | "anthropic",
                       )
                     }
                   >
@@ -113,18 +110,10 @@ export function AIConfigWrapper() {
 
                 <FormInput
                   form={form}
-                  name="system_default_model"
-                  label={t("fieldDefaultModelLabel")}
-                  placeholder="gpt-4"
-                />
-
-                <FormInput
-                  form={form}
-                  name="system_rate_limit"
-                  label={t("fieldRateLimitLabel")}
-                  type="number"
-                  min={1}
-                  max={1000}
+                  name="system_models"
+                  label={t("fieldModelsLabel")}
+                  description={t("fieldModelsDesc")}
+                  placeholder="gpt-4,gpt-3.5-turbo,claude-3-opus"
                 />
               </>
             )}

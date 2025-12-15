@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import type { ChatStatus } from 'ai';
 import { Loader2Icon, SendIcon, SquareIcon, XIcon } from 'lucide-react';
 import type {
   ComponentProps,
@@ -18,6 +17,9 @@ import type {
   KeyboardEventHandler,
 } from 'react';
 import { Children } from 'react';
+
+// 自定义状态类型（替代 ai 包的 ChatStatus）
+type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error';
 
 export type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 

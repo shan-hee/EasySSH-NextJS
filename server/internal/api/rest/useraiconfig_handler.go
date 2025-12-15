@@ -27,7 +27,7 @@ type SaveUserAIConfigRequest struct {
 	CustomProvider  string `json:"custom_provider"`
 	CustomAPIKey    string `json:"custom_api_key"`
 	CustomEndpoint  string `json:"custom_endpoint"`
-	CustomModel     string `json:"custom_model"`
+	CustomModels    string `json:"custom_models"`
 }
 
 // GetUserAIConfig 获取当前用户的AI配置
@@ -66,7 +66,7 @@ func (h *UserAIConfigHandler) GetUserAIConfig(c *gin.Context) {
 		"custom_enabled":    config.CustomEnabled,
 		"custom_provider":   config.CustomProvider,
 		"custom_endpoint":   config.CustomEndpoint,
-		"custom_model":      config.CustomModel,
+		"custom_models":     config.CustomModels,
 		"has_api_key":       config.CustomAPIKey != "",
 	}
 
@@ -111,7 +111,7 @@ func (h *UserAIConfigHandler) SaveUserAIConfig(c *gin.Context) {
 		CustomProvider:  req.CustomProvider,
 		CustomAPIKey:    req.CustomAPIKey,
 		CustomEndpoint:  req.CustomEndpoint,
-		CustomModel:     req.CustomModel,
+		CustomModels:    req.CustomModels,
 	}
 
 	// 保存配置

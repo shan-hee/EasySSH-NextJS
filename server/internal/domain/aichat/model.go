@@ -37,19 +37,19 @@ type StreamDelta struct {
 
 // AIProvider AI提供商配置
 type AIProvider struct {
-	Name      string // 提供商名称: openai, anthropic, azure, custom
-	APIKey    string // API密钥
-	Endpoint  string // API端点
-	Model     string // 默认模型
+	Name     string // 提供商名称: openai, anthropic
+	APIKey   string // API密钥
+	Endpoint string // API端点
+	Models   string // 可用模型列表（逗号分隔）
 }
 
 // ProviderConfig 提供商配置（用于实际调用）
 type ProviderConfig struct {
-	Provider  string
-	APIKey    string
-	Endpoint  string
-	Model     string
-	RateLimit int
+	Provider string
+	APIKey   string
+	Endpoint string
+	Model    string   // 当前选择的模型（由用户在请求中指定）
+	Models   []string // 可用的模型列表
 }
 
 // ChatContext 聊天上下文

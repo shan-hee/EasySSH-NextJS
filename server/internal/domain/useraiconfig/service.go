@@ -58,15 +58,13 @@ func (s *service) validateUserConfig(config *UserAIConfig) error {
 
 	// 如果启用自定义配置，需要验证
 	if config.CustomEnabled {
-		// 验证服务商
+		// 验证服务商（仅支持 openai 和 anthropic 作为 API 转换器，与系统配置保持一致）
 		validProviders := map[string]bool{
 			"openai":    true,
 			"anthropic": true,
-			"azure":     true,
-			"custom":    true,
 		}
 		if !validProviders[config.CustomProvider] {
-			return fmt.Errorf("invalid provider: %s", config.CustomProvider)
+			return fmt.Errorf("invalid provider: %s (only openai and anthropic are supported)", config.CustomProvider)
 		}
 
 		// 验证API密钥
@@ -74,9 +72,9 @@ func (s *service) validateUserConfig(config *UserAIConfig) error {
 			return errors.New("API key is required when custom AI is enabled")
 		}
 
-		// 验证模型
-		if config.CustomModel == "" {
-			return errors.New("model is required when custom AI is enabled")
+		// 验证模型列表
+		if config.CustomModels == "" {
+			return errors.New("at least one model is required when custom AI is enabled")
 		}
 	}
 

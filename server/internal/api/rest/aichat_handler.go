@@ -249,6 +249,7 @@ func (h *AIChatHandler) GetConfig(c *gin.Context) {
 		"configured": true,
 		"provider":   config.Provider,
 		"model":      config.Model,
+		"models":     config.Models,
 		"has_key":    config.APIKey != "",
 	})
 }

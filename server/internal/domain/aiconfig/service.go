@@ -45,25 +45,18 @@ func (s *service) validateSystemConfig(config *AIConfig) error {
 		return nil
 	}
 
-	// 验证服务商
+	// 验证服务商（仅支持 openai 和 anthropic 作为 API 转换器）
 	validProviders := map[string]bool{
 		"openai":    true,
 		"anthropic": true,
-		"azure":     true,
-		"custom":    true,
 	}
 	if !validProviders[config.SystemProvider] {
-		return fmt.Errorf("invalid provider: %s", config.SystemProvider)
+		return fmt.Errorf("invalid provider: %s (only openai and anthropic are supported)", config.SystemProvider)
 	}
 
-	// 验证默认模型
-	if config.SystemDefaultModel == "" {
-		return errors.New("default model is required when system AI is enabled")
-	}
-
-	// 验证速率限制
-	if config.SystemRateLimit < 0 || config.SystemRateLimit > 1000 {
-		return errors.New("rate limit must be between 0 and 1000")
+	// 验证模型列表
+	if config.SystemModels == "" {
+		return errors.New("at least one model is required when system AI is enabled")
 	}
 
 	return nil

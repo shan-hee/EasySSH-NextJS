@@ -11,12 +11,11 @@ type AIConfig struct {
 	ID uint `gorm:"primarykey" json:"id"`
 
 	// 系统级配置
-	SystemEnabled      bool   `gorm:"default:false" json:"system_enabled"`
-	SystemProvider     string `gorm:"size:20" json:"system_provider"`           // openai, anthropic, azure, custom
-	SystemAPIKey       string `gorm:"type:text" json:"-"`                       // API密钥（不对外输出）
-	SystemAPIEndpoint  string `gorm:"type:text" json:"system_api_endpoint"`
-	SystemDefaultModel string `gorm:"size:100" json:"system_default_model"`
-	SystemRateLimit    int    `gorm:"default:0" json:"system_rate_limit"` // 0表示无限制
+	SystemEnabled     bool   `gorm:"default:false" json:"system_enabled"`
+	SystemProvider    string `gorm:"size:20" json:"system_provider"`       // openai, anthropic（仅作为 API 转换器）
+	SystemAPIKey      string `gorm:"type:text" json:"-"`                   // API密钥（不对外输出）
+	SystemAPIEndpoint string `gorm:"type:text" json:"system_api_endpoint"` // API 端点
+	SystemModels      string `gorm:"type:text" json:"system_models"`       // 可用模型列表（逗号分隔）
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

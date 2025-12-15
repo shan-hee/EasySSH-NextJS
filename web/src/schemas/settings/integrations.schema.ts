@@ -3,15 +3,14 @@ import { z } from "zod"
 // AI系统配置 Schema（仅管理员，API 配置）
 export const aiSystemConfigSchema = z.object({
   system_enabled: z.boolean().optional(),
-  system_provider: z.enum(["openai", "anthropic", "azure", "custom"]).optional(),
+  system_provider: z.enum(["openai", "anthropic"]).optional(), // 仅支持 OpenAI 和 Anthropic 作为 API 转换器
   system_api_key: z.string().optional(), // API Key (保存时发送，读取时不返回)
   system_api_endpoint: z
     .string()
     .url("settingsValidation.systemApiEndpointInvalid")
     .or(z.literal(""))
     .optional(),
-  system_default_model: z.string().optional(),
-  system_rate_limit: z.number().min(1).max(1000).optional(),
+  system_models: z.string().optional(), // 模型列表（逗号分隔）
   has_api_key: z.boolean().optional(), // 仅读取时返回
 })
 

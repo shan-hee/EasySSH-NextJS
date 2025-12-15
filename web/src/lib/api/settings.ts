@@ -451,7 +451,7 @@ export interface UserAIConfig {
   custom_enabled: boolean
   custom_provider: string
   custom_endpoint: string
-  custom_model: string
+  custom_models: string
   has_api_key: boolean
 }
 
@@ -464,7 +464,7 @@ export interface SaveUserAIConfigRequest {
   custom_provider: string
   custom_api_key: string
   custom_endpoint: string
-  custom_model: string
+  custom_models: string
 }
 
 /**

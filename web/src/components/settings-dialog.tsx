@@ -224,7 +224,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     custom_provider: "openai" as string,
     custom_api_key: "" as string,
     custom_endpoint: "" as string,
-    custom_model: "" as string,
+    custom_models: "" as string,
   })
   const [showResetConfirm, setShowResetConfirm] = React.useState(false)
 
@@ -893,7 +893,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         custom_provider: config.custom_provider || "openai",
         custom_api_key: "", // 不从服务器获取API密钥
         custom_endpoint: config.custom_endpoint || "",
-        custom_model: config.custom_model || "",
+        custom_models: config.custom_models || "",
       })
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, tAccount("aiLoadFailed")))
@@ -1025,8 +1025,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         toast.error("请输入 API 密钥")
         return
       }
-      if (!aiForm.custom_model) {
-        toast.error("请输入模型名称")
+      if (!aiForm.custom_models) {
+        toast.error("请输入可用模型")
         return
       }
     }
@@ -1039,7 +1039,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         custom_provider: aiForm.custom_provider,
         custom_api_key: aiForm.custom_api_key,
         custom_endpoint: aiForm.custom_endpoint,
-        custom_model: aiForm.custom_model,
+        custom_models: aiForm.custom_models,
       }
       await userAIConfigApi.saveUserAIConfig(request)
       toast.success(tAccount("aiSaveSuccess"))
@@ -2297,12 +2297,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                                     <SelectItem value="anthropic">
                                       {tAccount("aiProviderAnthropic")}
                                     </SelectItem>
-                                    <SelectItem value="azure">
-                                      {tAccount("aiProviderAzure")}
-                                    </SelectItem>
-                                    <SelectItem value="custom">
-                                      {tAccount("aiProviderCustom")}
-                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -2347,19 +2341,19 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                               </div>
 
                               <div className="space-y-2">
-                                <Label htmlFor="ai-model">
-                                  {tAccount("aiModelLabel")} <span className="text-destructive">*</span>
+                                <Label htmlFor="ai-models">
+                                  {tAccount("aiModelsLabel")} <span className="text-destructive">*</span>
                                 </Label>
                                 <Input
-                                  id="ai-model"
-                                  placeholder={tAccount("aiModelPlaceholder")}
-                                  value={aiForm.custom_model || ""}
+                                  id="ai-models"
+                                  placeholder={tAccount("aiModelsPlaceholder")}
+                                  value={aiForm.custom_models || ""}
                                   onChange={(e) =>
-                                    setAiForm(prev => ({ ...prev, custom_model: e.target.value }))
+                                    setAiForm(prev => ({ ...prev, custom_models: e.target.value }))
                                   }
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                  {tAccount("aiModelHint")}
+                                  {tAccount("aiModelsHint")}
                                 </p>
                               </div>
                             </div>
