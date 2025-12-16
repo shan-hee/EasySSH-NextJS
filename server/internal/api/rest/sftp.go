@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/easyssh/server/internal/api/ws"
+	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/sftp"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
@@ -396,9 +397,14 @@ func (h *SFTPHandler) DownloadFile(c *gin.Context) {
 	}
 
 	// 获取路径参数
-	remotePath := c.Query("path")
+	remotePath := ""
+	if v, ok := c.Get("auth_ticket"); ok {
+		if t, ok := v.(*auth.Ticket); ok && t.Type == auth.TicketTypeSFTPDownload && t.SFTPDownloadPath != "" {
+			remotePath = t.SFTPDownloadPath
+		}
+	}
 	if remotePath == "" {
-		RespondError(c, http.StatusBadRequest, "missing_path", "Path parameter is required")
+		RespondError(c, http.StatusBadRequest, "missing_ticket", "ticket is required")
 		return
 	}
 
@@ -914,19 +920,16 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 
 	// 解析请求：支持 JSON 与原生表单提交（用于浏览器流式下载）
 	var req BatchDownloadRequest
-	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/json") {
-		if err := c.ShouldBindJSON(&req); err != nil {
-			RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
-			return
+	if v, ok := c.Get("auth_ticket"); ok {
+		if t, ok := v.(*auth.Ticket); ok && t.Type == auth.TicketTypeSFTPBatchDownload && t.SFTPBatchDownloadInput != nil {
+			req.Paths = t.SFTPBatchDownloadInput.Paths
+			req.Mode = t.SFTPBatchDownloadInput.Mode
+			req.ExcludePatterns = t.SFTPBatchDownloadInput.ExcludePatterns
 		}
-	} else {
-		req.Paths = c.PostFormArray("paths")
-		req.Mode = c.PostForm("mode")
-		req.ExcludePatterns = c.PostFormArray("excludePatterns")
-		if len(req.Paths) == 0 {
-			RespondError(c, http.StatusBadRequest, "validation_error", "paths is required")
-			return
-		}
+	}
+	if len(req.Paths) == 0 {
+		RespondError(c, http.StatusBadRequest, "missing_ticket", "ticket is required")
+		return
 	}
 
 	// 设置默认值

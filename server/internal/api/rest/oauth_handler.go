@@ -44,7 +44,6 @@ type GoogleVerifyRequest struct {
 // GoogleVerifyResponse Google 验证响应
 type GoogleVerifyResponse struct {
 	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
 	TokenType    string      `json:"token_type"`
 	ExpiresIn    int         `json:"expires_in"`
 	User         interface{} `json:"user"`
@@ -165,7 +164,6 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 
 	RespondSuccess(c, GoogleVerifyResponse{
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    h.accessTokenTTL,
 		User:         user.ToPublic(),

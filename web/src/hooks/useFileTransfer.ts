@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
 import { sftpApi, type FileInfo, type TransferProgressMessage } from '@/lib/api/sftp';
 import { getWsUrl } from '@/lib/config';
+import { createAuthTicket } from '@/lib/auth-ticket';
 
 /**
  * 传输任务接口
@@ -160,59 +161,67 @@ export function useFileTransfer() {
       try {
         // 如果启用 WebSocket，先建立连接
         if (enableWebSocket) {
-          // Cookie 鉴权：不再在 URL 中附带 token
-          const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}`);
+          try {
+            const { ticket } = await createAuthTicket({ type: 'ws_sftp_upload', task_id: task.id })
+            const params = new URLSearchParams()
+            params.set('ticket', ticket)
+            const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${task.id}?${params.toString()}`);
 
-          wsConnection = new WebSocket(wsUrl);
-          // 记录 WebSocket 连接,以支持取消时发送控制消息
-          wsRefs.current.set(task.id, wsConnection);
+            wsConnection = new WebSocket(wsUrl);
+            // 记录 WebSocket 连接,以支持取消时发送控制消息
+            wsRefs.current.set(task.id, wsConnection);
+          } catch (err) {
+            console.warn('[useFileTransfer] Failed to create upload WS ticket, fallback to non-WS upload:', err);
+          }
 
-          // WebSocket 消息处理
-          wsConnection.onmessage = (event) => {
-            try {
-              const msg = JSON.parse(event.data);
+          if (wsConnection) {
+            // WebSocket 消息处理
+            wsConnection.onmessage = (event) => {
+              try {
+                const msg = JSON.parse(event.data);
 
-              if (msg.type === 'progress' && msg.stage === 'sftp') {
-                // SFTP 阶段进度更新
-                const progress = Math.round((msg.loaded / msg.total) * 100);
-                updateTaskProgress(task.id, {
-                  progress,
-                  bytesTransferred: msg.loaded,
-                  status: 'uploading',
-                  stage: 'sftp',
-                  speed: msg.speed_bps ? formatSpeed(msg.speed_bps) : undefined,
-                });
-                onProgress?.(msg.loaded, msg.total);
-              } else if (msg.type === 'complete') {
-                // SFTP 传输完成
-                updateTaskProgress(task.id, {
-                  progress: 100,
-                  status: 'completed',
-                  bytesTransferred: file.size,
-                  stage: 'sftp',
-                });
-              } else if (msg.type === 'cancelled') {
-                // 服务器端 SFTP 阶段已取消
-                updateTaskProgress(task.id, {
-                  status: 'cancelled',
-                  stage: 'sftp',
-                  error: '已取消',
-                });
-              } else if (msg.type === 'error') {
-                console.error('[useFileTransfer] SFTP error:', msg.message);
+                if (msg.type === 'progress' && msg.stage === 'sftp') {
+                  // SFTP 阶段进度更新
+                  const progress = Math.round((msg.loaded / msg.total) * 100);
+                  updateTaskProgress(task.id, {
+                    progress,
+                    bytesTransferred: msg.loaded,
+                    status: 'uploading',
+                    stage: 'sftp',
+                    speed: msg.speed_bps ? formatSpeed(msg.speed_bps) : undefined,
+                  });
+                  onProgress?.(msg.loaded, msg.total);
+                } else if (msg.type === 'complete') {
+                  // SFTP 传输完成
+                  updateTaskProgress(task.id, {
+                    progress: 100,
+                    status: 'completed',
+                    bytesTransferred: file.size,
+                    stage: 'sftp',
+                  });
+                } else if (msg.type === 'cancelled') {
+                  // 服务器端 SFTP 阶段已取消
+                  updateTaskProgress(task.id, {
+                    status: 'cancelled',
+                    stage: 'sftp',
+                    error: '已取消',
+                  });
+                } else if (msg.type === 'error') {
+                  console.error('[useFileTransfer] SFTP error:', msg.message);
+                }
+              } catch (err) {
+                console.error('[useFileTransfer] Failed to parse WS message:', err);
               }
-            } catch (err) {
-              console.error('[useFileTransfer] Failed to parse WS message:', err);
-            }
-          };
+            };
 
-          wsConnection.onerror = (err) => {
-            console.error('[useFileTransfer] WebSocket error:', err);
-          };
+            wsConnection.onerror = (err) => {
+              console.error('[useFileTransfer] WebSocket error:', err);
+            };
 
-          wsConnection.onopen = () => {
-            wsConnected = true;
-          };
+            wsConnection.onopen = () => {
+              wsConnected = true;
+            };
+          }
 
           // 等待 WebSocket 连接（最多 2 秒）
           await new Promise<void>((resolve) => {
@@ -450,8 +459,10 @@ export function useFileTransfer() {
 
       try {
         // 建立 WebSocket 连接获取进度
-        // Cookie 鉴权：不再在 URL 中附带 token
-        const wsUrl = getWsUrl(`/api/v1/sftp/transfer/ws/${taskId}`)
+        const { ticket } = await createAuthTicket({ type: 'ws_sftp_transfer', task_id: taskId })
+        const params = new URLSearchParams()
+        params.set('ticket', ticket)
+        const wsUrl = getWsUrl(`/api/v1/sftp/transfer/ws/${taskId}?${params.toString()}`)
 
         wsConnection = new WebSocket(wsUrl);
         wsRefs.current.set(taskId, wsConnection);

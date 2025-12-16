@@ -10,9 +10,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// 从 Authorization 头或 Cookie 中提取 Token
+const (
+	ticketQueryName       = "ticket"
+	ticketContextKey      = "auth_ticket"
+)
+
+// 从 Authorization 头提取 Bearer Token
 func extractBearerToken(c *gin.Context) string {
-	// 优先从 Authorization 头读取：Authorization: Bearer <token>
 	authHeader := c.GetHeader("Authorization")
 	if authHeader != "" {
 		parts := strings.Fields(authHeader)
@@ -21,65 +25,134 @@ func extractBearerToken(c *gin.Context) string {
 		}
 	}
 
-	// Cookie 鉴权：用于 WebSocket/下载等无法便捷设置 Header 的场景
-	if token, err := c.Cookie("easyssh_access_token"); err == nil {
-		if token = strings.TrimSpace(token); token != "" {
-			return token
-		}
-	}
-
 	return ""
 }
 
-// AuthMiddleware JWT 认证中间件（支持 Authorization Bearer 与 Cookie）
-func AuthMiddleware(jwtService auth.JWTService) gin.HandlerFunc {
+func extractTicket(c *gin.Context) string {
+	if t := strings.TrimSpace(c.Query(ticketQueryName)); t != "" {
+		return t
+	}
+	return ""
+}
+
+func ticketExpectationForRequest(c *gin.Context) (auth.TicketExpectation, bool) {
+	switch c.FullPath() {
+	case "/api/v1/ssh/terminal/:server_id":
+		return auth.TicketExpectation{Type: auth.TicketTypeWSTerminal, Ref: c.Param("server_id")}, true
+	case "/api/v1/monitor/server/:server_id":
+		return auth.TicketExpectation{Type: auth.TicketTypeWSMonitor, Ref: c.Param("server_id")}, true
+	case "/api/v1/sftp/upload/ws/:task_id":
+		return auth.TicketExpectation{Type: auth.TicketTypeWSSFTPUpload, Ref: c.Param("task_id")}, true
+	case "/api/v1/sftp/transfer/ws/:task_id":
+		return auth.TicketExpectation{Type: auth.TicketTypeWSSFTPTransfer, Ref: c.Param("task_id")}, true
+	case "/api/v1/sftp/:server_id/download":
+		return auth.TicketExpectation{Type: auth.TicketTypeSFTPDownload, Ref: c.Param("server_id")}, true
+	case "/api/v1/sftp/:server_id/batch-download":
+		return auth.TicketExpectation{Type: auth.TicketTypeSFTPBatchDownload, Ref: c.Param("server_id")}, true
+	default:
+		return auth.TicketExpectation{}, false
+	}
+}
+
+func applyClaimsToContext(c *gin.Context, claims *auth.Claims) {
+	c.Set("user_id", claims.UserID.String())
+	c.Set("username", claims.Username)
+	c.Set("email", claims.Email)
+	c.Set("role", string(claims.Role))
+
+	if claims.SessionID != (uuid.UUID{}) {
+		c.Set("session_id", claims.SessionID.String())
+	}
+}
+
+func applyTicketToContext(c *gin.Context, t *auth.Ticket) {
+	c.Set("user_id", t.UserID.String())
+	c.Set("username", t.Username)
+	c.Set("email", t.Email)
+	c.Set("role", string(t.Role))
+	if t.SessionID != (uuid.UUID{}) {
+		c.Set("session_id", t.SessionID.String())
+	}
+	c.Set(ticketContextKey, t)
+}
+
+// AuthMiddleware 认证中间件（支持 Authorization Bearer / 一次性 Ticket）
+func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 1) 优先 Bearer（用于常规 API 调用）
 		tokenString := extractBearerToken(c)
-
-		if tokenString == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "Missing authorization token",
-			})
-			c.Abort()
-			return
-		}
-
-		// 验证 token
-		claims, err := jwtService.ValidateToken(tokenString)
-		if err != nil {
-			if errors.Is(err, auth.ErrExpiredToken) {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error":   "token_expired",
-					"message": "Token has expired",
-				})
-			} else if errors.Is(err, auth.ErrTokenBlacklisted) {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error":   "token_blacklisted",
-					"message": "Token has been revoked",
-				})
-			} else {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error":   "invalid_token",
-					"message": "Invalid token",
-				})
+		if tokenString != "" {
+			claims, err := jwtService.ValidateToken(tokenString)
+			if err != nil {
+				if errors.Is(err, auth.ErrExpiredToken) {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":   "token_expired",
+						"message": "Token has expired",
+					})
+				} else if errors.Is(err, auth.ErrTokenBlacklisted) {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":   "token_blacklisted",
+						"message": "Token has been revoked",
+					})
+				} else {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":   "invalid_token",
+						"message": "Invalid token",
+					})
+				}
+				c.Abort()
+				return
 			}
-			c.Abort()
+
+			applyClaimsToContext(c, claims)
+			c.Next()
 			return
 		}
 
-		// 将用户信息存入上下文
-		c.Set("user_id", claims.UserID.String())
-		c.Set("username", claims.Username)
-		c.Set("email", claims.Email)
-		c.Set("role", string(claims.Role))
+		// 2) Ticket（用于 WebSocket 握手 / 原生下载等无法设置 Header 的场景）
+		if ticketService != nil {
+			ticket := extractTicket(c)
+			if ticket != "" {
+				expect, ok := ticketExpectationForRequest(c)
+				if !ok {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":   "invalid_ticket",
+						"message": "Ticket not allowed for this endpoint",
+					})
+					c.Abort()
+					return
+				}
+				t, err := ticketService.Consume(ticket, expect)
+				if err != nil {
+					code := "invalid_ticket"
+					msg := "Invalid ticket"
+					if errors.Is(err, auth.ErrExpiredTicket) {
+						code = "ticket_expired"
+						msg = "Ticket has expired"
+					} else if errors.Is(err, auth.ErrTicketUsed) {
+						code = "ticket_used"
+						msg = "Ticket has been used"
+					}
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":   code,
+						"message": msg,
+					})
+					c.Abort()
+					return
+				}
 
-		// 将会话ID存入上下文（如存在），用于会话管理等场景
-		if claims.SessionID != (uuid.UUID{}) {
-			c.Set("session_id", claims.SessionID.String())
+				applyTicketToContext(c, t)
+				c.Next()
+				return
+			}
 		}
 
-		c.Next()
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "unauthorized",
+			"message": "Missing authorization token",
+		})
+		c.Abort()
+		return
 	}
 }
 
@@ -127,12 +200,22 @@ func RequireAdmin() gin.HandlerFunc {
 }
 
 // OptionalAuth 可选认证中间件（不强制要求认证）
-func OptionalAuth(jwtService auth.JWTService) gin.HandlerFunc {
+func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractBearerToken(c)
 
 		// 如果没有 token，直接继续（可选认证）
 		if tokenString == "" {
+			// 可选：允许 ticket（主要用于复用中间件形态，默认不会在此类端点使用）
+			if ticketService != nil {
+				if ticket := extractTicket(c); ticket != "" {
+					if expect, ok := ticketExpectationForRequest(c); ok {
+						if t, err := ticketService.Consume(ticket, expect); err == nil {
+							applyTicketToContext(c, t)
+						}
+					}
+				}
+			}
 			c.Next()
 			return
 		}
@@ -144,16 +227,7 @@ func OptionalAuth(jwtService auth.JWTService) gin.HandlerFunc {
 			return
 		}
 
-		// 将用户信息存入上下文
-		c.Set("user_id", claims.UserID.String())
-		c.Set("username", claims.Username)
-		c.Set("email", claims.Email)
-		c.Set("role", string(claims.Role))
-
-		// 可选地记录会话ID
-		if claims.SessionID != (uuid.UUID{}) {
-			c.Set("session_id", claims.SessionID.String())
-		}
+		applyClaimsToContext(c, claims)
 
 		c.Next()
 	}

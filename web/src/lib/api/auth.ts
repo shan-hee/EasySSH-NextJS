@@ -290,14 +290,12 @@ export const authApi = {
    */
   async verifyGoogleToken(idToken: string): Promise<{
     access_token: string
-    refresh_token: string
     token_type: string
     expires_in: number
     user: User
   }> {
     return apiFetch<{
       access_token: string
-      refresh_token: string
       token_type: string
       expires_in: number
       user: User

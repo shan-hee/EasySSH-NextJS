@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/api-client"
 import { getApiUrl } from "../config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
+import { createAuthTicket } from "@/lib/auth-ticket"
 
 /**
  * 文件信息
@@ -331,9 +332,7 @@ export const sftpApi = {
    * 获取下载URL
    */
   getDownloadUrl(serverId: string, path: string): string {
-    const apiUrl = getApiUrl()
-    // 通过 Cookie 认证，不再拼接 token
-    return `${apiUrl}/sftp/${serverId}/download?path=${encodeURIComponent(path)}`
+    throw new Error("getDownloadUrl 已弃用：下载需使用一次性 ticket（请使用 downloadFile 或 createAuthTicket）")
   },
 
   /**
@@ -461,7 +460,14 @@ export const sftpApi = {
 
     // 生产同域：用隐藏 form 提交，让浏览器原生流式下载（避免 response.blob 占用内存）
     if (typeof window !== "undefined" && isRelativeApiUrl) {
-      const action = `${apiUrl}/sftp/${serverId}/batch-download`
+      const { ticket } = await createAuthTicket({
+        type: "sftp_batch_download",
+        server_id: serverId,
+        paths,
+        mode,
+        exclude_patterns: excludePatterns ?? [],
+      })
+      const action = `${apiUrl}/sftp/${serverId}/batch-download?ticket=${encodeURIComponent(ticket)}`
 
       const iframeName = `easyssh-download-${Date.now()}-${Math.random().toString(36).slice(2)}`
       const iframe = document.createElement("iframe")
@@ -475,42 +481,6 @@ export const sftpApi = {
       form.target = iframeName
       form.style.display = "none"
 
-      // CSRF token（Cookie + Form）
-      const csrf = document.cookie
-        .split(";")
-        .map((p) => p.trim())
-        .find((p) => p.startsWith("easyssh_csrf_token="))
-      if (csrf) {
-        const csrfValue = decodeURIComponent(csrf.split("=").slice(1).join("="))
-        const input = document.createElement("input")
-        input.type = "hidden"
-        input.name = "csrf_token"
-        input.value = csrfValue
-        form.appendChild(input)
-      }
-
-      const modeInput = document.createElement("input")
-      modeInput.type = "hidden"
-      modeInput.name = "mode"
-      modeInput.value = mode
-      form.appendChild(modeInput)
-
-      for (const p of paths) {
-        const input = document.createElement("input")
-        input.type = "hidden"
-        input.name = "paths"
-        input.value = p
-        form.appendChild(input)
-      }
-
-      for (const pattern of excludePatterns ?? []) {
-        const input = document.createElement("input")
-        input.type = "hidden"
-        input.name = "excludePatterns"
-        input.value = pattern
-        form.appendChild(input)
-      }
-
       document.body.appendChild(form)
       form.submit()
       document.body.removeChild(form)
@@ -523,32 +493,16 @@ export const sftpApi = {
     }
 
     // 开发/跨域：保留 fetch 下载（注意大文件会占用内存）
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    }
-    const token = getCurrentAccessToken()
-    if (token) {
-      ;(headers as Record<string, string>)["Authorization"] = `Bearer ${token}`
-    }
-    // CSRF（若存在）
-    if (typeof document !== "undefined") {
-      const csrf = document.cookie
-        .split(";")
-        .map((p) => p.trim())
-        .find((p) => p.startsWith("easyssh_csrf_token="))
-      if (csrf) {
-        ;(headers as Record<string, string>)["X-CSRF-Token"] = decodeURIComponent(csrf.split("=").slice(1).join("="))
-      }
-    }
+    const { ticket } = await createAuthTicket({
+      type: "sftp_batch_download",
+      server_id: serverId,
+      paths,
+      mode,
+      exclude_patterns: excludePatterns ?? [],
+    })
 
-    const response = await fetch(`${apiUrl}/sftp/${serverId}/batch-download`, {
+    const response = await fetch(`${apiUrl}/sftp/${serverId}/batch-download?ticket=${encodeURIComponent(ticket)}`, {
       method: "POST",
-      headers,
-      body: JSON.stringify({
-        paths,
-        mode,
-        excludePatterns,
-      }),
       credentials: "include",
     })
 
@@ -582,20 +536,28 @@ export const sftpApi = {
    * 单文件下载（直接触发浏览器下载，使用浏览器原生下载管理器显示进度）
    */
   downloadFile(serverId: string, path: string, fileName?: string): void {
-    const apiUrl = getApiUrl()
-    // Cookie 鉴权：不再在 URL 中附带 token
-    const params = new URLSearchParams()
-    params.set("path", path)
-    const url = `${apiUrl}/sftp/${serverId}/download?${params.toString()}`
+    void (async () => {
+      try {
+        const apiUrl = getApiUrl()
+        const { ticket } = await createAuthTicket({
+          type: "sftp_download",
+          server_id: serverId,
+          path,
+        })
+        const url = `${apiUrl}/sftp/${serverId}/download?ticket=${encodeURIComponent(ticket)}`
 
-    // 使用 <a> 标签触发下载，避免页面跳转
-    const a = document.createElement('a')
-    a.href = url
-    a.download = fileName || path.split('/').pop() || 'download'
-    a.style.display = 'none'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+        // 使用 <a> 标签触发下载，避免页面跳转
+        const a = document.createElement("a")
+        a.href = url
+        a.download = fileName || path.split("/").pop() || "download"
+        a.style.display = "none"
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      } catch (err) {
+        console.error("[sftpApi.downloadFile] Failed to create download ticket:", err)
+      }
+    })()
   },
 
   /**

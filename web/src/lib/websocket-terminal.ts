@@ -4,6 +4,7 @@
  */
 
 import { getWsUrl } from './config'
+import { createAuthTicket } from "@/lib/auth-ticket"
 
 export interface TerminalWebSocketOptions {
   serverId: string
@@ -74,9 +75,21 @@ export class TerminalWebSocket {
    * 连接到 WebSocket 服务器
    */
   connect(): void {
+    void this.connectInternal()
+  }
+
+  private async connectInternal(): Promise<void> {
     // 防止销毁后重连
     if (this.isDestroyed) {
       console.warn("[TerminalWS] WebSocket 已销毁，无法重连")
+      return
+    }
+    // 防止并发重复连接
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.CONNECTING ||
+        this.ws.readyState === WebSocket.OPEN)
+    ) {
       return
     }
 
@@ -88,10 +101,17 @@ export class TerminalWebSocket {
       // 触发正在连接回调
       this.onConnecting?.()
 
-      // Cookie 鉴权：不再在 URL 中附带 token
+      // 一次性 ticket：用于 WebSocket 握手（避免在 URL 中暴露 access_token）
+      const { ticket } = await createAuthTicket({
+        type: "ws_terminal",
+        server_id: this.serverId,
+      })
+      if (this.isDestroyed) return
+
       const params = new URLSearchParams()
       params.set("cols", String(this.cols))
       params.set("rows", String(this.rows))
+      params.set("ticket", ticket)
       const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?${params.toString()}`)
 
       this.ws = new WebSocket(wsUrl)

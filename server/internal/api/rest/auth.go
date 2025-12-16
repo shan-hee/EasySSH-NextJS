@@ -772,10 +772,8 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
 		}
 
-		// 设置 HttpOnly access_token Cookie（用于 WebSocket/下载等场景）
-		if accessToken != "" {
-			setAccessTokenCookie(c, accessToken, h.securityService, h.accessTokenTTLSeconds)
-		}
+		// access_token 仅通过响应体返回，前端仅存内存；清理历史遗留的 access_token Cookie
+		clearAccessTokenCookie(c, h.securityService)
 
 		// 设置 CSRF Token Cookie（双提交：Cookie + Header/Form）
 		if csrfToken, err := newCSRFToken(); err == nil {
@@ -825,10 +823,8 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 			setAuthCookies(c, newRefreshToken, h.securityService, h.refreshTokenTTLSeconds)
 		}
 
-		// 同步更新 access_token Cookie
-		if newAccessToken != "" {
-			setAccessTokenCookie(c, newAccessToken, h.securityService, h.accessTokenTTLSeconds)
-		}
+		// access_token 仅通过响应体返回，前端仅存内存；清理历史遗留的 access_token Cookie
+		clearAccessTokenCookie(c, h.securityService)
 
 		// 如果缺少 CSRF Cookie，则补发一个
 		if _, err := c.Cookie(CSRFTokenCookieName); err != nil {

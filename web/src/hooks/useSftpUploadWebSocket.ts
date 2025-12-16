@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { getWsUrl } from '@/lib/config';
+import { createAuthTicket } from '@/lib/auth-ticket';
 
 // 上传进度消息接口
 export interface UploadProgressMessage {
@@ -96,11 +97,14 @@ export function useSftpUploadWebSocket({
 
     setStatus(WSStatus.CONNECTING);
 
-    try {
-      // Cookie 鉴权：不再在 URL 中附带 token
-      const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${taskId}`);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    void (async () => {
+      try {
+        const { ticket } = await createAuthTicket({ type: 'ws_sftp_upload', task_id: taskId })
+        const params = new URLSearchParams()
+        params.set('ticket', ticket)
+        const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${taskId}?${params.toString()}`);
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
       ws.onopen = () => {
         if (!isMountedRef.current) return;
@@ -148,7 +152,7 @@ export function useSftpUploadWebSocket({
         setStatus(WSStatus.ERROR);
       };
 
-      ws.onclose = (event) => {
+        ws.onclose = (event) => {
         if (!isMountedRef.current) return;
         setStatus(WSStatus.DISCONNECTED);
         wsRef.current = null;
@@ -162,12 +166,13 @@ export function useSftpUploadWebSocket({
             }
           }, 2000);
         }
-      };
-    } catch (err) {
-      console.error('[SftpUploadWS] Failed to create WebSocket:', err);
-      setStatus(WSStatus.ERROR);
-      onError?.('Failed to create WebSocket connection');
-    }
+        };
+      } catch (err) {
+        console.error('[SftpUploadWS] Failed to create WebSocket:', err);
+        setStatus(WSStatus.ERROR);
+        onError?.('Failed to create WebSocket connection');
+      }
+    })()
   }, [taskId, onProgress, onComplete, onError, disconnect]);
 
   // 挂载和卸载处理

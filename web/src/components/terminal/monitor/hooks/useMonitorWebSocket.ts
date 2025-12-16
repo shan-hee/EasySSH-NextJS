@@ -6,7 +6,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { monitor } from '@/lib/proto/metrics';
 import { getWsUrl } from '@/lib/config';
-import { getCurrentAccessToken } from '@/stores/auth-store';
+import { createAuthTicket } from '@/lib/auth-ticket';
 import { useMonitorStore, WSStatus, type MonitorMetrics as StoreMonitorMetrics } from '@/stores/monitor-store';
 
 // 重新导出 WSStatus 供外部使用
@@ -223,11 +223,14 @@ export function useMonitorWebSocket({
       return;
     }
 
-    try {
-      // Cookie 鉴权：不再在 URL 中附带 token
-      const params = new URLSearchParams()
-      params.set('interval', String(interval))
-      const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?${params.toString()}`);
+    void (async () => {
+      try {
+        const { ticket } = await createAuthTicket({ type: 'ws_monitor', server_id: serverId })
+
+        const params = new URLSearchParams()
+        params.set('interval', String(interval))
+        params.set('ticket', ticket)
+        const wsUrl = getWsUrl(`/api/v1/monitor/server/${serverId}?${params.toString()}`);
 
       setStatus(WSStatus.CONNECTING);
       onStatusChange?.(WSStatus.CONNECTING);
@@ -532,13 +535,14 @@ export function useMonitorWebSocket({
         onError?.(new Error('WebSocket connection error'));
       };
 
-      // wsRef.current 已在上方（创建 WebSocket 后）立即设置，这里不需要重复设置
-    } catch (error) {
-      console.error('[Monitor WS] 创建连接失败:', error);
-      setStatus(WSStatus.ERROR);
-      onStatusChange?.(WSStatus.ERROR);
-      onError?.(error as Error);
-    }
+        // wsRef.current 已在上方（创建 WebSocket 后）立即设置，这里不需要重复设置
+      } catch (error) {
+        console.error('[Monitor WS] 创建连接失败:', error);
+        setStatus(WSStatus.ERROR);
+        onStatusChange?.(WSStatus.ERROR);
+        onError?.(error as Error);
+      }
+    })()
   }, [enabled, serverId, interval, onError, onStatusChange, latencyIntervalMs, getConnection, setConnection, updateMetrics, updateLocalLatency, updateStatus, notifySubscribers]); // 添加 Store 依赖
 
   // 断开连接
