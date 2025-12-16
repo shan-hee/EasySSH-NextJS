@@ -27,9 +27,10 @@ import { authApi } from "@/lib/api/auth"
 import { twoFactorApi } from "@/lib/api/2fa"
 import { FadeSlideIn } from "@/components/ui/fade-slide-in"
 import { getErrorMessage } from "@/lib/error-utils"
+import { isApiError } from "@/lib/api-client"
 import { generateCodeVerifier, deriveCodeChallenge } from "@/lib/pkce"
 import { useAuthStore } from "@/stores/auth-store"
-import { resetUnauthorizedRedirectFlag } from "@/lib/api-client"
+import { resetUnauthorizedRedirectFlag, resetAccountLockedRedirectFlag } from "@/lib/api-client"
 import { useTranslations } from "next-intl"
 
 // 声明 Google Identity Services 全局类型（FedCM 模式）
@@ -69,6 +70,12 @@ export function LoginForm({
   const [tempToken, setTempToken] = useState("")
   const [twoFactorCode, setTwoFactorCode] = useState("")
 
+  // 账户锁定状态
+  const [isAccountLocked, setIsAccountLocked] = useState(false)
+  const [lockReason, setLockReason] = useState<string | null>(null)
+  const [lockMessage, setLockMessage] = useState("")
+  const [unlockAt, setUnlockAt] = useState<string | null>(null)
+
   // PKCE 状态，在 2FA 流程中复用
   const [codeVerifier, setCodeVerifier] = useState("")
   const [codeChallenge, setCodeChallenge] = useState("")
@@ -93,10 +100,30 @@ export function LoginForm({
     return "/dashboard"
   }, [searchParams])
 
-  // 进入登录表单时，重置全局 401 重定向标记，开始新的认证周期
+  // 进入登录表单时，重置全局重定向标记，开始新的认证周期
   useEffect(() => {
     resetUnauthorizedRedirectFlag()
+    resetAccountLockedRedirectFlag()
   }, [])
+
+  // 检查 URL 参数是否包含 locked=true（从其他页面被锁定后跳转过来）
+  useEffect(() => {
+    const lockedParam = searchParams.get("locked")
+    if (lockedParam === "true") {
+      setIsAccountLocked(true)
+      setLockMessage(tAuth("loginAccountLockedDesc"))
+      // 获取锁定原因
+      const lockReasonParam = searchParams.get("lock_reason")
+      if (lockReasonParam) {
+        setLockReason(lockReasonParam)
+      }
+      // 获取锁定时间
+      const lockedUntilParam = searchParams.get("locked_until")
+      if (lockedUntilParam) {
+        setUnlockAt(lockedUntilParam)
+      }
+    }
+  }, [searchParams, tAuth])
 
   // 初始化 Google 登录模式（从 localStorage 读取，默认重定向模式）
   useEffect(() => {
@@ -195,6 +222,21 @@ export function LoginForm({
       router.replace(getRedirectTarget())
     } catch (error: unknown) {
       console.error("Login error:", error)
+
+      // 检查是否为账户锁定错误
+      if (isApiError(error) && error.status === 429) {
+        const detail = error.detail as { error?: string; message?: string; unlock_at?: string } | undefined
+        if (detail?.error === "account_locked" || detail?.error === "ip_locked") {
+          setIsAccountLocked(true)
+          setLockMessage(getErrorMessage(error, tAuth("loginAccountLockedDesc")))
+          if (detail?.unlock_at) {
+            setUnlockAt(detail.unlock_at)
+          }
+          setIsLoading(false)
+          return
+        }
+      }
+
       const defaultDesc = tAuth("loginToastFailedDesc")
       let desc = getErrorMessage(error, defaultDesc)
       if (desc === "AUTH_CODE_EMPTY" || desc === "ACCESS_TOKEN_MISSING") {
@@ -529,6 +571,66 @@ export function LoginForm({
             ) : (
               // 邮箱密码登录表单
               <div className="space-y-4">
+              {/* 账户锁定提示 */}
+              {isAccountLocked && (
+                <FadeSlideIn delay={0}>
+                  <div className="rounded-xl border border-red-200/50 dark:border-red-900/50 bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20 p-5 shadow-sm">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0 p-2 rounded-full bg-red-100 dark:bg-red-900/50">
+                        <Lock className="h-5 w-5 text-red-600 dark:text-red-400" />
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-red-800 dark:text-red-200">
+                            {tAuth("loginAccountLockedTitle")}
+                          </h3>
+                          <p className="mt-1 text-sm text-red-700/90 dark:text-red-300/90">
+                            {lockMessage || tAuth("loginAccountLockedDesc")}
+                          </p>
+                        </div>
+
+                        {/* 锁定详情 */}
+                        {(lockReason || unlockAt) && (
+                          <div className="space-y-2 pt-2 border-t border-red-200/50 dark:border-red-800/50">
+                            {lockReason && (
+                              <div className="flex items-start gap-2 text-sm">
+                                <span className="text-red-600/70 dark:text-red-400/70 shrink-0">{tAuth("loginAccountLockedReason")}:</span>
+                                <span className="font-medium text-red-700 dark:text-red-300">
+                                  {lockReason}
+                                </span>
+                              </div>
+                            )}
+                            {unlockAt && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-red-600/70 dark:text-red-400/70">{tAuth("loginAccountLockedUnlockAt")}:</span>
+                                <span className="font-medium text-red-700 dark:text-red-300">
+                                  {new Date(unlockAt).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/50"
+                          onClick={() => {
+                            setIsAccountLocked(false)
+                            setLockMessage("")
+                            setLockReason(null)
+                            setUnlockAt(null)
+                          }}
+                        >
+                          {tAuth("loginAccountLockedRetry")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </FadeSlideIn>
+              )}
+
               {/* 邮箱输入 */}
               <FadeSlideIn delay={0.1}>
                 <Field>
@@ -605,7 +707,7 @@ export function LoginForm({
                 <Field>
                   <Button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || isAccountLocked}
                     className="w-full"
                     size="lg"
                   >

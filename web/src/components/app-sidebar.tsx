@@ -36,65 +36,80 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
   const { config } = useSystemConfig()
   const tNav = useTranslations("nav")
 
-  // 导航数据 - 根据当前语言动态构建
+  // 检查用户是否为管理员
+  const isAdmin = user?.role === "admin"
+
+  // 导航数据 - 根据当前语言和用户角色动态构建
   const navMainData = React.useMemo(
-    () => [
-      {
-        title: tNav("console"),
-        url: "/dashboard",
-        icon: Monitor,
-        isActive: true,
-      },
-      {
-        title: tNav("connections"),
-        url: "#",
-        icon: Server,
-        items: [
-          { title: tNav("connectionConfigs"), url: "/dashboard/servers" },
-          { title: tNav("connectionHistory"), url: "/dashboard/servers/history" },
-        ],
-      },
-      {
-        title: tNav("automation"),
-        url: "#",
-        icon: Terminal,
-        items: [
-          { title: tNav("scripts"), url: "/dashboard/scripts" },
-          { title: tNav("schedules"), url: "/dashboard/automation/schedules" },
-          { title: tNav("executions"), url: "/dashboard/automation/history" },
-        ],
-      },
-      {
-        title: tNav("file"),
-        url: "#",
-        icon: FolderOpen,
-        items: [
-          { title: tNav("fileManager"), url: "/dashboard/sftp" },
-          { title: tNav("transferHistory"), url: "/dashboard/transfers/history" },
-          { title: tNav("trash"), url: "/dashboard/storage" },
-        ],
-      },
-      {
-        title: tNav("logs"),
-        url: "#",
-        icon: FileText,
-        items: [
-          { title: tNav("logsOperations"), url: "/dashboard/logs" },
-          { title: tNav("logsLogin"), url: "/dashboard/logs/login" },
-        ],
-      },
-      {
-        title: tNav("userManagement"),
-        url: "/dashboard/users",
-        icon: Users,
-      },
-      {
-        title: tNav("systemSettings"),
-        url: "/dashboard/settings",
-        icon: Settings2,
-      },
-    ],
-    [tNav],
+    () => {
+      const baseItems = [
+        {
+          title: tNav("console"),
+          url: "/dashboard",
+          icon: Monitor,
+          isActive: true,
+        },
+        {
+          title: tNav("connections"),
+          url: "#",
+          icon: Server,
+          items: [
+            { title: tNav("connectionConfigs"), url: "/dashboard/servers" },
+            { title: tNav("connectionHistory"), url: "/dashboard/servers/history" },
+          ],
+        },
+        {
+          title: tNav("automation"),
+          url: "#",
+          icon: Terminal,
+          items: [
+            { title: tNav("scripts"), url: "/dashboard/scripts" },
+            { title: tNav("schedules"), url: "/dashboard/automation/schedules" },
+            { title: tNav("executions"), url: "/dashboard/automation/history" },
+          ],
+        },
+        {
+          title: tNav("file"),
+          url: "#",
+          icon: FolderOpen,
+          items: [
+            { title: tNav("fileManager"), url: "/dashboard/sftp" },
+            { title: tNav("transferHistory"), url: "/dashboard/transfers/history" },
+            { title: tNav("trash"), url: "/dashboard/storage" },
+          ],
+        },
+        {
+          title: tNav("logs"),
+          url: "#",
+          icon: FileText,
+          items: [
+            { title: tNav("logsOperations"), url: "/dashboard/logs" },
+            { title: tNav("logsLogin"), url: "/dashboard/logs/login" },
+          ],
+        },
+      ]
+
+      // 仅管理员可见的菜单项
+      if (isAdmin) {
+        baseItems.push(
+          {
+            title: tNav("userManagement"),
+            url: "/dashboard/users",
+            icon: Users,
+            isActive: false,
+          },
+          {
+            title: tNav("systemSettings"),
+            url: "/dashboard/settings",
+            icon: Settings2,
+            isActive: false,
+          },
+        )
+      }
+
+      return baseItems
+    },
+    [tNav, isAdmin],
   )
 
   // 动态构建 teams 数据

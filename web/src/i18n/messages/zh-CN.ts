@@ -1620,6 +1620,12 @@ const messages = {
     loginToastFailedDesc: "请检查输入信息并重试",
     loginToastUnauthorizedTitle: "登录失败",
     loginToastUnauthorizedDesc: "请检查输入信息并重试",
+    // 账户锁定相关
+    loginAccountLockedTitle: "账户已锁定",
+    loginAccountLockedDesc: "您的账户已被锁定，请稍后再试或联系管理员",
+    loginAccountLockedUnlockAt: "解锁时间",
+    loginAccountLockedReason: "锁定原因",
+    loginAccountLockedRetry: "重试登录",
   },
   trash: {
     pageTitle: "回收站",

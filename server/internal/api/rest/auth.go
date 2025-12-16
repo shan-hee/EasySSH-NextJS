@@ -1152,6 +1152,17 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 		"access_token_ttl_seconds": h.accessTokenTTLSeconds, // 统一配置的TTL
 	}
 
+	// 检查账户是否被锁定（由 OptionalAuth 中间件设置）
+	if accountLocked, exists := c.Get("account_locked"); exists && accountLocked.(bool) {
+		response["account_locked"] = true
+		if lockedUntil, exists := c.Get("locked_until"); exists && lockedUntil != nil {
+			response["locked_until"] = lockedUntil
+		}
+		if lockReason, exists := c.Get("lock_reason"); exists && lockReason != "" {
+			response["lock_reason"] = lockReason
+		}
+	}
+
 	// 如果已有管理员，检查当前用户是否已认证
 	if hasAdmin {
 		// 1. 使用 OptionalAuth 中间件在上下文中解析的用户信息（Authorization: Bearer）

@@ -45,6 +45,17 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   "Failed to register user": "注册失败",
   "Failed to generate verification code": "生成验证码失败",
   "Failed to send verification code email": "发送验证码邮件失败",
+
+  // 账户锁定相关错误
+  "Account is temporarily locked due to too many failed login attempts. Please try again later.": "账户因登录失败次数过多已被临时锁定，请稍后再试",
+  "account_locked": "账户已被锁定，请稍后再试",
+  "ip_locked": "当前IP因登录失败次数过多已被临时锁定，请稍后再试",
+  "Too many requests from this IP address. Please try again later.": "当前IP请求过于频繁，请稍后再试",
+
+  // 用户状态相关错误
+  "User account is locked": "用户账户已被锁定",
+  "User account is disabled": "用户账户已被禁用",
+  "Account is locked. Please contact administrator.": "账户已被锁定，请联系管理员",
 }
 
 export function getErrorMessage(error: unknown, defaultMessage = "操作失败"): string {
@@ -69,6 +80,8 @@ export function getErrorMessage(error: unknown, defaultMessage = "操作失败")
       return "请求的资源不存在"
     } else if (error.status === 409) {
       return "资源冲突，请检查输入信息"
+    } else if (error.status === 429) {
+      return "请求过于频繁或账户已被锁定，请稍后再试"
     } else if (error.status >= 500) {
       return "服务器内部错误，请稍后重试或联系管理员"
     }

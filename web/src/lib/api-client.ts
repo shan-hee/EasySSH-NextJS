@@ -63,6 +63,42 @@ function handleGlobalUnauthorized(error: unknown) {
   }
 }
 
+// 全局账户锁定处理标记，避免重复跳转
+let hasRedirectedForLocked = false
+
+/**
+ * 重置全局账户锁定重定向标记
+ */
+export function resetAccountLockedRedirectFlag() {
+  hasRedirectedForLocked = false
+}
+
+function handleAccountLocked(detail: unknown) {
+  if (typeof window === 'undefined') return
+  const currentPath = window.location.pathname + window.location.search + window.location.hash
+  // 已在登录页时收到锁定错误，忽略
+  if (currentPath.startsWith("/login")) {
+    return
+  }
+
+  if (hasRedirectedForLocked) return
+  hasRedirectedForLocked = true
+
+  console.error("[apiFetch] Account locked, redirecting to /login", detail)
+
+  try {
+    const params = new URLSearchParams()
+    params.set("locked", "true")
+    if (currentPath && currentPath !== "/") {
+      params.set("next", currentPath)
+    }
+    const query = params.toString()
+    window.location.href = `/login?${query}`
+  } catch {
+    window.location.href = "/login?locked=true"
+  }
+}
+
 async function refreshSession(): Promise<void> {
   if (typeof window === 'undefined') {
     // 仅在浏览器端执行刷新；服务端不做刷新以免无法设置浏览器 Cookie
@@ -323,6 +359,17 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
       } catch {
         detail = "Failed to parse error response"
       }
+
+      // 检查是否为账户锁定错误（403 + account_locked）
+      // 如果用户已登录但被锁定，跳转到登录页面
+      if (res.status === 403 && typeof detail === 'object' && detail !== null) {
+        const errorDetail = detail as { error?: string }
+        console.log("[apiFetch] 403 error detail:", errorDetail)
+        if (errorDetail.error === 'account_locked') {
+          handleAccountLocked(detail)
+        }
+      }
+
       throw Object.assign(new Error(`API ${res.status} ${res.statusText}`), {
         status: res.status,
         detail,

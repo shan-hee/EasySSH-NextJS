@@ -103,6 +103,9 @@ export interface AuthStatusResponse {
   access_token?: string     // 可选：后端通过 refresh_token 自动续期时返回新的 access_token
   access_token_ttl_seconds?: number // Access Token 统一配置的有效期(秒)
   access_token_expires_in?: number  // 当前 Access Token 剩余有效期(秒),用于前端定时刷新
+  account_locked?: boolean  // 账户是否被锁定
+  locked_until?: string     // 锁定解除时间
+  lock_reason?: string      // 锁定原因
 }
 
 /**

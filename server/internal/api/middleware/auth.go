@@ -77,7 +77,7 @@ func applyTicketToContext(c *gin.Context, t *auth.Ticket) {
 }
 
 // AuthMiddleware 认证中间件（支持 Authorization Bearer / 一次性 Ticket）
-func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService) gin.HandlerFunc {
+func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService, userRepo auth.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 1) 优先 Bearer（用于常规 API 调用）
 		tokenString := extractBearerToken(c)
@@ -102,6 +102,28 @@ func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService
 				}
 				c.Abort()
 				return
+			}
+
+			// 检查用户是否被锁定
+			if userRepo != nil {
+				user, err := userRepo.FindByID(c.Request.Context(), claims.UserID)
+				if err != nil {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":   "user_not_found",
+						"message": "User not found",
+					})
+					c.Abort()
+					return
+				}
+				if user.IsLocked() {
+					c.JSON(http.StatusForbidden, gin.H{
+						"error":     "account_locked",
+						"message":   "Account is locked. Please contact administrator.",
+						"unlock_at": user.LockedUntil,
+					})
+					c.Abort()
+					return
+				}
 			}
 
 			applyClaimsToContext(c, claims)
@@ -200,7 +222,7 @@ func RequireAdmin() gin.HandlerFunc {
 }
 
 // OptionalAuth 可选认证中间件（不强制要求认证）
-func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService) gin.HandlerFunc {
+func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService, userRepo auth.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractBearerToken(c)
 
@@ -225,6 +247,23 @@ func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService) 
 		if err != nil {
 			c.Next()
 			return
+		}
+
+		// 检查用户是否被锁定（可选认证时，锁定用户视为未认证，但设置锁定标记）
+		if userRepo != nil {
+			user, err := userRepo.FindByID(c.Request.Context(), claims.UserID)
+			if err != nil {
+				c.Next()
+				return
+			}
+			if user.IsLocked() {
+				// 设置锁定标记，供后续处理使用
+				c.Set("account_locked", true)
+				c.Set("locked_until", user.LockedUntil)
+				c.Set("lock_reason", user.LockReason)
+				c.Next()
+				return
+			}
 		}
 
 		applyClaimsToContext(c, claims)

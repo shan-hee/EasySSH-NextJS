@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { authApi, type User, type LoginRequest } from "@/lib/api/auth"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { useAuthStore } from "@/stores/auth-store"
+import { isApiError } from "@/lib/api-client"
 
 interface ClientAuthContextType {
   user: User | null
@@ -56,6 +57,16 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
       // 认证失败,清除用户状态
       console.error("Failed to refresh user:", error)
       setUser(null)
+
+      // 检查是否为账户锁定错误
+      if (isApiError(error) && error.status === 403) {
+        const detail = error.detail as { error?: string } | undefined
+        if (detail?.error === 'account_locked') {
+          router.replace("/login?locked=true")
+          return
+        }
+      }
+
       router.replace("/login")
     }
   }, [router])

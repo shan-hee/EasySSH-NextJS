@@ -1680,6 +1680,12 @@ const messages = {
     loginToastFailedDesc: "Please check your input and try again.",
     loginToastUnauthorizedTitle: "Login failed",
     loginToastUnauthorizedDesc: "Please check your input and try again.",
+    // Account lock related
+    loginAccountLockedTitle: "Account Locked",
+    loginAccountLockedDesc: "Your account has been locked. Please try again later or contact administrator.",
+    loginAccountLockedUnlockAt: "Unlock time",
+    loginAccountLockedReason: "Lock reason",
+    loginAccountLockedRetry: "Retry Login",
   },
   trash: {
     pageTitle: "Trash",

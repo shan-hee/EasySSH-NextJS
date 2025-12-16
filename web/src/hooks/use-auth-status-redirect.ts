@@ -62,6 +62,26 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
       return
     }
 
+    // 账户被锁定 → 跳转到登录页并显示锁定提示
+    if (status.account_locked) {
+      if (page === "login") {
+        // 已在登录页，显示锁定提示
+        setIsChecking(false)
+        hasSettledRef.current = true
+      } else {
+        const params = new URLSearchParams()
+        params.set("locked", "true")
+        if (status.locked_until) {
+          params.set("locked_until", status.locked_until)
+        }
+        if (status.lock_reason) {
+          params.set("lock_reason", status.lock_reason)
+        }
+        router.replace(`/login?${params.toString()}`)
+      }
+      return
+    }
+
     // 已认证 → 统一跳转到 /dashboard
     if (status.is_authenticated) {
       router.replace("/dashboard")

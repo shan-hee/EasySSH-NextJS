@@ -574,9 +574,9 @@ func main() {
 			authRoutes.POST("/register", authHandler.Register)
 			authRoutes.POST("/logout", authHandler.Logout)
 			// 使用可选认证中间件，支持未登录和已登录状态
-			authRoutes.GET("/status", middleware.OptionalAuth(jwtService, ticketService), authHandler.CheckStatus) // 检查系统和认证状态
+			authRoutes.GET("/status", middleware.OptionalAuth(jwtService, ticketService, authRepo), authHandler.CheckStatus) // 检查系统和认证状态
 			// 一次性 Ticket（需认证，用于 WS/下载握手）
-			authRoutes.POST("/ticket", middleware.AuthMiddleware(jwtService, ticketService), ticketHandler.CreateTicket)
+			authRoutes.POST("/ticket", middleware.AuthMiddleware(jwtService, ticketService, authRepo), ticketHandler.CreateTicket)
 			// 初始化管理员接口应用速率限制（支持动态配置，使用 Redis 分布式限流）
 			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.InitializeAdmin)
 			authRoutes.POST("/2fa/verify", middleware.TwoFARateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
@@ -593,7 +593,7 @@ func main() {
 
 		// 用户路由（需要认证）
 		userRoutes := v1.Group("/users")
-		userRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		userRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			userRoutes.GET("/me", authHandler.GetCurrentUser)
 			userRoutes.PUT("/me", authHandler.UpdateProfile)
@@ -623,7 +623,7 @@ func main() {
 
 		// 用户管理路由（需要认证）
 		userManagementRoutes := v1.Group("/users")
-		userManagementRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		userManagementRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		userManagementRoutes.Use(middleware.RequirePermission(permissionService, "user:manage"))
 		{
 			userManagementRoutes.GET("", userHandler.ListUsers)                    // 获取用户列表
@@ -639,7 +639,7 @@ func main() {
 
 		// 权限管理路由（需要认证）
 		permissionRoutes := v1.Group("/permissions")
-		permissionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		permissionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		permissionRoutes.Use(middleware.RequirePermission(permissionService, "user:manage"))
 		{
 			permissionRoutes.GET("", permissionHandler.ListPermissions)         // 获取权限列表
@@ -650,7 +650,7 @@ func main() {
 
 		// 服务器路由（需要认证）
 		serverRoutes := v1.Group("/servers")
-		serverRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		serverRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			serverRoutes.GET("", middleware.RequirePermission(permissionService, "server:view"), serverHandler.List)                     // 列表
 			serverRoutes.GET("/statistics", middleware.RequirePermission(permissionService, "server:view"), serverHandler.GetStatistics) // 统计
@@ -664,7 +664,7 @@ func main() {
 
 		// SSH 路由（需要认证）
 		sshRoutes := v1.Group("/ssh")
-		sshRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sshRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			// WebSocket 终端
 			sshRoutes.GET("/terminal/:server_id", middleware.RequirePermission(permissionService, "terminal:execute"), terminalHandler.HandleSSH)
@@ -678,7 +678,7 @@ func main() {
 
 		// Docker 路由（需要认证）
 		dockerRoutes := v1.Group("/docker/:serverId")
-		dockerRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		dockerRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			dockerRoutes.GET("/containers", dockerHandler.ListContainers)                // 容器列表
 			dockerRoutes.GET("/containers/sse", dockerHandler.ListContainersSSE)         // 容器列表（SSE，含更新检查）
@@ -697,7 +697,7 @@ func main() {
 
 		// 监控 WebSocket 路由（需要认证）
 		monitorRoutes := v1.Group("/monitor")
-		monitorRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		monitorRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			// WebSocket 实时监控 - 使用 server_id 查找活跃会话
 			monitorRoutes.GET("/server/:server_id", monitorHandler.HandleMonitor) // 实时监控 WebSocket
@@ -705,7 +705,7 @@ func main() {
 
 		// SFTP 路由（需要认证）
 		sftpRoutes := v1.Group("/sftp/:server_id")
-		sftpRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			// 文件浏览
 			sftpRoutes.GET("/list", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ListDirectory)      // 列出目录
@@ -742,7 +742,7 @@ func main() {
 
 		// SFTP 连接池统计路由（需要认证）
 		sftpPoolRoutes := v1.Group("/sftp/pool")
-		sftpPoolRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpPoolRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		sftpPoolRoutes.Use(middleware.RequirePermission(permissionService, "file:view"))
 		{
 			sftpPoolRoutes.GET("/stats", sftpHandler.GetPoolStats) // 连接池统计
@@ -750,7 +750,7 @@ func main() {
 
 		// 全局回收站索引（需要认证）
 		sftpTrashRoutes := v1.Group("/sftp/trash")
-		sftpTrashRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpTrashRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			sftpTrashRoutes.GET("/items", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ListTrashItems)
 			sftpTrashRoutes.POST("/items/:item_id/restore", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.RestoreTrashItem)
@@ -766,7 +766,7 @@ func main() {
 
 		// SFTP 上传进度 WebSocket 路由（需要认证）
 		sftpWSRoutes := v1.Group("/sftp/upload/ws")
-		sftpWSRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpWSRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		sftpWSRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpWSRoutes.GET("/:task_id", sftpUploadWSHandler.HandleUploadWebSocket) // 上传进度 WebSocket
@@ -774,7 +774,7 @@ func main() {
 
 		// SFTP 上传任务路由（需要认证）
 		sftpUploadRoutes := v1.Group("/sftp/upload")
-		sftpUploadRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpUploadRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		sftpUploadRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpUploadRoutes.POST("/task", sftpHandler.CreateUploadTask) // 创建上传任务（服务端生成 task_id）
@@ -782,7 +782,7 @@ func main() {
 
 		// SFTP 跨服务器传输路由（需要认证）
 		sftpTransferRoutes := v1.Group("/sftp")
-		sftpTransferRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpTransferRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		sftpTransferRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpTransferRoutes.POST("/transfer", sftpHandler.Transfer)                       // 跨服务器文件传输（流式中转）
@@ -792,7 +792,7 @@ func main() {
 
 		// SFTP 跨服务器传输进度 WebSocket 路由（需要认证）
 		sftpTransferWSRoutes := v1.Group("/sftp/transfer/ws")
-		sftpTransferWSRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpTransferWSRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		sftpTransferWSRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpTransferWSRoutes.GET("/:task_id", sftpTransferWSHandler.HandleTransferWebSocket) // 传输进度 WebSocket
@@ -800,7 +800,7 @@ func main() {
 
 		// 监控路由（需要认证）
 		monitoringRoutes := v1.Group("/monitoring")
-		monitoringRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		monitoringRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			monitoringRoutes.GET("/resources", monitoringHandler.GetAllResources)                 // 所有服务器资源概览
 			monitoringRoutes.GET("/resources/stream", monitoringHandler.StreamResources)          // 流式获取服务器资源（SSE）
@@ -809,7 +809,7 @@ func main() {
 
 		// 审计日志路由（需要认证）
 		auditLogRoutes := v1.Group("/audit-logs")
-		auditLogRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		auditLogRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		auditLogRoutes.Use(middleware.RequirePermission(permissionService, "audit:view"))
 		{
 			auditLogRoutes.GET("", auditLogHandler.List)                      // 查询日志列表
@@ -821,7 +821,7 @@ func main() {
 
 		// 脚本管理路由（需要认证）
 		scriptRoutes := v1.Group("/scripts")
-		scriptRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		scriptRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			scriptRoutes.GET("", scriptHandler.List)                 // 脚本列表
 			scriptRoutes.POST("", scriptHandler.Create)              // 创建脚本
@@ -833,7 +833,7 @@ func main() {
 
 		// 批量任务路由（需要认证）
 		batchTaskRoutes := v1.Group("/batch-tasks")
-		batchTaskRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		batchTaskRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			batchTaskRoutes.GET("", batchTaskHandler.List)                     // 任务列表
 			batchTaskRoutes.POST("", batchTaskHandler.Create)                  // 创建任务
@@ -846,7 +846,7 @@ func main() {
 
 		// 定时任务路由（需要认证）
 		scheduledTaskRoutes := v1.Group("/scheduled-tasks")
-		scheduledTaskRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		scheduledTaskRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			scheduledTaskRoutes.GET("", scheduledTaskHandler.List)                     // 任务列表
 			scheduledTaskRoutes.POST("", scheduledTaskHandler.Create)                  // 创建任务
@@ -860,7 +860,7 @@ func main() {
 
 		// 任务执行历史路由（需要认证）
 		taskExecutionRoutes := v1.Group("/task-executions")
-		taskExecutionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		taskExecutionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			taskExecutionRoutes.GET("", taskExecutionHandler.List)                     // 执行历史列表
 			taskExecutionRoutes.GET("/statistics", taskExecutionHandler.GetStatistics) // 统计信息
@@ -870,7 +870,7 @@ func main() {
 
 		// SSH会话路由（需要认证）
 		sshSessionRoutes := v1.Group("/ssh-sessions")
-		sshSessionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sshSessionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			sshSessionRoutes.GET("", sshSessionHandler.List)                     // 会话列表
 			sshSessionRoutes.GET("/statistics", sshSessionHandler.GetStatistics) // 统计信息
@@ -881,7 +881,7 @@ func main() {
 
 		// 文件传输路由（需要认证）
 		fileTransferRoutes := v1.Group("/file-transfers")
-		fileTransferRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		fileTransferRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			fileTransferRoutes.GET("", fileTransferHandler.List)                     // 传输列表
 			fileTransferRoutes.POST("", fileTransferHandler.Create)                  // 创建传输记录
@@ -893,7 +893,7 @@ func main() {
 
 		// 系统设置路由（需要认证）
 		settingsGroup := v1.Group("/settings")
-		settingsGroup.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		settingsGroup.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		settingsGroup.Use(middleware.RequirePermission(permissionService, "system:settings"))
 		{
 			// 系统配置
@@ -966,7 +966,7 @@ func main() {
 
 		// AI聊天路由（需要认证）
 		aiChatRoutes := v1.Group("/ai")
-		aiChatRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		aiChatRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			aiChatRoutes.POST("/chat", aiChatHandler.Chat)              // 聊天（支持流式和非流式）
 			aiChatRoutes.POST("/chat/stream", aiChatHandler.StreamChat) // 流式聊天专用端点
@@ -975,7 +975,7 @@ func main() {
 
 		// 备份恢复路由（需要认证）
 		backupRoutes := v1.Group("/backup")
-		backupRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		backupRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			backupRoutes.GET("/export-config", backupHandler.ExportConfig)      // 导出配置
 			backupRoutes.POST("/import-config", backupHandler.ImportConfig)     // 导入配置
@@ -985,7 +985,7 @@ func main() {
 
 		// SSH密钥路由（需要认证）
 		sshKeyRoutes := v1.Group("/ssh-keys")
-		sshKeyRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sshKeyRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			sshKeyRoutes.GET("", sshKeyHandler.GetSSHKeys)               // 获取密钥列表
 			sshKeyRoutes.POST("/generate", sshKeyHandler.GenerateSSHKey) // 生成密钥
@@ -995,7 +995,7 @@ func main() {
 
 		// 头像生成路由（需要认证）
 		avatarRoutes := v1.Group("/avatar")
-		avatarRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		avatarRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			avatarRoutes.POST("/generate", avatarHandler.GenerateAvatar) // 生成头像
 		}

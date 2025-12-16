@@ -42,6 +42,20 @@ export default function DashboardLayout({
       return
     }
 
+    // 账户被锁定 → 跳转到登录页并显示锁定提示
+    if (authStatus.account_locked) {
+      const params = new URLSearchParams()
+      params.set("locked", "true")
+      if (authStatus.locked_until) {
+        params.set("locked_until", authStatus.locked_until)
+      }
+      if (authStatus.lock_reason) {
+        params.set("lock_reason", authStatus.lock_reason)
+      }
+      router.replace(`/login?${params.toString()}`)
+      return
+    }
+
     // 未认证 → 跳转到登录
     if (!authStatus.is_authenticated) {
       router.replace("/login")
