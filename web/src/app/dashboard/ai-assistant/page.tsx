@@ -124,6 +124,26 @@ function parseThinkingContent(text: string): ParsedContent {
   return { thinking: null, content: text }
 }
 
+// ========== 波浪拂过效果组件 ==========
+function WaveText({ text }: { text: string }) {
+  return (
+    <span className="font-medium inline-flex">
+      {text.split("").map((char, index) => (
+        <span
+          key={index}
+          className="animate-pulse"
+          style={{
+            animationDelay: `${index * 150}ms`,
+            animationDuration: "2s",
+          }}
+        >
+          {char}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 // ========== 思考内容折叠组件 ==========
 function ThinkingBlock({
   thinking,
@@ -139,32 +159,25 @@ function ThinkingBlock({
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger asChild>
-        <button
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-            "bg-violet-500/10 hover:bg-violet-500/20 transition-colors",
-            "text-violet-600 dark:text-violet-400",
-            "border border-violet-500/20"
-          )}
-        >
+        <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <Brain className="h-4 w-4" />
-          <span className="font-medium">{t("thinkingProcess")}</span>
-          {isStreaming && (
-            <Loader size={12} className="text-violet-500" />
+          {/* 流式输出时显示波浪效果的"思考中..."，完成后显示"思考过程" */}
+          {isStreaming ? (
+            <WaveText text={t("thinkingLabel")} />
+          ) : (
+            <span>{t("thinkingProcess")}</span>
           )}
           <ChevronRight
             className={cn(
-              "h-4 w-4 ml-auto transition-transform duration-200",
+              "h-4 w-4 transition-transform duration-200",
               isOpen && "rotate-90"
             )}
           />
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-2 px-3 py-2 rounded-lg bg-muted/50 border border-border/50">
-          <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-            {thinking}
-          </div>
+        <div className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
+          {thinking}
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -202,18 +215,13 @@ function MessageBubble({
   // 判断是否正在流式输出思考内容
   const isThinkingStreaming = Boolean(isStreaming && parsedContent.thinking && !parsedContent.content)
 
-  // 用户消息 - 保持气泡样式
+  // 用户消息 - 简约风格，右对齐
   if (isUser) {
     return (
-      <div className="group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 flex-row-reverse">
-        {/* 头像 */}
-        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow-sm">
-          <User className="h-4 w-4 text-primary-foreground" />
-        </div>
-
+      <div className="group flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-300">
         {/* 消息内容 */}
         <div className="flex flex-col gap-1.5 max-w-[75%] items-end">
-          <div className="rounded-2xl px-4 py-3 text-sm leading-relaxed bg-primary text-primary-foreground rounded-br-md">
+          <div className="rounded-2xl px-4 py-2.5 text-sm leading-relaxed bg-muted text-foreground rounded-br-md">
             <div className="whitespace-pre-wrap break-words">
               {message.content}
             </div>
@@ -312,16 +320,124 @@ function MessageBubble({
   )
 }
 
-// ========== 加载指示器 ==========
-function LoadingIndicator({ t }: { t: ReturnType<typeof useTranslations<"aiAssistant">> }) {
+// ========== AI 响应区块（统一头像，内容平滑切换） ==========
+function AIResponseBlock({
+  message,
+  isWaitingForResponse,
+  isStreaming,
+  onCopy,
+  onRegenerate,
+  copiedId,
+  isLast,
+  isLoading,
+  t,
+}: {
+  message?: Message
+  isWaitingForResponse: boolean
+  isStreaming?: boolean
+  onCopy: (content: string, id: string) => void
+  onRegenerate?: () => void
+  copiedId: string | null
+  isLast: boolean
+  isLoading: boolean
+  t: ReturnType<typeof useTranslations<"aiAssistant">>
+}) {
+  // 解析 AI 消息中的思考内容
+  const parsedContent = useMemo(() => {
+    if (!message) return { thinking: null, content: "" }
+    return parseThinkingContent(message.content)
+  }, [message?.content])
+
+  // 判断是否正在流式输出思考内容
+  const isThinkingStreaming = Boolean(isStreaming && parsedContent.thinking && !parsedContent.content)
+
+  // 判断当前显示状态
+  const showLoadingIndicator = isWaitingForResponse && !message?.content
+  const showThinkingBlock = parsedContent.thinking
+  const showContent = parsedContent.content
+
+  // 是否有实际内容（思考或正文）
+  const hasContent = showThinkingBlock || showContent
+
   return (
-    <div className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-        <Bot className="h-4 w-4 text-white" />
+    <div className="group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* 头像 - 简约风格 */}
+      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+        <Bot className="h-4 w-4 text-foreground" />
       </div>
-      <div className="flex items-center gap-2 bg-muted/80 rounded-2xl rounded-bl-md px-4 py-3 border border-border/50">
-        <Loader size={14} className="text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">{t("thinkingLabel")}</span>
+
+      {/* 内容区域 - 平滑切换 */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0">
+        {/* 加载指示器 - 等待响应时只显示旋转图标，与头像底部对齐 */}
+        {showLoadingIndicator && (
+          <div className="h-8 flex items-end pb-1">
+            <Loader size={16} className="text-muted-foreground" />
+          </div>
+        )}
+
+        {/* 思考内容 - 折叠显示，位置与加载指示器对齐 */}
+        {showThinkingBlock && (
+          <div className="animate-in fade-in duration-200 pt-3">
+            <ThinkingBlock
+              thinking={parsedContent.thinking!}
+              isStreaming={isThinkingStreaming}
+              t={t}
+            />
+          </div>
+        )}
+
+        {/* 正文内容 - 位置与加载指示器对齐 */}
+        {showContent && !showThinkingBlock && (
+          <div className="text-sm leading-relaxed text-foreground animate-in fade-in duration-200 pt-3">
+            <Response className="prose prose-sm dark:prose-invert max-w-none">
+              {parsedContent.content}
+            </Response>
+          </div>
+        )}
+
+        {/* 正文内容 - 思考内容后面的正文，不需要额外上边距 */}
+        {showContent && showThinkingBlock && (
+          <div className="text-sm leading-relaxed text-foreground animate-in fade-in duration-200">
+            <Response className="prose prose-sm dark:prose-invert max-w-none">
+              {parsedContent.content}
+            </Response>
+          </div>
+        )}
+
+        {/* 消息元信息和操作 - 仅在有内容时显示 */}
+        {message && hasContent && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground/70">
+              {new Date(message.timestamp).toLocaleTimeString("zh-CN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+
+            <Actions className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Action
+                tooltip={copiedId === message.id ? t("copied") : t("copy")}
+                onClick={() => onCopy(parsedContent.content || message.content, message.id)}
+                className="h-6 w-6"
+              >
+                {copiedId === message.id ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Action>
+              {isLast && !isLoading && onRegenerate && (
+                <Action
+                  tooltip={t("regenerate")}
+                  onClick={onRegenerate}
+                  className="h-6 w-6"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Action>
+              )}
+            </Actions>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -367,13 +483,10 @@ function WelcomePanel({
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 animate-in fade-in duration-500">
-      {/* 大图标 */}
-      <div className="relative mb-6">
-        <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-600/20 flex items-center justify-center">
-          <Bot className="h-10 w-10 text-violet-500" />
-        </div>
-        <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-green-500 flex items-center justify-center ring-2 ring-background">
-          <Sparkles className="h-3 w-3 text-white" />
+      {/* 大图标 - 简约风格 */}
+      <div className="mb-6">
+        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+          <Bot className="h-8 w-8 text-foreground" />
         </div>
       </div>
 
@@ -1015,30 +1128,84 @@ export default function AIAssistantPage() {
           ) : (
             <Conversation className="flex-1">
               <ConversationContent className="space-y-6 pb-4 max-w-4xl mx-auto px-4">
-                {currentConversation?.messages.map((message, index) => {
-                  // 跳过空内容的 AI 消息（等待流式输出时的占位符）
-                  if (message.role === "assistant" && !message.content) {
-                    return null
+                {(() => {
+                  const messages = currentConversation?.messages || []
+                  const elements: React.ReactNode[] = []
+
+                  // 查找当前正在流式输出的 AI 消息
+                  const streamingAssistantMessage = streamingMessageId
+                    ? messages.find(m => m.id === streamingMessageId)
+                    : null
+
+                  for (let i = 0; i < messages.length; i++) {
+                    const message = messages[i]
+                    const nextMessage = messages[i + 1]
+
+                    if (message.role === "user") {
+                      // 渲染用户消息
+                      elements.push(
+                        <MessageBubble
+                          key={message.id}
+                          message={message}
+                          onCopy={handleCopyMessage}
+                          onRegenerate={handleRegenerate}
+                          copiedId={copiedId}
+                          isLast={false}
+                          isLoading={isLoading}
+                          isStreaming={false}
+                          t={t}
+                        />
+                      )
+
+                      // 检查是否需要显示 AI 响应区块
+                      const isLastUserMessage = i === messages.length - 1
+                      const hasNextAssistantMessage = nextMessage?.role === "assistant"
+
+                      // 如果是最后一条用户消息且正在加载，或者下一条是正在流式输出的 AI 消息
+                      // 使用固定的 key 来保持组件不被替换
+                      if (isLastUserMessage && isLoading && !hasNextAssistantMessage) {
+                        // 等待响应状态 - 使用固定 key
+                        elements.push(
+                          <AIResponseBlock
+                            key={`ai-response-after-${message.id}`}
+                            isWaitingForResponse={true}
+                            onCopy={handleCopyMessage}
+                            onRegenerate={handleRegenerate}
+                            copiedId={copiedId}
+                            isLast={true}
+                            isLoading={isLoading}
+                            t={t}
+                          />
+                        )
+                      }
+                    } else if (message.role === "assistant") {
+                      // 渲染 AI 消息
+                      const isLastMessage = i === messages.length - 1
+                      const prevMessage = messages[i - 1]
+                      // 使用与等待状态相同的 key 格式，确保组件复用
+                      const blockKey = prevMessage?.role === "user"
+                        ? `ai-response-after-${prevMessage.id}`
+                        : message.id
+
+                      elements.push(
+                        <AIResponseBlock
+                          key={blockKey}
+                          message={message}
+                          isWaitingForResponse={false}
+                          isStreaming={streamingMessageId === message.id}
+                          onCopy={handleCopyMessage}
+                          onRegenerate={handleRegenerate}
+                          copiedId={copiedId}
+                          isLast={isLastMessage}
+                          isLoading={isLoading}
+                          t={t}
+                        />
+                      )
+                    }
                   }
-                  return (
-                    <MessageBubble
-                      key={message.id}
-                      message={message}
-                      onCopy={handleCopyMessage}
-                      onRegenerate={handleRegenerate}
-                      copiedId={copiedId}
-                      isLast={index === currentConversation.messages.length - 1}
-                      isLoading={isLoading}
-                      isStreaming={streamingMessageId === message.id}
-                      t={t}
-                    />
-                  )
-                })}
-                {/* 当正在加载且最后一条消息是用户消息时（AI 还没开始回复），显示加载指示器 */}
-                {isLoading && (() => {
-                  const lastMessage = currentConversation?.messages[currentConversation.messages.length - 1]
-                  return lastMessage?.role === "user"
-                })() && <LoadingIndicator t={t} />}
+
+                  return elements
+                })()}
               </ConversationContent>
               <ConversationScrollButton />
             </Conversation>

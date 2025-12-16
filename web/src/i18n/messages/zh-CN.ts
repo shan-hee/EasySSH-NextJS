@@ -1516,7 +1516,7 @@ const messages = {
     copied: "已复制",
     regenerate: "重新生成",
     stopGenerating: "停止生成",
-    thinkingLabel: "正在思考...",
+    thinkingLabel: "思考中...",
     collapseSidebar: "收起侧边栏",
     expandSidebar: "展开侧边栏",
     configureAI: "配置AI",
