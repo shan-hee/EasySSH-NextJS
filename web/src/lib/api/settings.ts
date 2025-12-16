@@ -106,6 +106,7 @@ export interface SystemConfig {
 
   // 注册配置
   allow_registration?: boolean
+  default_role?: "user" | "viewer"
 
   // OAuth 配置
   oauth_enabled?: boolean

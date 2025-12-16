@@ -33,7 +33,8 @@ type SystemConfig struct {
 	CompletionCache     string `gorm:"type:jsonb" json:"completion_cache"`     // JSON: CompletionCacheConfig
 
 	// 注册配置
-	AllowRegistration bool `gorm:"not null;default:false" json:"allow_registration"`
+	AllowRegistration bool   `gorm:"not null;default:false" json:"allow_registration"`
+	DefaultRole       string `gorm:"size:20;not null;default:'user'" json:"default_role"` // 新用户默认角色: user, viewer
 
 	// OAuth 配置
 	OAuthEnabled       bool   `gorm:"not null;default:false" json:"oauth_enabled"`

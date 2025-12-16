@@ -5,6 +5,14 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSelect, FormSwitch } from "@/components/settings/form-field"
 import { Settings, Save, Loader2, RotateCcw, UserPlus, Key } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { basicInfoSchema } from "@/schemas/settings/system-config.schema"
 import { settingsApi } from "@/lib/api/settings"
@@ -51,6 +59,7 @@ export function BasicTab() {
         default_timezone: data.default_timezone,
         date_format: data.date_format,
         allow_registration: data.allow_registration ?? false,
+        default_role: data.default_role ?? "user",
         oauth_enabled: data.oauth_enabled ?? false,
         google_client_id: data.google_client_id ?? "",
         google_client_secret: data.google_client_secret ?? "",
@@ -204,6 +213,27 @@ export function BasicTab() {
               label={t("fieldAllowRegistration")}
               description={t("fieldAllowRegistrationDesc")}
             />
+
+            {form.watch("allow_registration") && (
+              <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label className="text-base">{t("fieldDefaultRole")}</Label>
+                  <p className="text-sm text-muted-foreground">{t("fieldDefaultRoleDesc")}</p>
+                </div>
+                <Select
+                  value={form.watch("default_role")}
+                  onValueChange={(val) => form.setValue("default_role", val as "user" | "viewer")}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">{t("roleUser")}</SelectItem>
+                    <SelectItem value="viewer">{t("roleViewer")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </SettingsSection>
 
           {/* OAuth 配置 */}

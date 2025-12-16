@@ -558,8 +558,22 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		}
 	}
 
-	// 注册用户（默认角色为 user，username 自动生成）
-	user, err := h.authService.Register(c.Request.Context(), req.Email, req.Password, auth.RoleUser)
+	// 从系统配置获取默认角色
+	defaultRole := auth.RoleUser
+	if h.systemConfigService != nil {
+		sysConfig, err := h.systemConfigService.Get(c.Request.Context())
+		if err == nil && sysConfig.DefaultRole != "" {
+			switch sysConfig.DefaultRole {
+			case "viewer":
+				defaultRole = auth.RoleViewer
+			case "user":
+				defaultRole = auth.RoleUser
+			}
+		}
+	}
+
+	// 注册用户（使用系统配置的默认角色，username 自动生成）
+	user, err := h.authService.Register(c.Request.Context(), req.Email, req.Password, defaultRole)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserAlreadyExists) {
 			RespondError(c, http.StatusConflict, "user_exists", "Email already exists")

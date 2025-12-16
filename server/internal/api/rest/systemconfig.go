@@ -41,6 +41,7 @@ type SystemConfigDTOV2 struct {
 	CompletionCache         *systemconfig.CompletionCacheConfig      `json:"completion_cache,omitempty"`
 	// 注册配置
 	AllowRegistration       bool                                     `json:"allow_registration"`
+	DefaultRole             string                                   `json:"default_role"`
 	// OAuth 配置
 	OAuthEnabled            bool                                     `json:"oauth_enabled"`
 	GoogleClientID          string                                   `json:"google_client_id"`
@@ -112,6 +113,7 @@ func (h *SystemConfigHandler) toDTO(config *systemconfig.SystemConfig) *SystemCo
 		MaxFileUploadSize:       config.MaxFileUploadSize,
 		CompletionEnabled:       config.CompletionEnabled,
 		AllowRegistration:       config.AllowRegistration,
+		DefaultRole:             config.DefaultRole,
 		OAuthEnabled:            config.OAuthEnabled,
 		GoogleClientID:          config.GoogleClientID,
 		GoogleClientSecret:      config.GoogleClientSecret,
@@ -157,6 +159,7 @@ func (h *SystemConfigHandler) fromDTO(dto *SystemConfigDTOV2) (*systemconfig.Sys
 		MaxFileUploadSize:       dto.MaxFileUploadSize,
 		CompletionEnabled:       dto.CompletionEnabled,
 		AllowRegistration:       dto.AllowRegistration,
+		DefaultRole:             dto.DefaultRole,
 		OAuthEnabled:            dto.OAuthEnabled,
 		GoogleClientID:          dto.GoogleClientID,
 		GoogleClientSecret:      dto.GoogleClientSecret,
@@ -220,6 +223,7 @@ func (h *SystemConfigHandler) PatchBasicInfo(c *gin.Context) {
 	existingConfig.DefaultTimezone = dto.DefaultTimezone
 	existingConfig.DateFormat = dto.DateFormat
 	existingConfig.AllowRegistration = dto.AllowRegistration
+	existingConfig.DefaultRole = dto.DefaultRole
 	existingConfig.OAuthEnabled = dto.OAuthEnabled
 	existingConfig.GoogleClientID = dto.GoogleClientID
 	existingConfig.GoogleClientSecret = dto.GoogleClientSecret

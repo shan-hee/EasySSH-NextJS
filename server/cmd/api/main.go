@@ -27,6 +27,7 @@ import (
 	"github.com/easyssh/server/internal/domain/monitoring"
 	"github.com/easyssh/server/internal/domain/notification"
 	"github.com/easyssh/server/internal/domain/notificationconfig"
+	"github.com/easyssh/server/internal/domain/permission"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
 	"github.com/easyssh/server/internal/domain/script"
 	"github.com/easyssh/server/internal/domain/security"
@@ -103,7 +104,7 @@ func main() {
 		&systemconfig.SystemConfig{},             // 系统配置表
 		&security.SecurityConfig{},               // 安全配置表
 		&notificationconfig.NotificationConfig{}, // 通知配置表
-		&aiconfig.AIConfig{},                   // AI配置表
+		&aiconfig.AIConfig{},                     // AI配置表
 		&useraiconfig.UserAIConfig{},             // 用户AI配置表
 		// 其他表
 		&sshkey.SSHKey{},         // SSH密钥表
@@ -115,10 +116,11 @@ func main() {
 		&sftp.TrashItem{},                    // SFTP 回收站索引表
 		&sftp.TrashSettings{},                // SFTP 回收站用户设置表
 		// 安全增强相关表
-		&auth.LoginAttempt{}, // 登录尝试记录表
-		&auth.TrustedDevice{},  // 可信设备表
-		&auth.LoginAlert{},     // 登录告警表
-		&auth.RSAKeyPair{},     // RSA 密钥对表
+		&auth.LoginAttempt{},     // 登录尝试记录表
+		&auth.TrustedDevice{},    // 可信设备表
+		&auth.LoginAlert{},       // 登录告警表
+		&auth.RSAKeyPair{},       // RSA 密钥对表
+		&permission.Permission{}, // 权限定义表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -369,6 +371,15 @@ func main() {
 	userRepo := user.NewRepository(database)
 	userService := user.NewService(userRepo)
 
+	// 权限服务（用于后端接口授权 + 前端权限管理页）
+	permissionRepo := permission.NewRepository(database)
+	permissionService := permission.NewService(permissionRepo)
+	if err := permissionService.EnsureDefaults(context.Background()); err != nil {
+		log.Printf("⚠️ Warning: Failed to ensure default permissions: %v", err)
+	} else {
+		log.Println("✅ Default permissions ensured")
+	}
+
 	// SSH密钥服务
 	sshKeyRepo := sshkey.NewRepository(database)
 	sshKeyService := sshkey.NewService(sshKeyRepo, cfg.Server.EncryptionKey)
@@ -468,6 +479,7 @@ func main() {
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	userHandler := rest.NewUserHandler(userService, accountLockService)
+	permissionHandler := rest.NewPermissionHandler(permissionService)
 	// 新的配置处理器
 	securityHandler := rest.NewSecurityHandler(securityService)
 	systemConfigHandler := rest.NewSystemConfigHandler(systemConfigService)
@@ -575,8 +587,8 @@ func main() {
 		{
 			// 与 /oauth 前缀下的端点保持一一对应，便于前端统一通过 /api/v1 调用
 			oauthRoutes.POST("/authorize", middleware.LoginRateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.OAuthAuthorize) // 开发版 PKCE 授权码端点（含登录验证）
-			oauthRoutes.POST("/token", authHandler.OAuthToken)                                                               // 交换/刷新 access_token
-			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify)                                                    // 验证 Google ID Token
+			oauthRoutes.POST("/token", authHandler.OAuthToken)                                                                                        // 交换/刷新 access_token
+			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify)                                                                             // 验证 Google ID Token
 		}
 
 		// 用户路由（需要认证）
@@ -612,6 +624,7 @@ func main() {
 		// 用户管理路由（需要认证）
 		userManagementRoutes := v1.Group("/users")
 		userManagementRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		userManagementRoutes.Use(middleware.RequirePermission(permissionService, "user:manage"))
 		{
 			userManagementRoutes.GET("", userHandler.ListUsers)                    // 获取用户列表
 			userManagementRoutes.GET("/statistics", userHandler.GetStatistics)     // 获取统计信息
@@ -624,17 +637,29 @@ func main() {
 			userManagementRoutes.POST("/:id/unlock", userHandler.UnlockUser)       // 解锁账户
 		}
 
+		// 权限管理路由（需要认证）
+		permissionRoutes := v1.Group("/permissions")
+		permissionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		permissionRoutes.Use(middleware.RequirePermission(permissionService, "user:manage"))
+		{
+			permissionRoutes.GET("", permissionHandler.ListPermissions)         // 获取权限列表
+			permissionRoutes.POST("", permissionHandler.CreatePermission)       // 创建权限
+			permissionRoutes.PUT("/:id", permissionHandler.UpdatePermission)    // 更新权限
+			permissionRoutes.DELETE("/:id", permissionHandler.DeletePermission) // 删除权限
+		}
+
 		// 服务器路由（需要认证）
 		serverRoutes := v1.Group("/servers")
 		serverRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
 		{
-			serverRoutes.GET("", serverHandler.List)                     // 列表
-			serverRoutes.POST("", serverHandler.Create)                  // 创建
-			serverRoutes.GET("/statistics", serverHandler.GetStatistics) // 统计
-			serverRoutes.PATCH("/reorder", serverHandler.Reorder)        // 批量更新排序
-			serverRoutes.GET("/:id", serverHandler.GetByID)              // 详情
-			serverRoutes.PUT("/:id", serverHandler.Update)               // 更新
-			serverRoutes.DELETE("/:id", serverHandler.Delete)            // 删除
+			serverRoutes.GET("", middleware.RequirePermission(permissionService, "server:view"), serverHandler.List)                     // 列表
+			serverRoutes.GET("/statistics", middleware.RequirePermission(permissionService, "server:view"), serverHandler.GetStatistics) // 统计
+			serverRoutes.GET("/:id", middleware.RequirePermission(permissionService, "server:view"), serverHandler.GetByID)              // 详情
+
+			serverRoutes.POST("", middleware.RequirePermission(permissionService, "server:manage"), serverHandler.Create)           // 创建
+			serverRoutes.PATCH("/reorder", middleware.RequirePermission(permissionService, "server:manage"), serverHandler.Reorder) // 批量更新排序
+			serverRoutes.PUT("/:id", middleware.RequirePermission(permissionService, "server:manage"), serverHandler.Update)        // 更新
+			serverRoutes.DELETE("/:id", middleware.RequirePermission(permissionService, "server:manage"), serverHandler.Delete)     // 删除
 		}
 
 		// SSH 路由（需要认证）
@@ -642,13 +667,13 @@ func main() {
 		sshRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
 		{
 			// WebSocket 终端
-			sshRoutes.GET("/terminal/:server_id", terminalHandler.HandleSSH)
+			sshRoutes.GET("/terminal/:server_id", middleware.RequirePermission(permissionService, "terminal:execute"), terminalHandler.HandleSSH)
 
 			// 会话管理 REST API
-			sshRoutes.GET("/sessions", sshHandler.ListSessions)        // 会话列表
-			sshRoutes.GET("/sessions/:id", sshHandler.GetSession)      // 会话详情
-			sshRoutes.DELETE("/sessions/:id", sshHandler.CloseSession) // 关闭会话
-			sshRoutes.GET("/statistics", sshHandler.GetStatistics)     // 统计信息
+			sshRoutes.GET("/sessions", middleware.RequirePermission(permissionService, "terminal:execute"), sshHandler.ListSessions)        // 会话列表
+			sshRoutes.GET("/sessions/:id", middleware.RequirePermission(permissionService, "terminal:execute"), sshHandler.GetSession)      // 会话详情
+			sshRoutes.DELETE("/sessions/:id", middleware.RequirePermission(permissionService, "terminal:execute"), sshHandler.CloseSession) // 关闭会话
+			sshRoutes.GET("/statistics", middleware.RequirePermission(permissionService, "terminal:execute"), sshHandler.GetStatistics)     // 统计信息
 		}
 
 		// Docker 路由（需要认证）
@@ -683,41 +708,42 @@ func main() {
 		sftpRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
 		{
 			// 文件浏览
-			sftpRoutes.GET("/list", sftpHandler.ListDirectory)      // 列出目录
-			sftpRoutes.GET("/stat", sftpHandler.GetFileInfo)        // 文件信息
-			sftpRoutes.GET("/disk-usage", sftpHandler.GetDiskUsage) // 磁盘使用
+			sftpRoutes.GET("/list", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ListDirectory)      // 列出目录
+			sftpRoutes.GET("/stat", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.GetFileInfo)        // 文件信息
+			sftpRoutes.GET("/disk-usage", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.GetDiskUsage) // 磁盘使用
 
 			// 文件传输
-			sftpRoutes.POST("/upload", sftpHandler.UploadFile)    // 上传文件
-			sftpRoutes.GET("/download", sftpHandler.DownloadFile) // 下载文件
+			sftpRoutes.POST("/upload", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.UploadFile)    // 上传文件
+			sftpRoutes.GET("/download", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.DownloadFile) // 下载文件
 
 			// 文件操作
-			sftpRoutes.POST("/mkdir", sftpHandler.CreateDirectory) // 创建目录
-			sftpRoutes.DELETE("/delete", sftpHandler.Delete)       // 删除
-			sftpRoutes.POST("/rename", sftpHandler.Rename)         // 重命名
-			sftpRoutes.POST("/chmod", sftpHandler.Chmod)           // 修改权限
+			sftpRoutes.POST("/mkdir", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.CreateDirectory) // 创建目录
+			sftpRoutes.DELETE("/delete", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.Delete)       // 删除
+			sftpRoutes.POST("/rename", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.Rename)         // 重命名
+			sftpRoutes.POST("/chmod", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.Chmod)           // 修改权限
 
 			// 批量操作
-			sftpRoutes.POST("/batch-delete", sftpHandler.BatchDelete)     // 批量删除
-			sftpRoutes.POST("/batch-download", sftpHandler.BatchDownload) // 批量下载
+			sftpRoutes.POST("/batch-delete", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.BatchDelete)     // 批量删除
+			sftpRoutes.POST("/batch-download", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.BatchDownload) // 批量下载
 
 			// 文件内容
-			sftpRoutes.GET("/read", sftpHandler.ReadFile)    // 读取文件
-			sftpRoutes.POST("/write", sftpHandler.WriteFile) // 写入文件
+			sftpRoutes.GET("/read", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ReadFile)      // 读取文件
+			sftpRoutes.POST("/write", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.WriteFile) // 写入文件
 
 			// 回收站（.trash）
-			sftpRoutes.GET("/trash/list", sftpHandler.ListTrash)
-			sftpRoutes.POST("/trash/restore", sftpHandler.RestoreTrash)
-			sftpRoutes.DELETE("/trash/purge", sftpHandler.PurgeTrash)
-			sftpRoutes.POST("/trash/empty", sftpHandler.EmptyTrash)
+			sftpRoutes.GET("/trash/list", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ListTrash)
+			sftpRoutes.POST("/trash/restore", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.RestoreTrash)
+			sftpRoutes.DELETE("/trash/purge", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.PurgeTrash)
+			sftpRoutes.POST("/trash/empty", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.EmptyTrash)
 
 			// 连接管理
-			sftpRoutes.POST("/close", sftpHandler.CloseConnection) // 关闭连接（用户关闭 SFTP 面板时调用）
+			sftpRoutes.POST("/close", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.CloseConnection) // 关闭连接（用户关闭 SFTP 面板时调用）
 		}
 
 		// SFTP 连接池统计路由（需要认证）
 		sftpPoolRoutes := v1.Group("/sftp/pool")
 		sftpPoolRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpPoolRoutes.Use(middleware.RequirePermission(permissionService, "file:view"))
 		{
 			sftpPoolRoutes.GET("/stats", sftpHandler.GetPoolStats) // 连接池统计
 		}
@@ -726,21 +752,22 @@ func main() {
 		sftpTrashRoutes := v1.Group("/sftp/trash")
 		sftpTrashRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
 		{
-			sftpTrashRoutes.GET("/items", sftpHandler.ListTrashItems)
-			sftpTrashRoutes.POST("/items/:item_id/restore", sftpHandler.RestoreTrashItem)
-			sftpTrashRoutes.DELETE("/items/:item_id", sftpHandler.PurgeTrashItem)
-			sftpTrashRoutes.POST("/items/empty", sftpHandler.EmptyTrashItems)
-			sftpTrashRoutes.POST("/items/batch-restore", sftpHandler.BatchRestoreTrashItems)
-			sftpTrashRoutes.POST("/items/batch-purge", sftpHandler.BatchPurgeTrashItems)
+			sftpTrashRoutes.GET("/items", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ListTrashItems)
+			sftpTrashRoutes.POST("/items/:item_id/restore", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.RestoreTrashItem)
+			sftpTrashRoutes.DELETE("/items/:item_id", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.PurgeTrashItem)
+			sftpTrashRoutes.POST("/items/empty", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.EmptyTrashItems)
+			sftpTrashRoutes.POST("/items/batch-restore", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.BatchRestoreTrashItems)
+			sftpTrashRoutes.POST("/items/batch-purge", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.BatchPurgeTrashItems)
 			// 回收站设置
-			sftpTrashRoutes.GET("/settings", sftpHandler.GetTrashSettings)
-			sftpTrashRoutes.PUT("/settings", sftpHandler.UpdateTrashSettings)
-			sftpTrashRoutes.DELETE("/settings", sftpHandler.ResetTrashSettings)
+			sftpTrashRoutes.GET("/settings", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.GetTrashSettings)
+			sftpTrashRoutes.PUT("/settings", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.UpdateTrashSettings)
+			sftpTrashRoutes.DELETE("/settings", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.ResetTrashSettings)
 		}
 
 		// SFTP 上传进度 WebSocket 路由（需要认证）
 		sftpWSRoutes := v1.Group("/sftp/upload/ws")
 		sftpWSRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpWSRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpWSRoutes.GET("/:task_id", sftpUploadWSHandler.HandleUploadWebSocket) // 上传进度 WebSocket
 		}
@@ -748,6 +775,7 @@ func main() {
 		// SFTP 上传任务路由（需要认证）
 		sftpUploadRoutes := v1.Group("/sftp/upload")
 		sftpUploadRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpUploadRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpUploadRoutes.POST("/task", sftpHandler.CreateUploadTask) // 创建上传任务（服务端生成 task_id）
 		}
@@ -755,6 +783,7 @@ func main() {
 		// SFTP 跨服务器传输路由（需要认证）
 		sftpTransferRoutes := v1.Group("/sftp")
 		sftpTransferRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpTransferRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpTransferRoutes.POST("/transfer", sftpHandler.Transfer)                       // 跨服务器文件传输（流式中转）
 			sftpTransferRoutes.POST("/transfer/direct", sftpHandler.DirectTransfer)          // 跨服务器直连传输（rsync/scp）
@@ -764,6 +793,7 @@ func main() {
 		// SFTP 跨服务器传输进度 WebSocket 路由（需要认证）
 		sftpTransferWSRoutes := v1.Group("/sftp/transfer/ws")
 		sftpTransferWSRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		sftpTransferWSRoutes.Use(middleware.RequirePermission(permissionService, "file:manage"))
 		{
 			sftpTransferWSRoutes.GET("/:task_id", sftpTransferWSHandler.HandleTransferWebSocket) // 传输进度 WebSocket
 		}
@@ -780,6 +810,7 @@ func main() {
 		// 审计日志路由（需要认证）
 		auditLogRoutes := v1.Group("/audit-logs")
 		auditLogRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		auditLogRoutes.Use(middleware.RequirePermission(permissionService, "audit:view"))
 		{
 			auditLogRoutes.GET("", auditLogHandler.List)                      // 查询日志列表
 			auditLogRoutes.GET("/me", auditLogHandler.GetMyLogs)              // 我的日志
@@ -863,6 +894,7 @@ func main() {
 		// 系统设置路由（需要认证）
 		settingsGroup := v1.Group("/settings")
 		settingsGroup.Use(middleware.AuthMiddleware(jwtService, ticketService))
+		settingsGroup.Use(middleware.RequirePermission(permissionService, "system:settings"))
 		{
 			// 系统配置
 			settingsGroup.GET("/system", systemConfigHandler.GetSystemConfig)

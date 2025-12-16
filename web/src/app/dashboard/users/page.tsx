@@ -30,17 +30,25 @@ import {
   Shield,
   Eye,
   Trash2,
+  KeyRound,
 } from "lucide-react"
-import { usersApi, type UserDetail, type UserRole } from "@/lib/api"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { permissionsApi, usersApi, type Permission, type UserDetail, type UserRole } from "@/lib/api"
 import { SkeletonStatsCard, SkeletonTable } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createUserColumns } from "./components/user-columns"
+import { createPermissionColumns, staticPermissions } from "./components/permission-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { Server, FolderKey, Terminal, FileText, Settings } from "lucide-react"
 
 export default function UsersPage() {
   const t = useTranslations("users")
   const { ready } = useAuthReady()
+
+  // Tab 状态
+  const [activeTab, setActiveTab] = useState<"users" | "permissions">("users")
+
   // 数据状态
   const [users, setUsers] = useState<UserDetail[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,6 +101,27 @@ export default function UsersPage() {
     duration_minutes: 60,
   })
 
+  // 权限管理状态
+  const [permissions, setPermissions] = useState<Permission[]>(staticPermissions)
+  const [isPermCreateDialogOpen, setIsPermCreateDialogOpen] = useState(false)
+  const [isPermEditDialogOpen, setIsPermEditDialogOpen] = useState(false)
+  const [editingPermission, setEditingPermission] = useState<Permission | null>(null)
+
+  // 新建/编辑权限表单
+  const [permForm, setPermForm] = useState<{
+    name: string
+    code: string
+    description: string
+    module: Permission["module"]
+    roles: Permission["roles"]
+  }>({
+    name: "",
+    code: "",
+    description: "",
+    module: "server",
+    roles: ["admin"],
+  })
+
   // 加载用户列表
   const loadUsers = async () => {
     try {
@@ -125,6 +154,20 @@ export default function UsersPage() {
     }
   }
 
+  // 加载权限列表
+  const loadPermissions = async () => {
+    try {
+      const res = await permissionsApi.list({ page: 1, limit: 200 })
+      const list = Array.isArray(res?.data) ? res.data : []
+      setPermissions(list)
+    } catch (error: unknown) {
+      console.error("加载权限列表失败:", error)
+      // 保留静态兜底数据，避免页面空白
+      setPermissions(staticPermissions)
+      toast.error(getErrorMessage(error, t("permToastLoadFailed")))
+    }
+  }
+
   // 刷新数据
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -135,6 +178,7 @@ export default function UsersPage() {
   useEffect(() => {
     if (!ready) return
     loadUsers()
+    loadPermissions()
   }, [ready])
 
   // 创建用户
@@ -333,6 +377,133 @@ export default function UsersPage() {
     }
   }
 
+  // 重置权限表单
+  const resetPermForm = () => {
+    setPermForm({
+      name: "",
+      code: "",
+      description: "",
+      module: "server",
+      roles: ["admin"],
+    })
+  }
+
+  // 打开新建权限对话框
+  const handleOpenPermCreateDialog = () => {
+    resetPermForm()
+    setIsPermCreateDialogOpen(true)
+  }
+
+  // 创建权限
+  const handleCreatePermission = async () => {
+    if (!permForm.name || !permForm.code) {
+      toast.error(t("permToastFormIncomplete"))
+      return
+    }
+
+    // 检查代码是否重复
+    if (permissions.some(p => p.code === permForm.code)) {
+      toast.error(t("permToastCodeExists"))
+      return
+    }
+
+    try {
+      await permissionsApi.create(permForm)
+      toast.success(t("permToastCreateSuccess"))
+      setIsPermCreateDialogOpen(false)
+      resetPermForm()
+      await loadPermissions()
+    } catch (error: unknown) {
+      console.error("创建权限失败:", error)
+      toast.error(getErrorMessage(error, t("permToastCreateFailed")))
+    }
+  }
+
+  // 打开编辑权限对话框
+  const handleEditPermission = (permission: Permission) => {
+    setEditingPermission(permission)
+    setPermForm({
+      name: permission.name,
+      code: permission.code,
+      description: permission.description,
+      module: permission.module,
+      roles: [...permission.roles],
+    })
+    setIsPermEditDialogOpen(true)
+  }
+
+  // 更新权限
+  const handleUpdatePermission = async () => {
+    if (!editingPermission) return
+
+    if (!permForm.name || !permForm.code) {
+      toast.error(t("permToastFormIncomplete"))
+      return
+    }
+
+    // 检查代码是否与其他权限重复
+    if (permissions.some(p => p.code === permForm.code && p.id !== editingPermission.id)) {
+      toast.error(t("permToastCodeExists"))
+      return
+    }
+
+    try {
+      await permissionsApi.update(editingPermission.id, permForm)
+      toast.success(t("permToastUpdateSuccess"))
+      setIsPermEditDialogOpen(false)
+      setEditingPermission(null)
+      resetPermForm()
+      await loadPermissions()
+    } catch (error: unknown) {
+      console.error("更新权限失败:", error)
+      toast.error(getErrorMessage(error, t("permToastUpdateFailed")))
+    }
+  }
+
+  // 删除权限
+  const handleDeletePermission = async (permissionId: string, name: string) => {
+    if (!confirm(t("permConfirmDelete", { name }))) {
+      return
+    }
+
+    try {
+      await permissionsApi.delete(permissionId)
+      toast.success(t("permToastDeleteSuccess"))
+      await loadPermissions()
+    } catch (error: unknown) {
+      console.error("删除权限失败:", error)
+      toast.error(getErrorMessage(error, t("permToastDeleteFailed")))
+    }
+  }
+
+  // 批量删除权限
+  const handleBatchDeletePermissions = async (permissionIds: string[]) => {
+    if (!confirm(t("permConfirmDeleteBatch", { count: permissionIds.length }))) {
+      return
+    }
+
+    try {
+      await Promise.all(permissionIds.map((id) => permissionsApi.delete(id)))
+      toast.success(t("permToastBatchDeleteSuccess", { count: permissionIds.length }))
+      await loadPermissions()
+    } catch (error: unknown) {
+      console.error("批量删除权限失败:", error)
+      toast.error(getErrorMessage(error, t("permToastDeleteFailed")))
+    }
+  }
+
+  // 切换角色选择
+  const toggleRole = (role: "admin" | "user" | "viewer") => {
+    if (permForm.roles.includes(role)) {
+      // 至少保留一个角色
+      if (permForm.roles.length > 1) {
+        setPermForm({ ...permForm, roles: permForm.roles.filter(r => r !== role) })
+      }
+    } else {
+      setPermForm({ ...permForm, roles: [...permForm.roles, role] })
+    }
+  }
+
   // 创建列定义
   const columns = createUserColumns({
     onEdit: handleEdit,
@@ -351,6 +522,27 @@ export default function UsersPage() {
         { label: t("filterRoleAdmin"), value: "admin", icon: Shield },
         { label: t("filterRoleUser"), value: "user", icon: Users },
         { label: t("filterRoleViewer"), value: "viewer", icon: Eye },
+      ],
+    },
+  ]
+
+  // 权限列定义
+  const permissionColumns = createPermissionColumns({
+    onEdit: handleEditPermission,
+    onDelete: handleDeletePermission,
+  })
+
+  // 模块筛选选项
+  const moduleFilters = [
+    {
+      column: "module",
+      title: t("permFilterModule"),
+      options: [
+        { label: t("permModuleServer"), value: "server", icon: Server },
+        { label: t("permModuleFile"), value: "file", icon: FolderKey },
+        { label: t("permModuleTerminal"), value: "terminal", icon: Terminal },
+        { label: t("permModuleAudit"), value: "audit", icon: FileText },
+        { label: t("permModuleSystem"), value: "system", icon: Settings },
       ],
     },
   ]
@@ -440,8 +632,22 @@ export default function UsersPage() {
             </Card>
           </div>
 
-          {/* 用户列表 */}
-          <DataTable
+          {/* 用户/权限切换 Tab */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "users" | "permissions")} className="flex-1 min-h-0 flex flex-col">
+            <TabsList className="w-fit">
+              <TabsTrigger value="users" className="gap-2">
+                <Users className="h-4 w-4" />
+                {t("tabUsers")}
+              </TabsTrigger>
+              <TabsTrigger value="permissions" className="gap-2">
+                <KeyRound className="h-4 w-4" />
+                {t("tabPermissions")}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* 用户列表 Tab */}
+            <TabsContent value="users" className="mt-4 flex-1 min-h-0">
+              <DataTable
             data={users}
             columns={columns}
             loading={refreshing}
@@ -479,6 +685,48 @@ export default function UsersPage() {
               </Button>
             )}
           />
+            </TabsContent>
+
+            {/* 权限列表 Tab */}
+            <TabsContent value="permissions" className="mt-4 flex-1 min-h-0">
+              <DataTable
+                data={permissions}
+                columns={permissionColumns}
+                loading={false}
+                emptyMessage={t("permTableEmpty")}
+                enableRowSelection={true}
+                toolbar={(table) => (
+                  <DataTableToolbar
+                    table={table}
+                    searchKey="name"
+                    searchPlaceholder={t("permSearchPlaceholder")}
+                    filters={moduleFilters}
+                    showRefresh={false}
+                  >
+                    <Button size="sm" onClick={handleOpenPermCreateDialog}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      {t("permBtnNew")}
+                    </Button>
+                  </DataTableToolbar>
+                )}
+                batchActions={(table) => (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      const selectedRows = table.getFilteredSelectedRowModel().rows
+                      const permissionIds = selectedRows.map(row => row.original.id)
+                      handleBatchDeletePermissions(permissionIds)
+                    }}
+                    className="h-7"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {t("batchDelete")}
+                  </Button>
+                )}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       )}
 
@@ -764,6 +1012,278 @@ export default function UsersPage() {
             <Button variant="destructive" onClick={handleLockUser}>
               {t("dialogLockSubmit")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 新建权限对话框 */}
+      <Dialog open={isPermCreateDialogOpen} onOpenChange={setIsPermCreateDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{t("permDialogCreateTitle")}</DialogTitle>
+            <DialogDescription>{t("permDialogCreateDescription")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="perm-name">
+                {t("permFieldName")} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="perm-name"
+                placeholder={t("permPlaceholderName")}
+                value={permForm.name}
+                onChange={(e) => setPermForm({ ...permForm, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="perm-code">
+                {t("permFieldCode")} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="perm-code"
+                placeholder={t("permPlaceholderCode")}
+                value={permForm.code}
+                onChange={(e) => setPermForm({ ...permForm, code: e.target.value })}
+                className="font-mono"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="perm-description">{t("permFieldDescription")}</Label>
+              <Input
+                id="perm-description"
+                placeholder={t("permPlaceholderDescription")}
+                value={permForm.description}
+                onChange={(e) => setPermForm({ ...permForm, description: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="perm-module">
+                {t("permFieldModule")} <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={permForm.module}
+                onValueChange={(value: Permission["module"]) => setPermForm({ ...permForm, module: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="server">
+                    <div className="flex items-center gap-2">
+                      <Server className="h-4 w-4" />
+                      {t("permModuleServer")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="file">
+                    <div className="flex items-center gap-2">
+                      <FolderKey className="h-4 w-4" />
+                      {t("permModuleFile")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="terminal">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="h-4 w-4" />
+                      {t("permModuleTerminal")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="audit">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      {t("permModuleAudit")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="system">
+                    <div className="flex items-center gap-2">
+                      <Settings className="h-4 w-4" />
+                      {t("permModuleSystem")}
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("permFieldRoles")} <span className="text-destructive">*</span></Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={permForm.roles.includes("admin") ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleRole("admin")}
+                  className="gap-1"
+                >
+                  <Shield className="h-3 w-3" />
+                  {t("filterRoleAdmin")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={permForm.roles.includes("user") ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleRole("user")}
+                  className="gap-1"
+                >
+                  <Users className="h-3 w-3" />
+                  {t("filterRoleUser")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={permForm.roles.includes("viewer") ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleRole("viewer")}
+                  className="gap-1"
+                >
+                  <Eye className="h-3 w-3" />
+                  {t("filterRoleViewer")}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPermCreateDialogOpen(false)}>
+              {t("dialogCancel")}
+            </Button>
+            <Button onClick={handleCreatePermission}>{t("permDialogCreateSubmit")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑权限对话框 */}
+      <Dialog open={isPermEditDialogOpen} onOpenChange={setIsPermEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{t("permDialogEditTitle")}</DialogTitle>
+            <DialogDescription>{t("permDialogEditDescription")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-perm-name">
+                {t("permFieldName")} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="edit-perm-name"
+                placeholder={t("permPlaceholderName")}
+                value={permForm.name}
+                onChange={(e) => setPermForm({ ...permForm, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-perm-code">
+                {t("permFieldCode")} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="edit-perm-code"
+                placeholder={t("permPlaceholderCode")}
+                value={permForm.code}
+                onChange={(e) => setPermForm({ ...permForm, code: e.target.value })}
+                className="font-mono"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-perm-description">{t("permFieldDescription")}</Label>
+              <Input
+                id="edit-perm-description"
+                placeholder={t("permPlaceholderDescription")}
+                value={permForm.description}
+                onChange={(e) => setPermForm({ ...permForm, description: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-perm-module">
+                {t("permFieldModule")} <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={permForm.module}
+                onValueChange={(value: Permission["module"]) => setPermForm({ ...permForm, module: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="server">
+                    <div className="flex items-center gap-2">
+                      <Server className="h-4 w-4" />
+                      {t("permModuleServer")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="file">
+                    <div className="flex items-center gap-2">
+                      <FolderKey className="h-4 w-4" />
+                      {t("permModuleFile")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="terminal">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="h-4 w-4" />
+                      {t("permModuleTerminal")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="audit">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      {t("permModuleAudit")}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="system">
+                    <div className="flex items-center gap-2">
+                      <Settings className="h-4 w-4" />
+                      {t("permModuleSystem")}
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("permFieldRoles")} <span className="text-destructive">*</span></Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={permForm.roles.includes("admin") ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleRole("admin")}
+                  className="gap-1"
+                >
+                  <Shield className="h-3 w-3" />
+                  {t("filterRoleAdmin")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={permForm.roles.includes("user") ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleRole("user")}
+                  className="gap-1"
+                >
+                  <Users className="h-3 w-3" />
+                  {t("filterRoleUser")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={permForm.roles.includes("viewer") ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleRole("viewer")}
+                  className="gap-1"
+                >
+                  <Eye className="h-3 w-3" />
+                  {t("filterRoleViewer")}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPermEditDialogOpen(false)}>
+              {t("dialogCancel")}
+            </Button>
+            <Button onClick={handleUpdatePermission}>{t("permDialogEditSubmit")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
