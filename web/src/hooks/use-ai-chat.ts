@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from "react"
-import { streamChat, chat, ChatMessage, ChatResponse } from "@/lib/api/ai"
+import { useState, useCallback, useEffect, useRef } from "react"
+import { streamChat, chat, ChatMessage } from "@/lib/api/ai"
 
 export interface UseAIChatOptions {
   onError?: (error: Error) => void
@@ -24,6 +24,14 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // 组件卸载时中止未完成的流式请求，避免残留连接占用浏览器/服务端资源
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+      abortControllerRef.current = null
+    }
+  }, [])
 
   const clearError = useCallback(() => setError(null), [])
 

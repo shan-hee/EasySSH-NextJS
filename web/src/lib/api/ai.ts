@@ -125,6 +125,12 @@ export async function streamChat(
       }
     }
   } finally {
+    // 主动取消读取，确保 SSE 连接尽快释放（尤其是我们在收到 done 后提前 return 的情况）
+    try {
+      await reader.cancel()
+    } catch {
+      // ignore
+    }
     reader.releaseLock()
   }
 }
