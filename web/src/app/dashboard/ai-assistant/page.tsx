@@ -124,6 +124,42 @@ function parseThinkingContent(text: string): ParsedContent {
   return { thinking: null, content: text }
 }
 
+// ========== 圆环进度条组件 ==========
+function CircularProgress({ progress, size = 32 }: { progress: number; size?: number }) {
+  const strokeWidth = 3
+  const radius = (size - strokeWidth) / 2
+  const circumference = radius * 2 * Math.PI
+  const offset = circumference - (progress / 100) * circumference
+
+  return (
+    <svg width={size} height={size} className="transform -rotate-90">
+      {/* 背景圆环 */}
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        className="text-muted/30"
+      />
+      {/* 进度圆环 */}
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="text-primary transition-all duration-200"
+      />
+    </svg>
+  )
+}
+
 // ========== 波浪拂过效果组件 ==========
 function WaveText({ text }: { text: string }) {
   return (
@@ -189,6 +225,7 @@ function MessageBubble({
   message,
   onCopy,
   onRegenerate,
+  onEdit,
   copiedId,
   isLast,
   isLoading,
@@ -198,6 +235,7 @@ function MessageBubble({
   message: Message
   onCopy: (content: string, id: string) => void
   onRegenerate?: () => void
+  onEdit?: (messageId: string, newContent: string) => void
   copiedId: string | null
   isLast: boolean
   isLoading: boolean
@@ -205,6 +243,18 @@ function MessageBubble({
   t: ReturnType<typeof useTranslations<"aiAssistant">>
 }) {
   const isUser = message.role === "user"
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(message.content)
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // 进入编辑模式时聚焦
+  useEffect(() => {
+    if (isEditing && editTextareaRef.current) {
+      editTextareaRef.current.focus()
+      // 将光标移到末尾
+      editTextareaRef.current.selectionStart = editTextareaRef.current.value.length
+    }
+  }, [isEditing])
 
   // 解析 AI 消息中的思考内容
   const parsedContent = useMemo(() => {
@@ -215,8 +265,68 @@ function MessageBubble({
   // 判断是否正在流式输出思考内容
   const isThinkingStreaming = Boolean(isStreaming && parsedContent.thinking && !parsedContent.content)
 
+  // 处理编辑提交
+  const handleEditSubmit = useCallback(() => {
+    if (!editContent.trim() || !onEdit) return
+    onEdit(message.id, editContent.trim())
+    setIsEditing(false)
+  }, [editContent, message.id, onEdit])
+
+  // 处理取消编辑
+  const handleCancelEdit = useCallback(() => {
+    setEditContent(message.content)
+    setIsEditing(false)
+  }, [message.content])
+
+  // 处理键盘事件
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleEditSubmit()
+    } else if (e.key === "Escape") {
+      handleCancelEdit()
+    }
+  }, [handleEditSubmit, handleCancelEdit])
+
   // 用户消息 - 简约风格，右对齐
   if (isUser) {
+    // 编辑模式
+    if (isEditing) {
+      return (
+        <div className="flex justify-end animate-in fade-in duration-200">
+          <div className="flex flex-col gap-2 max-w-[75%] w-full">
+            <textarea
+              ref={editTextareaRef}
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full rounded-xl px-4 py-2.5 text-sm leading-relaxed bg-muted text-foreground border border-primary/50 focus:border-primary focus:outline-none resize-none min-h-[60px]"
+              rows={Math.min(10, editContent.split("\n").length + 1)}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancelEdit}
+                className="h-7 px-3 text-xs"
+              >
+                {t("cancel")}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleEditSubmit}
+                disabled={!editContent.trim()}
+                className="h-7 px-3 text-xs"
+              >
+                {t("send")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 正常显示模式
     return (
       <div className="group flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-300">
         {/* 消息内容 */}
@@ -248,6 +358,15 @@ function MessageBubble({
                   <Copy className="h-3 w-3" />
                 )}
               </Action>
+              {onEdit && !isLoading && (
+                <Action
+                  tooltip={t("edit")}
+                  onClick={() => setIsEditing(true)}
+                  className="h-6 w-6"
+                >
+                  <Pencil className="h-3 w-3" />
+                </Action>
+              )}
             </Actions>
           </div>
         </div>
@@ -548,6 +667,13 @@ export default function AIAssistantPage() {
   const [isNewChat, setIsNewChat] = useState(false)
   const { ready } = useAuthReady()
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  // 文件附件状态，包含上传进度
+  const [attachedFiles, setAttachedFiles] = useState<Array<{
+    file: File
+    progress: number // 0-100
+    uploading: boolean
+  }>>([])
 
   // AI 配置状态
   const { isConfigured, isLoading: isConfigLoading, models, model: defaultModel } = useAIConfig()
@@ -817,6 +943,60 @@ export default function AIAssistantPage() {
     setRenameValue("")
   }, [])
 
+  // 文件上传处理
+  const handleFileSelect = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
+  // 模拟文件上传进度
+  const simulateUpload = useCallback((fileIndex: number) => {
+    const interval = setInterval(() => {
+      setAttachedFiles(prev => {
+        const newFiles = [...prev]
+        if (newFiles[fileIndex]) {
+          const currentProgress = newFiles[fileIndex].progress
+          if (currentProgress >= 100) {
+            clearInterval(interval)
+            newFiles[fileIndex] = { ...newFiles[fileIndex], progress: 100, uploading: false }
+          } else {
+            // 模拟上传进度，每次增加 10-30%
+            const increment = Math.random() * 20 + 10
+            newFiles[fileIndex] = {
+              ...newFiles[fileIndex],
+              progress: Math.min(100, currentProgress + increment)
+            }
+          }
+        }
+        return newFiles
+      })
+    }, 200)
+    return interval
+  }, [])
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      const startIndex = attachedFiles.length
+      const newFileEntries = Array.from(files).map(file => ({
+        file,
+        progress: 0,
+        uploading: true
+      }))
+      setAttachedFiles(prev => [...prev, ...newFileEntries])
+
+      // 为每个新文件启动模拟上传
+      newFileEntries.forEach((_, idx) => {
+        simulateUpload(startIndex + idx)
+      })
+    }
+    // 重置 input 以便可以再次选择相同文件
+    e.target.value = ""
+  }, [attachedFiles.length, simulateUpload])
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
   // 使用模板
   const handleUseTemplate = useCallback((prompt: string) => {
     setInputMessage(prompt)
@@ -829,6 +1009,134 @@ export default function AIAssistantPage() {
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
   }, [])
+
+  // 编辑消息 - 删除该消息之后的所有消息，更新当前消息内容，重新发送
+  const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
+    if (!currentConversation || isLoading) return
+
+    // 找到被编辑消息的索引
+    const messageIndex = currentConversation.messages.findIndex(m => m.id === messageId)
+    if (messageIndex === -1) return
+
+    // 清除之前的错误
+    clearError()
+
+    // 保留该消息之前的所有消息（不包括被编辑的消息）
+    const messagesBeforeEdit = currentConversation.messages.slice(0, messageIndex)
+
+    // 创建更新后的用户消息
+    const updatedUserMessage: Message = {
+      id: messageId,
+      role: "user",
+      content: newContent,
+      timestamp: Date.now(),
+    }
+
+    // 预生成 AI 消息 ID
+    const assistantMessageId = Date.now().toString()
+
+    // 更新对话：保留编辑前的消息 + 更新后的用户消息
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === currentConversationId
+          ? {
+              ...conv,
+              messages: [...messagesBeforeEdit, updatedUserMessage],
+              updatedAt: Date.now(),
+            }
+          : conv
+      )
+    )
+
+    setStreamingMessageId(assistantMessageId)
+
+    // 构建历史消息（编辑前的消息 + 更新后的用户消息）
+    const historyMessages: ChatMessage[] = [
+      ...messagesBeforeEdit.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+      {
+        role: "user" as const,
+        content: newContent,
+      },
+    ]
+
+    try {
+      await sendAIMessage(historyMessages, (delta) => {
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== currentConversationId) return conv
+
+            const existingAssistantMsg = conv.messages.find(
+              (msg) => msg.id === assistantMessageId
+            )
+
+            if (existingAssistantMsg) {
+              return {
+                ...conv,
+                messages: conv.messages.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: msg.content + delta }
+                    : msg
+                ),
+                updatedAt: Date.now(),
+              }
+            } else {
+              const newAssistantMessage: Message = {
+                id: assistantMessageId,
+                role: "assistant",
+                content: delta,
+                timestamp: Date.now(),
+              }
+              return {
+                ...conv,
+                messages: [...conv.messages, newAssistantMessage],
+                updatedAt: Date.now(),
+              }
+            }
+          })
+        )
+      }, selectedModel || undefined)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t("chatError")
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== currentConversationId) return conv
+
+          const existingAssistantMsg = conv.messages.find(
+            (msg) => msg.id === assistantMessageId
+          )
+
+          if (existingAssistantMsg) {
+            return {
+              ...conv,
+              messages: conv.messages.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: `❌ ${errorMessage}` }
+                  : msg
+              ),
+            }
+          } else {
+            return {
+              ...conv,
+              messages: [
+                ...conv.messages,
+                {
+                  id: assistantMessageId,
+                  role: "assistant" as const,
+                  content: `❌ ${errorMessage}`,
+                  timestamp: Date.now(),
+                },
+              ],
+            }
+          }
+        })
+      )
+    } finally {
+      setStreamingMessageId(null)
+    }
+  }, [currentConversation, currentConversationId, isLoading, sendAIMessage, clearError, t, selectedModel])
 
   // 导出对话
   const handleExportConversation = useCallback(() => {
@@ -1122,12 +1430,12 @@ export default function AIAssistantPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* 主内容区 */}
-        <div className="flex-1 flex flex-col min-w-0 bg-background">
+        <div className="relative flex-1 flex flex-col min-w-0 bg-background">
           {!hasMessages ? (
             <WelcomePanel onUseTemplate={handleUseTemplate} t={t} />
           ) : (
             <Conversation className="flex-1">
-              <ConversationContent className="space-y-6 pb-4 max-w-4xl mx-auto px-4">
+              <ConversationContent className="space-y-6 pb-56 max-w-4xl mx-auto px-4">
                 {(() => {
                   const messages = currentConversation?.messages || []
                   const elements: React.ReactNode[] = []
@@ -1149,6 +1457,7 @@ export default function AIAssistantPage() {
                           message={message}
                           onCopy={handleCopyMessage}
                           onRegenerate={handleRegenerate}
+                          onEdit={handleEditMessage}
                           copiedId={copiedId}
                           isLast={false}
                           isLoading={isLoading}
@@ -1207,13 +1516,13 @@ export default function AIAssistantPage() {
                   return elements
                 })()}
               </ConversationContent>
-              <ConversationScrollButton />
+              <ConversationScrollButton className="bottom-52" />
             </Conversation>
           )}
 
-          {/* 输入区域 */}
-          <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="max-w-4xl mx-auto p-4">
+          {/* 输入区域 - 悬浮在底部，与内容区域同宽，不遮挡滚动条 */}
+          <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-center pointer-events-none">
+            <div className="w-full max-w-4xl mx-auto px-4 pb-4 pointer-events-auto bg-gradient-to-t from-background via-background to-transparent">
               {/* 快捷建议（对话进行中显示） */}
               {hasMessages && !isLoading && (
                 <Suggestions className="mb-3">
@@ -1252,18 +1561,59 @@ export default function AIAssistantPage() {
                     onSubmit={handleSendMessage}
                     className="shadow-2xl border-primary/20 bg-background/95 backdrop-blur-xl ring-1 ring-primary/10"
                   >
-                    <PromptInputTextarea
-                      ref={inputRef as any}
-                      value={inputMessage}
-                      onChange={(e) => setInputMessage(e.target.value)}
-                      placeholder={isConfigured ? t("inputPlaceholder") : t("aiNotConfiguredPlaceholder")}
-                      className="min-h-[52px] text-base"
-                      disabled={!isConfigured}
-                    />
+                    {/* 文件预览和输入框包装在一起，避免 divide-y 产生分隔线 */}
+                    <div>
+                      {/* 已选文件预览 - 带过渡动画 */}
+                      {attachedFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-3 px-3 pt-3 pb-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                          {attachedFiles.map((fileEntry, index) => (
+                            <div
+                              key={index}
+                              className="relative flex items-center gap-2 px-3 py-2 bg-muted rounded-lg text-sm animate-in fade-in zoom-in-95 duration-200"
+                            >
+                              {/* 文件图标 + 进度环覆盖 */}
+                              <div className="relative flex-shrink-0 h-7 w-7">
+                                {/* 底层图标 */}
+                                <div className={cn(
+                                  "absolute inset-0 rounded-full bg-primary/10 flex items-center justify-center transition-opacity duration-300",
+                                  fileEntry.uploading ? "opacity-40" : "opacity-100"
+                                )}>
+                                  <FileText className="h-4 w-4 text-primary" />
+                                </div>
+                                {/* 进度环覆盖在图标上 */}
+                                {fileEntry.uploading && (
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <CircularProgress progress={fileEntry.progress} size={28} />
+                                  </div>
+                                )}
+                              </div>
+                              {/* 文件名 */}
+                              <span className="max-w-[150px] truncate font-medium">{fileEntry.file.name}</span>
+                              {/* 删除按钮 */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFile(index)}
+                                className="ml-1 p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10 transition-colors"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <PromptInputTextarea
+                        ref={inputRef as any}
+                        value={inputMessage}
+                        onChange={(e) => setInputMessage(e.target.value)}
+                        placeholder={isConfigured ? t("inputPlaceholder") : t("aiNotConfiguredPlaceholder")}
+                        className="min-h-[52px] text-base"
+                        disabled={!isConfigured}
+                      />
+                    </div>
                     <PromptInputToolbar>
                       <PromptInputTools>
-                        {/* 模型选择器 - 仅在配置完成且有模型时显示 */}
-                        {isConfigured && models.length > 0 && (
+                        {/* 模型选择器 */}
+                        {isConfigured && models.length > 0 ? (
                           models.length === 1 ? (
                             // 单个模型：只显示模型名称，不需要下拉
                             <div className="flex items-center gap-1.5 px-2.5 h-8 text-xs text-muted-foreground">
@@ -1286,27 +1636,36 @@ export default function AIAssistantPage() {
                               </PromptInputModelSelectContent>
                             </PromptInputModelSelect>
                           )
-                        )}
-
-                        {/* AI配置状态 Badge */}
-                        {isConfigLoading ? (
-                          <Badge variant="secondary" className="text-xs font-normal gap-1">
-                            <Loader size={10} className="text-muted-foreground" />
-                            {t("checkingConfig")}
-                          </Badge>
-                        ) : isConfigured ? (
-                          <Badge variant="secondary" className="text-xs font-normal gap-1">
-                            <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                            {t("statusOnline")}
-                          </Badge>
-                        ) : (
+                        ) : !isConfigLoading ? (
+                          // 未配置时显示"未配置"
                           <Link href="/dashboard/settings?tab=ai">
-                            <Badge variant="destructive" className="text-xs font-normal gap-1 cursor-pointer hover:opacity-80">
-                              <AlertCircle className="h-3 w-3" />
-                              {t("aiNotConfigured")}
-                            </Badge>
+                            <div className="flex items-center gap-1.5 px-2.5 h-8 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              <span>{t("notConfigured")}</span>
+                            </div>
                           </Link>
-                        )}
+                        ) : null}
+
+                        {/* 文件上传按钮 */}
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={handleFileChange}
+                          accept="image/*,.pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.log"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleFileSelect}
+                          disabled={!isConfigured}
+                          title={t("attachFile")}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
                       </PromptInputTools>
 
                       <div className="flex items-center gap-2">

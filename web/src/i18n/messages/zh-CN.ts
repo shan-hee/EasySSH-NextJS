@@ -1514,6 +1514,9 @@ const messages = {
     // 新增翻译
     copy: "复制",
     copied: "已复制",
+    edit: "编辑",
+    cancel: "取消",
+    send: "发送",
     regenerate: "重新生成",
     stopGenerating: "停止生成",
     thinkingLabel: "思考中...",
@@ -1530,6 +1533,8 @@ const messages = {
     rename: "重命名",
     delete: "删除",
     thinkingProcess: "思考过程",
+    notConfigured: "未配置",
+    attachFile: "添加附件",
   },
   auth: {
     registerTitle: "注册 {systemName} 账号",

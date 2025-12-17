@@ -1573,6 +1573,9 @@ const messages = {
     // New translations
     copy: "Copy",
     copied: "Copied",
+    edit: "Edit",
+    cancel: "Cancel",
+    send: "Send",
     regenerate: "Regenerate",
     stopGenerating: "Stop generating",
     thinkingLabel: "Thinking...",
@@ -1589,6 +1592,8 @@ const messages = {
     rename: "Rename",
     delete: "Delete",
     thinkingProcess: "Thinking Process",
+    notConfigured: "Not Configured",
+    attachFile: "Attach file",
   },
   auth: {
     registerTitle: "Register {systemName} account",
