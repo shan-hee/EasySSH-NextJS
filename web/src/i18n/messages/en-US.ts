@@ -1594,6 +1594,10 @@ const messages = {
     thinkingProcess: "Thinking Process",
     notConfigured: "Not Configured",
     attachFile: "Attach file",
+    pendingToolsHint:
+      "{count} tool action(s) pending. Please execute or skip them before continuing.",
+    pendingToolsPlaceholder:
+      "Please handle the pending tool actions above...",
   },
   auth: {
     registerTitle: "Register {systemName} account",

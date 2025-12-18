@@ -489,6 +489,16 @@ func main() {
 	// AI聊天服务和处理器
 	aiChatService := aichat.NewService(aiConfigService, userAIConfigService)
 	aiChatHandler := rest.NewAIChatHandler(aiChatService)
+	// AI工具执行器和处理器
+	aiToolExecutor := aichat.NewToolExecutorService(serverService, sftpHandler.GetPool(), encryptor)
+	// 注入工具执行器到 AI 聊天服务（用于自动工具调用循环）
+	type toolExecutorSetter interface {
+		SetToolExecutor(executor *aichat.ToolExecutorService)
+	}
+	if setter, ok := aiChatService.(toolExecutorSetter); ok {
+		setter.SetToolExecutor(aiToolExecutor)
+	}
+	aiChatToolsHandler := rest.NewAIChatToolsHandler(aiChatService, aiToolExecutor)
 	// Docker 处理器（复用监控连接池）
 	dockerHandler := rest.NewDockerHandler(serverService, serverRepo, encryptor, sshHostKeyService.GetHostKeyCallback(), monitorConnectionPool)
 	// 其他处理器
@@ -971,6 +981,10 @@ func main() {
 			aiChatRoutes.POST("/chat", aiChatHandler.Chat)              // 聊天（支持流式和非流式）
 			aiChatRoutes.POST("/chat/stream", aiChatHandler.StreamChat) // 流式聊天专用端点
 			aiChatRoutes.GET("/config", aiChatHandler.GetConfig)        // 获取AI配置状态
+			// AI工具调用相关路由
+			aiChatRoutes.GET("/tools", aiChatToolsHandler.GetTools)             // 获取可用工具列表
+			aiChatRoutes.POST("/chat/tools", aiChatToolsHandler.ChatWithTools)  // 带工具的聊天
+			aiChatRoutes.POST("/tools/execute", aiChatToolsHandler.ExecuteTool) // 执行工具
 		}
 
 		// 备份恢复路由（需要认证）

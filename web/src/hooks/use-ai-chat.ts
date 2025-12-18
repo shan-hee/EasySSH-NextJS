@@ -1,15 +1,23 @@
 import { useState, useCallback, useEffect, useRef } from "react"
-import { streamChat, chat, ChatMessage } from "@/lib/api/ai"
+import { streamChat, chat, ChatMessage, ToolCall, streamChatWithTools, executeTool } from "@/lib/api/ai"
 
 export interface UseAIChatOptions {
   onError?: (error: Error) => void
   onStreamStart?: () => void
   onStreamEnd?: () => void
+  onToolCalls?: (toolCalls: ToolCall[]) => void
 }
 
 export interface UseAIChatReturn {
   sendMessage: (messages: ChatMessage[], onDelta: (content: string) => void, model?: string) => Promise<void>
   sendMessageSync: (messages: ChatMessage[], model?: string) => Promise<string>
+  sendMessageWithTools: (
+    messages: ChatMessage[],
+    onDelta: (content: string) => void,
+    onToolCalls: (toolCalls: ToolCall[]) => void,
+    model?: string
+  ) => Promise<void>
+  executeToolCall: (toolCall: ToolCall) => Promise<{ content: string; isError: boolean }>
   isLoading: boolean
   stop: () => void
   error: Error | null
@@ -89,5 +97,54 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
     [isLoading, onError]
   )
 
-  return { sendMessage, sendMessageSync, isLoading, stop, error, clearError }
+  const sendMessageWithTools = useCallback(
+    async (
+      messages: ChatMessage[],
+      onDelta: (content: string) => void,
+      onToolCalls: (toolCalls: ToolCall[]) => void,
+      model?: string
+    ) => {
+      if (isLoading) return
+
+      setIsLoading(true)
+      setError(null)
+      onStreamStart?.()
+      abortControllerRef.current = new AbortController()
+
+      try {
+        await streamChatWithTools(
+          { messages, model, enable_tools: true },
+          onDelta,
+          onToolCalls,
+          abortControllerRef.current.signal
+        )
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return
+        const error = err instanceof Error ? err : new Error(String(err))
+        setError(error)
+        onError?.(error)
+        throw error
+      } finally {
+        setIsLoading(false)
+        abortControllerRef.current = null
+        onStreamEnd?.()
+      }
+    },
+    [isLoading, onError, onStreamStart, onStreamEnd]
+  )
+
+  const executeToolCall = useCallback(
+    async (toolCall: ToolCall): Promise<{ content: string; isError: boolean }> => {
+      try {
+        const result = await executeTool(toolCall)
+        return { content: result.content, isError: result.is_error || false }
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err))
+        return { content: `执行失败: ${error.message}`, isError: true }
+      }
+    },
+    []
+  )
+
+  return { sendMessage, sendMessageSync, sendMessageWithTools, executeToolCall, isLoading, stop, error, clearError }
 }

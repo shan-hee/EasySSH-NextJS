@@ -31,11 +31,13 @@ import {
   Pencil,
   X,
   Brain,
+  Wrench,
 } from "lucide-react"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useAIChat } from "@/hooks/use-ai-chat"
 import { useAIConfig } from "@/hooks/use-ai-config"
-import { ChatMessage } from "@/lib/api/ai"
+import { ChatMessage, ToolCall } from "@/lib/api/ai"
+import { ToolCallList } from "@/components/ai/tool-call-card"
 import { useTranslations } from "next-intl"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -76,11 +78,19 @@ import {
 } from "@/components/ui/collapsible"
 
 // ========== 类型定义 ==========
+interface ToolCallState {
+  toolCall: ToolCall
+  status: "pending" | "executing" | "completed" | "error"
+  result?: string
+  isError?: boolean
+}
+
 interface Message {
   id: string
   role: "user" | "assistant"
   content: string
   timestamp: number
+  toolCalls?: ToolCallState[]
 }
 
 interface ConversationData {
@@ -122,6 +132,101 @@ function parseThinkingContent(text: string): ParsedContent {
   }
 
   return { thinking: null, content: text }
+}
+
+// ========== 解析工具状态标签 ==========
+interface ParsedToolStatus {
+  toolStatus: string | null  // 工具执行状态描述
+  content: string            // 移除工具状态标签后的内容
+}
+
+/**
+ * 解析 AI 响应中的 <tool-status> 标签
+ * 支持格式：<tool-status>正在查询服务器列表</tool-status>
+ */
+function parseToolStatus(text: string): ParsedToolStatus {
+  // 匹配最后一个 <tool-status>...</tool-status> 标签
+  const toolStatusMatches = text.match(/<tool-status>([\s\S]*?)<\/tool-status>/gi)
+
+  if (toolStatusMatches && toolStatusMatches.length > 0) {
+    // 获取最后一个工具状态
+    const lastMatch = toolStatusMatches[toolStatusMatches.length - 1]
+    const statusMatch = lastMatch.match(/<tool-status>([\s\S]*?)<\/tool-status>/i)
+    const toolStatus = statusMatch ? statusMatch[1].trim() : null
+
+    // 移除所有 <tool-status>...</tool-status> 部分
+    const content = text.replace(/<tool-status>[\s\S]*?<\/tool-status>/gi, "").trim()
+    return { toolStatus, content }
+  }
+
+  // 处理未闭合的 <tool-status> 标签（流式传输中可能出现）
+  const unclosedMatch = text.match(/<tool-status>([\s\S]*)$/i)
+  if (unclosedMatch) {
+    return { toolStatus: unclosedMatch[1].trim(), content: text.replace(/<tool-status>[\s\S]*$/i, "").trim() }
+  }
+
+  return { toolStatus: null, content: text }
+}
+
+// ========== 历史消息净化 ==========
+function sanitizeAssistantContentForHistory(text: string): string {
+  const withoutToolStatus = parseToolStatus(text).content
+  return parseThinkingContent(withoutToolStatus).content
+}
+
+function countUnresolvedToolCalls(messages: Message[], ignoreToolCallIds?: Set<string>): number {
+  let count = 0
+  for (const msg of messages) {
+    for (const tc of msg.toolCalls || []) {
+      if (ignoreToolCallIds?.has(tc.toolCall.id)) continue
+      if (tc.status === "pending" || tc.status === "executing") count++
+    }
+  }
+  return count
+}
+
+function buildHistoryMessages(
+  messages: Message[],
+  toolResultOverrides?: Record<string, string>
+): ChatMessage[] {
+  const result: ChatMessage[] = []
+
+  for (const msg of messages) {
+    const base: ChatMessage = {
+      role: msg.role,
+      content:
+        msg.role === "assistant"
+          ? sanitizeAssistantContentForHistory(msg.content)
+          : msg.content,
+    }
+
+    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      base.tool_calls = msg.toolCalls.map((tc) => tc.toolCall)
+    }
+
+    result.push(base)
+
+    // 将已完成的工具执行结果补成 role=tool 消息，保证协议完整
+    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      for (const tc of msg.toolCalls) {
+        const overrideExists =
+          toolResultOverrides &&
+          Object.prototype.hasOwnProperty.call(toolResultOverrides, tc.toolCall.id)
+        const isFinished = tc.status === "completed" || tc.status === "error" || overrideExists
+        if (!isFinished) continue
+        const content = overrideExists ? toolResultOverrides![tc.toolCall.id] : tc.result
+        if (content === undefined || content === null) continue
+
+        result.push({
+          role: "tool",
+          content,
+          tool_call_id: tc.toolCall.id,
+        })
+      }
+    }
+  }
+
+  return result
 }
 
 // ========== 圆环进度条组件 ==========
@@ -177,6 +282,16 @@ function WaveText({ text }: { text: string }) {
         </span>
       ))}
     </span>
+  )
+}
+
+// ========== 工具执行状态组件（带呼吸动画） ==========
+function ToolStatusIndicator({ status }: { status: string }) {
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+      <Wrench className="h-4 w-4 animate-pulse" />
+      <WaveText text={status} />
+    </div>
   )
 }
 
@@ -450,6 +565,10 @@ function AIResponseBlock({
   isLast,
   isLoading,
   t,
+  conversationId,
+  onExecuteToolCall,
+  onCancelToolCall,
+  onExecuteAllToolCalls,
 }: {
   message?: Message
   isWaitingForResponse: boolean
@@ -460,11 +579,22 @@ function AIResponseBlock({
   isLast: boolean
   isLoading: boolean
   t: ReturnType<typeof useTranslations<"aiAssistant">>
+  conversationId?: string
+  onExecuteToolCall?: (conversationId: string, messageId: string, toolCallId: string) => void
+  onCancelToolCall?: (conversationId: string, messageId: string, toolCallId: string) => void
+  onExecuteAllToolCalls?: (conversationId: string, messageId: string) => void
 }) {
-  // 解析 AI 消息中的思考内容
-  const parsedContent = useMemo(() => {
-    if (!message) return { thinking: null, content: "" }
-    return parseThinkingContent(message.content)
+  // 解析 AI 消息中的工具状态和思考内容
+  const { parsedContent, toolStatus } = useMemo(() => {
+    if (!message) return { parsedContent: { thinking: null, content: "" }, toolStatus: null }
+    // 先解析工具状态
+    const toolStatusResult = parseToolStatus(message.content)
+    // 再解析思考内容（从移除工具状态后的内容中解析）
+    const thinkingResult = parseThinkingContent(toolStatusResult.content)
+    return {
+      parsedContent: thinkingResult,
+      toolStatus: toolStatusResult.toolStatus
+    }
   }, [message?.content])
 
   // 判断是否正在流式输出思考内容
@@ -474,6 +604,8 @@ function AIResponseBlock({
   const showLoadingIndicator = isWaitingForResponse && !message?.content
   const showThinkingBlock = parsedContent.thinking
   const showContent = parsedContent.content
+  // 只在流式输出时显示工具状态（工具执行完成后不再显示）
+  const showToolStatus = isStreaming && toolStatus
 
   // 是否有实际内容（思考或正文）
   const hasContent = showThinkingBlock || showContent
@@ -491,6 +623,13 @@ function AIResponseBlock({
         {showLoadingIndicator && (
           <div className="h-8 flex items-end pb-1">
             <Loader size={16} className="text-muted-foreground" />
+          </div>
+        )}
+
+        {/* 工具执行状态 - 带呼吸动画 */}
+        {showToolStatus && (
+          <div className="animate-in fade-in duration-200 pt-1">
+            <ToolStatusIndicator status={toolStatus} />
           </div>
         )}
 
@@ -520,6 +659,24 @@ function AIResponseBlock({
             <Response className="prose prose-sm dark:prose-invert max-w-none">
               {parsedContent.content}
             </Response>
+          </div>
+        )}
+
+        {/* 工具调用区域 */}
+        {message?.toolCalls && message.toolCalls.length > 0 && conversationId && (
+          <div className="mt-2 animate-in fade-in duration-200">
+            <ToolCallList
+              toolCalls={message.toolCalls}
+              onExecute={(toolCallId) =>
+                onExecuteToolCall?.(conversationId, message.id, toolCallId)
+              }
+              onCancel={(toolCallId) =>
+                onCancelToolCall?.(conversationId, message.id, toolCallId)
+              }
+              onExecuteAll={() =>
+                onExecuteAllToolCalls?.(conversationId, message.id)
+              }
+            />
           </div>
         )}
 
@@ -687,7 +844,8 @@ export default function AIAssistantPage() {
 
   // AI 聊天 Hook
   const {
-    sendMessage: sendAIMessage,
+    sendMessageWithTools,
+    executeToolCall,
     isLoading,
     stop: stopGenerating,
     error: aiError,
@@ -706,6 +864,13 @@ export default function AIAssistantPage() {
     [conversations, currentConversationId]
   )
 
+  const unresolvedToolCallCount = useMemo(() => {
+    if (!currentConversation) return 0
+    return countUnresolvedToolCalls(currentConversation.messages)
+  }, [currentConversation])
+
+  const hasUnresolvedToolCalls = unresolvedToolCallCount > 0
+
   // 过滤后的对话列表
   // 开发环境：显示所有会话（包括空会话，用于测试）
   // 生产环境：只显示有消息的会话
@@ -723,11 +888,360 @@ export default function AIAssistantPage() {
     [conversations, searchQuery]
   )
 
+  // 处理工具调用
+  const handleToolCallsReceived = useCallback(
+    (toolCalls: ToolCall[], targetConversationId: string, assistantMessageId: string) => {
+      const toolCallStates: ToolCallState[] = toolCalls.map((tc) => ({
+        toolCall: tc,
+        status: "pending" as const,
+      }))
+
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== targetConversationId) return conv
+          return {
+            ...conv,
+            messages: conv.messages.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, toolCalls: toolCallStates }
+                : msg
+            ),
+            updatedAt: Date.now(),
+          }
+        })
+      )
+    },
+    []
+  )
+
+  // 执行单个工具调用（内部函数，不触发继续对话）
+  const executeToolCallInternal = useCallback(
+    async (conversationId: string, messageId: string, toolCallId: string): Promise<{ toolCallId: string; content: string; isError: boolean } | null> => {
+      // 找到工具调用
+      const conv = conversations.find((c) => c.id === conversationId)
+      const msg = conv?.messages.find((m) => m.id === messageId)
+      const toolCallState = msg?.toolCalls?.find((tc) => tc.toolCall.id === toolCallId)
+      if (!toolCallState) return null
+
+      // 更新状态为执行中
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== conversationId) return c
+          return {
+            ...c,
+            messages: c.messages.map((m) => {
+              if (m.id !== messageId) return m
+              return {
+                ...m,
+                toolCalls: m.toolCalls?.map((tc) =>
+                  tc.toolCall.id === toolCallId
+                    ? { ...tc, status: "executing" as const }
+                    : tc
+                ),
+              }
+            }),
+          }
+        })
+      )
+
+      // 执行工具
+      const result = await executeToolCall(toolCallState.toolCall)
+
+      // 更新结果
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== conversationId) return c
+          return {
+            ...c,
+            messages: c.messages.map((m) => {
+              if (m.id !== messageId) return m
+              return {
+                ...m,
+                toolCalls: m.toolCalls?.map((tc) =>
+                  tc.toolCall.id === toolCallId
+                    ? {
+                        ...tc,
+                        status: result.isError ? ("error" as const) : ("completed" as const),
+                        result: result.content,
+                        isError: result.isError,
+                      }
+                    : tc
+                ),
+              }
+            }),
+          }
+        })
+      )
+
+      return { toolCallId, content: result.content, isError: result.isError }
+    },
+    [conversations, executeToolCall]
+  )
+
+  // 执行单个工具调用并继续对话
+  const handleExecuteToolCall = useCallback(
+    async (conversationId: string, messageId: string, toolCallId: string) => {
+      const result = await executeToolCallInternal(conversationId, messageId, toolCallId)
+      if (!result) return
+
+      // 获取当前对话的所有消息，构建历史
+      const conv = conversations.find((c) => c.id === conversationId)
+      if (!conv) return
+
+      // 找到包含工具调用的消息
+      const assistantMsg = conv.messages.find((m) => m.id === messageId)
+      if (!assistantMsg) return
+      const remainingUnresolved =
+        assistantMsg.toolCalls?.filter(
+          (tc) =>
+            (tc.status === "pending" || tc.status === "executing") &&
+            tc.toolCall.id !== toolCallId
+        ).length || 0
+      if (remainingUnresolved > 0) return
+      if (countUnresolvedToolCalls(conv.messages, new Set([toolCallId])) > 0) return
+
+      // 构建消息历史（包含工具结果）
+      const historyMessages: ChatMessage[] = buildHistoryMessages(conv.messages, {
+        [result.toolCallId]: result.content,
+      })
+
+      // 预生成新的 AI 消息 ID
+      const newAssistantMessageId = Date.now().toString()
+      setStreamingMessageId(newAssistantMessageId)
+
+      // 处理流式内容更新
+      const handleDelta = (delta: string) => {
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== conversationId) return c
+
+            const existingAssistantMsg = c.messages.find(
+              (msg) => msg.id === newAssistantMessageId
+            )
+
+            if (existingAssistantMsg) {
+              return {
+                ...c,
+                messages: c.messages.map((msg) =>
+                  msg.id === newAssistantMessageId
+                    ? { ...msg, content: msg.content + delta }
+                    : msg
+                ),
+                updatedAt: Date.now(),
+              }
+            } else {
+              const newMessage: Message = {
+                id: newAssistantMessageId,
+                role: "assistant",
+                content: delta,
+                timestamp: Date.now(),
+              }
+              return {
+                ...c,
+                messages: [...c.messages, newMessage],
+                updatedAt: Date.now(),
+              }
+            }
+          })
+        )
+      }
+
+      try {
+        // 继续对话，让 AI 处理工具结果
+        await sendMessageWithTools(
+          historyMessages,
+          handleDelta,
+          (toolCalls) => handleToolCallsReceived(toolCalls, conversationId, newAssistantMessageId),
+          selectedModel || undefined
+        )
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : t("chatError")
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== conversationId) return c
+            const existingMsg = c.messages.find((msg) => msg.id === newAssistantMessageId)
+            if (existingMsg) {
+              return {
+                ...c,
+                messages: c.messages.map((msg) =>
+                  msg.id === newAssistantMessageId
+                    ? { ...msg, content: `❌ ${errorMessage}` }
+                    : msg
+                ),
+              }
+            } else {
+              return {
+                ...c,
+                messages: [
+                  ...c.messages,
+                  {
+                    id: newAssistantMessageId,
+                    role: "assistant" as const,
+                    content: `❌ ${errorMessage}`,
+                    timestamp: Date.now(),
+                  },
+                ],
+              }
+            }
+          })
+        )
+      } finally {
+        setStreamingMessageId(null)
+      }
+    },
+    [conversations, executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
+  )
+
+  // 取消工具调用
+  const handleCancelToolCall = useCallback(
+    (conversationId: string, messageId: string, toolCallId: string) => {
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== conversationId) return c
+          return {
+            ...c,
+            messages: c.messages.map((m) => {
+              if (m.id !== messageId) return m
+              return {
+                ...m,
+                toolCalls: m.toolCalls?.filter((tc) => tc.toolCall.id !== toolCallId),
+              }
+            }),
+          }
+        })
+      )
+    },
+    []
+  )
+
+  // 执行所有待处理的工具调用并继续对话
+  const handleExecuteAllToolCalls = useCallback(
+    async (conversationId: string, messageId: string) => {
+      const conv = conversations.find((c) => c.id === conversationId)
+      const msg = conv?.messages.find((m) => m.id === messageId)
+      const pendingToolCalls = msg?.toolCalls?.filter((tc) => tc.status === "pending") || []
+
+      if (pendingToolCalls.length === 0) return
+
+      // 执行所有工具并收集结果
+      const results: Array<{ toolCallId: string; content: string; isError: boolean }> = []
+      for (const tc of pendingToolCalls) {
+        const result = await executeToolCallInternal(conversationId, messageId, tc.toolCall.id)
+        if (result) {
+          results.push(result)
+        }
+      }
+
+      if (results.length === 0) return
+
+      // 重新获取对话（因为状态可能已更新）
+      const updatedConv = conversations.find((c) => c.id === conversationId)
+      if (!updatedConv) return
+
+      const ignoreIds = new Set(results.map((r) => r.toolCallId))
+      if (countUnresolvedToolCalls(updatedConv.messages, ignoreIds) > 0) return
+
+      const toolResultOverrides = results.reduce<Record<string, string>>((acc, r) => {
+        acc[r.toolCallId] = r.content
+        return acc
+      }, {})
+
+      // 构建消息历史（包含所有工具结果）
+      const historyMessages: ChatMessage[] = buildHistoryMessages(updatedConv.messages, toolResultOverrides)
+
+      // 预生成新的 AI 消息 ID
+      const newAssistantMessageId = Date.now().toString()
+      setStreamingMessageId(newAssistantMessageId)
+
+      // 处理流式内容更新
+      const handleDelta = (delta: string) => {
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== conversationId) return c
+
+            const existingAssistantMsg = c.messages.find(
+              (m) => m.id === newAssistantMessageId
+            )
+
+            if (existingAssistantMsg) {
+              return {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === newAssistantMessageId
+                    ? { ...m, content: m.content + delta }
+                    : m
+                ),
+                updatedAt: Date.now(),
+              }
+            } else {
+              const newMessage: Message = {
+                id: newAssistantMessageId,
+                role: "assistant",
+                content: delta,
+                timestamp: Date.now(),
+              }
+              return {
+                ...c,
+                messages: [...c.messages, newMessage],
+                updatedAt: Date.now(),
+              }
+            }
+          })
+        )
+      }
+
+      try {
+        // 继续对话，让 AI 处理工具结果
+        await sendMessageWithTools(
+          historyMessages,
+          handleDelta,
+          (toolCalls) => handleToolCallsReceived(toolCalls, conversationId, newAssistantMessageId),
+          selectedModel || undefined
+        )
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : t("chatError")
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== conversationId) return c
+            const existingMsg = c.messages.find((m) => m.id === newAssistantMessageId)
+            if (existingMsg) {
+              return {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === newAssistantMessageId
+                    ? { ...m, content: `❌ ${errorMessage}` }
+                    : m
+                ),
+              }
+            } else {
+              return {
+                ...c,
+                messages: [
+                  ...c.messages,
+                  {
+                    id: newAssistantMessageId,
+                    role: "assistant" as const,
+                    content: `❌ ${errorMessage}`,
+                    timestamp: Date.now(),
+                  },
+                ],
+              }
+            }
+          })
+        )
+      } finally {
+        setStreamingMessageId(null)
+      }
+    },
+    [conversations, executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
+  )
+
   // 发送消息
   const handleSendMessage = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault()
       if (!inputMessage.trim() || isLoading) return
+      if (currentConversation && countUnresolvedToolCalls(currentConversation.messages) > 0) return
 
       // 清除之前的错误
       clearError()
@@ -742,7 +1256,6 @@ export default function AIAssistantPage() {
       // 预生成 AI 消息 ID（用于后续流式更新）
       const assistantMessageId = (Date.now() + 1).toString()
       let targetConversationId = currentConversationId
-      let assistantMessageCreated = false
 
       // 如果是新聊天模式，创建新会话（只包含用户消息）
       if (isNewChat || !currentConversation) {
@@ -781,10 +1294,7 @@ export default function AIAssistantPage() {
 
       // 构建历史消息
       const historyMessages: ChatMessage[] = currentConversation
-        ? currentConversation.messages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          }))
+        ? buildHistoryMessages(currentConversation.messages)
         : []
 
       // 添加当前用户消息
@@ -793,46 +1303,54 @@ export default function AIAssistantPage() {
         content: inputMessage.trim(),
       })
 
-      try {
-        // 使用流式 API，传入选中的模型
-        await sendAIMessage(historyMessages, (delta) => {
-          setConversations((prev) =>
-            prev.map((conv) => {
-              if (conv.id !== targetConversationId) return conv
+      // 处理流式内容更新
+      const handleDelta = (delta: string) => {
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== targetConversationId) return conv
 
-              // 查找是否已存在 AI 消息
-              const existingAssistantMsg = conv.messages.find(
-                (msg) => msg.id === assistantMessageId
-              )
+            // 查找是否已存在 AI 消息
+            const existingAssistantMsg = conv.messages.find(
+              (msg) => msg.id === assistantMessageId
+            )
 
-              if (existingAssistantMsg) {
-                // 已存在，追加内容
-                return {
-                  ...conv,
-                  messages: conv.messages.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { ...msg, content: msg.content + delta }
-                      : msg
-                  ),
-                  updatedAt: Date.now(),
-                }
-              } else {
-                // 不存在，创建新的 AI 消息
-                const newAssistantMessage: Message = {
-                  id: assistantMessageId,
-                  role: "assistant",
-                  content: delta,
-                  timestamp: Date.now(),
-                }
-                return {
-                  ...conv,
-                  messages: [...conv.messages, newAssistantMessage],
-                  updatedAt: Date.now(),
-                }
+            if (existingAssistantMsg) {
+              // 已存在，追加内容
+              return {
+                ...conv,
+                messages: conv.messages.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: msg.content + delta }
+                    : msg
+                ),
+                updatedAt: Date.now(),
               }
-            })
-          )
-        }, selectedModel || undefined)
+            } else {
+              // 不存在，创建新的 AI 消息
+              const newAssistantMessage: Message = {
+                id: assistantMessageId,
+                role: "assistant",
+                content: delta,
+                timestamp: Date.now(),
+              }
+              return {
+                ...conv,
+                messages: [...conv.messages, newAssistantMessage],
+                updatedAt: Date.now(),
+              }
+            }
+          })
+        )
+      }
+
+      try {
+        // 使用带工具的流式 API（默认开启）
+        await sendMessageWithTools(
+          historyMessages,
+          handleDelta,
+          (toolCalls) => handleToolCallsReceived(toolCalls, targetConversationId, assistantMessageId),
+          selectedModel || undefined
+        )
       } catch (error) {
         // 如果发生错误，创建或更新消息显示错误
         const errorMessage = error instanceof Error ? error.message : t("chatError")
@@ -875,7 +1393,7 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [inputMessage, currentConversation, currentConversationId, isLoading, isNewChat, sendAIMessage, clearError, t, selectedModel]
+    [inputMessage, currentConversation, currentConversationId, isLoading, isNewChat, sendMessageWithTools, handleToolCallsReceived, clearError, t, selectedModel]
   )
 
   // 新建对话
@@ -1013,6 +1531,7 @@ export default function AIAssistantPage() {
   // 编辑消息 - 删除该消息之后的所有消息，更新当前消息内容，重新发送
   const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
     if (!currentConversation || isLoading) return
+    if (countUnresolvedToolCalls(currentConversation.messages) > 0) return
 
     // 找到被编辑消息的索引
     const messageIndex = currentConversation.messages.findIndex(m => m.id === messageId)
@@ -1052,10 +1571,7 @@ export default function AIAssistantPage() {
 
     // 构建历史消息（编辑前的消息 + 更新后的用户消息）
     const historyMessages: ChatMessage[] = [
-      ...messagesBeforeEdit.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      })),
+      ...buildHistoryMessages(messagesBeforeEdit),
       {
         role: "user" as const,
         content: newContent,
@@ -1063,7 +1579,7 @@ export default function AIAssistantPage() {
     ]
 
     try {
-      await sendAIMessage(historyMessages, (delta) => {
+      const onDelta = (delta: string) => {
         setConversations((prev) =>
           prev.map((conv) => {
             if (conv.id !== currentConversationId) return conv
@@ -1097,7 +1613,14 @@ export default function AIAssistantPage() {
             }
           })
         )
-      }, selectedModel || undefined)
+      }
+
+      await sendMessageWithTools(
+        historyMessages,
+        onDelta,
+        (toolCalls) => handleToolCallsReceived(toolCalls, currentConversationId, assistantMessageId),
+        selectedModel || undefined
+      )
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t("chatError")
       setConversations((prev) =>
@@ -1136,7 +1659,7 @@ export default function AIAssistantPage() {
     } finally {
       setStreamingMessageId(null)
     }
-  }, [currentConversation, currentConversationId, isLoading, sendAIMessage, clearError, t, selectedModel])
+  }, [currentConversation, currentConversationId, isLoading, clearError, sendMessageWithTools, handleToolCallsReceived, t, selectedModel])
 
   // 导出对话
   const handleExportConversation = useCallback(() => {
@@ -1165,6 +1688,7 @@ export default function AIAssistantPage() {
   // 重新生成
   const handleRegenerate = useCallback(async () => {
     if (!currentConversation || currentConversation.messages.length < 2 || isLoading) return
+    if (countUnresolvedToolCalls(currentConversation.messages) > 0) return
 
     // 获取最后一条用户消息
     const lastUserMessage = currentConversation.messages
@@ -1194,13 +1718,10 @@ export default function AIAssistantPage() {
     setStreamingMessageId(assistantMessageId)
 
     // 构建历史消息（不包含最后一条 AI 消息）
-    const historyMessages: ChatMessage[] = messagesWithoutLastAI.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }))
+    const historyMessages: ChatMessage[] = buildHistoryMessages(messagesWithoutLastAI)
 
     try {
-      await sendAIMessage(historyMessages, (delta) => {
+      const onDelta = (delta: string) => {
         setConversations((prev) =>
           prev.map((conv) => {
             if (conv.id !== currentConversationId) return conv
@@ -1237,7 +1758,14 @@ export default function AIAssistantPage() {
             }
           })
         )
-      }, selectedModel || undefined)
+      }
+
+      await sendMessageWithTools(
+        historyMessages,
+        onDelta,
+        (toolCalls) => handleToolCallsReceived(toolCalls, currentConversationId, assistantMessageId),
+        selectedModel || undefined
+      )
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t("chatError")
       setConversations((prev) =>
@@ -1276,7 +1804,7 @@ export default function AIAssistantPage() {
     } finally {
       setStreamingMessageId(null)
     }
-  }, [currentConversation, currentConversationId, isLoading, sendAIMessage, t, selectedModel])
+  }, [currentConversation, currentConversationId, isLoading, sendMessageWithTools, handleToolCallsReceived, t, selectedModel])
 
   // 加载状态
   if (!mounted || !ready) {
@@ -1508,6 +2036,10 @@ export default function AIAssistantPage() {
                           isLast={isLastMessage}
                           isLoading={isLoading}
                           t={t}
+                          conversationId={currentConversationId}
+                          onExecuteToolCall={handleExecuteToolCall}
+                          onCancelToolCall={handleCancelToolCall}
+                          onExecuteAllToolCalls={handleExecuteAllToolCalls}
                         />
                       )
                     }
@@ -1524,7 +2056,7 @@ export default function AIAssistantPage() {
           <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-center pointer-events-none">
             <div className="w-full max-w-4xl mx-auto px-4 pb-4 pointer-events-auto bg-gradient-to-t from-background via-background to-transparent">
               {/* 快捷建议（对话进行中显示） */}
-              {hasMessages && !isLoading && (
+              {hasMessages && !isLoading && !hasUnresolvedToolCalls && (
                 <Suggestions className="mb-3">
                   <Suggestion
                     suggestion={t("templateRunCommandPrompt")}
@@ -1551,6 +2083,12 @@ export default function AIAssistantPage() {
               )}
 
               {/* 输入框容器 - 带背景光晕 */}
+              {hasUnresolvedToolCalls && (
+                <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{t("pendingToolsHint", { count: unresolvedToolCallCount })}</span>
+                </div>
+              )}
               <div className="relative">
                 {/* 背景光晕效果 */}
                 <div className="absolute -inset-4 bg-gradient-to-t from-primary/20 via-primary/10 to-transparent blur-xl rounded-3xl opacity-100 animate-pulse" />
@@ -1605,9 +2143,15 @@ export default function AIAssistantPage() {
                         ref={inputRef as any}
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
-                        placeholder={isConfigured ? t("inputPlaceholder") : t("aiNotConfiguredPlaceholder")}
+                        placeholder={
+                          !isConfigured
+                            ? t("aiNotConfiguredPlaceholder")
+                            : hasUnresolvedToolCalls
+                              ? t("pendingToolsPlaceholder")
+                              : t("inputPlaceholder")
+                        }
                         className="min-h-[52px] text-base"
-                        disabled={!isConfigured}
+                        disabled={!isConfigured || hasUnresolvedToolCalls}
                       />
                     </div>
                     <PromptInputToolbar>
@@ -1661,11 +2205,12 @@ export default function AIAssistantPage() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={handleFileSelect}
-                          disabled={!isConfigured}
+                          disabled={!isConfigured || hasUnresolvedToolCalls}
                           title={t("attachFile")}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
+
                       </PromptInputTools>
 
                       <div className="flex items-center gap-2">
@@ -1683,7 +2228,7 @@ export default function AIAssistantPage() {
                           </Button>
                         ) : (
                           <PromptInputSubmit
-                            disabled={!inputMessage.trim() || !isConfigured}
+                            disabled={!inputMessage.trim() || !isConfigured || hasUnresolvedToolCalls}
                             className="h-8 w-8"
                           />
                         )}

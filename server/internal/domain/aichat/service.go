@@ -27,6 +27,12 @@ type Service interface {
 	// StreamChat 流式聊天
 	StreamChat(ctx context.Context, userID uuid.UUID, req *ChatRequest, onDelta func(delta *StreamDelta) error) error
 
+	// ChatWithTools 发送带工具的聊天请求（非流式）
+	ChatWithTools(ctx context.Context, userID uuid.UUID, req *ChatRequest) (*ChatResponse, error)
+
+	// StreamChatWithTools 流式聊天（带工具）
+	StreamChatWithTools(ctx context.Context, userID uuid.UUID, req *ChatRequest, onDelta func(delta *StreamDelta) error) error
+
 	// GetEffectiveConfig 获取用户有效的AI配置
 	GetEffectiveConfig(ctx context.Context, userID uuid.UUID) (*ProviderConfig, error)
 }
@@ -34,6 +40,7 @@ type Service interface {
 type service struct {
 	aiConfigService     aiconfig.Service
 	userAIConfigService useraiconfig.Service
+	toolExecutor        *ToolExecutorService
 }
 
 // NewService 创建AI聊天服务
@@ -42,6 +49,11 @@ func NewService(aiConfigService aiconfig.Service, userAIConfigService useraiconf
 		aiConfigService:     aiConfigService,
 		userAIConfigService: userAIConfigService,
 	}
+}
+
+// SetToolExecutor 设置工具执行器（用于自动工具调用循环）
+func (s *service) SetToolExecutor(executor *ToolExecutorService) {
+	s.toolExecutor = executor
 }
 
 // parseModels 解析逗号分隔的模型字符串

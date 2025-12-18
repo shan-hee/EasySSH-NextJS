@@ -2,14 +2,24 @@ import { apiFetch, getApiUrl, getAuthHeaders, getCsrfToken } from "@/lib/api-cli
 
 // ========== 类型定义 ==========
 
+export interface ToolCall {
+  id: string
+  name: string
+  arguments: Record<string, unknown>
+  dangerous?: boolean
+}
+
 export interface ChatMessage {
-  role: "user" | "assistant" | "system"
+  role: "user" | "assistant" | "system" | "tool"
   content: string
+  tool_calls?: ToolCall[]
+  tool_call_id?: string
 }
 
 export interface ChatRequest {
   messages: ChatMessage[]
   model?: string
+  enable_tools?: boolean
 }
 
 export interface ChatUsage {
@@ -22,6 +32,24 @@ export interface ChatResponse {
   content: string
   model?: string
   usage?: ChatUsage
+  tool_calls?: ToolCall[]
+}
+
+export interface ToolDefinition {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+  dangerous: boolean
+}
+
+export interface ToolExecuteRequest {
+  tool_call: ToolCall
+}
+
+export interface ToolExecuteResponse {
+  tool_call_id: string
+  content: string
+  is_error?: boolean
 }
 
 export interface AIConfigStatus {
@@ -37,6 +65,7 @@ interface StreamEvent {
   content?: string
   done?: boolean
   error?: string
+  tool_calls?: ToolCall[]
 }
 
 // ========== API 实现 ==========
@@ -140,4 +169,110 @@ export async function streamChat(
  */
 export async function getAIConfig(): Promise<AIConfigStatus> {
   return apiFetch<AIConfigStatus>("/ai/config", { method: "GET" })
+}
+
+// ========== 工具调用 API ==========
+
+/**
+ * 获取可用工具列表
+ */
+export async function getTools(): Promise<ToolDefinition[]> {
+  return apiFetch<ToolDefinition[]>("/ai/tools", { method: "GET" })
+}
+
+/**
+ * 执行工具
+ */
+export async function executeTool(toolCall: ToolCall): Promise<ToolExecuteResponse> {
+  return apiFetch<ToolExecuteResponse>("/ai/tools/execute", {
+    method: "POST",
+    body: { tool_call: toolCall },
+  })
+}
+
+/**
+ * 发送带工具的流式聊天请求
+ */
+export async function streamChatWithTools(
+  request: ChatRequest,
+  onDelta: (content: string) => void,
+  onToolCalls: (toolCalls: ToolCall[]) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const url = getApiUrl("/ai/chat/tools")
+  const csrfToken = getCsrfToken()
+
+  const headers: Record<string, string> = {
+    ...getAuthHeaders(),
+    "Content-Type": "application/json",
+  }
+  if (csrfToken) {
+    headers["X-CSRF-Token"] = csrfToken
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...request, stream: true, enable_tools: true }),
+    credentials: "include",
+    signal,
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    let errorMessage = `API error: ${response.status}`
+    try {
+      const errorJson = JSON.parse(errorText)
+      errorMessage = errorJson.message || errorJson.error || errorMessage
+    } catch {
+      // 使用默认错误消息
+    }
+    throw new Error(errorMessage)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error("No response body")
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() || ""
+
+      for (const line of lines) {
+        if (!line.trim() || !line.startsWith("data: ")) continue
+
+        const data = line.slice(6)
+        if (data === "[DONE]") return
+
+        try {
+          const event: StreamEvent = JSON.parse(data)
+          if (event.error) throw new Error(event.error)
+          if (event.content) onDelta(event.content)
+          if (event.tool_calls && event.tool_calls.length > 0) {
+            onToolCalls(event.tool_calls)
+          }
+          if (event.done) return
+        } catch (e) {
+          if (e instanceof SyntaxError) continue
+          throw e
+        }
+      }
+    }
+  } finally {
+    try {
+      await reader.cancel()
+    } catch {
+      // ignore
+    }
+    reader.releaseLock()
+  }
 }

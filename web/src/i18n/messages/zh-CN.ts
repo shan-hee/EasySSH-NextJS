@@ -1535,6 +1535,8 @@ const messages = {
     thinkingProcess: "思考过程",
     notConfigured: "未配置",
     attachFile: "添加附件",
+    pendingToolsHint: "有 {count} 个工具操作待确认，请先执行或跳过后再继续对话。",
+    pendingToolsPlaceholder: "请先处理上方待确认的工具操作...",
   },
   auth: {
     registerTitle: "注册 {systemName} 账号",
