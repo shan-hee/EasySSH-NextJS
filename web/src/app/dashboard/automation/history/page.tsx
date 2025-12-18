@@ -89,10 +89,6 @@ export default function AutomationHistoryPage() {
     loadData()
   }, [ready, loadData])
 
-  if (!ready) {
-    return null
-  }
-
   const getStatusText = (status: string) => {
     switch (status) {
       case "success":
@@ -332,6 +328,11 @@ export default function AutomationHistoryPage() {
       { label: t("typeFilterManual"), value: "manual" },
     ],
   }), [t])
+
+  // 认证未就绪时返回 null（所有 hooks 已在上方调用完毕）
+  if (!ready) {
+    return null
+  }
 
   return (
     <>
