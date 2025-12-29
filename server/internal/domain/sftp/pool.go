@@ -60,58 +60,20 @@ func (pc *PooledClient) IsHealthy() bool {
 	return pc.sshConn.IsHealthy()
 }
 
-// DeleteDirectory 覆写目录删除：移动到回收站并登记后台清理
+// DeleteDirectory 直接删除目录
 func (pc *PooledClient) DeleteDirectory(path string) error {
 	if pc.Client == nil {
 		return fmt.Errorf("sftp client not initialized")
 	}
-
-	// 先获取文件信息，用于记录准确的元数据
-	// 即使获取失败也继续删除，但会记录警告日志
-	info, infoErr := pc.Client.GetFileInfo(path)
-	if infoErr != nil && pc.pool != nil {
-		pc.pool.log.Warn("failed to get file info before delete, metadata may be incomplete",
-			logger.String("path", path),
-			logger.Err(infoErr))
-	}
-
-	trashDir, trashPath, err := pc.Client.MoveToTrash(path)
-	if err != nil {
-		return err
-	}
-	deletedAt := time.Now()
-	if pc.pool != nil && trashDir != "" {
-		pc.pool.registerTrashDir(pc.userID, pc.serverID, trashDir)
-		pc.pool.registerTrashItem(pc.userID, pc.serverID, path, trashDir, trashPath, info, deletedAt)
-	}
-	return nil
+	return pc.Client.DeleteDirectory(path)
 }
 
-// DeleteFile 覆写文件删除：移动到回收站并登记后台清理
+// DeleteFile 直接删除文件
 func (pc *PooledClient) DeleteFile(path string) error {
 	if pc.Client == nil {
 		return fmt.Errorf("sftp client not initialized")
 	}
-
-	// 先获取文件信息，用于记录准确的元数据
-	// 即使获取失败也继续删除，但会记录警告日志
-	info, infoErr := pc.Client.GetFileInfo(path)
-	if infoErr != nil && pc.pool != nil {
-		pc.pool.log.Warn("failed to get file info before delete, metadata may be incomplete",
-			logger.String("path", path),
-			logger.Err(infoErr))
-	}
-
-	trashDir, trashPath, err := pc.Client.MoveToTrash(path)
-	if err != nil {
-		return err
-	}
-	deletedAt := time.Now()
-	if pc.pool != nil && trashDir != "" {
-		pc.pool.registerTrashDir(pc.userID, pc.serverID, trashDir)
-		pc.pool.registerTrashItem(pc.userID, pc.serverID, path, trashDir, trashPath, info, deletedAt)
-	}
-	return nil
+	return pc.Client.DeleteFile(path)
 }
 
 // pooledSSHConn 池化的 SSH 连接

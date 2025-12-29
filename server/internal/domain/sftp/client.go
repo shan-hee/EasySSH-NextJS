@@ -278,26 +278,20 @@ func (c *Client) CreateDirectories(path string) error {
 	return nil
 }
 
-// DeleteFile 删除文件
+// DeleteFile 删除文件（直接删除）
 func (c *Client) DeleteFile(path string) error {
-	// UX 优化：仅移动到 .trash，避免请求内执行 rm -rf。
-	// 后台清理由池化层/定时任务处理（例如按保留期删除 .trash 中的旧条目）。
-	_, _, err := c.MoveToTrash(path)
-	if err != nil {
-		return fmt.Errorf("failed to move file to trash: %w", err)
+	if c.sftpClient == nil {
+		return fmt.Errorf("sftp client not initialized")
+	}
+	if err := c.sftpClient.Remove(path); err != nil {
+		return fmt.Errorf("failed to delete file: %w", err)
 	}
 	return nil
 }
 
-// DeleteDirectory 删除目录
+// DeleteDirectory 删除目录（直接删除）
 func (c *Client) DeleteDirectory(path string) error {
-	// UX 优化：仅移动到 .trash，避免请求内执行 rm -rf。
-	// 后台清理由池化层/定时任务处理（例如按保留期删除 .trash 中的旧条目）。
-	_, _, err := c.MoveToTrash(path)
-	if err != nil {
-		return fmt.Errorf("failed to move directory to trash: %w", err)
-	}
-	return nil
+	return c.removeAll(path)
 }
 
 // RemoveFile 永久删除文件（用于清理半文件/后台清理等）

@@ -566,6 +566,12 @@ const messages = {
     toastChmodLoading: "正在修改权限: {file}",
     toastChmodSuccess: "修改权限成功: {file}",
     toastChmodFailed: "修改权限失败：{message}",
+    // 删除确认弹窗
+    deleteConfirmTitle: "确认删除",
+    deleteConfirmTitleBatch: "确认删除 {count} 个项目",
+    deleteConfirmDescription: "此操作将永久删除该文件，无法恢复。确定要继续吗？",
+    deleteConfirmDescriptionDirectory: "此操作将永久删除该文件夹及其所有内容，无法恢复。确定要继续吗？",
+    deleteConfirmButton: "删除",
   },
   transfers: {
     pageTitle: "传输记录",

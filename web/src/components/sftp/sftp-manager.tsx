@@ -88,6 +88,7 @@ import { useFileListVirtualizer } from "@/hooks/use-file-list-virtualizer"
 import { toast } from "sonner"
 import { computeFloatingPosition } from "@/lib/overlay-position"
 import { setDragSourceSessionId } from "@/lib/drag-state"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 
 type FileItem = Pick<SftpFileItem, "name" | "type" | "size" | "modified" | "permissions"> & {
   sizeBytes?: number
@@ -249,6 +250,18 @@ export function SftpManager(props: SftpManagerProps) {
     fileName: "",
     filePath: "",
     permissions: "",
+  })
+  // 删除确认弹窗状态
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    isOpen: boolean
+    fileName: string | null
+    fileNames: string[]
+    isDirectory: boolean
+  }>({
+    isOpen: false,
+    fileName: null,
+    fileNames: [],
+    isDirectory: false,
   })
   const [pathInputValue, setPathInputValue] = useState(currentPath)
   const [isEditingPath, setIsEditingPath] = useState(false)
@@ -991,6 +1004,43 @@ export function SftpManager(props: SftpManagerProps) {
     }
   }, [selectedFiles, onDelete, onBatchDelete])
 
+  // 请求删除单个文件（显示确认弹窗）
+  const requestDelete = useCallback((fileName: string) => {
+    const file = filteredFiles.find(f => f.name === fileName)
+    setDeleteConfirmDialog({
+      isOpen: true,
+      fileName,
+      fileNames: [],
+      isDirectory: file?.type === 'directory',
+    })
+  }, [filteredFiles])
+
+  // 请求批量删除（显示确认弹窗）
+  const requestBatchDelete = useCallback(() => {
+    if (selectedFiles.length === 0) return
+    const hasDirectory = selectedFiles.some(name =>
+      filteredFiles.find(f => f.name === name)?.type === 'directory'
+    )
+    setDeleteConfirmDialog({
+      isOpen: true,
+      fileName: null,
+      fileNames: [...selectedFiles],
+      isDirectory: hasDirectory,
+    })
+  }, [selectedFiles, filteredFiles])
+
+  // 确认删除
+  const confirmDelete = useCallback(async () => {
+    if (deleteConfirmDialog.fileNames.length > 0) {
+      // 批量删除
+      await handleBatchDelete()
+    } else if (deleteConfirmDialog.fileName) {
+      // 单个删除
+      onDelete(deleteConfirmDialog.fileName)
+    }
+    setDeleteConfirmDialog({ isOpen: false, fileName: null, fileNames: [], isDirectory: false })
+  }, [deleteConfirmDialog, handleBatchDelete, onDelete])
+
   // 清除已完成任务 - 使用外部传入的处理函数
   const handleClearCompleted = () => {
     if (onClearCompletedTransfers) {
@@ -1016,7 +1066,7 @@ export function SftpManager(props: SftpManagerProps) {
       // Delete/Backspace: 删除选中文件
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFiles.length > 0) {
         e.preventDefault()
-        handleBatchDelete()
+        requestBatchDelete()
       }
 
       // F2: 重命名 (仅单选时)
@@ -1074,7 +1124,7 @@ export function SftpManager(props: SftpManagerProps) {
     editingSessionLabel,
     editorState.isOpen,
     onRefresh,
-    handleBatchDelete,
+    requestBatchDelete,
     handleBatchDownload,
     handleSelectAll,
   ])
@@ -2290,7 +2340,7 @@ export function SftpManager(props: SftpManagerProps) {
                                         })
                                         break
                                       case "delete":
-                                        onDelete(file.name)
+                                        requestDelete(file.name)
                                         break
                                     }
                                   }}
@@ -2448,7 +2498,7 @@ export function SftpManager(props: SftpManagerProps) {
                                       })
                                       break
                                     case "delete":
-                                      onDelete(file.name)
+                                      requestDelete(file.name)
                                       break
                                   }
                                 }}
@@ -2485,6 +2535,21 @@ export function SftpManager(props: SftpManagerProps) {
         fileName={chmodDialog.fileName}
         currentPermissions={chmodDialog.permissions}
         onConfirm={handleChmod}
+      />
+
+      {/* 删除确认对话框 */}
+      <ConfirmDialog
+        open={deleteConfirmDialog.isOpen}
+        onOpenChange={(open) => setDeleteConfirmDialog(prev => ({ ...prev, isOpen: open }))}
+        title={deleteConfirmDialog.fileNames.length > 0
+          ? tSftp("deleteConfirmTitleBatch", { count: deleteConfirmDialog.fileNames.length })
+          : tSftp("deleteConfirmTitle")}
+        description={deleteConfirmDialog.isDirectory
+          ? tSftp("deleteConfirmDescriptionDirectory")
+          : tSftp("deleteConfirmDescription")}
+        confirmText={tSftp("deleteConfirmButton")}
+        variant="destructive"
+        onConfirm={confirmDelete}
       />
 
 
@@ -2680,9 +2745,9 @@ export function SftpManager(props: SftpManagerProps) {
                         break
                       case "delete":
                         if (selectedFiles.length > 1) {
-                          handleBatchDelete()
+                          requestBatchDelete()
                         } else if (contextMenu.fileName) {
-                          onDelete(contextMenu.fileName)
+                          requestDelete(contextMenu.fileName)
                         }
                         break
                     }

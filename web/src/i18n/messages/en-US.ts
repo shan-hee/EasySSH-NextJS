@@ -615,6 +615,12 @@ const messages = {
     toastChmodLoading: "Changing permissions: {file}",
     toastChmodSuccess: "Permissions changed: {file}",
     toastChmodFailed: "Failed to change permissions: {message}",
+    // Delete confirmation dialog
+    deleteConfirmTitle: "Confirm Delete",
+    deleteConfirmTitleBatch: "Confirm Delete {count} Items",
+    deleteConfirmDescription: "This action will permanently delete the file and cannot be undone. Are you sure you want to continue?",
+    deleteConfirmDescriptionDirectory: "This action will permanently delete the folder and all its contents. This cannot be undone. Are you sure you want to continue?",
+    deleteConfirmButton: "Delete",
   },
   transfers: {
     pageTitle: "Transfer history",
