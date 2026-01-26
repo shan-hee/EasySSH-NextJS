@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 interface ContainerListProps {
   containers: DockerContainer[]
   serverId: string
+  sessionId: string
   onRefresh: () => void
   isLoading?: boolean
 }
@@ -25,6 +26,7 @@ interface ContainerListProps {
 export function ContainerList({
   containers,
   serverId,
+  sessionId,
   onRefresh,
   isLoading = false,
 }: ContainerListProps) {
@@ -111,6 +113,7 @@ export function ContainerList({
               key={container.id}
               container={container}
               serverId={serverId}
+              sessionId={sessionId}
               onRefresh={onRefresh}
               onViewLogs={handleViewLogs}
             />

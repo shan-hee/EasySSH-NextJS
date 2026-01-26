@@ -691,8 +691,8 @@ func main() {
 		dockerRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			dockerRoutes.GET("/containers", dockerHandler.ListContainers)                // 容器列表
-			dockerRoutes.GET("/containers/sse", dockerHandler.ListContainersSSE)         // 容器列表（SSE，含更新检查）
-			dockerRoutes.GET("/containers/:id/logs", dockerHandler.GetContainerLogs)     // 容器日志
+			dockerRoutes.GET("/containers/:id/logs", dockerHandler.GetContainerLogs)         // 容器日志
+			dockerRoutes.GET("/containers/:id/check-update", dockerHandler.CheckContainerImageUpdate) // 检查镜像更新
 			dockerRoutes.POST("/containers/:id/start", dockerHandler.StartContainer)     // 启动容器
 			dockerRoutes.POST("/containers/:id/stop", dockerHandler.StopContainer)       // 停止容器
 			dockerRoutes.POST("/containers/:id/restart", dockerHandler.RestartContainer) // 重启容器

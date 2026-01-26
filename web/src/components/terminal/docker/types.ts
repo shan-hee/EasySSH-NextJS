@@ -101,3 +101,78 @@ export const STATE_TEXT_COLORS: Record<ContainerState, string> = {
   restarting: 'text-blue-600 dark:text-blue-400',
   dead: 'text-red-600 dark:text-red-400',
 }
+
+// Compose 容器信息
+export interface ComposeInfo {
+  isCompose: boolean
+  project?: string
+  service?: string
+  workDir?: string
+  version?: string // Compose 版本 (1.x 或 2.x)
+}
+
+// Compose 标签常量
+const COMPOSE_LABELS = {
+  PROJECT: 'com.docker.compose.project',
+  SERVICE: 'com.docker.compose.service',
+  WORK_DIR: 'com.docker.compose.project.working_dir',
+  VERSION: 'com.docker.compose.version',
+  CONFIG_FILES: 'com.docker.compose.project.config_files',
+} as const
+
+/**
+ * 从容器标签中检测 Compose 信息
+ */
+export function getComposeInfo(labels: Record<string, string>): ComposeInfo {
+  const project = labels[COMPOSE_LABELS.PROJECT]
+  const service = labels[COMPOSE_LABELS.SERVICE]
+  const workDir = labels[COMPOSE_LABELS.WORK_DIR]
+  const version = labels[COMPOSE_LABELS.VERSION]
+  const configFiles = labels[COMPOSE_LABELS.CONFIG_FILES]
+
+  if (!project || !service) {
+    return { isCompose: false }
+  }
+
+  // 尝试从 config_files 标签中提取工作目录（如果 workDir 不存在）
+  let resolvedWorkDir = workDir
+  if (!resolvedWorkDir && configFiles) {
+    // config_files 格式可能是: /path/to/docker-compose.yml 或 /path/to/docker-compose.yml,/path/to/override.yml
+    const firstConfigFile = configFiles.split(',')[0]?.trim()
+    if (firstConfigFile) {
+      // 提取目录路径
+      const lastSlash = firstConfigFile.lastIndexOf('/')
+      if (lastSlash > 0) {
+        resolvedWorkDir = firstConfigFile.substring(0, lastSlash)
+      }
+    }
+  }
+
+  return {
+    isCompose: true,
+    project,
+    service,
+    workDir: resolvedWorkDir,
+    version,
+  }
+}
+
+/**
+ * 生成更新并重启命令
+ * @param container 容器信息
+ * @param composeInfo Compose 信息
+ * @returns 更新命令
+ */
+export function generateUpdateRestartCommand(
+  container: DockerContainer,
+  composeInfo: ComposeInfo
+): string {
+  if (composeInfo.isCompose && composeInfo.workDir && composeInfo.service) {
+    // Compose 容器：使用 docker compose 命令
+    // 优先使用 docker compose (v2)，如果失败会自动回退
+    return `cd "${composeInfo.workDir}" && docker compose pull ${composeInfo.service} && docker compose up -d ${composeInfo.service}`
+  }
+
+  // 非 Compose 容器：仅拉取镜像
+  return `docker pull ${container.image}`
+}

@@ -18,17 +18,17 @@ import (
 
 // DockerContainer Docker 容器信息
 type DockerContainer struct {
-	ID        string            `json:"id"`
-	Names     []string          `json:"names"`
-	Image     string            `json:"image"`
-	ImageID   string            `json:"imageId"`
-	Command   string            `json:"command"`
-	Created   int64             `json:"created"`
-	Status    string            `json:"status"`
-	State     string            `json:"state"`
-	Ports     []DockerPort      `json:"ports"`
-	Labels    map[string]string `json:"labels"`
-	Mounts    []DockerMount     `json:"mounts"`
+	ID      string            `json:"id"`
+	Names   []string          `json:"names"`
+	Image   string            `json:"image"`
+	ImageID string            `json:"imageId"`
+	Command string            `json:"command"`
+	Created int64             `json:"created"`
+	Status  string            `json:"status"`
+	State   string            `json:"state"`
+	Ports   []DockerPort      `json:"ports"`
+	Labels  map[string]string `json:"labels"`
+	Mounts  []DockerMount     `json:"mounts"`
 }
 
 // DockerPort 端口映射
@@ -166,96 +166,362 @@ func (h *DockerHandler) ListContainers(c *gin.Context) {
 	}
 	defer h.releaseConnection(c, serverID)
 
-	cmd := "docker ps --format '{{json .}}'"
-	if all {
-		cmd = "docker ps -a --format '{{json .}}'"
-	}
-
-	output, err := h.executeCommand(pooledConn.Client, cmd)
+	containers, err := h.listContainersFast(pooledConn.Client, all)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "docker_error", err.Error())
 		return
 	}
-
-	containers := h.parseContainers(output)
 	RespondSuccess(c, map[string]interface{}{
 		"data":  containers,
 		"total": len(containers),
 	})
 }
 
-// SSE 事件类型
-type SSEContainerEvent struct {
-	Type string      `json:"type"` // "containers" | "update_status" | "done"
-	Data interface{} `json:"data"`
+const dockerSockNoCurlSentinel = "__EASYSSH_NO_CURL__"
+
+func (h *DockerHandler) listContainersFast(client *sshDomain.Client, all bool) ([]DockerContainer, error) {
+	containers, ok, err := h.listContainersViaDockerSock(client, all)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return containers, nil
+	}
+	return h.listContainersViaInspect(client, all)
 }
 
-// ListContainersSSE 获取容器列表（SSE 流式响应，包含更新检查）
-func (h *DockerHandler) ListContainersSSE(c *gin.Context) {
-	serverID := c.Param("serverId")
-	all := c.DefaultQuery("all", "true") == "true"
-
-	// 设置 SSE 响应头
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-
-	pooledConn, err := h.getPooledConnection(c, serverID)
-	if err != nil {
-		h.sendSSEEvent(c, "error", map[string]string{"error": err.Error()})
-		return
-	}
-	defer h.releaseConnection(c, serverID)
-
-	cmd := "docker ps --format '{{json .}}'"
+func (h *DockerHandler) listContainersViaDockerSock(client *sshDomain.Client, all bool) ([]DockerContainer, bool, error) {
+	allFlag := 0
 	if all {
-		cmd = "docker ps -a --format '{{json .}}'"
+		allFlag = 1
 	}
 
-	output, err := h.executeCommand(pooledConn.Client, cmd)
+	cmd := fmt.Sprintf(
+		`sh -lc 'if command -v curl >/dev/null 2>&1; then curl -sS --fail --max-time 5 --unix-socket /var/run/docker.sock "http://localhost/containers/json?all=%d"; else echo "%s"; fi'`,
+		allFlag,
+		dockerSockNoCurlSentinel,
+	)
+
+	output, err := h.executeCommand(client, cmd)
 	if err != nil {
-		h.sendSSEEvent(c, "error", map[string]string{"error": err.Error()})
-		return
+		// curl 不可用/失败时回退到 inspect 路径
+		return nil, false, nil
 	}
 
-	containers := h.parseContainers(output)
+	output = strings.TrimSpace(output)
+	if output == dockerSockNoCurlSentinel {
+		return nil, false, nil
+	}
 
-	// 1. 先发送容器列表
-	h.sendSSEEvent(c, "containers", map[string]interface{}{
-		"data":  containers,
-		"total": len(containers),
-	})
+	containers, err := h.parseContainersFromDockerSock(output)
+	if err != nil {
+		return nil, true, err
+	}
+	return containers, true, nil
+}
 
-	// 2. 收集运行中的容器
-	var runningContainers []DockerContainer
-	for _, container := range containers {
-		if container.State == "running" {
-			runningContainers = append(runningContainers, container)
+type dockerSockContainerSummary struct {
+	ID      string            `json:"Id"`
+	Names   []string          `json:"Names"`
+	Image   string            `json:"Image"`
+	ImageID string            `json:"ImageID"`
+	Command string            `json:"Command"`
+	Created int64             `json:"Created"`
+	State   string            `json:"State"`
+	Status  string            `json:"Status"`
+	Ports   []DockerPort      `json:"Ports"`
+	Labels  map[string]string `json:"Labels"`
+	Mounts  []dockerSockMount `json:"Mounts"`
+}
+
+type dockerSockMount struct {
+	Type        string `json:"Type"`
+	Source      string `json:"Source"`
+	Destination string `json:"Destination"`
+	Mode        string `json:"Mode"`
+	RW          bool   `json:"RW"`
+}
+
+func (h *DockerHandler) parseContainersFromDockerSock(data string) ([]DockerContainer, error) {
+	data = strings.TrimSpace(data)
+	if data == "" || data == "[]" {
+		return []DockerContainer{}, nil
+	}
+
+	var raw []dockerSockContainerSummary
+	if err := json.Unmarshal([]byte(data), &raw); err != nil {
+		return nil, err
+	}
+
+	containers := make([]DockerContainer, 0, len(raw))
+	for _, c := range raw {
+		names := make([]string, 0, len(c.Names))
+		for _, n := range c.Names {
+			n = strings.TrimSpace(strings.TrimPrefix(n, "/"))
+			if n != "" {
+				names = append(names, n)
+			}
+		}
+
+		mounts := make([]DockerMount, 0, len(c.Mounts))
+		for _, m := range c.Mounts {
+			mounts = append(mounts, DockerMount{
+				Type:        m.Type,
+				Source:      m.Source,
+				Destination: m.Destination,
+				Mode:        m.Mode,
+				RW:          m.RW,
+			})
+		}
+
+		labels := c.Labels
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+
+		containers = append(containers, DockerContainer{
+			ID:      c.ID,
+			Names:   names,
+			Image:   c.Image,
+			ImageID: c.ImageID,
+			Command: c.Command,
+			Created: c.Created,
+			Status:  c.Status,
+			State:   strings.ToLower(c.State),
+			Ports:   c.Ports,
+			Labels:  labels,
+			Mounts:  mounts,
+		})
+	}
+
+	return containers, nil
+}
+
+type dockerPSMeta struct {
+	Status string
+	State  string
+	Names  []string
+}
+
+type dockerInspectPortBinding struct {
+	HostIP   string `json:"HostIp"`
+	HostPort string `json:"HostPort"`
+}
+
+type dockerInspectContainer struct {
+	ID      string   `json:"Id"`
+	Name    string   `json:"Name"`
+	Image   string   `json:"Image"`
+	Created string   `json:"Created"`
+	Path    string   `json:"Path"`
+	Args    []string `json:"Args"`
+	State   struct {
+		Status string `json:"Status"`
+	} `json:"State"`
+	Config struct {
+		Image  string            `json:"Image"`
+		Labels map[string]string `json:"Labels"`
+	} `json:"Config"`
+	NetworkSettings struct {
+		Ports map[string][]dockerInspectPortBinding `json:"Ports"`
+	} `json:"NetworkSettings"`
+	Mounts []struct {
+		Type        string `json:"Type"`
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+		Mode        string `json:"Mode"`
+		RW          bool   `json:"RW"`
+	} `json:"Mounts"`
+}
+
+func (h *DockerHandler) listContainersViaInspect(client *sshDomain.Client, all bool) ([]DockerContainer, error) {
+	psFlag := ""
+	if all {
+		psFlag = "-a"
+	}
+
+	metaCmd := fmt.Sprintf(`docker ps %s --no-trunc --format '{{.ID}}\t{{.Status}}\t{{.State}}\t{{.Names}}'`, psFlag)
+	metaOut, err := h.executeCommand(client, metaCmd)
+	if err != nil {
+		return nil, err
+	}
+	meta := h.parseDockerPSMeta(metaOut)
+
+	idsCmd := fmt.Sprintf("docker ps %s -q", psFlag)
+	idsOut, err := h.executeCommand(client, idsCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := splitNonEmptyLines(idsOut)
+	if len(ids) == 0 {
+		return []DockerContainer{}, nil
+	}
+
+	inspectCmd := fmt.Sprintf("docker inspect %s", strings.Join(ids, " "))
+	inspectOut, err := h.executeCommand(client, inspectCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	inspectOut = strings.TrimSpace(inspectOut)
+	var inspected []dockerInspectContainer
+	if err := json.Unmarshal([]byte(inspectOut), &inspected); err != nil {
+		return nil, err
+	}
+
+	containers := make([]DockerContainer, 0, len(inspected))
+	for _, ic := range inspected {
+		labels := ic.Config.Labels
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+
+		names := []string{}
+		if m, ok := meta[ic.ID]; ok && len(m.Names) > 0 {
+			names = m.Names
+		} else if ic.Name != "" {
+			name := strings.TrimPrefix(strings.TrimSpace(ic.Name), "/")
+			if name != "" {
+				names = []string{name}
+			}
+		}
+
+		createdUnix := int64(0)
+		if ic.Created != "" {
+			if t, err := time.Parse(time.RFC3339Nano, ic.Created); err == nil {
+				createdUnix = t.Unix()
+			} else if t, err := time.Parse(time.RFC3339, ic.Created); err == nil {
+				createdUnix = t.Unix()
+			}
+		}
+
+		mounts := make([]DockerMount, 0, len(ic.Mounts))
+		for _, m := range ic.Mounts {
+			mounts = append(mounts, DockerMount{
+				Type:        m.Type,
+				Source:      m.Source,
+				Destination: m.Destination,
+				Mode:        m.Mode,
+				RW:          m.RW,
+			})
+		}
+
+		status := ""
+		state := strings.ToLower(ic.State.Status)
+		if m, ok := meta[ic.ID]; ok {
+			status = m.Status
+			if m.State != "" {
+				state = strings.ToLower(m.State)
+			}
+		}
+		if status == "" {
+			status = ic.State.Status
+		}
+
+		command := strings.TrimSpace(strings.Join(append([]string{ic.Path}, ic.Args...), " "))
+
+		containers = append(containers, DockerContainer{
+			ID:      ic.ID,
+			Names:   names,
+			Image:   ic.Config.Image,
+			ImageID: ic.Image,
+			Command: command,
+			Created: createdUnix,
+			Status:  status,
+			State:   state,
+			Ports:   parseInspectPorts(ic.NetworkSettings.Ports),
+			Labels:  labels,
+			Mounts:  mounts,
+		})
+	}
+
+	return containers, nil
+}
+
+func (h *DockerHandler) parseDockerPSMeta(output string) map[string]dockerPSMeta {
+	result := make(map[string]dockerPSMeta)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		id := strings.TrimSpace(parts[0])
+		if id == "" {
+			continue
+		}
+		names := []string{}
+		for _, n := range strings.Split(parts[3], ",") {
+			n = strings.TrimSpace(n)
+			if n != "" {
+				names = append(names, n)
+			}
+		}
+		result[id] = dockerPSMeta{
+			Status: strings.TrimSpace(parts[1]),
+			State:  strings.TrimSpace(parts[2]),
+			Names:  names,
 		}
 	}
-
-	// 3. 逐个检查更新状态并流式返回
-	for _, container := range runningContainers {
-		status := h.checkSingleImageUpdate(pooledConn.Client, container.ID)
-		status.ContainerID = container.ID
-		h.sendSSEEvent(c, "update_status", status)
-		c.Writer.Flush()
-	}
-
-	// 4. 发送完成事件
-	h.sendSSEEvent(c, "done", nil)
+	return result
 }
 
-// sendSSEEvent 发送 SSE 事件
-func (h *DockerHandler) sendSSEEvent(c *gin.Context, eventType string, data interface{}) {
-	event := SSEContainerEvent{
-		Type: eventType,
-		Data: data,
+func splitNonEmptyLines(output string) []string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		l = strings.TrimSpace(strings.TrimRight(l, "\r"))
+		if l != "" {
+			out = append(out, l)
+		}
 	}
-	jsonData, _ := json.Marshal(event)
-	c.Writer.Write([]byte("data: " + string(jsonData) + "\n\n"))
-	c.Writer.Flush()
+	return out
+}
+
+func parseInspectPorts(ports map[string][]dockerInspectPortBinding) []DockerPort {
+	if len(ports) == 0 {
+		return []DockerPort{}
+	}
+
+	result := make([]DockerPort, 0)
+	for containerPortSpec, bindings := range ports {
+		spec := strings.TrimSpace(containerPortSpec)
+		if spec == "" {
+			continue
+		}
+		privateStr, proto := spec, "tcp"
+		if strings.Contains(spec, "/") {
+			parts := strings.SplitN(spec, "/", 2)
+			privateStr = parts[0]
+			if parts[1] != "" {
+				proto = parts[1]
+			}
+		}
+		privatePort, err := strconv.Atoi(privateStr)
+		if err != nil || privatePort <= 0 {
+			continue
+		}
+
+		if len(bindings) == 0 {
+			result = append(result, DockerPort{PrivatePort: privatePort, Type: proto})
+			continue
+		}
+
+		for _, b := range bindings {
+			publicPort, _ := strconv.Atoi(strings.TrimSpace(b.HostPort))
+			result = append(result, DockerPort{
+				IP:          strings.TrimSpace(b.HostIP),
+				PrivatePort: privatePort,
+				PublicPort:  publicPort,
+				Type:        proto,
+			})
+		}
+	}
+	return result
 }
 
 // GetContainerLogs 获取容器日志
@@ -929,81 +1195,86 @@ func parseSize(s string) int64 {
 	return int64(v * float64(multiplier))
 }
 
-// ImageUpdateStatus 镜像更新状态
-type ImageUpdateStatus struct {
-	ContainerID   string `json:"containerId,omitempty"`
+// ImageUpdateCheckResponse 镜像更新检查响应
+type ImageUpdateCheckResponse struct {
 	HasUpdate     bool   `json:"hasUpdate"`
-	CurrentDigest string `json:"currentDigest,omitempty"`
-	RemoteDigest  string `json:"remoteDigest,omitempty"`
+	ImageName     string `json:"imageName"`
+	ContainerName string `json:"containerName"`
+	UpdateCommand string `json:"updateCommand"`
 	Error         string `json:"error,omitempty"`
 }
 
-// checkSingleImageUpdate 检查单个容器镜像更新
-func (h *DockerHandler) checkSingleImageUpdate(client *sshDomain.Client, containerID string) ImageUpdateStatus {
-	// 1. 获取容器使用的镜像名称
-	getImageCmd := fmt.Sprintf("docker inspect --format='{{.Config.Image}}' %s 2>/dev/null", containerID)
-	imageName, err := h.executeCommand(client, getImageCmd)
+// CheckContainerImageUpdate 检查容器镜像是否有更新
+func (h *DockerHandler) CheckContainerImageUpdate(c *gin.Context) {
+	serverID := c.Param("serverId")
+	containerID := c.Param("id")
+
+	pooledConn, err := h.getPooledConnection(c, serverID)
 	if err != nil {
-		return ImageUpdateStatus{
-			HasUpdate: false,
-			Error:     "Failed to get container image: " + err.Error(),
-		}
+		RespondError(c, http.StatusInternalServerError, "ssh_error", err.Error())
+		return
 	}
-	imageName = strings.TrimSpace(imageName)
-	if imageName == "" {
-		return ImageUpdateStatus{
-			HasUpdate: false,
-			Error:     "Container image name is empty",
-		}
+	defer h.releaseConnection(c, serverID)
+
+	// 获取容器信息
+	inspectCmd := fmt.Sprintf("docker inspect %s --format '{{.Name}}|{{.Config.Image}}'", containerID)
+	output, err := h.executeCommand(pooledConn.Client, inspectCmd)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "docker_error", "获取容器信息失败: "+err.Error())
+		return
 	}
 
-	// 2. 获取本地镜像的 digest
-	localDigestCmd := fmt.Sprintf("docker inspect --format='{{index .RepoDigests 0}}' %s 2>/dev/null || echo ''", imageName)
-	localDigestOutput, _ := h.executeCommand(client, localDigestCmd)
+	output = strings.TrimSpace(output)
+	parts := strings.SplitN(output, "|", 2)
+	if len(parts) != 2 {
+		RespondError(c, http.StatusInternalServerError, "docker_error", "解析容器信息失败")
+		return
+	}
+
+	containerName := strings.TrimPrefix(parts[0], "/")
+	imageName := parts[1]
+
+	// 获取本地镜像 digest
+	localDigestCmd := fmt.Sprintf("docker image inspect %s --format '{{index .RepoDigests 0}}' 2>/dev/null || echo ''", imageName)
+	localDigestOutput, _ := h.executeCommand(pooledConn.Client, localDigestCmd)
 	localDigest := strings.TrimSpace(localDigestOutput)
 
-	// 如果没有 RepoDigests（本地构建的镜像），使用镜像 ID
-	if localDigest == "" || localDigest == "<no value>" {
-		localIdCmd := fmt.Sprintf("docker inspect --format='{{.Id}}' %s 2>/dev/null || echo ''", imageName)
-		localIdOutput, _ := h.executeCommand(client, localIdCmd)
-		localDigest = strings.TrimSpace(localIdOutput)
+	// 提取 digest 部分 (repo@sha256:xxx -> sha256:xxx)
+	if idx := strings.Index(localDigest, "@"); idx != -1 {
+		localDigest = localDigest[idx+1:]
 	}
 
-	// 提取 digest 部分（去掉镜像名前缀）
-	if strings.Contains(localDigest, "@") {
-		parts := strings.Split(localDigest, "@")
-		if len(parts) == 2 {
-			localDigest = parts[1]
-		}
-	}
-
-	// 3. 尝试获取远程镜像的 digest
+	// 获取远程镜像 digest (使用 docker manifest inspect)
 	remoteDigestCmd := fmt.Sprintf("docker manifest inspect %s 2>/dev/null | grep -m1 '\"digest\"' | cut -d'\"' -f4 || echo ''", imageName)
-	remoteDigestOutput, _ := h.executeCommand(client, remoteDigestCmd)
+	remoteDigestOutput, _ := h.executeCommand(pooledConn.Client, remoteDigestCmd)
 	remoteDigest := strings.TrimSpace(remoteDigestOutput)
 
-	// 如果 manifest inspect 不可用，尝试使用 skopeo
-	if remoteDigest == "" {
-		skopeoCmd := fmt.Sprintf("skopeo inspect docker://%s 2>/dev/null | grep -m1 '\"Digest\"' | cut -d'\"' -f4 || echo ''", imageName)
-		skopeoOutput, _ := h.executeCommand(client, skopeoCmd)
-		remoteDigest = strings.TrimSpace(skopeoOutput)
+	// 生成更新命令
+	updateCommand := fmt.Sprintf("docker pull %s", imageName)
+
+	// 判断是否有更新
+	hasUpdate := false
+	errorMsg := ""
+
+	if localDigest == "" && remoteDigest == "" {
+		// 无法获取 digest 信息，可能是本地构建的镜像或私有仓库
+		errorMsg = "无法检查更新：可能是本地构建的镜像或需要登录私有仓库"
+	} else if remoteDigest == "" {
+		// 无法获取远程 digest
+		errorMsg = "无法获取远程镜像信息，请确保网络连接正常且已登录镜像仓库"
+	} else if localDigest == "" {
+		// 本地没有 digest，可能需要更新
+		hasUpdate = true
+	} else if localDigest != remoteDigest {
+		// digest 不同，有更新
+		hasUpdate = true
 	}
 
-	// 如果无法获取远程 digest，返回未知状态
-	if remoteDigest == "" {
-		return ImageUpdateStatus{
-			HasUpdate:     false,
-			CurrentDigest: localDigest,
-			Error:         "Unable to check remote image",
-		}
-	}
-
-	// 4. 比较 digest
-	hasUpdate := localDigest != "" && remoteDigest != "" && localDigest != remoteDigest
-
-	return ImageUpdateStatus{
+	RespondSuccess(c, ImageUpdateCheckResponse{
 		HasUpdate:     hasUpdate,
-		CurrentDigest: localDigest,
-		RemoteDigest:  remoteDigest,
-	}
+		ImageName:     imageName,
+		ContainerName: containerName,
+		UpdateCommand: updateCommand,
+		Error:         errorMsg,
+	})
 }

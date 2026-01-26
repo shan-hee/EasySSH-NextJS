@@ -45,6 +45,17 @@ export interface ResourcesResponse {
 }
 
 /**
+ * 镜像更新检查响应
+ */
+export interface ImageUpdateCheckResponse {
+  hasUpdate: boolean
+  imageName: string
+  containerName: string
+  updateCommand: string
+  error?: string
+}
+
+/**
  * Docker API 服务
  */
 export const dockerApi = {
@@ -163,5 +174,15 @@ export const dockerApi = {
    */
   async getResources(serverId: string): Promise<ResourcesResponse> {
     return apiFetch<ResourcesResponse>(`/docker/${serverId}/resources`)
+  },
+
+  /**
+   * 检查容器镜像更新
+   */
+  async checkImageUpdate(serverId: string, containerId: string): Promise<ImageUpdateCheckResponse> {
+    const res = await apiFetch<{ data: ImageUpdateCheckResponse }>(
+      `/docker/${serverId}/containers/${containerId}/check-update`
+    )
+    return res.data
   },
 }

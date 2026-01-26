@@ -142,6 +142,7 @@ export function TabTerminalContent({
 
               <DockerPopover
                 serverId={String(session.serverId)}
+                sessionId={session.id}
                 isConnected={session.isConnected || false}
               />
 

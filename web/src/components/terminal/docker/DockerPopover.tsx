@@ -59,10 +59,11 @@ interface ResourcesTabData {
 
 interface DockerPopoverProps {
   serverId: string
+  sessionId: string
   isConnected: boolean
 }
 
-export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
+export function DockerPopover({ serverId, sessionId, isConnected }: DockerPopoverProps) {
   const t = useTranslations('terminal')
   const [open, setOpen] = useState(false)
 
@@ -243,6 +244,7 @@ export function DockerPopover({ serverId, isConnected }: DockerPopoverProps) {
           fetchImagesData={fetchImagesData}
           fetchResourcesData={fetchResourcesData}
           serverId={serverId}
+          sessionId={sessionId}
         />
       </PopoverContent>
     </Popover>
@@ -266,6 +268,7 @@ function DockerPopoverContent({
   fetchImagesData,
   fetchResourcesData,
   serverId,
+  sessionId,
 }: {
   activeTab: TabValue
   onTabChange: (value: string) => void
@@ -282,6 +285,7 @@ function DockerPopoverContent({
   fetchImagesData: () => Promise<void>
   fetchResourcesData: () => Promise<void>
   serverId: string
+  sessionId: string
 }) {
   const t = useTranslations('terminal')
 
@@ -347,6 +351,7 @@ function DockerPopoverContent({
             <ContainerList
               containers={containersData?.containers ?? []}
               serverId={serverId}
+              sessionId={sessionId}
               onRefresh={fetchContainersData}
               isLoading={containersLoading}
             />
