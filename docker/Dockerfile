@@ -21,9 +21,8 @@ RUN pnpm install --frozen-lockfile --ignore-scripts && \
 # 复制前端源代码
 COPY web/ ./
 
-# 创建输出目录并构建前端（输出到 /server/static）
-RUN mkdir -p /server/static && \
-    pnpm run build && \
+# 构建前端（静态导出产物位于 /frontend/out）
+RUN pnpm run build && \
     # 清理不需要的文件
     rm -rf node_modules .next/cache src
 
@@ -45,8 +44,8 @@ RUN go mod download && \
 # 复制源代码
 COPY server/ ./
 
-# 复制前端构建产物到 static 目录
-COPY --from=frontend-builder /server/static ./static
+# 复制前端静态导出产物到 static 目录
+COPY --from=frontend-builder /frontend/out ./static
 
 # 构建后端（优化编译参数）
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \

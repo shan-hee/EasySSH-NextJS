@@ -31,7 +31,7 @@
 ## 技术栈
 
 ### 前端
-- **框架**：Next.js 15.5 (App Router + 静态导出) + React 19
+- **框架**：Next.js 16 (App Router + 静态导出) + React 19
 - **UI**：Radix UI + Shadcn/ui + Tailwind CSS 4.x
 - **终端**：xterm.js
 - **编辑器**：Monaco Editor
@@ -186,7 +186,7 @@ EasySSH-NextJS/
 # 前端开发
 cd web
 pnpm dev          # 开发服务器
-pnpm build        # 构建生产版本
+pnpm build        # Turbopack 构建生产版本（静态导出到 web/out）
 pnpm lint         # 代码检查
 
 # 后端开发
