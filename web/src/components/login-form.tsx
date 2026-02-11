@@ -33,22 +33,6 @@ import { useAuthStore } from "@/stores/auth-store"
 import { resetUnauthorizedRedirectFlag, resetAccountLockedRedirectFlag } from "@/lib/api-client"
 import { useTranslations } from "next-intl"
 
-// 声明 Google Identity Services 全局类型（FedCM 模式）
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: any) => void
-          prompt: () => void
-        }
-      }
-    }
-  }
-}
-
-type GoogleLoginMode = "redirect" | "fedcm"
-
 export function LoginForm({
   className,
   ...props
@@ -82,8 +66,6 @@ export function LoginForm({
   const [pkceState, setPkceState] = useState("")
   const [redirectUri, setRedirectUri] = useState("")
 
-  // Google 登录模式（仅前端本地存储，用于调试切换）
-  const [googleLoginMode, setGoogleLoginMode] = useState<GoogleLoginMode>("redirect")
   const tAuth = useTranslations("auth")
 
   // 登录成功后的回跳路径,优先使用 /login?next=xxx 中的 next
@@ -124,29 +106,6 @@ export function LoginForm({
       }
     }
   }, [searchParams, tAuth])
-
-  // 初始化 Google 登录模式（从 localStorage 读取，默认重定向模式）
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    try {
-      const saved = window.localStorage.getItem("googleLoginMode")
-      if (saved === "redirect" || saved === "fedcm") {
-        setGoogleLoginMode(saved)
-      }
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  // 持久化 Google 登录模式到 localStorage（不入库，仅当前浏览器）
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    try {
-      window.localStorage.setItem("googleLoginMode", googleLoginMode)
-    } catch {
-      // ignore
-    }
-  }, [googleLoginMode])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -371,72 +330,6 @@ export function LoginForm({
       })
     }
   }
-
-  // 处理 Google 登录成功（FedCM + GSI）
-  const handleGoogleFedcmSuccess = useCallback(
-    async (credentialResponse: any) => {
-      if (!credentialResponse?.credential) {
-        toast.error(tAuth("loginGoogleFailedTitle"), {
-          description: tAuth("loginGoogleCredentialMissingDesc"),
-        })
-        return
-      }
-
-      setIsLoading(true)
-
-      try {
-        const response = await authApi.verifyGoogleToken(credentialResponse.credential)
-
-        if (!response.access_token) {
-          throw new Error("Missing access_token in Google token response")
-        }
-
-        const expiresIn = typeof response.expires_in === "number" ? response.expires_in : 0
-        setToken(response.access_token, expiresIn)
-
-        toast.success(tAuth("loginToastSuccessTitle"), {
-          description: tAuth("loginToastSuccessDesc"),
-        })
-
-        await refreshConfig()
-        router.replace(getRedirectTarget())
-      } catch (error: unknown) {
-        console.error("Google FedCM login error:", error)
-        toast.error(tAuth("loginGoogleFailedTitle"), {
-          description: getErrorMessage(error, tAuth("loginGoogleRetryDesc")),
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [getRedirectTarget, refreshConfig, router, setToken],
-  )
-
-  // 使用 Google Identity Services 初始化（仅在 FedCM 模式下）
-  useEffect(() => {
-    if (!config?.oauth_enabled || !config?.google_client_id) return
-    if (googleLoginMode !== "fedcm") return
-
-    const script = document.createElement("script")
-    script.src = "https://accounts.google.com/gsi/client"
-    script.async = true
-    script.defer = true
-    script.onload = () => {
-      if (window.google) {
-        window.google.accounts.id.initialize({
-          client_id: config.google_client_id,
-          callback: handleGoogleFedcmSuccess,
-          ux_mode: "popup",
-          context: "signin",
-        })
-      }
-    }
-    document.body.appendChild(script)
-
-    return () => {
-      document.body.removeChild(script)
-    }
-  }, [config?.oauth_enabled, config?.google_client_id, googleLoginMode, handleGoogleFedcmSuccess])
 
   // 监听 2FA 验证码输入，长度达到 6 位时自动提交
   useEffect(() => {
@@ -743,19 +636,7 @@ export function LoginForm({
                         variant="outline"
                         className="w-full max-w-[384px]"
                         size="lg"
-                        onClick={() => {
-                          if (googleLoginMode === "fedcm") {
-                            if (window.google) {
-                              window.google.accounts.id.prompt()
-                            } else {
-                              toast.error(tAuth("loginGoogleFailedTitle"), {
-                                description: tAuth("loginGoogleFedcmNotReadyDesc"),
-                              })
-                            }
-                          } else {
-                            handleGoogleRedirectLogin()
-                          }
-                        }}
+                        onClick={handleGoogleRedirectLogin}
                       >
                         <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
                           <path
@@ -780,42 +661,6 @@ export function LoginForm({
                     </div>
                   </FadeSlideIn>
 
-                  {/* Google 登录调试模式切换（仅前端，本地存储，开发环境可见） */}
-                  {process.env.NODE_ENV !== "production" && (
-                    <FadeSlideIn delay={0.7}>
-                      <div className="mt-2 text-center text-[11px] text-zinc-500 dark:text-zinc-400">
-                        {tAuth("loginOAuthModeLabel")}
-                        <button
-                          type="button"
-                          className={cn(
-                            "ml-1 underline-offset-2",
-                            googleLoginMode === "redirect"
-                              ? "font-semibold underline"
-                              : "opacity-70 hover:underline",
-                          )}
-                          onClick={() => setGoogleLoginMode("redirect")}
-                        >
-                          {tAuth("loginOAuthModeRedirect")}
-                        </button>
-                        <span className="mx-1">/</span>
-                        <button
-                          type="button"
-                          className={cn(
-                            "underline-offset-2",
-                            googleLoginMode === "fedcm"
-                              ? "font-semibold underline"
-                              : "opacity-70 hover:underline",
-                          )}
-                          onClick={() => setGoogleLoginMode("fedcm")}
-                        >
-                          FedCM
-                        </button>
-                        <span className="ml-1">
-                          {tAuth("loginOAuthModeNote")}
-                        </span>
-                      </div>
-                    </FadeSlideIn>
-                  )}
                 </>
               )}
             </div>

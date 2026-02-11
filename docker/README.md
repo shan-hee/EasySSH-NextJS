@@ -108,7 +108,7 @@ docker pull shanheee/easyssh:v1.0.0
 cd /path/to/EasySSH-NextJS
 
 # 构建镜像
-docker build -f docker/Dockerfile -t easyssh:latest .
+docker build -t easyssh:latest .
 ```
 
 ## 🔍 健康检查

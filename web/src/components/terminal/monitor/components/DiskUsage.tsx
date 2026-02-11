@@ -117,14 +117,14 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
               <div style="margin-bottom:2px;display:flex;align-items:center;gap:6px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${usedColor};"></span>
                 <span>${t("diskTooltipUsed")}:</span>
-                <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
+                <span style="font-family:var(--font-jetbrains-mono),ui-monospace;font-weight:600;">
                   ${used} ${unit}
                 </span>
               </div>
               <div style="margin-bottom:2px;display:flex;align-items:center;gap:6px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${freeColor};"></span>
                 <span>${t("diskTooltipFree")}:</span>
-                <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
+                <span style="font-family:var(--font-jetbrains-mono),ui-monospace;font-weight:600;">
                   ${freeDisplay} ${unit}
                 </span>
               </div>

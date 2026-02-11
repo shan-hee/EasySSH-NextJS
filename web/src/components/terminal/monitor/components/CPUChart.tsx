@@ -121,7 +121,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
                   style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${usageColor};"
                 ></span>
                 <span>${t("tooltipMetricLabel")}: </span>
-                <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
+                <span style="font-family:var(--font-jetbrains-mono),ui-monospace;font-weight:600;">
                   ${value}%
                 </span>
               </div>

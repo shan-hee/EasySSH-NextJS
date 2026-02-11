@@ -85,7 +85,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${params.color};"></span>
                 <span>${memoryTooltipUsedLabel}</span>
-                <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
+                <span style="font-family:var(--font-jetbrains-mono),ui-monospace;font-weight:600;">
                   ${mem.value} ${mem.unit}
                 </span>
               </div>

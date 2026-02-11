@@ -141,7 +141,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
                 <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
                   <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${color};"></span>
                   <span>${name}:</span>
-                  <span style="font-family:var(--font-geist-mono,ui-monospace);font-weight:600;">
+                  <span style="font-family:var(--font-jetbrains-mono),ui-monospace;font-weight:600;">
                     ${formatSpeed(value)}
                   </span>
                 </div>

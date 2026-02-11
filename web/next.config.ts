@@ -30,37 +30,12 @@ const nextConfig: NextConfig = {
     trailingSlash: true,
   }),
 
-  // 开发环境自定义响应头：支持 Google OAuth
-  // 注意：静态导出模式下 headers 不生效，因此仅在开发环境启用
-  ...(!isProd && {
-    async headers() {
-      return [
-        {
-          source: "/:path*",
-          headers: [
-            {
-              key: "Cross-Origin-Opener-Policy",
-              value: "unsafe-none",
-            },
-            {
-              key: "Cross-Origin-Embedder-Policy",
-              value: "unsafe-none",
-            },
-          ],
-        },
-      ]
-    },
-  }),
 
   // 静态导出不支持图片优化
   images: {
     unoptimized: true,
   },
 
-  // TypeScript 配置：在构建时忽略类型错误
-  typescript: {
-    ignoreBuildErrors: true,
-  },
 };
 
 export default nextConfig;

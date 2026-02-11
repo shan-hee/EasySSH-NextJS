@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -6,6 +7,26 @@ import { SystemConfigProvider } from "@/contexts/system-config-context";
 import { DynamicHeadUpdater } from "@/components/dynamic-head-updater";
 import { QueryProvider } from "@/providers/query-provider";
 import { SessionRefreshProvider } from "@/providers/session-refresh-provider";
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
+
+const notoSansSC = Noto_Sans_SC({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  preload: false,
+  variable: "--font-noto-sans-sc",
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+});
 
 export const viewport = {
   width: "device-width",
@@ -52,7 +73,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html
+      lang="zh-CN"
+      suppressHydrationWarning
+      className={`${inter.variable} ${notoSansSC.variable} ${jetBrainsMono.variable}`}
+    >
       <head>
         {/* no-FOUC: 在样式加载前同步设置主题类和语言属性，避免闪烁 */}
         <script
@@ -62,7 +87,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased">
+      <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <QueryProvider>
             <SystemConfigProvider>

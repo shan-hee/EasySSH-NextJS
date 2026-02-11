@@ -15,7 +15,7 @@ services:
   easyssh:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
     image: easyssh:dev
     container_name: easyssh-dev
     restart: unless-stopped
