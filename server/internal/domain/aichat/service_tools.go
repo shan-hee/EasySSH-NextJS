@@ -259,7 +259,7 @@ func (s *service) chatOpenAIWithTools(ctx context.Context, config *ProviderConfi
 		Tools:    getOpenAITools(),
 	})
 	if err != nil {
-		return nil, errors.Join(errors.New("OpenAI API error"), err)
+		return nil, wrapOpenAIProviderError("OpenAI API error", err)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -301,7 +301,7 @@ func (s *service) streamOpenAIWithTools(ctx context.Context, config *ProviderCon
 		Tools:    getOpenAITools(),
 	})
 	if err != nil {
-		return errors.Join(errors.New("failed to create OpenAI stream"), err)
+		return wrapOpenAIProviderError("failed to create OpenAI stream", err)
 	}
 	defer stream.Close()
 
@@ -319,7 +319,7 @@ func (s *service) streamOpenAIWithTools(ctx context.Context, config *ProviderCon
 			return onDelta(&StreamDelta{Done: true, ToolCalls: toolCalls})
 		}
 		if err != nil {
-			return errors.Join(errors.New("OpenAI stream error"), err)
+			return wrapOpenAIProviderError("OpenAI stream error", err)
 		}
 
 		if len(response.Choices) > 0 {

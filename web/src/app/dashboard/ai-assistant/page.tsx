@@ -89,6 +89,7 @@ interface Message {
   id: string
   role: "user" | "assistant"
   content: string
+  modelContent?: string
   timestamp: number
   toolCalls?: ToolCallState[]
 }
@@ -101,8 +102,110 @@ interface ConversationData {
   updatedAt: number
 }
 
+interface AttachedFile {
+  id: string
+  file: File
+  progress: number
+  uploading: boolean
+}
+
 // 快捷模板图标映射
 const quickTemplateIcons = [Terminal, Code, FileText, Zap] as const
+
+function createLocalId(prefix: string = "id") {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+const ATTACHMENT_MAX_FILES = 6
+const ATTACHMENT_MAX_BYTES_PER_FILE = 256 * 1024
+const ATTACHMENT_MAX_CHARS_PER_FILE = 8000
+const ATTACHMENT_MAX_TOTAL_CHARS = 24000
+
+function getFileExtension(fileName: string): string {
+  const ext = fileName.split(".").pop()
+  return ext ? ext.toLowerCase() : ""
+}
+
+function isTextLikeFile(file: File): boolean {
+  const type = file.type.toLowerCase()
+  if (type.startsWith("text/")) return true
+  if (
+    type.includes("json") ||
+    type.includes("xml") ||
+    type.includes("yaml") ||
+    type.includes("csv") ||
+    type.includes("javascript") ||
+    type.includes("typescript") ||
+    type.includes("x-sh")
+  ) {
+    return true
+  }
+
+  const textExtensions = new Set([
+    "txt", "md", "json", "csv", "xml", "yaml", "yml", "log",
+    "ini", "conf", "cfg", "env", "sh", "bash", "zsh", "py",
+    "js", "ts", "tsx", "jsx", "go", "java", "c", "cpp", "h",
+    "hpp", "rs", "sql", "toml", "properties",
+  ])
+
+  return textExtensions.has(getFileExtension(file.name))
+}
+
+async function buildAttachmentContext(files: AttachedFile[]): Promise<string> {
+  if (files.length === 0) return ""
+
+  const selected = files.slice(0, ATTACHMENT_MAX_FILES)
+  const blocks: string[] = []
+  let remainingChars = ATTACHMENT_MAX_TOTAL_CHARS
+
+  for (const [index, entry] of selected.entries()) {
+    const file = entry.file
+    const fileMeta = `文件${index + 1}：${file.name}（${file.type || "未知类型"}，${(file.size / 1024).toFixed(1)}KB）`
+
+    if (!isTextLikeFile(file)) {
+      blocks.push(`${fileMeta}\n该文件为二进制或暂不支持直接解析文本内容，请结合文件名和类型给出建议。`)
+      continue
+    }
+
+    try {
+      const partialText = await file.slice(0, ATTACHMENT_MAX_BYTES_PER_FILE).text()
+      const normalized = partialText.replace(/\r\n/g, "\n").trim()
+
+      if (!normalized) {
+        blocks.push(`${fileMeta}\n（文件内容为空）`)
+        continue
+      }
+
+      const currentFileCharLimit = Math.min(ATTACHMENT_MAX_CHARS_PER_FILE, remainingChars)
+      if (currentFileCharLimit <= 0) break
+
+      let excerpt = normalized.slice(0, currentFileCharLimit)
+      if (excerpt.includes("```")) {
+        excerpt = excerpt.replace(/```/g, "` ` `")
+      }
+
+      const isTruncated =
+        normalized.length > currentFileCharLimit ||
+        file.size > ATTACHMENT_MAX_BYTES_PER_FILE
+
+      blocks.push(
+        `${fileMeta}\n内容摘录：\n\`\`\`text\n${excerpt}\n\`\`\`${isTruncated ? "\n（内容过长，已截断）" : ""}`
+      )
+
+      remainingChars -= excerpt.length
+      if (remainingChars <= 0) break
+    } catch {
+      blocks.push(`${fileMeta}\n（读取失败，无法解析文本内容）`)
+    }
+  }
+
+  if (blocks.length === 0) return ""
+
+  const omittedCount = files.length - selected.length
+  const omittedSuffix = omittedCount > 0 ? `\n\n其余 ${omittedCount} 个附件未纳入上下文（超过数量限制）。` : ""
+
+  return `【附件上下文】以下为用户随消息附带的文件信息，请作为补充上下文：\n\n${blocks.join("\n\n---\n\n")}${omittedSuffix}`
+}
 
 // ========== 解析思考内容 ==========
 interface ParsedContent {
@@ -197,7 +300,7 @@ function buildHistoryMessages(
       content:
         msg.role === "assistant"
           ? sanitizeAssistantContentForHistory(msg.content)
-          : msg.content,
+          : msg.modelContent || msg.content,
     }
 
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
@@ -822,15 +925,14 @@ export default function AIAssistantPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const [isNewChat, setIsNewChat] = useState(false)
+  const [isPreparingAttachments, setIsPreparingAttachments] = useState(false)
   const { ready } = useAuthReady()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
+  const conversationsRef = useRef<ConversationData[]>([])
   // 文件附件状态，包含上传进度
-  const [attachedFiles, setAttachedFiles] = useState<Array<{
-    file: File
-    progress: number // 0-100
-    uploading: boolean
-  }>>([])
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
 
   // AI 配置状态
   const { isConfigured, isLoading: isConfigLoading, models, model: defaultModel } = useAIConfig()
@@ -863,6 +965,31 @@ export default function AIAssistantPage() {
     () => conversations.find((c) => c.id === currentConversationId),
     [conversations, currentConversationId]
   )
+
+  useEffect(() => {
+    conversationsRef.current = conversations
+  }, [conversations])
+
+  const clearUploadInterval = useCallback((fileId: string) => {
+    const interval = uploadIntervalsRef.current.get(fileId)
+    if (interval) {
+      clearInterval(interval)
+      uploadIntervalsRef.current.delete(fileId)
+    }
+  }, [])
+
+  const clearAllUploadIntervals = useCallback(() => {
+    uploadIntervalsRef.current.forEach((interval) => {
+      clearInterval(interval)
+    })
+    uploadIntervalsRef.current.clear()
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      clearAllUploadIntervals()
+    }
+  }, [clearAllUploadIntervals])
 
   const unresolvedToolCallCount = useMemo(() => {
     if (!currentConversation) return 0
@@ -899,13 +1026,31 @@ export default function AIAssistantPage() {
       setConversations((prev) =>
         prev.map((conv) => {
           if (conv.id !== targetConversationId) return conv
+
+          const hasAssistantMessage = conv.messages.some(
+            (msg) => msg.id === assistantMessageId
+          )
+
+          const updatedMessages = hasAssistantMessage
+            ? conv.messages.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, toolCalls: toolCallStates }
+                  : msg
+              )
+            : [
+                ...conv.messages,
+                {
+                  id: assistantMessageId,
+                  role: "assistant" as const,
+                  content: "",
+                  timestamp: Date.now(),
+                  toolCalls: toolCallStates,
+                },
+              ]
+
           return {
             ...conv,
-            messages: conv.messages.map((msg) =>
-              msg.id === assistantMessageId
-                ? { ...msg, toolCalls: toolCallStates }
-                : msg
-            ),
+            messages: updatedMessages,
             updatedAt: Date.now(),
           }
         })
@@ -918,7 +1063,7 @@ export default function AIAssistantPage() {
   const executeToolCallInternal = useCallback(
     async (conversationId: string, messageId: string, toolCallId: string): Promise<{ toolCallId: string; content: string; isError: boolean } | null> => {
       // 找到工具调用
-      const conv = conversations.find((c) => c.id === conversationId)
+      const conv = conversationsRef.current.find((c) => c.id === conversationId)
       const msg = conv?.messages.find((m) => m.id === messageId)
       const toolCallState = msg?.toolCalls?.find((tc) => tc.toolCall.id === toolCallId)
       if (!toolCallState) return null
@@ -975,7 +1120,7 @@ export default function AIAssistantPage() {
 
       return { toolCallId, content: result.content, isError: result.isError }
     },
-    [conversations, executeToolCall]
+    [executeToolCall]
   )
 
   // 执行单个工具调用并继续对话
@@ -985,7 +1130,7 @@ export default function AIAssistantPage() {
       if (!result) return
 
       // 获取当前对话的所有消息，构建历史
-      const conv = conversations.find((c) => c.id === conversationId)
+      const conv = conversationsRef.current.find((c) => c.id === conversationId)
       if (!conv) return
 
       // 找到包含工具调用的消息
@@ -1006,7 +1151,7 @@ export default function AIAssistantPage() {
       })
 
       // 预生成新的 AI 消息 ID
-      const newAssistantMessageId = Date.now().toString()
+      const newAssistantMessageId = createLocalId("assistant")
       setStreamingMessageId(newAssistantMessageId)
 
       // 处理流式内容更新
@@ -1089,7 +1234,7 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [conversations, executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
+    [executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
   )
 
   // 取消工具调用
@@ -1117,7 +1262,7 @@ export default function AIAssistantPage() {
   // 执行所有待处理的工具调用并继续对话
   const handleExecuteAllToolCalls = useCallback(
     async (conversationId: string, messageId: string) => {
-      const conv = conversations.find((c) => c.id === conversationId)
+      const conv = conversationsRef.current.find((c) => c.id === conversationId)
       const msg = conv?.messages.find((m) => m.id === messageId)
       const pendingToolCalls = msg?.toolCalls?.filter((tc) => tc.status === "pending") || []
 
@@ -1135,7 +1280,7 @@ export default function AIAssistantPage() {
       if (results.length === 0) return
 
       // 重新获取对话（因为状态可能已更新）
-      const updatedConv = conversations.find((c) => c.id === conversationId)
+      const updatedConv = conversationsRef.current.find((c) => c.id === conversationId)
       if (!updatedConv) return
 
       const ignoreIds = new Set(results.map((r) => r.toolCallId))
@@ -1150,7 +1295,7 @@ export default function AIAssistantPage() {
       const historyMessages: ChatMessage[] = buildHistoryMessages(updatedConv.messages, toolResultOverrides)
 
       // 预生成新的 AI 消息 ID
-      const newAssistantMessageId = Date.now().toString()
+      const newAssistantMessageId = createLocalId("assistant")
       setStreamingMessageId(newAssistantMessageId)
 
       // 处理流式内容更新
@@ -1233,35 +1378,53 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [conversations, executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
+    [executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
   )
 
   // 发送消息
   const handleSendMessage = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault()
-      if (!inputMessage.trim() || isLoading) return
+      const trimmedInput = inputMessage.trim()
+      if (!trimmedInput || isLoading || isPreparingAttachments) return
       if (currentConversation && countUnresolvedToolCalls(currentConversation.messages) > 0) return
 
       // 清除之前的错误
       clearError()
 
+      let userMessageForModel = trimmedInput
+      if (attachedFiles.length > 0) {
+        setIsPreparingAttachments(true)
+        try {
+          const attachmentContext = await buildAttachmentContext(attachedFiles)
+          if (attachmentContext) {
+            userMessageForModel = `${trimmedInput}\n\n${attachmentContext}`
+          }
+        } finally {
+          setIsPreparingAttachments(false)
+        }
+      }
+
       const userMessage: Message = {
-        id: Date.now().toString(),
+        id: createLocalId("user"),
         role: "user",
-        content: inputMessage.trim(),
+        content: trimmedInput,
+        modelContent:
+          userMessageForModel === trimmedInput
+            ? undefined
+            : userMessageForModel,
         timestamp: Date.now(),
       }
 
       // 预生成 AI 消息 ID（用于后续流式更新）
-      const assistantMessageId = (Date.now() + 1).toString()
+      const assistantMessageId = createLocalId("assistant")
       let targetConversationId = currentConversationId
 
       // 如果是新聊天模式，创建新会话（只包含用户消息）
       if (isNewChat || !currentConversation) {
         const newConv: ConversationData = {
-          id: Date.now().toString(),
-          title: inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : ""),
+          id: createLocalId("conv"),
+          title: trimmedInput.slice(0, 30) + (trimmedInput.length > 30 ? "..." : ""),
           messages: [userMessage],
           createdAt: Date.now(),
           updatedAt: Date.now(),
@@ -1280,7 +1443,7 @@ export default function AIAssistantPage() {
                   messages: [...conv.messages, userMessage],
                   title:
                     conv.messages.length === 0
-                      ? inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : "")
+                      ? trimmedInput.slice(0, 30) + (trimmedInput.length > 30 ? "..." : "")
                       : conv.title,
                   updatedAt: Date.now(),
                 }
@@ -1290,6 +1453,12 @@ export default function AIAssistantPage() {
       }
 
       setInputMessage("")
+      if (attachedFiles.length > 0) {
+        attachedFiles.forEach((file) => {
+          clearUploadInterval(file.id)
+        })
+        setAttachedFiles([])
+      }
       setStreamingMessageId(assistantMessageId)
 
       // 构建历史消息
@@ -1300,7 +1469,7 @@ export default function AIAssistantPage() {
       // 添加当前用户消息
       historyMessages.push({
         role: "user",
-        content: inputMessage.trim(),
+        content: userMessageForModel,
       })
 
       // 处理流式内容更新
@@ -1393,7 +1562,7 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [inputMessage, currentConversation, currentConversationId, isLoading, isNewChat, sendMessageWithTools, handleToolCallsReceived, clearError, t, selectedModel]
+    [inputMessage, currentConversation, currentConversationId, isLoading, isPreparingAttachments, isNewChat, attachedFiles, clearUploadInterval, sendMessageWithTools, handleToolCallsReceived, clearError, t, selectedModel]
   )
 
   // 新建对话
@@ -1401,7 +1570,7 @@ export default function AIAssistantPage() {
     // 开发环境：直接创建会话（用于测试）
     if (process.env.NODE_ENV === "development") {
       const newConv: ConversationData = {
-        id: Date.now().toString(),
+        id: createLocalId("conv"),
         title: t("newConversation"),
         messages: [],
         createdAt: Date.now(),
@@ -1422,8 +1591,14 @@ export default function AIAssistantPage() {
     (id: string) => {
       setConversations((prev) => {
         const filtered = prev.filter((c) => c.id !== id)
-        if (currentConversationId === id && filtered.length > 0) {
-          setCurrentConversationId(filtered[0].id)
+        if (currentConversationId === id) {
+          if (filtered.length > 0) {
+            setCurrentConversationId(filtered[0].id)
+            setIsNewChat(false)
+          } else {
+            setCurrentConversationId("")
+            setIsNewChat(true)
+          }
         }
         return filtered
       })
@@ -1467,35 +1642,57 @@ export default function AIAssistantPage() {
   }, [])
 
   // 模拟文件上传进度
-  const simulateUpload = useCallback((fileIndex: number) => {
+  const simulateUpload = useCallback((fileId: string) => {
+    clearUploadInterval(fileId)
+
     const interval = setInterval(() => {
-      setAttachedFiles(prev => {
-        const newFiles = [...prev]
-        if (newFiles[fileIndex]) {
-          const currentProgress = newFiles[fileIndex].progress
-          if (currentProgress >= 100) {
-            clearInterval(interval)
-            newFiles[fileIndex] = { ...newFiles[fileIndex], progress: 100, uploading: false }
-          } else {
-            // 模拟上传进度，每次增加 10-30%
-            const increment = Math.random() * 20 + 10
-            newFiles[fileIndex] = {
-              ...newFiles[fileIndex],
-              progress: Math.min(100, currentProgress + increment)
-            }
-          }
+      setAttachedFiles((prev) => {
+        const fileIndex = prev.findIndex((item) => item.id === fileId)
+        if (fileIndex === -1) {
+          clearUploadInterval(fileId)
+          return prev
         }
-        return newFiles
+
+        const target = prev[fileIndex]
+        if (!target.uploading) {
+          clearUploadInterval(fileId)
+          return prev
+        }
+
+        const increment = Math.random() * 20 + 10
+        const nextProgress = Math.min(100, target.progress + increment)
+        const uploadFinished = nextProgress >= 100
+
+        const nextFiles = [...prev]
+        nextFiles[fileIndex] = {
+          ...target,
+          progress: nextProgress,
+          uploading: !uploadFinished,
+        }
+
+        if (uploadFinished) {
+          clearUploadInterval(fileId)
+        }
+
+        return nextFiles
       })
     }, 200)
-    return interval
-  }, [])
+
+    uploadIntervalsRef.current.set(fileId, interval)
+  }, [clearUploadInterval])
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files && files.length > 0) {
-      const startIndex = attachedFiles.length
-      const newFileEntries = Array.from(files).map(file => ({
+      const availableSlots = Math.max(0, ATTACHMENT_MAX_FILES - attachedFiles.length)
+      if (availableSlots === 0) {
+        e.target.value = ""
+        return
+      }
+
+      const selectedFiles = Array.from(files).slice(0, availableSlots)
+      const newFileEntries = selectedFiles.map(file => ({
+        id: createLocalId("file"),
         file,
         progress: 0,
         uploading: true
@@ -1503,17 +1700,18 @@ export default function AIAssistantPage() {
       setAttachedFiles(prev => [...prev, ...newFileEntries])
 
       // 为每个新文件启动模拟上传
-      newFileEntries.forEach((_, idx) => {
-        simulateUpload(startIndex + idx)
+      newFileEntries.forEach((entry) => {
+        simulateUpload(entry.id)
       })
     }
     // 重置 input 以便可以再次选择相同文件
     e.target.value = ""
   }, [attachedFiles.length, simulateUpload])
 
-  const handleRemoveFile = useCallback((index: number) => {
-    setAttachedFiles(prev => prev.filter((_, i) => i !== index))
-  }, [])
+  const handleRemoveFile = useCallback((fileId: string) => {
+    clearUploadInterval(fileId)
+    setAttachedFiles(prev => prev.filter((file) => file.id !== fileId))
+  }, [clearUploadInterval])
 
   // 使用模板
   const handleUseTemplate = useCallback((prompt: string) => {
@@ -1552,7 +1750,7 @@ export default function AIAssistantPage() {
     }
 
     // 预生成 AI 消息 ID
-    const assistantMessageId = Date.now().toString()
+    const assistantMessageId = createLocalId("assistant")
 
     // 更新对话：保留编辑前的消息 + 更新后的用户消息
     setConversations((prev) =>
@@ -1690,18 +1888,20 @@ export default function AIAssistantPage() {
     if (!currentConversation || currentConversation.messages.length < 2 || isLoading) return
     if (countUnresolvedToolCalls(currentConversation.messages) > 0) return
 
-    // 获取最后一条用户消息
-    const lastUserMessage = currentConversation.messages
-      .filter((m) => m.role === "user")
-      .pop()
+    const lastMessage = currentConversation.messages[currentConversation.messages.length - 1]
+    if (!lastMessage || lastMessage.role !== "assistant") return
 
-    if (!lastUserMessage) return
+    // 清除之前的错误
+    clearError()
 
     // 移除最后一条AI消息
     const messagesWithoutLastAI = currentConversation.messages.slice(0, -1)
 
+    const hasUserMessage = messagesWithoutLastAI.some((m) => m.role === "user")
+    if (!hasUserMessage) return
+
     // 预生成新的 AI 消息 ID
-    const assistantMessageId = Date.now().toString()
+    const assistantMessageId = createLocalId("assistant")
 
     // 更新对话：移除旧的 AI 消息（不添加占位符）
     setConversations((prev) =>
@@ -1710,6 +1910,7 @@ export default function AIAssistantPage() {
           ? {
               ...conv,
               messages: messagesWithoutLastAI,
+              updatedAt: Date.now(),
             }
           : conv
       )
@@ -1804,7 +2005,7 @@ export default function AIAssistantPage() {
     } finally {
       setStreamingMessageId(null)
     }
-  }, [currentConversation, currentConversationId, isLoading, sendMessageWithTools, handleToolCallsReceived, t, selectedModel])
+  }, [currentConversation, currentConversationId, isLoading, clearError, sendMessageWithTools, handleToolCallsReceived, t, selectedModel])
 
   // 加载状态
   if (!mounted || !ready) {
@@ -2104,9 +2305,9 @@ export default function AIAssistantPage() {
                       {/* 已选文件预览 - 带过渡动画 */}
                       {attachedFiles.length > 0 && (
                         <div className="flex flex-wrap gap-3 px-3 pt-3 pb-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                          {attachedFiles.map((fileEntry, index) => (
+                          {attachedFiles.map((fileEntry) => (
                             <div
-                              key={index}
+                              key={fileEntry.id}
                               className="relative flex items-center gap-2 px-3 py-2 bg-muted rounded-lg text-sm animate-in fade-in zoom-in-95 duration-200"
                             >
                               {/* 文件图标 + 进度环覆盖 */}
@@ -2130,7 +2331,7 @@ export default function AIAssistantPage() {
                               {/* 删除按钮 */}
                               <button
                                 type="button"
-                                onClick={() => handleRemoveFile(index)}
+                                onClick={() => handleRemoveFile(fileEntry.id)}
                                 className="ml-1 p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10 transition-colors"
                               >
                                 <X className="h-4 w-4" />
@@ -2151,7 +2352,7 @@ export default function AIAssistantPage() {
                               : t("inputPlaceholder")
                         }
                         className="min-h-[52px] text-base"
-                        disabled={!isConfigured || hasUnresolvedToolCalls}
+                        disabled={!isConfigured || hasUnresolvedToolCalls || isPreparingAttachments}
                       />
                     </div>
                     <PromptInputToolbar>
@@ -2205,8 +2406,8 @@ export default function AIAssistantPage() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={handleFileSelect}
-                          disabled={!isConfigured || hasUnresolvedToolCalls}
-                          title={t("attachFile")}
+                          disabled={!isConfigured || hasUnresolvedToolCalls || isPreparingAttachments}
+                          title={`${t("attachFile")} · ${t("attachmentLimitHint", { count: ATTACHMENT_MAX_FILES })}`}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
@@ -2228,7 +2429,8 @@ export default function AIAssistantPage() {
                           </Button>
                         ) : (
                           <PromptInputSubmit
-                            disabled={!inputMessage.trim() || !isConfigured || hasUnresolvedToolCalls}
+                            disabled={!inputMessage.trim() || !isConfigured || hasUnresolvedToolCalls || isPreparingAttachments}
+                            status={isPreparingAttachments ? "submitted" : undefined}
                             className="h-8 w-8"
                           />
                         )}

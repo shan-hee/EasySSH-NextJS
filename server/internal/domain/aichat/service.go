@@ -71,6 +71,60 @@ func parseModels(modelsStr string) []string {
 	return result
 }
 
+// normalizeOpenAIBaseURL 规范化 OpenAI 兼容端点。
+// 期望返回类似: https://host/v1
+func normalizeOpenAIBaseURL(endpoint string) string {
+	baseURL := strings.TrimSpace(strings.TrimSuffix(endpoint, "/"))
+	if baseURL == "" {
+		return ""
+	}
+
+	lower := strings.ToLower(baseURL)
+	for _, suffix := range []string{"/chat/completions", "/completions", "/responses"} {
+		if strings.HasSuffix(lower, suffix) {
+			baseURL = baseURL[:len(baseURL)-len(suffix)]
+			lower = strings.ToLower(baseURL)
+			break
+		}
+	}
+
+	if idx := strings.Index(lower, "/v1/"); idx >= 0 {
+		baseURL = baseURL[:idx+3]
+		lower = strings.ToLower(baseURL)
+	}
+
+	if !strings.HasSuffix(lower, "/v1") {
+		baseURL += "/v1"
+	}
+
+	return baseURL
+}
+
+func openAIEndpointHint(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "404 page not found") || strings.Contains(lower, "invalid character 'p' after top-level value") {
+		return errors.New("AI Endpoint 可能配置错误：请填写 OpenAI 兼容根地址（例如 https://api.openai.com/v1 或 http://localhost:11434/v1），不要填写 EasySSH 的 /api/v1/ai/... 路径")
+	}
+
+	return nil
+}
+
+func wrapOpenAIProviderError(prefix string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if hint := openAIEndpointHint(err); hint != nil {
+		return errors.Join(errors.New(prefix), err, hint)
+	}
+
+	return errors.Join(errors.New(prefix), err)
+}
+
 // GetEffectiveConfig 获取用户有效的AI配置
 func (s *service) GetEffectiveConfig(ctx context.Context, userID uuid.UUID) (*ProviderConfig, error) {
 	// 1. 尝试获取用户自定义配置
@@ -177,13 +231,7 @@ func (s *service) createOpenAIClient(config *ProviderConfig) *openai.Client {
 	cfg := openai.DefaultConfig(config.APIKey)
 
 	if config.Endpoint != "" {
-		// 自定义端点（Azure、本地部署等）
-		baseURL := strings.TrimSuffix(config.Endpoint, "/")
-		// 确保以 /v1 结尾（go-openai SDK 要求）
-		if !strings.HasSuffix(baseURL, "/v1") {
-			baseURL = baseURL + "/v1"
-		}
-		cfg.BaseURL = baseURL
+		cfg.BaseURL = normalizeOpenAIBaseURL(config.Endpoint)
 	}
 
 	return openai.NewClientWithConfig(cfg)
@@ -209,7 +257,7 @@ func (s *service) chatOpenAI(ctx context.Context, config *ProviderConfig, messag
 		Messages: convertToOpenAIMessages(messages),
 	})
 	if err != nil {
-		return nil, errors.Join(errors.New("OpenAI API error"), err)
+		return nil, wrapOpenAIProviderError("OpenAI API error", err)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -235,7 +283,7 @@ func (s *service) streamOpenAI(ctx context.Context, config *ProviderConfig, mess
 		Messages: convertToOpenAIMessages(messages),
 	})
 	if err != nil {
-		return errors.Join(errors.New("failed to create OpenAI stream"), err)
+		return wrapOpenAIProviderError("failed to create OpenAI stream", err)
 	}
 	defer stream.Close()
 
@@ -246,7 +294,7 @@ func (s *service) streamOpenAI(ctx context.Context, config *ProviderConfig, mess
 			return onDelta(&StreamDelta{Done: true})
 		}
 		if err != nil {
-			return errors.Join(errors.New("OpenAI stream error"), err)
+			return wrapOpenAIProviderError("OpenAI stream error", err)
 		}
 
 		if len(response.Choices) > 0 {

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { aiSystemConfigSchema } from "@/schemas/settings/integrations.schema"
@@ -10,13 +11,40 @@ import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Bot, Save, Loader2, RotateCcw } from "lucide-react"
+import { Bot, Save, Loader2, RotateCcw, Search } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
+import { toast } from "sonner"
+
+function getProbeErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "detail" in error) {
+    const detail = (error as { detail?: unknown }).detail
+    if (typeof detail === "string" && detail.trim()) {
+      return detail
+    }
+    if (typeof detail === "object" && detail !== null) {
+      const details = detail as { error?: string; message?: string }
+      if (details.error && details.error.trim()) {
+        return details.error
+      }
+      if (details.message && details.message.trim()) {
+        return details.message
+      }
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return fallback
+}
 
 export function AIConfigWrapper() {
   const t = useTranslations("settingsIntegrationsAI")
   const tCommon = useTranslations("common")
+  const [isProbingModels, setIsProbingModels] = useState(false)
+  const [detectedModels, setDetectedModels] = useState<string[]>([])
 
   const providerOptions = [
     { label: t("providerOpenAI"), value: "openai" },
@@ -26,12 +54,10 @@ export function AIConfigWrapper() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: aiSystemConfigSchema,
     loadFn: async () => {
-      // 只获取 AI 系统配置
       const systemConfig = await settingsApi.getAISystemConfig()
       return systemConfig
     },
     saveFn: async (data) => {
-      // 只保存系统配置
       await settingsApi.saveAISystemConfig({
         system_enabled: data.system_enabled,
         system_provider: data.system_provider,
@@ -42,16 +68,65 @@ export function AIConfigWrapper() {
     },
   })
 
+  const handleProbeModels = async () => {
+    setIsProbingModels(true)
+
+    try {
+      const response = await settingsApi.probeAISystemModels({
+        system_provider: form.getValues("system_provider"),
+        system_api_key: form.getValues("system_api_key")?.trim() || "",
+        system_api_endpoint: form.getValues("system_api_endpoint")?.trim() || "",
+      })
+
+      const normalizedModels = Array.from(
+        new Set(
+          (response.models || [])
+            .map((model) => model.trim())
+            .filter((model) => model.length > 0),
+        ),
+      )
+
+      setDetectedModels(normalizedModels)
+
+      if (normalizedModels.length > 0) {
+        toast.success(t("probeModelsSuccess", { count: normalizedModels.length }))
+      } else {
+        toast.info(response.message || t("noDetectedModels"))
+      }
+    } catch (error) {
+      toast.error(getProbeErrorMessage(error, t("probeModelsFailed")))
+    } finally {
+      setIsProbingModels(false)
+    }
+  }
+
+  const handleApplyDetectedModels = () => {
+    if (detectedModels.length === 0) {
+      toast.info(t("noDetectedModels"))
+      return
+    }
+
+    form.setValue("system_models", detectedModels.join(","), {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+
+    toast.success(t("applyDetectedModelsSuccess", { count: detectedModels.length }))
+  }
+
+  const handleReload = async () => {
+    await reload()
+    setDetectedModels([])
+  }
+
   if (isLoading) {
     return <SettingsLoading />
   }
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      {/* 可滚动内容区 - flex-1 + min-h-0 确保正确收缩 */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-4">
         <div className="space-y-4">
-          {/* 系统配置 */}
           <SettingsSection
             title={t("sectionTitle")}
             description={t("sectionDescription")}
@@ -112,9 +187,45 @@ export function AIConfigWrapper() {
                   form={form}
                   name="system_models"
                   label={t("fieldModelsLabel")}
-                  description={t("fieldModelsDesc")}
+                  description={`${t("fieldModelsDesc")} ${t("manualModelInputHint")}`}
                   placeholder="gpt-4,gpt-3.5-turbo,claude-3-opus"
                 />
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleProbeModels}
+                    disabled={isSaving || isProbingModels}
+                  >
+                    {isProbingModels ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {t("probingModels")}
+                      </>
+                    ) : (
+                      <>
+                        <Search className="mr-2 h-4 w-4" />
+                        {t("probeModels")}
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleApplyDetectedModels}
+                    disabled={isSaving || detectedModels.length === 0}
+                  >
+                    {t("applyDetectedModels")}
+                  </Button>
+                </div>
+
+                {detectedModels.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {t("detectedModelsLabel")}: {detectedModels.join(", ")}
+                  </p>
+                )}
               </>
             )}
 
@@ -128,13 +239,12 @@ export function AIConfigWrapper() {
         </div>
       </div>
 
-      {/* 固定底部按钮区 - shrink-0 防止被压缩 */}
       <div className="shrink-0 flex justify-end gap-2 p-4 bg-background">
-        <Button variant="outline" onClick={reload} disabled={isSaving}>
+        <Button variant="outline" onClick={handleReload} disabled={isSaving || isProbingModels}>
           <RotateCcw className="mr-2 h-4 w-4" />
           {tCommon("reset")}
         </Button>
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button onClick={handleSave} disabled={isSaving || isProbingModels}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -151,4 +261,3 @@ export function AIConfigWrapper() {
     </div>
   )
 }
-

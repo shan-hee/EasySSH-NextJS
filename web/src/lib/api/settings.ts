@@ -188,6 +188,47 @@ export interface GetRateLimitConfigResponse {
 }
 
 /**
+ * 系统级 AI 配置
+ */
+export interface AISystemConfig {
+  system_enabled: boolean
+  system_provider: string
+  system_api_key?: string
+  system_api_endpoint: string
+  system_models: string
+  has_api_key?: boolean
+}
+
+/**
+ * 保存系统级 AI 配置请求
+ */
+export interface SaveAISystemConfigRequest {
+  system_enabled?: boolean
+  system_provider?: string
+  system_api_key?: string
+  system_api_endpoint?: string
+  system_models?: string
+}
+
+/**
+ * 探测系统 AI 模型请求
+ */
+export interface ProbeAISystemModelsRequest {
+  system_provider?: string
+  system_api_key?: string
+  system_api_endpoint?: string
+}
+
+/**
+ * 探测系统 AI 模型响应
+ */
+export interface ProbeAISystemModelsResponse {
+  available: boolean
+  models: string[]
+  message?: string
+}
+
+/**
  * 系统设置 API 服务
  */
 export const settingsApi = {
@@ -427,19 +468,35 @@ export const settingsApi = {
   /**
    * 获取系统级 AI 配置
    */
-  async getAISystemConfig(): Promise<any> {
-    const response = await apiFetch<any>("/settings/ai/system", { method: "GET" })
-    // API 直接返回配置对象，不是嵌套在 config 字段中
-    return response || {}
+  async getAISystemConfig(): Promise<AISystemConfig> {
+    const response = await apiFetch<Partial<AISystemConfig>>("/settings/ai/system", { method: "GET" })
+    return {
+      system_enabled: response.system_enabled ?? false,
+      system_provider: response.system_provider ?? "openai",
+      system_api_endpoint: response.system_api_endpoint ?? "",
+      system_models: response.system_models ?? "",
+      has_api_key: response.has_api_key ?? false,
+      system_api_key: "",
+    }
   },
 
   /**
    * 保存系统级 AI 配置
    */
-  async saveAISystemConfig(config: any): Promise<void> {
+  async saveAISystemConfig(config: SaveAISystemConfigRequest): Promise<void> {
     return apiFetch<void>("/settings/ai/system", {
       method: "POST",
       body: config,
+    })
+  },
+
+  /**
+   * 探测系统级 AI 可用模型
+   */
+  async probeAISystemModels(payload: ProbeAISystemModelsRequest): Promise<ProbeAISystemModelsResponse> {
+    return apiFetch<ProbeAISystemModelsResponse>("/settings/ai/system/models", {
+      method: "POST",
+      body: payload,
     })
   },
 }

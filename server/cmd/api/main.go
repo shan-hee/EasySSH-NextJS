@@ -971,6 +971,7 @@ func main() {
 			{
 				aiGroup.GET("/system", aiConfigHandler.GetSystemAIConfig)
 				aiGroup.POST("/system", aiConfigHandler.SaveSystemAIConfig)
+				aiGroup.POST("/system/models", aiConfigHandler.ProbeSystemAIModels)
 			}
 		}
 
