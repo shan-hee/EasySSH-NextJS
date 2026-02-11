@@ -10,41 +10,19 @@ import { SettingsLoading } from "@/components/settings/settings-loading"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Bot, Save, Loader2, RotateCcw, Search } from "lucide-react"
+import { Bot, Save, Loader2, RotateCcw, Plus, X, Search, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { toast } from "sonner"
 
-function getProbeErrorMessage(error: unknown, fallback: string): string {
-  if (typeof error === "object" && error !== null && "detail" in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === "string" && detail.trim()) {
-      return detail
-    }
-    if (typeof detail === "object" && detail !== null) {
-      const details = detail as { error?: string; message?: string }
-      if (details.error && details.error.trim()) {
-        return details.error
-      }
-      if (details.message && details.message.trim()) {
-        return details.message
-      }
-    }
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-
-  return fallback
-}
-
 export function AIConfigWrapper() {
   const t = useTranslations("settingsIntegrationsAI")
   const tCommon = useTranslations("common")
+  const [modelInput, setModelInput] = useState("")
   const [isProbingModels, setIsProbingModels] = useState(false)
-  const [detectedModels, setDetectedModels] = useState<string[]>([])
 
   const providerOptions = [
     { label: t("providerOpenAI"), value: "openai" },
@@ -68,55 +46,60 @@ export function AIConfigWrapper() {
     },
   })
 
+  // 将逗号分隔字符串解析为数组
+  const getModelsArray = (): string[] => {
+    const raw = form.watch("system_models") || ""
+    return raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
+  }
+
+  const setModelsFromArray = (models: string[]) => {
+    form.setValue("system_models", models.join(","), {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+  }
+
+  const addModel = () => {
+    if (!modelInput.trim()) return
+    const current = getModelsArray()
+    if (!current.includes(modelInput.trim())) {
+      setModelsFromArray([...current, modelInput.trim()])
+    }
+    setModelInput("")
+  }
+
+  const removeModel = (model: string) => {
+    setModelsFromArray(getModelsArray().filter((m) => m !== model))
+  }
+
   const handleProbeModels = async () => {
     setIsProbingModels(true)
-
     try {
       const response = await settingsApi.probeAISystemModels({
         system_provider: form.getValues("system_provider"),
         system_api_key: form.getValues("system_api_key")?.trim() || "",
         system_api_endpoint: form.getValues("system_api_endpoint")?.trim() || "",
       })
-
-      const normalizedModels = Array.from(
+      const probed = Array.from(
         new Set(
-          (response.models || [])
-            .map((model) => model.trim())
-            .filter((model) => model.length > 0),
+          (response.models || []).map((m) => m.trim()).filter((m) => m.length > 0),
         ),
       )
-
-      setDetectedModels(normalizedModels)
-
-      if (normalizedModels.length > 0) {
-        toast.success(t("probeModelsSuccess", { count: normalizedModels.length }))
+      if (probed.length > 0) {
+        // 合并到现有标签，去重
+        const current = getModelsArray()
+        const merged = Array.from(new Set([...current, ...probed]))
+        setModelsFromArray(merged)
+        toast.success(t("probeModelsSuccess", { count: probed.length }))
       } else {
         toast.info(response.message || t("noDetectedModels"))
       }
     } catch (error) {
-      toast.error(getProbeErrorMessage(error, t("probeModelsFailed")))
+      const msg = error instanceof Error ? error.message : t("probeModelsFailed")
+      toast.error(msg)
     } finally {
       setIsProbingModels(false)
     }
-  }
-
-  const handleApplyDetectedModels = () => {
-    if (detectedModels.length === 0) {
-      toast.info(t("noDetectedModels"))
-      return
-    }
-
-    form.setValue("system_models", detectedModels.join(","), {
-      shouldDirty: true,
-      shouldValidate: true,
-    })
-
-    toast.success(t("applyDetectedModelsSuccess", { count: detectedModels.length }))
-  }
-
-  const handleReload = async () => {
-    await reload()
-    setDetectedModels([])
   }
 
   if (isLoading) {
@@ -183,49 +166,73 @@ export function AIConfigWrapper() {
                   placeholder={form.watch("has_api_key") ? "••••••••••••••••" : t("fieldApiKeyPlaceholder")}
                 />
 
-                <FormInput
-                  form={form}
-                  name="system_models"
-                  label={t("fieldModelsLabel")}
-                  description={`${t("fieldModelsDesc")} ${t("manualModelInputHint")}`}
-                  placeholder="gpt-4,gpt-3.5-turbo,claude-3-opus"
-                />
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleProbeModels}
-                    disabled={isSaving || isProbingModels}
-                  >
-                    {isProbingModels ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {t("probingModels")}
-                      </>
-                    ) : (
-                      <>
-                        <Search className="mr-2 h-4 w-4" />
-                        {t("probeModels")}
-                      </>
-                    )}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleApplyDetectedModels}
-                    disabled={isSaving || detectedModels.length === 0}
-                  >
-                    {t("applyDetectedModels")}
-                  </Button>
-                </div>
-
-                {detectedModels.length > 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {t("detectedModelsLabel")}: {detectedModels.join(", ")}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>{t("fieldModelsLabel")}</Label>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={handleProbeModels}
+                        disabled={isProbingModels || isSaving}
+                      >
+                        {isProbingModels ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            {t("probingModels")}
+                          </>
+                        ) : (
+                          <>
+                            <Search className="mr-1 h-3 w-3" />
+                            {t("probeModels")}
+                          </>
+                        )}
+                      </Button>
+                      {getModelsArray().length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto py-0.5 px-2 text-xs text-destructive hover:text-destructive"
+                          onClick={() => setModelsFromArray([])}
+                          disabled={isSaving}
+                        >
+                          <Trash2 className="mr-1 h-3 w-3" />
+                          {t("clearModels")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder={t("fieldModelsPlaceholder")}
+                      value={modelInput}
+                      onChange={(e) => setModelInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addModel())}
+                    />
+                    <Button type="button" onClick={addModel} size="sm">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {getModelsArray().map((model) => (
+                      <Badge key={model} variant="secondary" className="gap-1">
+                        {model}
+                        <button
+                          onClick={() => removeModel(model)}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("fieldModelsDesc")}
                   </p>
-                )}
+                </div>
               </>
             )}
 
@@ -240,11 +247,11 @@ export function AIConfigWrapper() {
       </div>
 
       <div className="shrink-0 flex justify-end gap-2 p-4 bg-background">
-        <Button variant="outline" onClick={handleReload} disabled={isSaving || isProbingModels}>
+        <Button variant="outline" onClick={reload} disabled={isSaving}>
           <RotateCcw className="mr-2 h-4 w-4" />
           {tCommon("reset")}
         </Button>
-        <Button onClick={handleSave} disabled={isSaving || isProbingModels}>
+        <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
