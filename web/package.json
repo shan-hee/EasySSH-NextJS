@@ -62,7 +62,7 @@
     "katex": "^0.16.25",
     "lru-cache": "^11.2.2",
     "lucide-react": "^0.545.0",
-    "monaco-editor": "^0.54.0",
+    "monaco-editor": "^0.55.1",
     "motion": "^12.23.24",
     "next": "^16.0.0",
     "next-intl": "^4.4.0",

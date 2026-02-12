@@ -55,6 +55,7 @@ export function FileActionMenu({
   onAction,
 }: FileActionMenuProps) {
   const t = useTranslations("sftp")
+  const recommendedLabel = t("actionRecommended")
   const isContext = mode === "context"
   const isMultiSelect = selectedFilesCount > 1
   const isSingleSelect = selectedFilesCount === 1
@@ -93,7 +94,7 @@ export function FileActionMenu({
       <span className={cn(
         "text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary",
       )}>
-        Recommended
+        {recommendedLabel}
       </span>
     )
   }

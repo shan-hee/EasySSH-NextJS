@@ -89,6 +89,7 @@ import { toast } from "sonner"
 import { computeFloatingPosition } from "@/lib/overlay-position"
 import { setDragSourceSessionId } from "@/lib/drag-state"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { getErrorMessage } from "@/lib/error-utils"
 
 type FileItem = Pick<SftpFileItem, "name" | "type" | "size" | "modified" | "permissions"> & {
   sizeBytes?: number
@@ -966,16 +967,16 @@ export function SftpManager(props: SftpManagerProps) {
       try {
         await onBatchDownload(paths, mode, excludePatterns)
         setSelectedFiles([])
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[SftpManager] 批量下载失败:', error)
-        alert(`批量下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
+        toast.error(getErrorMessage(error, tSftp("toastBatchDownloadFailed")))
       }
     } else {
       // 降级到循环调用单个下载
       paths.forEach(path => onDownload(path))
       setSelectedFiles([])
     }
-  }, [selectedFiles, contextMenu, onDownload, onBatchDownload, excludePatterns, defaultDownloadMode])
+  }, [selectedFiles, contextMenu, onDownload, onBatchDownload, excludePatterns, defaultDownloadMode, tSftp])
 
   // 批量删除
   const handleBatchDelete = useCallback(async () => {
@@ -988,21 +989,30 @@ export function SftpManager(props: SftpManagerProps) {
 
         // 显示结果
         if (result.failed.length > 0) {
-          const failedNames = result.failed.map(f => f.path.split('/').pop()).join(', ')
-          alert(`删除完成：成功 ${result.success.length} 个，失败 ${result.failed.length} 个\n失败的文件：${failedNames}`)
+          const failedNames = result.failed
+            .map(f => f.path.split('/').pop())
+            .filter(Boolean)
+            .join(', ')
+
+          toast.error(
+            tSftp("toastBatchDeletePartialFailed", {
+              count: result.failed.length,
+              names: failedNames || "-",
+            })
+          )
         }
 
         setSelectedFiles([])
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[SftpManager] 批量删除失败:', error)
-        alert(`批量删除失败: ${error instanceof Error ? error.message : '未知错误'}`)
+        toast.error(getErrorMessage(error, tSftp("toastBatchDeleteFailed")))
       }
     } else {
       // 降级到循环调用单个删除
       selectedFiles.forEach(fileName => onDelete(fileName))
       setSelectedFiles([])
     }
-  }, [selectedFiles, onDelete, onBatchDelete])
+  }, [selectedFiles, onDelete, onBatchDelete, tSftp])
 
   // 请求删除单个文件（显示确认弹窗）
   const requestDelete = useCallback((fileName: string) => {

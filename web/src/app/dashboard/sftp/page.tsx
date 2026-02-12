@@ -33,7 +33,6 @@ import {
 } from '@dnd-kit/sortable'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useVirtualizer } from '@tanstack/react-virtual'
 import { createPortal } from 'react-dom'
 import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
@@ -1012,14 +1011,12 @@ export default function SftpPage() {
      `${session.currentPath}/${fileName}`.replace("//", "/")
    )
 
-   try {
-     console.log('[handleBatchDownload] start batch download:', { serverId: session.serverId, filePaths, mode })
-     await sftpApi.batchDownload(session.serverId, filePaths, mode, excludePatterns)
-     console.log('[handleBatchDownload] batch download triggered')
-     toast.success(tSftp("toastBatchDownloadStart", { count: fileNames.length }))
-   } catch (error: unknown) {
-     console.error("Failed to batch download:", error)
-     toast.error(getErrorMessage(error, tSftp("toastBatchDownloadFailed")))
+  try {
+    await sftpApi.batchDownload(session.serverId, filePaths, mode, excludePatterns)
+    toast.success(tSftp("toastBatchDownloadStart", { count: fileNames.length }))
+  } catch (error: unknown) {
+    console.error("Failed to batch download:", error)
+    toast.error(getErrorMessage(error, tSftp("toastBatchDownloadFailed")))
      throw error
    }
  }, [tSftp])
@@ -1032,22 +1029,8 @@ export default function SftpPage() {
  return "grid-cols-2"
  }
 
- const onlineServers = servers.filter(s => s.status === "online")
- const offlineServers = servers.filter(s => s.status !== "online")
-
- // 虚拟化滚动 - 仅在会话数量 >= 10 时启用
- const useVirtualization = sessions.length >= 10
-
- // 虚拟化对象（预留用于后续优化大量会话的渲染性能）
- const virtualizer = useVirtualizer({
-   count: sessions.length,
-   getScrollElement: () => parentRef.current,
-   estimateSize: () => 500, // 估计每个会话项的高度
-   enabled: useVirtualization,
- })
-
- // 访问一次虚拟项, 避免未使用变量告警
- const virtualItems = useVirtualization ? virtualizer.getVirtualItems() : []
+const onlineServers = servers.filter(s => s.status === "online")
+const offlineServers = servers.filter(s => s.status !== "online")
 
  // 加载状态 - 直接显示界面，服务器列表异步加载
  // 与快速连接界面保持一致，不使用骨架屏

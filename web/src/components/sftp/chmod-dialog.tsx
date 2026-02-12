@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useTranslations } from "next-intl"
 
 interface ChmodDialogProps {
   open: boolean
@@ -29,6 +30,9 @@ export function ChmodDialog({
   currentPermissions,
   onConfirm,
 }: ChmodDialogProps) {
+  const tSftp = useTranslations("sftp")
+  const tCommon = useTranslations("common")
+
   // 解析当前权限（如 "drwxr-xr-x" 或 "-rw-r--r--"）
   const parsePermissions = (perms: string): number => {
     // 空值检查
@@ -120,16 +124,18 @@ export function ChmodDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>修改权限</DialogTitle>
+          <DialogTitle>{tSftp("chmodDialogTitle")}</DialogTitle>
           <DialogDescription>
-            修改 <span className="font-mono text-foreground">{fileName}</span> 的权限
+            {tSftp("chmodDialogDescriptionPrefix")}{" "}
+            <span className="font-mono text-foreground">{fileName}</span>{" "}
+            {tSftp("chmodDialogDescriptionSuffix")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           {/* 八进制输入 */}
           <div className="space-y-2">
-            <Label htmlFor="octal">八进制模式</Label>
+            <Label htmlFor="octal">{tSftp("chmodDialogOctalLabel")}</Label>
             <Input
               id="octal"
               value={octalInput}
@@ -139,7 +145,7 @@ export function ChmodDialog({
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              预览: {formatPermissionString(mode)}
+              {tSftp("chmodDialogPreview")}: {formatPermissionString(mode)}
             </p>
           </div>
 
@@ -147,7 +153,7 @@ export function ChmodDialog({
           <div className="space-y-4">
             {/* Owner */}
             <div>
-              <Label className="text-sm font-semibold mb-2 block">所有者</Label>
+              <Label className="text-sm font-semibold mb-2 block">{tSftp("chmodDialogOwner")}</Label>
               <div className="flex gap-4">
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -159,7 +165,7 @@ export function ChmodDialog({
                     htmlFor="owner-read"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    读取 (r)
+                    {tSftp("chmodDialogRead")} (r)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -172,7 +178,7 @@ export function ChmodDialog({
                     htmlFor="owner-write"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    写入 (w)
+                    {tSftp("chmodDialogWrite")} (w)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -185,7 +191,7 @@ export function ChmodDialog({
                     htmlFor="owner-execute"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    执行 (x)
+                    {tSftp("chmodDialogExecute")} (x)
                   </label>
                 </div>
               </div>
@@ -193,7 +199,7 @@ export function ChmodDialog({
 
             {/* Group */}
             <div>
-              <Label className="text-sm font-semibold mb-2 block">组</Label>
+              <Label className="text-sm font-semibold mb-2 block">{tSftp("chmodDialogGroup")}</Label>
               <div className="flex gap-4">
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -205,7 +211,7 @@ export function ChmodDialog({
                     htmlFor="group-read"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    读取 (r)
+                    {tSftp("chmodDialogRead")} (r)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -218,7 +224,7 @@ export function ChmodDialog({
                     htmlFor="group-write"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    写入 (w)
+                    {tSftp("chmodDialogWrite")} (w)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -231,7 +237,7 @@ export function ChmodDialog({
                     htmlFor="group-execute"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    执行 (x)
+                    {tSftp("chmodDialogExecute")} (x)
                   </label>
                 </div>
               </div>
@@ -239,7 +245,7 @@ export function ChmodDialog({
 
             {/* Others */}
             <div>
-              <Label className="text-sm font-semibold mb-2 block">其他</Label>
+              <Label className="text-sm font-semibold mb-2 block">{tSftp("chmodDialogOthers")}</Label>
               <div className="flex gap-4">
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -251,7 +257,7 @@ export function ChmodDialog({
                     htmlFor="others-read"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    读取 (r)
+                    {tSftp("chmodDialogRead")} (r)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -264,7 +270,7 @@ export function ChmodDialog({
                     htmlFor="others-write"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    写入 (w)
+                    {tSftp("chmodDialogWrite")} (w)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -277,7 +283,7 @@ export function ChmodDialog({
                     htmlFor="others-execute"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    执行 (x)
+                    {tSftp("chmodDialogExecute")} (x)
                   </label>
                 </div>
               </div>
@@ -287,10 +293,10 @@ export function ChmodDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {tCommon("cancel")}
           </Button>
           <Button onClick={handleConfirm}>
-            确认
+            {tCommon("confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

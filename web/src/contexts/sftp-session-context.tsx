@@ -43,10 +43,10 @@ interface SftpSessionContextValue {
 
 const SftpSessionContext = createContext<SftpSessionContextValue | null>(null)
 
-export function useSftpSession() {
+export function useSftpSessionContext() {
   const context = useContext(SftpSessionContext)
   if (!context) {
-    throw new Error("useSftpSession must be used within SftpSessionProvider")
+    throw new Error("useSftpSessionContext must be used within SftpSessionProvider")
   }
   return context
 }

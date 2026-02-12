@@ -370,7 +370,7 @@ export function FileEditor({
           </div>
 
           {/* Monaco Editor */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-visible">
              <Editor
                height="100%"
                language={getLanguage(fileName)}
@@ -396,7 +396,7 @@ export function FileEditor({
                 cursorSmoothCaretAnimation: "off", // 关闭光标平滑动画，减少重绘
                 padding: { top: 16, bottom: 16 },
                 find: {
-                  addExtraSpaceOnTop: false,
+                  addExtraSpaceOnTop: true,
                   autoFindInSelection: "never",
                   seedSearchStringFromSelection: "selection",
                 },
@@ -607,7 +607,7 @@ export function FileEditor({
       </div>
 
       {/* Monaco Editor */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-visible">
         <Editor
           height="100%"
           language={getLanguage(fileName)}
@@ -633,7 +633,7 @@ export function FileEditor({
             cursorSmoothCaretAnimation: "off", // 关闭光标平滑动画，减少重绘
             padding: { top: 12, bottom: 12 },
             find: {
-              addExtraSpaceOnTop: false,
+              addExtraSpaceOnTop: true,
               autoFindInSelection: "never",
               seedSearchStringFromSelection: "selection",
             },
