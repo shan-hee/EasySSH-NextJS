@@ -43,7 +43,7 @@ type AIModelsProbeResponseDTO struct {
 	Message   string   `json:"message,omitempty"`
 }
 
-func normalizeOpenAIProbeBaseURL(endpoint string) string {
+func normalizeOpenAIProbeBaseURL(provider, endpoint string) string {
 	baseURL := strings.TrimSpace(strings.TrimSuffix(endpoint, "/"))
 	if baseURL == "" {
 		return ""
@@ -58,6 +58,11 @@ func normalizeOpenAIProbeBaseURL(endpoint string) string {
 		}
 	}
 
+	// Gemini 的 OpenAI 兼容地址通常是 /v1beta/openai，不应强制改写到 /v1。
+	if strings.EqualFold(provider, "gemini") {
+		return baseURL
+	}
+
 	if idx := strings.Index(lower, "/v1/"); idx >= 0 {
 		baseURL = baseURL[:idx+3]
 		lower = strings.ToLower(baseURL)
@@ -70,10 +75,10 @@ func normalizeOpenAIProbeBaseURL(endpoint string) string {
 	return baseURL
 }
 
-func fetchOpenAICompatibleModels(apiKey, endpoint string) ([]string, error) {
+func fetchOpenAICompatibleModels(provider, apiKey, endpoint string) ([]string, error) {
 	cfg := openai.DefaultConfig(apiKey)
 	if endpoint != "" {
-		cfg.BaseURL = normalizeOpenAIProbeBaseURL(endpoint)
+		cfg.BaseURL = normalizeOpenAIProbeBaseURL(provider, endpoint)
 	}
 
 	client := openai.NewClientWithConfig(cfg)
@@ -170,7 +175,7 @@ func (h *AIConfigHandler) ProbeSystemAIModels(c *gin.Context) {
 		return
 	}
 
-	provider := strings.TrimSpace(req.SystemProvider)
+	provider := strings.ToLower(strings.TrimSpace(req.SystemProvider))
 	apiKey := strings.TrimSpace(req.SystemAPIKey)
 	endpoint := strings.TrimSpace(req.SystemAPIEndpoint)
 
@@ -178,7 +183,7 @@ func (h *AIConfigHandler) ProbeSystemAIModels(c *gin.Context) {
 		existing, err := h.service.GetSystemConfig(c.Request.Context())
 		if err == nil && existing != nil {
 			if provider == "" {
-				provider = strings.TrimSpace(existing.SystemProvider)
+				provider = strings.ToLower(strings.TrimSpace(existing.SystemProvider))
 			}
 			if apiKey == "" {
 				apiKey = strings.TrimSpace(existing.SystemAPIKey)
@@ -193,14 +198,14 @@ func (h *AIConfigHandler) ProbeSystemAIModels(c *gin.Context) {
 		provider = "openai"
 	}
 
-	switch strings.ToLower(provider) {
-	case "openai":
+	switch provider {
+	case "openai", "openai-response", "gemini":
 		if apiKey == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "API key is required to probe models"})
 			return
 		}
 
-		models, err := fetchOpenAICompatibleModels(apiKey, endpoint)
+		models, err := fetchOpenAICompatibleModels(provider, apiKey, endpoint)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"available": false,

@@ -43,7 +43,7 @@ type StreamDelta struct {
 
 // AIProvider AI提供商配置
 type AIProvider struct {
-	Name     string // 提供商名称: openai, anthropic
+	Name     string // 提供商名称: openai, openai-response, gemini, anthropic
 	APIKey   string // API密钥
 	Endpoint string // API端点
 	Models   string // 可用模型列表（逗号分隔）

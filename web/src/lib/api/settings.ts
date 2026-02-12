@@ -193,7 +193,14 @@ export interface GetRateLimitConfigResponse {
 /**
  * 系统级 AI 配置
  */
-export type AISystemProvider = "openai" | "anthropic"
+export type AISystemProvider = "openai" | "openai-response" | "gemini" | "anthropic"
+
+const VALID_AI_SYSTEM_PROVIDERS: AISystemProvider[] = [
+  "openai",
+  "openai-response",
+  "gemini",
+  "anthropic",
+]
 
 export interface AISystemConfig {
   system_enabled: boolean
@@ -483,8 +490,11 @@ export const settingsApi = {
     const response = await apiFetch<
       Partial<Omit<AISystemConfig, "system_provider">> & { system_provider?: string }
     >("/settings/ai/system", { method: "GET" })
+    const rawProvider = (response.system_provider || "").toLowerCase()
     const normalizedProvider: AISystemProvider =
-      response.system_provider === "anthropic" ? "anthropic" : "openai"
+      VALID_AI_SYSTEM_PROVIDERS.includes(rawProvider as AISystemProvider)
+        ? (rawProvider as AISystemProvider)
+        : "openai"
     return {
       system_enabled: response.system_enabled ?? false,
       system_provider: normalizedProvider,

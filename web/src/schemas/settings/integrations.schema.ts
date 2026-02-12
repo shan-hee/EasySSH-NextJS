@@ -3,7 +3,7 @@ import { z } from "zod"
 // AI系统配置 Schema（仅管理员，API 配置）
 export const aiSystemConfigSchema = z.object({
   system_enabled: z.boolean().optional(),
-  system_provider: z.enum(["openai", "anthropic"]).optional(), // 仅支持 OpenAI 和 Anthropic 作为 API 转换器
+  system_provider: z.enum(["openai", "openai-response", "gemini", "anthropic"]).optional(),
   system_api_key: z.string().optional(), // API Key (保存时发送，读取时不返回)
   system_api_endpoint: z
     .string()

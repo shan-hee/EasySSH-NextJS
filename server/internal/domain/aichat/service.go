@@ -71,9 +71,26 @@ func parseModels(modelsStr string) []string {
 	return result
 }
 
+func normalizeProviderName(provider string) string {
+	p := strings.ToLower(strings.TrimSpace(provider))
+	if p == "" {
+		return "openai"
+	}
+	return p
+}
+
+func isOpenAICompatibleProvider(provider string) bool {
+	switch normalizeProviderName(provider) {
+	case "openai", "openai-response", "gemini":
+		return true
+	default:
+		return false
+	}
+}
+
 // normalizeOpenAIBaseURL 规范化 OpenAI 兼容端点。
 // 期望返回类似: https://host/v1
-func normalizeOpenAIBaseURL(endpoint string) string {
+func normalizeOpenAIBaseURL(provider, endpoint string) string {
 	baseURL := strings.TrimSpace(strings.TrimSuffix(endpoint, "/"))
 	if baseURL == "" {
 		return ""
@@ -86,6 +103,11 @@ func normalizeOpenAIBaseURL(endpoint string) string {
 			lower = strings.ToLower(baseURL)
 			break
 		}
+	}
+
+	// Gemini 的 OpenAI 兼容地址通常为 /v1beta/openai，不应强制改写为 /v1。
+	if normalizeProviderName(provider) == "gemini" {
+		return baseURL
 	}
 
 	if idx := strings.Index(lower, "/v1/"); idx >= 0 {
@@ -107,7 +129,7 @@ func openAIEndpointHint(err error) error {
 
 	lower := strings.ToLower(err.Error())
 	if strings.Contains(lower, "404 page not found") || strings.Contains(lower, "invalid character 'p' after top-level value") {
-		return errors.New("AI Endpoint 可能配置错误：请填写 OpenAI 兼容根地址（例如 https://api.openai.com/v1 或 http://localhost:11434/v1），不要填写 EasySSH 的 /api/v1/ai/... 路径")
+		return errors.New("AI Endpoint 可能配置错误：请填写 OpenAI 兼容根地址（例如 https://api.openai.com/v1、http://localhost:11434/v1，或 Gemini 的 https://generativelanguage.googleapis.com/v1beta/openai），不要填写 EasySSH 的 /api/v1/ai/... 路径")
 	}
 
 	return nil
@@ -130,6 +152,7 @@ func (s *service) GetEffectiveConfig(ctx context.Context, userID uuid.UUID) (*Pr
 	// 1. 尝试获取用户自定义配置
 	userConfig, err := s.userAIConfigService.GetUserConfig(ctx, userID)
 	if err == nil && userConfig != nil && !userConfig.UseSystemConfig && userConfig.CustomEnabled {
+		provider := normalizeProviderName(userConfig.CustomProvider)
 		// 解析用户配置的模型列表
 		userModels := parseModels(userConfig.CustomModels)
 		defaultModel := ""
@@ -137,7 +160,7 @@ func (s *service) GetEffectiveConfig(ctx context.Context, userID uuid.UUID) (*Pr
 			defaultModel = userModels[0] // 默认使用第一个模型
 		}
 		return &ProviderConfig{
-			Provider: userConfig.CustomProvider,
+			Provider: provider,
 			APIKey:   userConfig.CustomAPIKey,
 			Endpoint: userConfig.CustomEndpoint,
 			Model:    defaultModel,
@@ -160,9 +183,10 @@ func (s *service) GetEffectiveConfig(ctx context.Context, userID uuid.UUID) (*Pr
 	if len(models) > 0 {
 		defaultModel = models[0] // 默认使用第一个模型
 	}
+	provider := normalizeProviderName(sysConfig.SystemProvider)
 
 	return &ProviderConfig{
-		Provider: sysConfig.SystemProvider,
+		Provider: provider,
 		APIKey:   sysConfig.SystemAPIKey,
 		Endpoint: sysConfig.SystemAPIEndpoint,
 		Model:    defaultModel,
@@ -187,10 +211,13 @@ func (s *service) Chat(ctx context.Context, userID uuid.UUID, req *ChatRequest) 
 		model = config.Model
 	}
 
-	switch config.Provider {
-	case "openai":
+	provider := normalizeProviderName(config.Provider)
+	config.Provider = provider
+
+	switch {
+	case isOpenAICompatibleProvider(provider):
 		return s.chatOpenAI(ctx, config, req.Messages, model)
-	case "anthropic":
+	case provider == "anthropic":
 		return s.chatAnthropic(ctx, config, req.Messages, model)
 	default:
 		return nil, ErrInvalidProvider
@@ -214,24 +241,27 @@ func (s *service) StreamChat(ctx context.Context, userID uuid.UUID, req *ChatReq
 		model = config.Model
 	}
 
-	switch config.Provider {
-	case "openai":
+	provider := normalizeProviderName(config.Provider)
+	config.Provider = provider
+
+	switch {
+	case isOpenAICompatibleProvider(provider):
 		return s.streamOpenAI(ctx, config, req.Messages, model, onDelta)
-	case "anthropic":
+	case provider == "anthropic":
 		return s.streamAnthropic(ctx, config, req.Messages, model, onDelta)
 	default:
 		return ErrInvalidProvider
 	}
 }
 
-// ========== OpenAI / Azure / Custom 兼容 API (使用 go-openai SDK) ==========
+// ========== OpenAI / OpenAI-Response / Gemini(OpenAI兼容) 兼容 API ==========
 
 // createOpenAIClient 创建 OpenAI 客户端
 func (s *service) createOpenAIClient(config *ProviderConfig) *openai.Client {
 	cfg := openai.DefaultConfig(config.APIKey)
 
 	if config.Endpoint != "" {
-		cfg.BaseURL = normalizeOpenAIBaseURL(config.Endpoint)
+		cfg.BaseURL = normalizeOpenAIBaseURL(config.Provider, config.Endpoint)
 	}
 
 	return openai.NewClientWithConfig(cfg)

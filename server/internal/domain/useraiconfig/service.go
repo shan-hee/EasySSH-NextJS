@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -58,14 +59,22 @@ func (s *service) validateUserConfig(config *UserAIConfig) error {
 
 	// 如果启用自定义配置，需要验证
 	if config.CustomEnabled {
-		// 验证服务商（仅支持 openai 和 anthropic 作为 API 转换器，与系统配置保持一致）
+		provider := strings.ToLower(strings.TrimSpace(config.CustomProvider))
+		if provider == "" {
+			provider = "openai"
+		}
+
+		// 验证服务商（与系统配置保持一致）
 		validProviders := map[string]bool{
-			"openai":    true,
-			"anthropic": true,
+			"openai":          true,
+			"openai-response": true,
+			"gemini":          true,
+			"anthropic":       true,
 		}
-		if !validProviders[config.CustomProvider] {
-			return fmt.Errorf("invalid provider: %s (only openai and anthropic are supported)", config.CustomProvider)
+		if !validProviders[provider] {
+			return fmt.Errorf("invalid provider: %s (supported: openai, openai-response, gemini, anthropic)", config.CustomProvider)
 		}
+		config.CustomProvider = provider
 
 		// 验证API密钥
 		if config.CustomAPIKey == "" {
@@ -73,7 +82,7 @@ func (s *service) validateUserConfig(config *UserAIConfig) error {
 		}
 
 		// 验证模型列表
-		if config.CustomModels == "" {
+		if strings.TrimSpace(config.CustomModels) == "" {
 			return errors.New("at least one model is required when custom AI is enabled")
 		}
 	}

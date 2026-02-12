@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { aiSystemConfigSchema } from "@/schemas/settings/integrations.schema"
-import { settingsApi } from "@/lib/api/settings"
+import { settingsApi, type AISystemProvider } from "@/lib/api/settings"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
@@ -24,8 +24,10 @@ export function AIConfigWrapper() {
   const [modelInput, setModelInput] = useState("")
   const [isProbingModels, setIsProbingModels] = useState(false)
 
-  const providerOptions = [
+  const providerOptions: Array<{ label: string; value: AISystemProvider }> = [
     { label: t("providerOpenAI"), value: "openai" },
+    { label: t("providerOpenAIResponse"), value: "openai-response" },
+    { label: t("providerGemini"), value: "gemini" },
     { label: t("providerAnthropic"), value: "anthropic" },
   ]
 
@@ -131,7 +133,7 @@ export function AIConfigWrapper() {
                     onValueChange={(val) =>
                       form.setValue(
                         "system_provider",
-                        val as "openai" | "anthropic",
+                        val as AISystemProvider,
                       )
                     }
                   >

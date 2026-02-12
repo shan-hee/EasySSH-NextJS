@@ -12,7 +12,7 @@ type AIConfig struct {
 
 	// 系统级配置
 	SystemEnabled     bool   `gorm:"default:false" json:"system_enabled"`
-	SystemProvider    string `gorm:"size:20" json:"system_provider"`       // openai, anthropic（仅作为 API 转换器）
+	SystemProvider    string `gorm:"size:20" json:"system_provider"`       // openai, openai-response, gemini, anthropic
 	SystemAPIKey      string `gorm:"type:text" json:"-"`                   // API密钥（不对外输出）
 	SystemAPIEndpoint string `gorm:"type:text" json:"system_api_endpoint"` // API 端点
 	SystemModels      string `gorm:"type:text" json:"system_models"`       // 可用模型列表（逗号分隔）

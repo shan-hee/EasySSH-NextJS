@@ -2294,6 +2294,12 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                                     <SelectItem value="openai">
                                       {tAccount("aiProviderOpenAI")}
                                     </SelectItem>
+                                    <SelectItem value="openai-response">
+                                      {tAccount("aiProviderOpenAIResponse")}
+                                    </SelectItem>
+                                    <SelectItem value="gemini">
+                                      {tAccount("aiProviderGemini")}
+                                    </SelectItem>
                                     <SelectItem value="anthropic">
                                       {tAccount("aiProviderAnthropic")}
                                     </SelectItem>

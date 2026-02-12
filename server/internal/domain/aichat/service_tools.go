@@ -30,10 +30,13 @@ func (s *service) ChatWithTools(ctx context.Context, userID uuid.UUID, req *Chat
 	}
 	permissionMode := NormalizePermissionMode(string(req.PermissionMode))
 
-	switch config.Provider {
-	case "openai":
+	provider := normalizeProviderName(config.Provider)
+	config.Provider = provider
+
+	switch {
+	case isOpenAICompatibleProvider(provider):
 		return s.chatOpenAIWithTools(ctx, config, req.Messages, model, permissionMode)
-	case "anthropic":
+	case provider == "anthropic":
 		return s.chatAnthropicWithTools(ctx, config, req.Messages, model, permissionMode)
 	default:
 		return nil, ErrInvalidProvider
@@ -78,6 +81,7 @@ func (s *service) StreamChatWithTools(ctx context.Context, userID uuid.UUID, req
 	if err != nil {
 		return err
 	}
+	config.Provider = normalizeProviderName(config.Provider)
 
 	model := req.Model
 	if model == "" {
@@ -133,10 +137,10 @@ func (s *service) StreamChatWithTools(ctx context.Context, userID uuid.UUID, req
 
 		// 调用 AI
 		var streamErr error
-		switch config.Provider {
-		case "openai":
+		switch {
+		case isOpenAICompatibleProvider(config.Provider):
 			streamErr = s.streamOpenAIWithTools(ctx, config, messages, model, permissionMode, internalCallback)
-		case "anthropic":
+		case config.Provider == "anthropic":
 			streamErr = s.streamAnthropicWithTools(ctx, config, messages, model, permissionMode, internalCallback)
 		default:
 			return ErrInvalidProvider

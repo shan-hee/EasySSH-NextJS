@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Service AI配置服务接口
@@ -45,17 +46,25 @@ func (s *service) validateSystemConfig(config *AIConfig) error {
 		return nil
 	}
 
-	// 验证服务商（仅支持 openai 和 anthropic 作为 API 转换器）
-	validProviders := map[string]bool{
-		"openai":    true,
-		"anthropic": true,
-	}
-	if !validProviders[config.SystemProvider] {
-		return fmt.Errorf("invalid provider: %s (only openai and anthropic are supported)", config.SystemProvider)
+	provider := strings.ToLower(strings.TrimSpace(config.SystemProvider))
+	if provider == "" {
+		provider = "openai"
 	}
 
+	// 验证服务商
+	validProviders := map[string]bool{
+		"openai":          true,
+		"openai-response": true,
+		"gemini":          true,
+		"anthropic":       true,
+	}
+	if !validProviders[provider] {
+		return fmt.Errorf("invalid provider: %s (supported: openai, openai-response, gemini, anthropic)", config.SystemProvider)
+	}
+	config.SystemProvider = provider
+
 	// 验证模型列表
-	if config.SystemModels == "" {
+	if strings.TrimSpace(config.SystemModels) == "" {
 		return errors.New("at least one model is required when system AI is enabled")
 	}
 
