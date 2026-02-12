@@ -100,8 +100,9 @@ export function useTerminalInstance(
           allowTransparency: false,
           disableStdin: false,
           fastScrollModifier: 'shift',
-          fastScrollSensitivity: 5,
-          scrollSensitivity: 3,
+          // 降低滚轮灵敏度，避免一次滚动跳动过多
+          fastScrollSensitivity: 2,
+          scrollSensitivity: 1,
           windowOptions: {},
         })
 

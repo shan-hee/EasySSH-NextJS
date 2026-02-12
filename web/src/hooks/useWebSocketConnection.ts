@@ -4,7 +4,11 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { TerminalWebSocket, type CompletionDataResponse } from '@/lib/websocket-terminal'
+import {
+  TerminalWebSocket,
+  type CompletionDataResponse,
+  type CompletionUpdateResponse,
+} from '@/lib/websocket-terminal'
 import { useTerminalStore } from '@/stores/terminal-store'
 import type { Terminal } from '@xterm/xterm'
 
@@ -20,6 +24,8 @@ export interface WebSocketConnectionConfig {
   rows: number
   onLoadingChange?: (isLoading: boolean) => void
   onCompletionData?: (data: CompletionDataResponse) => void
+  onCompletionUpdate?: (data: CompletionUpdateResponse) => void
+  enableCompletionFetch?: boolean
 }
 
 /**
@@ -36,6 +42,9 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     cols,
     rows,
     onLoadingChange,
+    onCompletionData,
+    onCompletionUpdate,
+    enableCompletionFetch,
   } = config
 
   const wsRef = useRef<TerminalWebSocket | null>(null)
@@ -44,11 +53,21 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
 
   // ==================== 方案C：使用 ref 存储最新的回调 ====================
   const onLoadingChangeRef = useRef(onLoadingChange)
+  const onCompletionDataRef = useRef(onCompletionData)
+  const onCompletionUpdateRef = useRef(onCompletionUpdate)
 
   // 每次渲染时同步最新的回调到 ref
   useEffect(() => {
     onLoadingChangeRef.current = onLoadingChange
   }, [onLoadingChange])
+
+  useEffect(() => {
+    onCompletionDataRef.current = onCompletionData
+  }, [onCompletionData])
+
+  useEffect(() => {
+    onCompletionUpdateRef.current = onCompletionUpdate
+  }, [onCompletionUpdate])
 
   // ==================== 核心修复：从 Store 同步 wsRef ====================
   // 每次渲染时，先从 Store 获取现有连接
@@ -132,7 +151,13 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
             inst.terminal.writeln(`\r\n\x1b[1;31m✗ Error: ${error.message}\x1b[0m`)
           }
         },
-        onCompletionData: config.onCompletionData
+        onCompletionData: (data) => {
+          onCompletionDataRef.current?.(data)
+        },
+        onCompletionUpdate: (data) => {
+          onCompletionUpdateRef.current?.(data)
+        },
+        enableCompletionFetch: !!enableCompletionFetch,
       })
 
       ws.connect()
@@ -167,6 +192,21 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     // - terminalReady: 终端实例创建完成时触发连接（关键修复！）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, serverId, isConnected, terminalReady])
+
+  // 动态同步补全拉取开关，避免切换配置时必须重建连接
+  useEffect(() => {
+    if (!wsRef.current) {
+      return
+    }
+
+    const shouldFetch = !!enableCompletionFetch
+    wsRef.current.setCompletionFetchEnabled(shouldFetch)
+
+    // 开关从关闭切到开启且连接已建立时，主动拉取一次补全数据
+    if (shouldFetch && wsRef.current.isConnected()) {
+      wsRef.current.fetchCompletionData(500)
+    }
+  }, [enableCompletionFetch, sessionId, serverId])
 
   // 返回当前连接引用
   return {

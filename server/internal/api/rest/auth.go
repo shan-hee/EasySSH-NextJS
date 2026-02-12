@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -1205,6 +1206,30 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 	// 附带公共系统配置（未登录场景下也可使用）
 	if h.systemConfigService != nil {
 		if cfg, err := h.systemConfigService.Get(c.Request.Context()); err == nil && cfg != nil {
+			completionProviders := systemconfig.DefaultCompletionProviders()
+			if cfg.CompletionProviders != "" {
+				var parsed systemconfig.CompletionProvidersConfig
+				if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionProviders), &parsed); unmarshalErr == nil {
+					completionProviders = &parsed
+				}
+			}
+
+			completionQuotas := systemconfig.DefaultCompletionQuotas()
+			if cfg.CompletionQuotas != "" {
+				var parsed systemconfig.CompletionQuotasConfig
+				if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionQuotas), &parsed); unmarshalErr == nil {
+					completionQuotas = &parsed
+				}
+			}
+
+			completionCache := systemconfig.DefaultCompletionCache()
+			if cfg.CompletionCache != "" {
+				var parsed systemconfig.CompletionCacheConfig
+				if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionCache), &parsed); unmarshalErr == nil {
+					completionCache = &parsed
+				}
+			}
+
 			response["system_config"] = gin.H{
 				"system_name":               cfg.SystemName,
 				"system_logo":               cfg.SystemLogo,
@@ -1217,6 +1242,9 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 				"skip_excluded_on_upload":   cfg.SkipExcludedOnUpload,
 				"max_file_upload_size":      cfg.MaxFileUploadSize,
 				"completion_enabled":        cfg.CompletionEnabled,
+				"completion_providers":      completionProviders,
+				"completion_quotas":         completionQuotas,
+				"completion_cache":          completionCache,
 				"allow_registration":        cfg.AllowRegistration,
 				"oauth_enabled":             cfg.OAuthEnabled,
 				"google_client_id":          cfg.GoogleClientID,

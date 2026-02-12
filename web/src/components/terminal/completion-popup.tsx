@@ -6,6 +6,13 @@
 
 import { useEffect, useRef, useCallback, useState } from "react"
 import {
+  Command as CommandIcon,
+  Clock3,
+  Cloud,
+  FileText,
+  Sparkles,
+} from "lucide-react"
+import {
   Popover,
   PopoverContent,
   PopoverAnchor,
@@ -28,7 +35,7 @@ interface CompletionPopupProps {
   selectedIndex: number
   position: { x: number; y: number }
   matchedPrefix: string
-  showDescription?: boolean
+  showIcon?: boolean
   onSelect: (item: CompletionItem, index: number) => void
   onClose: () => void
   onSelectedIndexChange?: (index: number) => void
@@ -72,12 +79,31 @@ function HighlightedText({
   )
 }
 
+function getCompletionIcon(item: CompletionItem) {
+  if (item.providerName === "session") {
+    return Clock3
+  }
+  if (item.source === "ai") {
+    return Sparkles
+  }
+  if (item.source === "remote") {
+    return Cloud
+  }
+  if (item.source === "history") {
+    return Clock3
+  }
+  if (item.source === "script") {
+    return FileText
+  }
+  return CommandIcon
+}
+
 export function CompletionPopup({
   items,
   selectedIndex,
   position,
   matchedPrefix,
-  showDescription = true,
+  showIcon = true,
   onSelect,
   onClose,
   onSelectedIndexChange,
@@ -218,6 +244,20 @@ export function CompletionPopup({
                         : "bg-transparent"
                     )}
                   >
+                    {/* 图标 */}
+                    {showIcon && (
+                      <div
+                        className="flex-shrink-0 text-zinc-500 dark:text-zinc-400"
+                        title={t(sourceLabelKey[item.source])}
+                        aria-label={t(sourceLabelKey[item.source])}
+                      >
+                        {(() => {
+                          const Icon = getCompletionIcon(item)
+                          return <Icon className="h-3.5 w-3.5" />
+                        })()}
+                      </div>
+                    )}
+
                     {/* 主文本 */}
                     <div className="flex-1 min-w-0 font-mono text-sm text-zinc-800 dark:text-zinc-200">
                       <HighlightedText
@@ -225,20 +265,6 @@ export function CompletionPopup({
                         prefix={matchedPrefix}
                         highlightColor={theme.green || "#22c55e"}
                       />
-                    </div>
-
-                    {/* 描述 */}
-                    {showDescription && item.description && (
-                      <div className="flex-shrink-0 text-xs max-w-[200px] truncate text-zinc-500 dark:text-zinc-400">
-                        {item.description}
-                      </div>
-                    )}
-
-                    {/* 来源标签 */}
-                    <div className="flex-shrink-0">
-                      <span className="text-xs px-1.5 py-0.5 rounded font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800">
-                        {t(sourceLabelKey[item.source])}
-                      </span>
                     </div>
                   </CommandItem>
                 )

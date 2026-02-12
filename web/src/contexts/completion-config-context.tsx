@@ -140,6 +140,8 @@ export function CompletionConfigProvider({ children }: { children: ReactNode }) 
         local: globalConfig.providers.local,
         remote: globalConfig.providers.remote_history,
         history: globalConfig.providers.session,
+        script: globalConfig.providers.script,
+        session: globalConfig.providers.session,
       },
       enableQuotaAllocation: true,
       sourceQuotas: sourceQuotas.length > 0 ? sourceQuotas : DEFAULT_SOURCE_QUOTAS,

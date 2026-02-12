@@ -17,6 +17,7 @@ import (
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshsession"
+	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -90,13 +91,16 @@ type TerminalHandler struct {
 	sessionManager    *sshDomain.SessionManager
 	encryptor         *crypto.Encryptor
 	sshSessionService sshsession.Service
-	hostKeyCallback   ssh.HostKeyCallback // SSH主机密钥验证回调
-	securityService   security.Service    // 安全配置服务（用于 CORS）
-	completionService completion.Service  // 补全服务
+	hostKeyCallback   ssh.HostKeyCallback  // SSH主机密钥验证回调
+	securityService   security.Service     // 安全配置服务（用于 CORS）
+	completionService completion.Service   // 补全服务
+	systemConfigSvc   systemconfig.Service // 系统配置（用于补全配置动态生效）
+	completionSubMu   sync.RWMutex
+	completionSubs    map[completionBroadcastKey]map[*completionSubscriber]struct{}
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, securityService security.Service, completionService completion.Service) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, securityService security.Service, completionService completion.Service, systemConfigSvc systemconfig.Service) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
@@ -106,6 +110,8 @@ func NewTerminalHandler(serverService server.Service, serverRepo server.Reposito
 		hostKeyCallback:   hostKeyCallback,
 		securityService:   securityService,
 		completionService: completionService,
+		systemConfigSvc:   systemConfigSvc,
+		completionSubs:    make(map[completionBroadcastKey]map[*completionSubscriber]struct{}),
 	}
 }
 
@@ -151,14 +157,24 @@ type FetchCompletionDataMessage struct {
 
 // CompletionDataResponse 补全数据响应
 type CompletionDataResponse struct {
-	History   []string                  `json:"history"`
-	Scripts   []completion.ScriptItem   `json:"scripts"`
-	Timestamp int64                     `json:"timestamp"`
+	History   []string                `json:"history"`
+	Scripts   []completion.ScriptItem `json:"scripts"`
+	Timestamp int64                   `json:"timestamp"`
 }
 
 // CompletionUpdateMessage 补全更新消息（增量更新）
 type CompletionUpdateMessage struct {
 	NewCommand string `json:"newCommand"`
+}
+
+type completionBroadcastKey struct {
+	userID   uuid.UUID
+	serverID uuid.UUID
+}
+
+type completionSubscriber struct {
+	conn    *websocket.Conn
+	writeMu *sync.Mutex
 }
 
 // HandleSSH 处理 SSH WebSocket 连接
@@ -171,10 +187,16 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		return
 	}
 	userID := userIDStr.(string)
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_user_id"})
+		return
+	}
 
 	// 解析服务器 ID
 	serverID := c.Param("server_id")
-	if _, err := uuid.Parse(serverID); err != nil {
+	serverUUID, err := uuid.Parse(serverID)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_server_id"})
 		return
 	}
@@ -218,7 +240,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	// 异步建立SSH连接和初始化
 	go func() {
 		// 获取服务器信息
-		srv, err := h.serverService.GetByID(context.Background(), uuid.MustParse(userID), uuid.MustParse(serverID))
+		srv, err := h.serverService.GetByID(context.Background(), userUUID, serverUUID)
 		if err != nil {
 			resultChan <- initResult{err: fmt.Errorf("server_not_found: %w", err)}
 			return
@@ -273,8 +295,8 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		dbSessionChan := make(chan *sshsession.SSHSession, 1)
 		go func() {
 			createReq := &sshsession.CreateSSHSessionRequest{
-				UserID:       uuid.MustParse(userID),
-				ServerID:     uuid.MustParse(serverID),
+				UserID:       userUUID,
+				ServerID:     serverUUID,
 				SessionID:    session.ID,
 				ClientIP:     clientIP,
 				ClientPort:   clientPort,
@@ -384,7 +406,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	}
 
 	// WebSocket写锁保护（防止并发写入）
-	var wsMutex sync.Mutex
+	wsMutex := &sync.Mutex{}
 	safeWriteMessage := func(messageType int, data []byte) error {
 		wsMutex.Lock()
 		defer wsMutex.Unlock()
@@ -395,6 +417,18 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		defer wsMutex.Unlock()
 		return wsConn.WriteJSON(v)
 	}
+
+	// 注册补全增量广播订阅（同用户 + 同服务器）
+	completionKey := completionBroadcastKey{
+		userID:   userUUID,
+		serverID: serverUUID,
+	}
+	completionSub := &completionSubscriber{
+		conn:    wsConn,
+		writeMu: wsMutex,
+	}
+	h.registerCompletionSubscriber(completionKey, completionSub)
+	defer h.unregisterCompletionSubscriber(completionKey, completionSub)
 
 	// 从 SSH 读取并发送到 WebSocket（stdout）- 使用二进制传输
 	go func() {
@@ -514,12 +548,44 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 							return
 						}
 
+						fetchOpts := completion.FetchOptions{
+							HistoryLimit:   fetchReq.HistoryLimit,
+							IncludeHistory: true,
+							IncludeScripts: true,
+						}
+
+						// 运行时读取系统配置，使补全提供者与缓存配置动态生效
+						if h.systemConfigSvc != nil {
+							if providers, cfgErr := h.systemConfigSvc.GetCompletionProviders(context.Background()); cfgErr != nil {
+								log.Printf("Failed to get completion providers config: %v", cfgErr)
+							} else if providers != nil {
+								fetchOpts.IncludeHistory = providers.RemoteHistory
+								fetchOpts.IncludeScripts = providers.Script
+							}
+
+							if quotas, cfgErr := h.systemConfigSvc.GetCompletionQuotas(context.Background()); cfgErr != nil {
+								log.Printf("Failed to get completion quotas config: %v", cfgErr)
+							} else if quotas != nil && !quotas.RemoteHistoryUnlimited && quotas.RemoteHistorySoftMax > 0 && fetchOpts.HistoryLimit > quotas.RemoteHistorySoftMax {
+								fetchOpts.HistoryLimit = quotas.RemoteHistorySoftMax
+							}
+
+							if cacheCfg, cfgErr := h.systemConfigSvc.GetCompletionCache(context.Background()); cfgErr != nil {
+								log.Printf("Failed to get completion cache config: %v", cfgErr)
+							} else if cacheCfg != nil {
+								h.completionService.UpdateCacheConfig(cacheCfg.TTLMinutes, cacheCfg.MaxEntries)
+							}
+						}
+
+						if !fetchOpts.IncludeHistory {
+							fetchOpts.HistoryLimit = 0
+						}
+
 						// 获取补全数据（传递 serverID 以区分不同服务器）
 						completionData, err := h.completionService.FetchCompletionData(
 							sshClient,
-							uuid.MustParse(userID),
-							uuid.MustParse(serverID),
-							fetchReq.HistoryLimit,
+							userUUID,
+							serverUUID,
+							fetchOpts,
 						)
 						if err != nil {
 							log.Printf("Failed to fetch completion data: %v", err)
@@ -560,6 +626,26 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 						log.Printf("Sent completion data: %d history, %d scripts",
 							len(completionData.History), len(completionData.Scripts))
 					}()
+
+				case "completion_update":
+					// 处理补全增量更新（命令执行后由前端上报）
+					var updateReq CompletionUpdateMessage
+					if err := json.Unmarshal(msg.Data, &updateReq); err != nil {
+						log.Printf("Error parsing completion_update: %v", err)
+						continue
+					}
+
+					if strings.TrimSpace(updateReq.NewCommand) == "" {
+						continue
+					}
+
+					h.completionService.AppendHistoryCommand(
+						userUUID,
+						serverUUID,
+						updateReq.NewCommand,
+					)
+
+					h.broadcastCompletionUpdate(completionKey, updateReq.NewCommand, completionSub)
 				}
 
 			case websocket.BinaryMessage:
@@ -590,6 +676,100 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	// 尝试发送关闭消息（如果连接已关闭则静默忽略）
 	wsConn.SetWriteDeadline(time.Now().Add(time.Second))
 	_ = safeWriteJSON(Message{Type: "closed"})
+}
+
+func (h *TerminalHandler) registerCompletionSubscriber(key completionBroadcastKey, sub *completionSubscriber) {
+	h.completionSubMu.Lock()
+	defer h.completionSubMu.Unlock()
+
+	subscribers, exists := h.completionSubs[key]
+	if !exists {
+		subscribers = make(map[*completionSubscriber]struct{})
+		h.completionSubs[key] = subscribers
+	}
+	subscribers[sub] = struct{}{}
+}
+
+func (h *TerminalHandler) unregisterCompletionSubscriber(key completionBroadcastKey, sub *completionSubscriber) {
+	h.completionSubMu.Lock()
+	defer h.completionSubMu.Unlock()
+
+	subscribers, exists := h.completionSubs[key]
+	if !exists {
+		return
+	}
+	delete(subscribers, sub)
+	if len(subscribers) == 0 {
+		delete(h.completionSubs, key)
+	}
+}
+
+func (h *TerminalHandler) broadcastCompletionUpdate(key completionBroadcastKey, command string, exclude *completionSubscriber) {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		return
+	}
+
+	payload, err := json.Marshal(CompletionUpdateMessage{NewCommand: trimmed})
+	if err != nil {
+		log.Printf("Failed to marshal completion_update payload: %v", err)
+		return
+	}
+
+	msg := Message{
+		Type: "completion_update",
+		Data: payload,
+	}
+
+	h.completionSubMu.RLock()
+	group, exists := h.completionSubs[key]
+	if !exists || len(group) == 0 {
+		h.completionSubMu.RUnlock()
+		return
+	}
+
+	targets := make([]*completionSubscriber, 0, len(group))
+	for sub := range group {
+		if exclude != nil && sub == exclude {
+			continue
+		}
+		targets = append(targets, sub)
+	}
+	h.completionSubMu.RUnlock()
+
+	if len(targets) == 0 {
+		return
+	}
+
+	invalid := make([]*completionSubscriber, 0)
+	for _, sub := range targets {
+		sub.writeMu.Lock()
+		writeErr := sub.conn.WriteJSON(msg)
+		sub.writeMu.Unlock()
+
+		if writeErr != nil {
+			log.Printf("Failed to broadcast completion_update: %v", writeErr)
+			invalid = append(invalid, sub)
+		}
+	}
+
+	if len(invalid) == 0 {
+		return
+	}
+
+	h.completionSubMu.Lock()
+	defer h.completionSubMu.Unlock()
+
+	currentGroup, exists := h.completionSubs[key]
+	if !exists {
+		return
+	}
+	for _, sub := range invalid {
+		delete(currentGroup, sub)
+	}
+	if len(currentGroup) == 0 {
+		delete(h.completionSubs, key)
+	}
 }
 
 // sendMessage 发送消息

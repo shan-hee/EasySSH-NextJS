@@ -276,8 +276,9 @@ function TerminalPageContent() {
  host: server.host,
  port: server.port,
  username: server.username,
- isConnected: server.status === "online",
- status: server.status === "online" ? "connected" : "disconnected",
+ // server.status 只是“上次连接结果”，不应阻止本次连接尝试
+ isConnected: true,
+ status: server.status === "online" ? "connected" : "reconnecting",
  lastActivity: now,
  group: server.group,
  tags: server.tags,

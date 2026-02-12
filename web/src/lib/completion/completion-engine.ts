@@ -251,6 +251,7 @@ export class CompletionEngine {
     }
 
     // 4. 在不超过各来源 max 的前提下，用全局排序填满剩余空位
+    //    注意：当启用配额分配时，未配置配额的来源视为禁用来源。
     for (const entry of remainingPool) {
       if (result.length >= totalLimit) break
 
@@ -258,13 +259,15 @@ export class CompletionEngine {
       const item = entry.item
       const config = quotaMap.get(providerName)
 
+      if (!config) {
+        continue
+      }
+
       let providerMax = totalLimit
-      if (config) {
-        if (config.unlimited) {
-          providerMax = Math.min(config.softMax ?? totalLimit, totalLimit)
-        } else {
-          providerMax = config.max
-        }
+      if (config.unlimited) {
+        providerMax = Math.min(config.softMax ?? totalLimit, totalLimit)
+      } else {
+        providerMax = config.max
       }
 
       const used = usedByProvider.get(providerName) ?? 0

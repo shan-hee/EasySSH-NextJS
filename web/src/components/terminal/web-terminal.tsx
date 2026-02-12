@@ -26,7 +26,7 @@ import {
   isEnterKey,
   isBackspaceKey,
 } from "@/lib/completion/utils"
-import type { CompletionItem, CompletionResult } from "@/lib/completion/types"
+import type { CompletionItem } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
 
@@ -102,7 +102,8 @@ export function WebTerminal({
   const { theme: appTheme, resolvedTheme } = useTheme()
 
   // 使用补全配置 Context
-  const { completionConfig } = useCompletionConfig()
+  const { completionConfig, globalConfig } = useCompletionConfig()
+  const effectiveCompletionEnabled = completionEnabled && completionConfig.enabled
 
   // 获取实际的主题（light 或 dark）
   const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
@@ -129,6 +130,13 @@ export function WebTerminal({
     true // enabled
   )
 
+  // 补全引擎实例和各 provider 引用
+  // 这里提前声明，避免在 WebSocket 回调中出现“先使用后声明”的问题
+  const completionEngineRef = useRef<CompletionEngine | null>(null)
+  const remoteHistoryProviderRef = useRef<RemoteHistoryProvider | null>(null)
+  const scriptProviderRef = useRef<ScriptProvider | null>(null)
+  const sessionProviderRef = useRef<SessionProvider | null>(null)
+
   // ==================== WebSocket 连接管理 ====================
   const { sendInput, resize, ws } = useWebSocketConnection({
     sessionId,
@@ -141,6 +149,9 @@ export function WebTerminal({
     cols: terminal?.cols || 80,
     rows: terminal?.rows || 24,
     onLoadingChange,
+    enableCompletionFetch:
+      effectiveCompletionEnabled &&
+      (globalConfig.providers.remote_history || globalConfig.providers.script),
     onCompletionData: (data) => {
       // 加载远端历史到 RemoteHistoryProvider
       remoteHistoryProviderRef.current?.loadHistory(data.history, data.timestamp)
@@ -150,7 +161,11 @@ export function WebTerminal({
 
       // 补全数据发生变化时，清空引擎缓存，确保新数据参与排序
       completionEngineRef.current?.clearCache()
-    }
+    },
+    onCompletionUpdate: (data) => {
+      remoteHistoryProviderRef.current?.addCommand(data.newCommand)
+      completionEngineRef.current?.clearCache()
+    },
   })
 
   // ==================== 补全数据同步生命周期管理 ====================
@@ -214,6 +229,22 @@ export function WebTerminal({
     }
   }, [scrollback, terminalReady, terminal])
 
+  // ==================== 监听滚动灵敏度设置变化 ====================
+  useEffect(() => {
+    if (!terminal || !terminalReady) return
+
+    // 控制滚轮滚动速度，避免一次滚动跳动过多
+    if (terminal.options.scrollSensitivity !== 1) {
+      terminal.options.scrollSensitivity = 1
+    }
+    if (terminal.options.fastScrollSensitivity !== 2) {
+      terminal.options.fastScrollSensitivity = 2
+    }
+    if (terminal.options.fastScrollModifier !== "shift") {
+      terminal.options.fastScrollModifier = "shift"
+    }
+  }, [terminalReady, terminal])
+
   // ==================== 补全功能状态 ====================
   const [completionState, setCompletionState] = useState<{
     visible: boolean
@@ -242,12 +273,6 @@ export function WebTerminal({
     completionStateRef.current = completionState
   }, [completionState])
 
-  // 补全引擎实例
-  const completionEngineRef = useRef<CompletionEngine | null>(null)
-  const remoteHistoryProviderRef = useRef<RemoteHistoryProvider | null>(null)
-  const scriptProviderRef = useRef<ScriptProvider | null>(null)
-  const sessionProviderRef = useRef<SessionProvider | null>(null)
-
   // 自动补全定时器（防抖）
   const autoCompleteTimerRef = useRef<NodeJS.Timeout | null>(null)
   // 补全请求进行中标记,用于简单节流: 上一次请求未完成时,忽略新的自动触发
@@ -255,6 +280,30 @@ export function WebTerminal({
 
   // 使用 ref 保存最新的 handleCompletionRequest 函数
   const handleCompletionRequestRef = useRef<(() => Promise<void>) | undefined>(undefined)
+
+  const syncProviderEnabledState = useCallback(
+    (engine: CompletionEngine) => {
+      const providerEnabled = {
+        local: effectiveCompletionEnabled && !!globalConfig.providers.local,
+        session: effectiveCompletionEnabled && !!globalConfig.providers.session,
+        script: effectiveCompletionEnabled && !!globalConfig.providers.script,
+        remoteHistory:
+          effectiveCompletionEnabled && !!globalConfig.providers.remote_history,
+      }
+
+      engine.setProviderEnabled("local", providerEnabled.local)
+      engine.setProviderEnabled("session", providerEnabled.session)
+      engine.setProviderEnabled("script", providerEnabled.script)
+      engine.setProviderEnabled("remote-history", providerEnabled.remoteHistory)
+    },
+    [
+      effectiveCompletionEnabled,
+      globalConfig.providers.local,
+      globalConfig.providers.remote_history,
+      globalConfig.providers.script,
+      globalConfig.providers.session,
+    ]
+  )
 
   // 初始化补全引擎
   useEffect(() => {
@@ -290,9 +339,10 @@ export function WebTerminal({
       remoteHistoryProviderRef.current = remoteHistoryProvider
       engine.registerProvider(remoteHistoryProvider)
 
+      syncProviderEnabledState(engine)
       completionEngineRef.current = engine
     }
-  }, [sessionId, completionConfig, completionTrigger, completionAutoDelay, completionMaxItems, completionShowIcon, completionShowDescription])
+  }, [sessionId, completionConfig, completionTrigger, completionAutoDelay, completionMaxItems, completionShowIcon, completionShowDescription, syncProviderEnabledState])
 
   // 动态更新补全配置
   useEffect(() => {
@@ -306,8 +356,10 @@ export function WebTerminal({
         showDescription: completionShowDescription,
       }
       completionEngineRef.current.updateConfig(mergedConfig)
+      syncProviderEnabledState(completionEngineRef.current)
+      completionEngineRef.current.clearCache()
     }
-  }, [completionConfig, completionTrigger, completionAutoDelay, completionMaxItems, completionShowIcon, completionShowDescription])
+  }, [completionConfig, completionTrigger, completionAutoDelay, completionMaxItems, completionShowIcon, completionShowDescription, syncProviderEnabledState])
 
   // 关闭补全弹窗
   const closeCompletion = useCallback(() => {
@@ -319,6 +371,13 @@ export function WebTerminal({
       matchedPrefix: "",
     })
   }, [])
+
+  // 补全被关闭时，确保弹窗立即关闭
+  useEffect(() => {
+    if (!effectiveCompletionEnabled && completionStateRef.current.visible) {
+      closeCompletion()
+    }
+  }, [effectiveCompletionEnabled, closeCompletion])
 
   // 应用补全
   const applyCompletionItem = useCallback(
@@ -362,7 +421,7 @@ export function WebTerminal({
   // 处理补全请求
   const handleCompletionRequest = useCallback(async () => {
     // 如果补全功能被禁用，直接返回
-    if (!completionEnabled || !terminal || !completionEngineRef.current) {
+    if (!effectiveCompletionEnabled || !terminal || !completionEngineRef.current) {
       return
     }
 
@@ -419,7 +478,7 @@ export function WebTerminal({
     } finally {
       completionInProgressRef.current = false
     }
-  }, [completionEnabled, terminal, closeCompletion, containerRef])
+  }, [effectiveCompletionEnabled, terminal, closeCompletion, containerRef])
 
   // 更新 ref 以保持最新的函数引用
   useEffect(() => {
@@ -441,7 +500,14 @@ export function WebTerminal({
 
       // 检测 Tab 键 - 手动触发补全
       if (isTabKey(data)) {
-        handleCompletionRequestRef.current?.()
+        // Tab 模式：触发补全；Auto 模式或补全关闭：透传给 shell
+        if (effectiveCompletionEnabled && completionTrigger === "tab") {
+          handleCompletionRequestRef.current?.()
+          return
+        }
+
+        sendInput(data)
+        onCommand(data)
         return
       }
 
@@ -523,7 +589,22 @@ export function WebTerminal({
           sessionProviderRef.current.addCommand(command)
         }
 
+        // 作为增量更新兜底：命令执行后同步到远端历史 Provider，避免必须重新全量拉取
+        if (command && remoteHistoryProviderRef.current) {
+          remoteHistoryProviderRef.current.addCommand(command)
+        }
+
+        // 通知后端增量更新补全缓存，避免其他会话命中旧缓存
+        if (command && ws) {
+          ws.sendCompletionUpdate(command)
+        }
+
         // 回车键不触发自动补全
+        return
+      }
+
+      // 非自动触发模式时，不进行自动补全
+      if (!effectiveCompletionEnabled || completionTrigger !== "auto") {
         return
       }
 
@@ -556,6 +637,10 @@ export function WebTerminal({
       }
 
       autoCompleteTimerRef.current = setTimeout(() => {
+        if (!effectiveCompletionEnabled || completionTrigger !== "auto") {
+          autoCompleteTimerRef.current = null
+          return
+        }
         const context = parseCompletionContext(terminal)
 
         // 基于"整行前缀"判断是否触发自动补全:
@@ -588,7 +673,10 @@ export function WebTerminal({
     terminal,
     terminalReady,
     isConnected,
+    completionTrigger,
+    effectiveCompletionEnabled,
     sendInput,
+    ws,
     onCommand,
     closeCompletion,
     applyCompletionItem,
@@ -898,6 +986,7 @@ export function WebTerminal({
             selectedIndex={completionState.selectedIndex}
             position={completionState.position}
             matchedPrefix={completionState.matchedPrefix}
+            showIcon={completionShowIcon}
             onSelect={applyCompletionItem}
             onClose={closeCompletion}
             onPlacementChange={setCompletionPlacement}
@@ -906,6 +995,11 @@ export function WebTerminal({
       )}
 
       <style jsx global>{`
+        .terminal-container {
+          /* 阻断终端滚动向页面的滚动链传递 */
+          overscroll-behavior: contain;
+          overscroll-behavior-y: contain;
+        }
         .terminal-container .xterm {
           padding: 16px;
         }
@@ -913,6 +1007,9 @@ export function WebTerminal({
           border-radius: 0;
         }
         .terminal-container .xterm-viewport {
+          /* 在终端滚动到边界时，不继续滚动外层页面 */
+          overscroll-behavior: contain;
+          overscroll-behavior-y: contain;
           scrollbar-width: thin;
           scrollbar-color: #3f3f46 transparent;
         }

@@ -17,6 +17,8 @@ export interface TerminalWebSocketOptions {
   onHandshakeComplete?: () => void // 握手完成回调
   onConnecting?: () => void // 正在连接回调
   onCompletionData?: (data: CompletionDataResponse) => void // 补全数据回调
+  onCompletionUpdate?: (data: CompletionUpdateResponse) => void // 补全增量更新回调
+  enableCompletionFetch?: boolean // 是否在连接成功后自动拉取补全数据
 }
 
 // 补全数据响应接口
@@ -24,6 +26,10 @@ export interface CompletionDataResponse {
   history: string[]
   scripts: ScriptItem[]
   timestamp: number
+}
+
+export interface CompletionUpdateResponse {
+  newCommand: string
 }
 
 export interface ScriptItem {
@@ -46,6 +52,8 @@ export class TerminalWebSocket {
   private onHandshakeComplete?: () => void
   private onConnecting?: () => void
   private onCompletionData?: (data: CompletionDataResponse) => void
+  private onCompletionUpdate?: (data: CompletionUpdateResponse) => void
+  private enableCompletionFetch: boolean
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
   private reconnectDelay = 2000
@@ -70,6 +78,8 @@ export class TerminalWebSocket {
     this.onHandshakeComplete = options.onHandshakeComplete
     this.onConnecting = options.onConnecting
     this.onCompletionData = options.onCompletionData
+    this.onCompletionUpdate = options.onCompletionUpdate
+    this.enableCompletionFetch = options.enableCompletionFetch ?? true
   }
 
   /**
@@ -235,6 +245,35 @@ export class TerminalWebSocket {
   }
 
   /**
+   * 上报补全增量更新（命令执行后）
+   */
+  sendCompletionUpdate(newCommand: string): void {
+    if (!newCommand.trim()) {
+      return
+    }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return
+    }
+
+    try {
+      const message = {
+        type: "completion_update",
+        data: { newCommand },
+      }
+      this.ws.send(JSON.stringify(message))
+    } catch (error) {
+      console.error("[TerminalWS] 发送补全增量更新失败:", error)
+    }
+  }
+
+  /**
+   * 动态更新补全拉取开关
+   */
+  setCompletionFetchEnabled(enabled: boolean): void {
+    this.enableCompletionFetch = enabled
+  }
+
+  /**
    * 断开连接
    */
   disconnect(): void {
@@ -291,13 +330,20 @@ export class TerminalWebSocket {
         this.onConnected?.()
         this.startPing()
 
-        // SSH连接建立后自动请求补全数据
-        this.fetchCompletionData(500)
+        // SSH连接建立后按需请求补全数据
+        if (this.enableCompletionFetch) {
+          this.fetchCompletionData(500)
+        }
         break
       case "completion_data":
         // 补全数据响应
         if (this.onCompletionData && message.data) {
           this.onCompletionData(message.data as CompletionDataResponse)
+        }
+        break
+      case "completion_update":
+        if (this.onCompletionUpdate && message.data) {
+          this.onCompletionUpdate(message.data as CompletionUpdateResponse)
         }
         break
       case "error":

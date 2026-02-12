@@ -122,6 +122,8 @@ export interface CompletionConfig {
     local: boolean
     remote: boolean
     history: boolean
+    script?: boolean
+    session?: boolean
   }
   /** 是否显示描述 */
   showDescription: boolean
@@ -166,6 +168,8 @@ export const DEFAULT_COMPLETION_CONFIG: CompletionConfig = {
     local: true,
     remote: false, // Phase 2 实现后默认开启
     history: false, // Phase 3 实现后默认开启
+    script: false,
+    session: false,
   },
   showDescription: true,
   showIcon: true,
