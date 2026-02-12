@@ -17,11 +17,13 @@ export interface SMTPConfig {
 /**
  * Webhook 配置
  */
+export type WebhookMethod = "POST" | "GET"
+
 export interface WebhookConfig {
   enabled: boolean
   url: string
   secret: string
-  method: string // POST 或 GET
+  method: WebhookMethod
 }
 
 /**
@@ -80,6 +82,7 @@ export interface SystemConfig {
   download_exclude_patterns: string
   default_download_mode: "fast" | "compatible"
   skip_excluded_on_upload: boolean
+  max_file_upload_size: number
 
   // 补全配置
   completion_enabled?: boolean
@@ -190,9 +193,11 @@ export interface GetRateLimitConfigResponse {
 /**
  * 系统级 AI 配置
  */
+export type AISystemProvider = "openai" | "anthropic"
+
 export interface AISystemConfig {
   system_enabled: boolean
-  system_provider: string
+  system_provider: AISystemProvider
   system_api_key?: string
   system_api_endpoint: string
   system_models: string
@@ -204,7 +209,7 @@ export interface AISystemConfig {
  */
 export interface SaveAISystemConfigRequest {
   system_enabled?: boolean
-  system_provider?: string
+  system_provider?: AISystemProvider
   system_api_key?: string
   system_api_endpoint?: string
   system_models?: string
@@ -214,7 +219,7 @@ export interface SaveAISystemConfigRequest {
  * 探测系统 AI 模型请求
  */
 export interface ProbeAISystemModelsRequest {
-  system_provider?: string
+  system_provider?: AISystemProvider
   system_api_key?: string
   system_api_endpoint?: string
 }
@@ -242,7 +247,13 @@ export const settingsApi = {
       method: "GET",
       retry: false, // 禁用重试，减少错误日志
     })
-    return response.config
+    return {
+      ...response.config,
+      webhook: {
+        ...response.config.webhook,
+        method: response.config.webhook.method === "GET" ? "GET" : "POST",
+      },
+    }
   },
 
   /**
@@ -469,10 +480,14 @@ export const settingsApi = {
    * 获取系统级 AI 配置
    */
   async getAISystemConfig(): Promise<AISystemConfig> {
-    const response = await apiFetch<Partial<AISystemConfig>>("/settings/ai/system", { method: "GET" })
+    const response = await apiFetch<
+      Partial<Omit<AISystemConfig, "system_provider">> & { system_provider?: string }
+    >("/settings/ai/system", { method: "GET" })
+    const normalizedProvider: AISystemProvider =
+      response.system_provider === "anthropic" ? "anthropic" : "openai"
     return {
       system_enabled: response.system_enabled ?? false,
-      system_provider: response.system_provider ?? "openai",
+      system_provider: normalizedProvider,
       system_api_endpoint: response.system_api_endpoint ?? "",
       system_models: response.system_models ?? "",
       has_api_key: response.has_api_key ?? false,

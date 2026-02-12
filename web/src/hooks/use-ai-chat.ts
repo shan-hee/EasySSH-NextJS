@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
-import { streamChat, chat, ChatMessage, ToolCall, streamChatWithTools, executeTool } from "@/lib/api/ai"
+import { streamChat, chat, streamChatWithTools, executeTool } from "@/lib/api/ai"
+import type { ChatMessage, ToolCall, PermissionMode } from "@/lib/api/ai"
+import { isApiError } from "@/lib/api-client"
 
 export interface UseAIChatOptions {
   onError?: (error: Error) => void
@@ -9,15 +11,16 @@ export interface UseAIChatOptions {
 }
 
 export interface UseAIChatReturn {
-  sendMessage: (messages: ChatMessage[], onDelta: (content: string) => void, model?: string) => Promise<void>
-  sendMessageSync: (messages: ChatMessage[], model?: string) => Promise<string>
+  sendMessage: (messages: ChatMessage[], onDelta: (content: string) => void, model?: string, permissionMode?: PermissionMode) => Promise<void>
+  sendMessageSync: (messages: ChatMessage[], model?: string, permissionMode?: PermissionMode) => Promise<string>
   sendMessageWithTools: (
     messages: ChatMessage[],
     onDelta: (content: string) => void,
     onToolCalls: (toolCalls: ToolCall[]) => void,
-    model?: string
+    model?: string,
+    permissionMode?: PermissionMode
   ) => Promise<void>
-  executeToolCall: (toolCall: ToolCall) => Promise<{ content: string; isError: boolean }>
+  executeToolCall: (toolCall: ToolCall, permissionMode?: PermissionMode) => Promise<{ content: string; isError: boolean }>
   isLoading: boolean
   stop: () => void
   error: Error | null
@@ -50,7 +53,7 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
   }, [])
 
   const sendMessage = useCallback(
-    async (messages: ChatMessage[], onDelta: (content: string) => void, model?: string) => {
+    async (messages: ChatMessage[], onDelta: (content: string) => void, model?: string, permissionMode?: PermissionMode) => {
       if (isLoading) return
 
       setIsLoading(true)
@@ -59,7 +62,7 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
       abortControllerRef.current = new AbortController()
 
       try {
-        await streamChat({ messages, model }, onDelta, abortControllerRef.current.signal)
+        await streamChat({ messages, model, permission_mode: permissionMode }, onDelta, abortControllerRef.current.signal)
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return
         const error = err instanceof Error ? err : new Error(String(err))
@@ -76,14 +79,14 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
   )
 
   const sendMessageSync = useCallback(
-    async (messages: ChatMessage[], model?: string): Promise<string> => {
+    async (messages: ChatMessage[], model?: string, permissionMode?: PermissionMode): Promise<string> => {
       if (isLoading) throw new Error("Another request is in progress")
 
       setIsLoading(true)
       setError(null)
 
       try {
-        const response = await chat({ messages, model })
+        const response = await chat({ messages, model, permission_mode: permissionMode })
         return response.content
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err))
@@ -102,7 +105,8 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
       messages: ChatMessage[],
       onDelta: (content: string) => void,
       onToolCalls: (toolCalls: ToolCall[]) => void,
-      model?: string
+      model?: string,
+      permissionMode?: PermissionMode
     ) => {
       if (isLoading) return
 
@@ -113,7 +117,7 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
 
       try {
         await streamChatWithTools(
-          { messages, model, enable_tools: true },
+          { messages, model, enable_tools: true, permission_mode: permissionMode },
           onDelta,
           onToolCalls,
           abortControllerRef.current.signal
@@ -134,13 +138,20 @@ export function useAIChat(options: UseAIChatOptions = {}): UseAIChatReturn {
   )
 
   const executeToolCall = useCallback(
-    async (toolCall: ToolCall): Promise<{ content: string; isError: boolean }> => {
+    async (toolCall: ToolCall, permissionMode?: PermissionMode): Promise<{ content: string; isError: boolean }> => {
       try {
-        const result = await executeTool(toolCall)
+        const result = await executeTool(toolCall, permissionMode)
         return { content: result.content, isError: result.is_error || false }
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err))
-        return { content: `执行失败: ${error.message}`, isError: true }
+        let displayMessage = error.message
+        if (isApiError(err) && typeof err.detail === "object" && err.detail !== null) {
+          const detail = err.detail as { message?: string }
+          if (detail.message) {
+            displayMessage = detail.message
+          }
+        }
+        return { content: `执行失败: ${displayMessage}`, isError: true }
       }
     },
     []

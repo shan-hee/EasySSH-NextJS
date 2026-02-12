@@ -8,7 +8,7 @@ export const basicInfoSchema = z.object({
     .max(100, "settingsValidation.systemNameMax"),
   system_logo: z.string().url("settingsValidation.urlInvalid").or(z.literal("")),
   system_favicon: z.string().url("settingsValidation.urlInvalid").or(z.literal("")),
-  default_language: z.enum(["zh-CN", "en-US", "ja-JP"], {
+  default_language: z.enum(["zh-CN", "en-US"], {
     message: "settingsValidation.defaultLanguageInvalid",
   }),
   default_timezone: z.string().min(1, "settingsValidation.defaultTimezoneRequired"),
@@ -20,12 +20,6 @@ export const basicInfoSchema = z.object({
   oauth_enabled: z.boolean().default(false),
   google_client_id: z.string().optional(),
   google_client_secret: z.string().optional(),
-})
-
-// 国际化设置 Schema
-export const i18nSchema = z.object({
-  default_timezone: z.string().min(1, "settingsValidation.defaultTimezoneRequired"),
-  date_format: z.string().min(1, "settingsValidation.dateFormatRequired"),
 })
 
 // 文件传输设置 Schema（包含上传大小限制）
@@ -100,6 +94,5 @@ export const completionSchema = z.object({
 
 // 导出类型
 export type BasicInfoFormData = z.infer<typeof basicInfoSchema>
-export type I18nFormData = z.infer<typeof i18nSchema>
 export type FileTransferFormData = z.infer<typeof fileTransferSchema>
 export type CompletionFormData = z.infer<typeof completionSchema>

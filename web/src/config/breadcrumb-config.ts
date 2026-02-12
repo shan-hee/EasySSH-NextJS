@@ -133,18 +133,6 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     // 仅显示系统名称 + 当前页面标题
     showTitle: true,
   },
-  '/dashboard/settings/system-config': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-  '/dashboard/settings/security-center': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-  '/dashboard/settings/integrations': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
   '/dashboard/settings/management': {
     // 仅显示系统名称 + 当前页面标题
     showTitle: true,

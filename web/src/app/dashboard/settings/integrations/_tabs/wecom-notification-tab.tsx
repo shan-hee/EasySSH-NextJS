@@ -5,21 +5,27 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { MessageCircle, Send } from "lucide-react"
-import { type UseFormReturn } from "react-hook-form"
+import { type FieldValues, type Path, type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
-
-interface WeComNotificationTabProps {
-  form: UseFormReturn<IntegrationsConfigFormData>
-  enabledFieldName?: keyof IntegrationsConfigFormData
+type WeComNotificationFields = {
+  wecom_enabled?: boolean
+  wecom_webhook_url?: string
 }
 
-export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" }: WeComNotificationTabProps) {
+interface WeComNotificationTabProps<TFieldValues extends FieldValues & WeComNotificationFields> {
+  form: UseFormReturn<TFieldValues>
+  enabledFieldName?: Path<TFieldValues>
+}
+
+export function WeComNotificationTab<TFieldValues extends FieldValues & WeComNotificationFields>({
+  form,
+  enabledFieldName = "wecom_enabled" as Path<TFieldValues>,
+}: WeComNotificationTabProps<TFieldValues>) {
   const t = useTranslations("settingsIntegrationsWeCom")
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
   const enabled = form.watch(enabledFieldName)
@@ -54,7 +60,7 @@ export function WeComNotificationTab({ form, enabledFieldName = "wecom_enabled" 
         <>
           <FormInput
             form={form}
-            name="wecom_webhook_url"
+            name={"wecom_webhook_url" as Path<TFieldValues>}
             label={t("fieldWebhookUrlLabel")}
             description={t("fieldWebhookUrlDesc")}
             type="url"

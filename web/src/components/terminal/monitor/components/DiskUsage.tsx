@@ -10,25 +10,16 @@ import {
   ChartContainer,
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
+import { MONITOR_COLORS } from "../constants/colors";
 
 interface DiskUsageProps {
   data: DiskData[];
   totalPercent: number;
 }
 
-/**
- * 图表配置（颜色由主题提供，标签使用 i18n）
- */
-const chartConfig = {
-  used: {
-    label: "used",
-    color: "var(--chart-1)",
-  },
-  free: {
-    label: "free",
-    color: "var(--chart-2)",
-  },
-} satisfies ChartConfig;
+const DISK_COLOR_VARS = MONITOR_COLORS.disk.usedPalette;
+const DISK_COLOR_FALLBACKS = MONITOR_COLORS.disk.usedPalette;
+const FREE_SEGMENT_COLOR = MONITOR_COLORS.disk.freeSegment;
 
 /**
  * 磁盘使用组件
@@ -52,9 +43,28 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
     [data]
   );
 
-  const colors = useEchartsColors(chartConfig);
-  const usedColor = colors.used || "#4b9cff";
-  const freeColor = colors.free || "#a5b4fc";
+  const colorConfig = React.useMemo<ChartConfig>(() => {
+    const config: ChartConfig = {};
+    const count = Math.max(chartData.length, 1);
+    for (let i = 0; i < count; i += 1) {
+      config[`disk_${i}`] = {
+        label: `disk_${i}`,
+        color: DISK_COLOR_VARS[i % DISK_COLOR_VARS.length],
+      };
+    }
+    return config;
+  }, [chartData.length]);
+
+  const colors = useEchartsColors(colorConfig);
+  const diskColors = React.useMemo(
+    () =>
+      chartData.map(
+        (_, index) =>
+          colors[`disk_${index}`] ||
+          DISK_COLOR_FALLBACKS[index % DISK_COLOR_FALLBACKS.length]
+      ),
+    [chartData, colors]
+  );
 
   const option: EChartsOption = React.useMemo(() => {
     const names = chartData.map((item) => item.name);
@@ -96,8 +106,15 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
           const used = data.used ?? data.value ?? 0;
           const free = data.free ?? 0;
           const unit = data.unit || "";
-           const total = data.total ?? (used + free);
-           const totalUnit = data.totalUnit || unit;
+          const total = data.total ?? (used + free);
+          const totalUnit = data.totalUnit || unit;
+          const usedColor =
+            data.usedColor ??
+            base.color ??
+            DISK_COLOR_FALLBACKS[0];
+          const freeColor =
+            data.freeColor ??
+            FREE_SEGMENT_COLOR;
           const percent = data.percent ?? 0;
           const freeDisplay =
             typeof free === "number" && Number.isFinite(free)
@@ -180,16 +197,21 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
           stack: "total",
           barWidth: chartData.length === 1 ? 30 : 18,
           itemStyle: {
-            color: usedColor,
             borderRadius: [4, 0, 0, 4],
           },
           // 悬浮时仅显示 tooltip，不改变条形样式
           emphasis: {
             disabled: true,
           },
-          data: chartData.map((item) => ({
+          data: chartData.map((item, index) => ({
             value: item.used,
             ...item,
+            usedColor: diskColors[index],
+            freeColor: FREE_SEGMENT_COLOR,
+            itemStyle: {
+              color: diskColors[index],
+              borderRadius: [4, 0, 0, 4],
+            },
           })),
         },
         {
@@ -198,21 +220,25 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
           stack: "total",
           barWidth: chartData.length === 1 ? 30 : 18,
           itemStyle: {
-            color: freeColor,
-            opacity: 0.3,
             borderRadius: [0, 4, 4, 0],
           },
           emphasis: {
             disabled: true,
           },
-          data: chartData.map((item) => ({
+          data: chartData.map((item, index) => ({
             value: item.free,
             ...item,
+            usedColor: diskColors[index],
+            freeColor: FREE_SEGMENT_COLOR,
+            itemStyle: {
+              color: FREE_SEGMENT_COLOR,
+              borderRadius: [0, 4, 4, 0],
+            },
           })),
         },
       ],
     };
-  }, [chartData, usedColor, freeColor]);
+  }, [chartData, diskColors, t]);
 
   return (
     <div className="space-y-1">
@@ -228,7 +254,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
 
       {/* 图表区域 - 固定高度 106px */}
       <div className="h-[106px] w-full">
-        <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
+        <ChartContainer config={colorConfig} className="h-full w-full aspect-auto">
           {(_size) => (
             <ReactECharts
               option={option}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -27,15 +28,44 @@ func (s *service) ChatWithTools(ctx context.Context, userID uuid.UUID, req *Chat
 	if model == "" {
 		model = config.Model
 	}
+	permissionMode := NormalizePermissionMode(string(req.PermissionMode))
 
 	switch config.Provider {
 	case "openai":
-		return s.chatOpenAIWithTools(ctx, config, req.Messages, model)
+		return s.chatOpenAIWithTools(ctx, config, req.Messages, model, permissionMode)
 	case "anthropic":
-		return s.chatAnthropicWithTools(ctx, config, req.Messages, model)
+		return s.chatAnthropicWithTools(ctx, config, req.Messages, model, permissionMode)
 	default:
 		return nil, ErrInvalidProvider
 	}
+}
+
+func buildToolSystemPrompt(permissionMode PermissionMode, allowedTools []ToolDefinition) string {
+	var sb strings.Builder
+	sb.WriteString("你是一个服务器管理助手，可以帮助用户管理和操作他们的服务器。\n\n")
+	sb.WriteString("重要规则：\n")
+	sb.WriteString("1. 当用户请求需要执行操作时（如查看Docker服务、执行命令、读写文件等），你应该直接调用相应的工具，而不是用文字询问用户是否允许。\n")
+	sb.WriteString("2. 工具调用会由系统自动处理权限确认，危险操作会弹窗让用户确认后才执行。\n")
+	sb.WriteString("3. 你只需要专注于理解用户需求并调用正确的工具，权限控制由系统负责。\n")
+	sb.WriteString("4. 如果需要多个步骤完成任务，请依次调用所需的工具。\n")
+	sb.WriteString("5. 一旦拿到工具结果，你必须先基于结果做分析并给出结论，不要只给模板化建议。\n")
+	sb.WriteString("6. 分析时必须引用关键数据（例如具体进程ID、CPU/内存数值、错误行、文件路径），并明确说明“正常/异常”及原因。\n")
+	sb.WriteString("7. 只有在当前结果不足以支持结论时，才继续调用下一步工具；否则直接输出完整结论和可执行建议。\n")
+	sb.WriteString("8. 不要重复大段原始工具输出，重点提炼关键发现并给出下一步动作。\n")
+	sb.WriteString("9. ")
+	sb.WriteString(GetPermissionModeRule(permissionMode))
+	sb.WriteString("\n\n")
+
+	sb.WriteString("本会话可用工具（仅限以下工具）：\n")
+	for _, tool := range allowedTools {
+		sb.WriteString("- ")
+		sb.WriteString(tool.Name)
+		sb.WriteString(": ")
+		sb.WriteString(tool.Description)
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
 }
 
 // StreamChatWithTools 流式聊天（带工具）- 支持自动工具调用循环
@@ -53,32 +83,27 @@ func (s *service) StreamChatWithTools(ctx context.Context, userID uuid.UUID, req
 	if model == "" {
 		model = config.Model
 	}
+	permissionMode := NormalizePermissionMode(string(req.PermissionMode))
+	allowedTools := GetAvailableToolsByPermission(permissionMode)
 
 	// 系统提示词：引导 AI 直接调用工具，而不是用文字询问用户
-	systemPrompt := `你是一个服务器管理助手，可以帮助用户管理和操作他们的服务器。
-
-重要规则：
-1. 当用户请求需要执行操作时（如查看Docker服务、执行命令、读写文件等），你应该直接调用相应的工具，而不是用文字询问用户是否允许。
-2. 工具调用会由系统自动处理权限确认，危险操作会弹窗让用户确认后才执行。
-3. 你只需要专注于理解用户需求并调用正确的工具，权限控制由系统负责。
-4. 如果需要多个步骤完成任务，请依次调用所需的工具。
-
-可用工具说明：
-- list_servers: 列出用户的所有服务器
-- get_server_info: 获取指定服务器的详细信息
-- execute_command: 在服务器上执行Shell命令（危险操作，系统会要求用户确认）
-- list_directory: 列出服务器上的目录内容
-- read_file: 读取服务器上的文件
-- write_file: 写入文件到服务器（危险操作，系统会要求用户确认）
-- create_directory: 在服务器上创建目录
-- delete_file: 删除服务器上的文件或目录（危险操作，系统会要求用户确认）
-- get_system_info: 获取服务器的系统信息（CPU、内存、磁盘等）`
+	systemPrompt := buildToolSystemPrompt(permissionMode, allowedTools)
 
 	// 复制消息列表，用于多轮对话
 	// 在开头插入系统提示词
 	messages := make([]ChatMessage, 0, len(req.Messages)+1)
 	messages = append(messages, ChatMessage{Role: "system", Content: systemPrompt})
 	messages = append(messages, req.Messages...)
+	// 当上一条是工具结果时，显式要求先“基于结果分析”，避免与工具执行割裂。
+	if len(req.Messages) > 0 {
+		last := req.Messages[len(req.Messages)-1]
+		if last.Role == "tool" {
+			messages = append(messages, ChatMessage{
+				Role:    "user",
+				Content: "请基于上一条工具结果直接给出结论和分析（引用关键数据），再给出下一步建议。若信息已足够，不要继续调用工具。",
+			})
+		}
+	}
 
 	// 最大工具调用轮数，防止无限循环
 	const maxToolRounds = 10
@@ -110,9 +135,9 @@ func (s *service) StreamChatWithTools(ctx context.Context, userID uuid.UUID, req
 		var streamErr error
 		switch config.Provider {
 		case "openai":
-			streamErr = s.streamOpenAIWithTools(ctx, config, messages, model, internalCallback)
+			streamErr = s.streamOpenAIWithTools(ctx, config, messages, model, permissionMode, internalCallback)
 		case "anthropic":
-			streamErr = s.streamAnthropicWithTools(ctx, config, messages, model, internalCallback)
+			streamErr = s.streamAnthropicWithTools(ctx, config, messages, model, permissionMode, internalCallback)
 		default:
 			return ErrInvalidProvider
 		}
@@ -168,7 +193,7 @@ func (s *service) StreamChatWithTools(ctx context.Context, userID uuid.UUID, req
 			}
 
 			// 执行工具
-			result, err := s.toolExecutor.ExecuteTool(ctx, userID, &tc)
+			result, err := s.toolExecutor.ExecuteTool(ctx, userID, &tc, permissionMode)
 			if err != nil {
 				result = &ToolResult{
 					ToolCallID: tc.ID,
@@ -233,8 +258,8 @@ func convertToOpenAIMessagesWithTools(messages []ChatMessage) []openai.ChatCompl
 }
 
 // getOpenAITools 获取 OpenAI 格式的工具定义
-func getOpenAITools() []openai.Tool {
-	tools := GetAvailableTools()
+func getOpenAITools(permissionMode PermissionMode) []openai.Tool {
+	tools := GetAvailableToolsByPermission(permissionMode)
 	result := make([]openai.Tool, len(tools))
 	for i, tool := range tools {
 		paramsJSON, _ := json.Marshal(tool.Parameters)
@@ -250,13 +275,13 @@ func getOpenAITools() []openai.Tool {
 	return result
 }
 
-func (s *service) chatOpenAIWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string) (*ChatResponse, error) {
+func (s *service) chatOpenAIWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string, permissionMode PermissionMode) (*ChatResponse, error) {
 	client := s.createOpenAIClient(config)
 
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:    model,
 		Messages: convertToOpenAIMessagesWithTools(messages),
-		Tools:    getOpenAITools(),
+		Tools:    getOpenAITools(permissionMode),
 	})
 	if err != nil {
 		return nil, wrapOpenAIProviderError("OpenAI API error", err)
@@ -292,13 +317,13 @@ func (s *service) chatOpenAIWithTools(ctx context.Context, config *ProviderConfi
 	return response, nil
 }
 
-func (s *service) streamOpenAIWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string, onDelta func(delta *StreamDelta) error) error {
+func (s *service) streamOpenAIWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string, permissionMode PermissionMode, onDelta func(delta *StreamDelta) error) error {
 	client := s.createOpenAIClient(config)
 
 	stream, err := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Model:    model,
 		Messages: convertToOpenAIMessagesWithTools(messages),
-		Tools:    getOpenAITools(),
+		Tools:    getOpenAITools(permissionMode),
 	})
 	if err != nil {
 		return wrapOpenAIProviderError("failed to create OpenAI stream", err)
@@ -307,16 +332,31 @@ func (s *service) streamOpenAIWithTools(ctx context.Context, config *ProviderCon
 
 	// 收集工具调用（流式中逐步构建）
 	toolCallsMap := make(map[int]*ToolCall)
+	toolCallIDToIndex := make(map[string]int)
+	nextToolCallIndex := 0
+
+	buildToolCalls := func() []ToolCall {
+		if len(toolCallsMap) == 0 {
+			return nil
+		}
+		indexes := make([]int, 0, len(toolCallsMap))
+		for idx := range toolCallsMap {
+			indexes = append(indexes, idx)
+		}
+		sort.Ints(indexes)
+
+		result := make([]ToolCall, 0, len(indexes))
+		for _, idx := range indexes {
+			result = append(result, *toolCallsMap[idx])
+		}
+		return result
+	}
 
 	for {
 		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			// 流结束，返回收集到的工具调用
-			var toolCalls []ToolCall
-			for _, tc := range toolCallsMap {
-				toolCalls = append(toolCalls, *tc)
-			}
-			return onDelta(&StreamDelta{Done: true, ToolCalls: toolCalls})
+			return onDelta(&StreamDelta{Done: true, ToolCalls: buildToolCalls()})
 		}
 		if err != nil {
 			return wrapOpenAIProviderError("OpenAI stream error", err)
@@ -334,7 +374,25 @@ func (s *service) streamOpenAIWithTools(ctx context.Context, config *ProviderCon
 
 			// 处理工具调用增量
 			for _, tc := range choice.Delta.ToolCalls {
-				idx := *tc.Index
+				idx := -1
+				if tc.Index != nil {
+					idx = *tc.Index
+				} else if tc.ID != "" {
+					if existingIdx, ok := toolCallIDToIndex[tc.ID]; ok {
+						idx = existingIdx
+					}
+				}
+				if idx < 0 {
+					idx = nextToolCallIndex
+					nextToolCallIndex++
+				}
+				if tc.ID != "" {
+					toolCallIDToIndex[tc.ID] = idx
+				}
+				if idx >= nextToolCallIndex {
+					nextToolCallIndex = idx + 1
+				}
+
 				if _, exists := toolCallsMap[idx]; !exists {
 					toolCallsMap[idx] = &ToolCall{
 						ID:        tc.ID,
@@ -358,14 +416,15 @@ func (s *service) streamOpenAIWithTools(ctx context.Context, config *ProviderCon
 
 			// 检查是否因工具调用而停止
 			if choice.FinishReason == openai.FinishReasonToolCalls {
-				var toolCalls []ToolCall
-				for _, tc := range toolCallsMap {
-					toolCalls = append(toolCalls, *tc)
-				}
-				return onDelta(&StreamDelta{Done: true, ToolCalls: toolCalls})
+				return onDelta(&StreamDelta{Done: true, ToolCalls: buildToolCalls()})
 			}
 
 			if choice.FinishReason == openai.FinishReasonStop {
+				// 某些 OpenAI 兼容实现会在工具调用场景下返回 stop。
+				// 如果已收集到 tool calls，则按工具调用结束处理，避免前端只收到 done:true。
+				if len(toolCallsMap) > 0 {
+					return onDelta(&StreamDelta{Done: true, ToolCalls: buildToolCalls()})
+				}
 				return onDelta(&StreamDelta{Done: true})
 			}
 		}
@@ -425,8 +484,8 @@ func convertToAnthropicMessagesWithTools(messages []ChatMessage) ([]anthropic.Me
 }
 
 // getAnthropicTools 获取 Anthropic 格式的工具定义
-func getAnthropicTools() []anthropic.ToolDefinition {
-	tools := GetAvailableTools()
+func getAnthropicTools(permissionMode PermissionMode) []anthropic.ToolDefinition {
+	tools := GetAvailableToolsByPermission(permissionMode)
 	result := make([]anthropic.ToolDefinition, len(tools))
 	for i, tool := range tools {
 		result[i] = anthropic.ToolDefinition{
@@ -438,7 +497,7 @@ func getAnthropicTools() []anthropic.ToolDefinition {
 	return result
 }
 
-func (s *service) chatAnthropicWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string) (*ChatResponse, error) {
+func (s *service) chatAnthropicWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string, permissionMode PermissionMode) (*ChatResponse, error) {
 	client := s.createAnthropicClient(config)
 
 	anthropicMessages, systemPrompt := convertToAnthropicMessagesWithTools(messages)
@@ -447,7 +506,7 @@ func (s *service) chatAnthropicWithTools(ctx context.Context, config *ProviderCo
 		Model:     anthropic.Model(model),
 		Messages:  anthropicMessages,
 		MaxTokens: 4096,
-		Tools:     getAnthropicTools(),
+		Tools:     getAnthropicTools(permissionMode),
 	}
 
 	if systemPrompt != "" {
@@ -489,7 +548,7 @@ func (s *service) chatAnthropicWithTools(ctx context.Context, config *ProviderCo
 	}, nil
 }
 
-func (s *service) streamAnthropicWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string, onDelta func(delta *StreamDelta) error) error {
+func (s *service) streamAnthropicWithTools(ctx context.Context, config *ProviderConfig, messages []ChatMessage, model string, permissionMode PermissionMode, onDelta func(delta *StreamDelta) error) error {
 	client := s.createAnthropicClient(config)
 
 	anthropicMessages, systemPrompt := convertToAnthropicMessagesWithTools(messages)
@@ -505,7 +564,7 @@ func (s *service) streamAnthropicWithTools(ctx context.Context, config *Provider
 			Messages:  anthropicMessages,
 			MaxTokens: 4096,
 			System:    systemPrompt,
-			Tools:     getAnthropicTools(),
+			Tools:     getAnthropicTools(permissionMode),
 		},
 		OnContentBlockStart: func(data anthropic.MessagesEventContentBlockStartData) {
 			if data.ContentBlock.Type == anthropic.MessagesContentTypeToolUse {

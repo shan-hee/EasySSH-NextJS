@@ -9,6 +9,8 @@ export interface ToolCall {
   dangerous?: boolean
 }
 
+export type PermissionMode = "readonly" | "balanced" | "privileged"
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system" | "tool"
   content: string
@@ -20,6 +22,7 @@ export interface ChatRequest {
   messages: ChatMessage[]
   model?: string
   enable_tools?: boolean
+  permission_mode?: PermissionMode
 }
 
 export interface ChatUsage {
@@ -44,6 +47,7 @@ export interface ToolDefinition {
 
 export interface ToolExecuteRequest {
   tool_call: ToolCall
+  permission_mode?: PermissionMode
 }
 
 export interface ToolExecuteResponse {
@@ -88,7 +92,7 @@ export async function streamChat(
   onDelta: (content: string) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const url = getApiUrl("/ai/chat/stream")
+  const url = getApiUrl("/ai/chat")
   const csrfToken = getCsrfToken()
 
   const headers: Record<string, string> = {
@@ -183,10 +187,10 @@ export async function getTools(): Promise<ToolDefinition[]> {
 /**
  * 执行工具
  */
-export async function executeTool(toolCall: ToolCall): Promise<ToolExecuteResponse> {
+export async function executeTool(toolCall: ToolCall, permissionMode?: PermissionMode): Promise<ToolExecuteResponse> {
   return apiFetch<ToolExecuteResponse>("/ai/tools/execute", {
     method: "POST",
-    body: { tool_call: toolCall },
+    body: { tool_call: toolCall, permission_mode: permissionMode },
   })
 }
 
@@ -199,7 +203,7 @@ export async function streamChatWithTools(
   onToolCalls: (toolCalls: ToolCall[]) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const url = getApiUrl("/ai/chat/tools")
+  const url = getApiUrl("/ai/chat")
   const csrfToken = getCsrfToken()
 
   const headers: Record<string, string> = {

@@ -1,7 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useForm, type UseFormReturn, type FieldValues } from "react-hook-form"
+import {
+  useForm,
+  type DefaultValues,
+  type FieldValues,
+  type Resolver,
+  type UseFormReturn,
+} from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -9,7 +15,7 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 
 interface UseSettingsFormOptions<T extends FieldValues> {
-  schema: z.ZodType<T>
+  schema: z.ZodTypeAny
   loadFn: () => Promise<T>
   saveFn: (data: T) => Promise<void>
   onSuccess?: () => void
@@ -52,9 +58,9 @@ export function useSettingsForm<T extends FieldValues>({
   const [isSaving, setIsSaving] = useState(false)
 
   const form = useForm<T>({
-    resolver: zodResolver(schema) as any,
-    defaultValues: defaultValues as any,
-  }) as UseFormReturn<T>
+    resolver: zodResolver(schema as any) as Resolver<T>,
+    defaultValues: defaultValues as DefaultValues<T> | undefined,
+  })
 
   // 加载配置数据
   const loadData = async () => {

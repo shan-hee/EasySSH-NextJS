@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Clock, XCircle, Upload, Download, ArrowUpDown } from "lucide-react"
 
+type I18nValues = Record<string, string | number | Date>
+
 // 类型颜色映射
 const typeColors = {
   upload: "bg-blue-100 text-blue-800 border-blue-200",
@@ -35,7 +37,7 @@ function formatSpeed(bytesPerSecond: number | undefined): string {
 
 // 格式化时长
 function formatDuration(
-  t: (key: string, values?: Record<string, unknown>) => string,
+  t: (key: string, values?: I18nValues) => string,
   seconds: number | undefined,
 ): string {
   if (!seconds) return "-"
@@ -62,7 +64,7 @@ interface TransferColumnsOptions {
 }
 
 export function createTransferColumns(
-  t: (key: string, values?: Record<string, unknown>) => string,
+  t: (key: string, values?: I18nValues) => string,
   options?: TransferColumnsOptions,
 ): ColumnDef<FileTransfer>[] {
   return [

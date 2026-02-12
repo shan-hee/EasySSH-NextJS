@@ -35,6 +35,7 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   download_exclude_patterns: "node_modules,.git,.cache",
   default_download_mode: "fast",
   skip_excluded_on_upload: true,
+  max_file_upload_size: 100,
   completion_enabled: true,
   completion_providers: {
     local: true,

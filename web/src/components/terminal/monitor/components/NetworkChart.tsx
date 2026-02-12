@@ -10,6 +10,7 @@ import {
   ChartContainer,
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
+import { MONITOR_COLORS } from "../constants/colors";
 
 interface NetworkChartProps {
   data: NetworkData[];
@@ -33,11 +34,11 @@ function formatSpeed(kbps: number): string {
 const chartConfig = {
   download: {
     label: "download",
-    color: "var(--chart-3)",
+    color: MONITOR_COLORS.network.download,
   },
   upload: {
     label: "upload",
-    color: "var(--chart-5)",
+    color: MONITOR_COLORS.network.upload,
   },
 } satisfies ChartConfig;
 
@@ -64,8 +65,8 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
   );
 
   const colors = useEchartsColors(chartConfig);
-  const downloadColor = colors.download || "#22c55e";
-  const uploadColor = colors.upload || "#f97316";
+  const downloadColor = colors.download || MONITOR_COLORS.network.download;
+  const uploadColor = colors.upload || MONITOR_COLORS.network.upload;
 
   // 计算Y轴的最大值用于显示刻度
   // 找出实际数据的最大值
@@ -74,7 +75,20 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
     : 0;
 
   // 为 Y 轴添加一些上方留白（增加 20%），最小值为 1（避免除零）
-  const maxValue = Math.max(Math.ceil(dataMax * 1.2), 1);
+  const targetMaxValue = Math.max(Math.ceil(dataMax * 1.2), 1);
+  const [maxValue, setMaxValue] = React.useState(targetMaxValue);
+
+  // 让 Y 轴在峰值上升时快速跟随，下降时平滑回落，减少视觉抖动
+  React.useEffect(() => {
+    setMaxValue((prev) => {
+      if (targetMaxValue >= prev) return targetMaxValue;
+      const next = Math.max(
+        targetMaxValue,
+        prev - Math.max(1, Math.ceil((prev - targetMaxValue) * 0.25))
+      );
+      return next;
+    });
+  }, [targetMaxValue, data]);
 
   const yAxisTicks = [
     0,
@@ -193,7 +207,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           symbol: "circle",
           symbolSize: 3,
           lineStyle: {
-            width: 2,
+            width: 2.2,
             color: downloadColor,
           },
           // 悬浮时仅在当前点显示小圆点，线条保持原有颜色
@@ -201,7 +215,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
             focus: "none",
             scale: false,
             lineStyle: {
-              width: 2,
+              width: 2.2,
               color: downloadColor,
             },
             itemStyle: {
@@ -222,14 +236,14 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           symbol: "circle",
           symbolSize: 3,
           lineStyle: {
-            width: 2,
+            width: 2.2,
             color: uploadColor,
           },
           emphasis: {
             focus: "none",
             scale: false,
             lineStyle: {
-              width: 2,
+              width: 2.2,
               color: uploadColor,
             },
             itemStyle: {
@@ -250,8 +264,8 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
       <div className="flex justify-between items-center h-7">
         <span className="text-xs font-semibold">{t("networkLabel")}</span>
         <div className="text-xs font-mono font-semibold tabular-nums flex items-center gap-2">
-          <span style={{ color: 'var(--chart-3)' }}>↓ {formatSpeed(currentDownload)}</span>
-          <span style={{ color: 'var(--chart-5)' }}>↑ {formatSpeed(currentUpload)}</span>
+          <span style={{ color: downloadColor }}>↓ {formatSpeed(currentDownload)}</span>
+          <span style={{ color: uploadColor }}>↑ {formatSpeed(currentUpload)}</span>
         </div>
       </div>
 

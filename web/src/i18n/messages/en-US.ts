@@ -1623,6 +1623,27 @@ const messages = {
     notConfigured: "Not Configured",
     attachFile: "Attach file",
     attachmentLimitHint: "Up to {count} attachments",
+    permissionControl: "Permission Control",
+    permissionModeReadonly: "Read-only Analysis",
+    permissionModeReadonlyDesc: "Query and analyze only, no write/delete/system changes.",
+    permissionModeBalanced: "Balanced Mode",
+    permissionModeBalancedDesc: "Allows routine operations; dangerous actions still require confirmation.",
+    permissionModePrivileged: "Privileged Mode",
+    permissionModePrivilegedDesc: "Allows full operation plans including high-risk suggestions.",
+    permissionContextHeader: "[Permission Control] Session mode: {mode}",
+    permissionContextReadonlyRule: "Read/query/analyze only; do not perform write, delete, or state-changing commands.",
+    permissionContextBalancedRule: "Allow read and routine operations; for high-risk writes, explain impact first and wait for confirmation.",
+    permissionContextPrivilegedRule: "You may provide full operation plans including high-risk actions, but must explain risks and rollback first.",
+    referenceServer: "Select Servers",
+    referenceServerSelected: "{count} selected",
+    referenceServerLoading: "Loading servers...",
+    referenceServerRefresh: "Refresh server list",
+    referenceServerEmpty: "No servers available",
+    referenceServerHint: "Selected servers will be prioritized for this request and tool calls.",
+    referenceServerClear: "Clear selected",
+    referencedServersLabel: "Selected Servers",
+    referenceContextHeader: "[Selected Servers] User-selected priority targets:",
+    referenceContextRule: "Prioritize analysis/questions/tool calls on these servers. If switching target, explain why first.",
     pendingToolsHint:
       "{count} tool action(s) pending. Please execute or skip them before continuing.",
     pendingToolsPlaceholder:
@@ -1908,41 +1929,15 @@ const messages = {
   },
   settingsMain: {
     pageTitle: "System settings",
-    groupSystemConfig: "System config",
-    groupSecurityCenter: "Security center",
-    groupIntegrations: "Integrations",
-    groupManagementOps: "Management & operations",
     itemBasic: "Basic info",
     itemFileTransfer: "File transfer",
     itemCompletion: "Completion",
-    itemI18n: "Internationalization",
-    itemPerformance: "Performance",
     itemAccessControl: "Access control",
     itemSessionManagement: "Session management",
     itemNetworkSecurity: "Network security",
     itemAIConfig: "AI config",
     itemNotificationConfig: "Notification config",
-    itemUsers: "User management",
     itemBackup: "Backup & restore",
-    mobileSelectPlaceholder: "Select setting",
-  },
-  settingsIntegrations: {
-    pageTitle: "Integrations",
-    navAiService: "AI service",
-    navModelParams: "Model parameters",
-    navPrivacy: "Privacy settings",
-    navEmail: "Email notifications",
-    navDingtalk: "DingTalk notifications",
-    navWecom: "WeCom notifications",
-    navWebhook: "Webhook notifications",
-    selectPlaceholder: "Choose setting",
-  },
-  settingsSecurity: {
-    pageTitle: "Security center",
-    navAccessControl: "Access control",
-    navSessionManagement: "Session management",
-    navNetworkSecurity: "Network security",
-    mobileSelectPlaceholder: "Select setting",
   },
   settingsSecurityAccess: {
     sectionTitle: "IP access control",
@@ -2021,44 +2016,6 @@ const messages = {
     previewApiSuffix: " API requests per minute",
     alertContent:
       "Rate limiting effectively prevents brute-force attacks and API abuse. Set values according to real usage.",
-  },
-  settingsSecurityJwt: {
-    sectionTitle: "JWT auth configuration",
-    sectionDescription: "Configure expiration times for JSON Web Tokens",
-    alertRestart:
-      "Changing JWT configuration requires restarting the service to take effect. After changes, all users will need to sign in again.",
-    fieldAccessExpireLabel: "Access token expiration (hours)",
-    fieldAccessExpireDescription:
-      "Validity of user access tokens (1-168 hours, i.e. 1 hour-7 days).",
-    fieldRefreshExpireLabel: "Refresh token expiration (hours)",
-    fieldRefreshExpireDescription:
-      "Validity of refresh tokens (24-720 hours, i.e. 1-30 days).",
-    summaryTitle: "Current configuration:",
-    summaryAccessTitle: "Access token:",
-    summaryAccessDescription:
-      "Currently set to {hours} hours. Used to authenticate regular API requests.",
-    summaryRefreshTitle: "Refresh token:",
-    summaryRefreshDescription:
-      "Currently set to {hours} hours. Used to obtain new access tokens.",
-    recommendTitle: "Recommended presets:",
-    recommendHighTitle: "High security:",
-    recommendHighAccess: "Access token: 1-4 hours",
-    recommendHighRefresh: "Refresh token: 24-72 hours (1-3 days)",
-    recommendBalancedTitle: "Balanced (recommended):",
-    recommendBalancedAccess: "Access token: 24 hours (1 day)",
-    recommendBalancedRefresh: "Refresh token: 168 hours (7 days)",
-    recommendConvenienceTitle: "Convenience first:",
-    recommendConvenienceAccess: "Access token: 72-168 hours (3-7 days)",
-    recommendConvenienceRefresh: "Refresh token: 720 hours (30 days)",
-    notesTitle: "Notes:",
-    notesItemOrder:
-      "Refresh token expiration must be greater than access token expiration.",
-    notesItemTooShort:
-      "Too short expiration times may hurt user experience (frequent re-login).",
-    notesItemTooLong:
-      "Too long expiration times reduce system security.",
-    notesItemRestart:
-      "After changing configuration, restart the backend service.",
   },
   settingsSystemBasic: {
     sectionTitle: "Basic info",
@@ -2301,17 +2258,6 @@ const messages = {
       "Azure OpenAI: Microsoft Azure-hosted OpenAI service.",
     providerHelpCustom:
       "Custom: third-party services compatible with OpenAI API format.",
-  },
-  settingsIntegrationsPrivacy: {
-    sectionTitle: "Privacy settings",
-    sectionDescription:
-      "Manage AI conversation privacy and data retention",
-    fieldSaveHistoryLabel: "Save history",
-    fieldSaveHistoryDesc: "Save AI conversation history",
-    fieldAllowTrainingLabel: "Allow for training",
-    fieldAllowTrainingDesc:
-      "Allow AI provider to use conversation data for model training",
-    fieldAutoDeleteDaysLabel: "Auto delete days",
   },
   settingsIntegrationsEmail: {
     sectionTitle: "Email notification",

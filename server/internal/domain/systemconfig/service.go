@@ -82,7 +82,6 @@ func (s *service) validate(config *SystemConfig) error {
 	validLanguages := map[string]bool{
 		"zh-CN": true,
 		"en-US": true,
-		"ja-JP": true,
 	}
 	if !validLanguages[config.DefaultLanguage] {
 		return fmt.Errorf("invalid language: %s", config.DefaultLanguage)

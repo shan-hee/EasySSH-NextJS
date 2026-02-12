@@ -107,8 +107,8 @@ export function UpdateDialog({
                       </p>
                       <p className="text-green-600 dark:text-green-400 mt-1">
                         {t('dockerComposeInfo', {
-                          project: updateInfo?.composeInfo?.project,
-                          service: updateInfo?.composeInfo?.service
+                          project: updateInfo?.composeInfo?.project ?? "",
+                          service: updateInfo?.composeInfo?.service ?? "",
                         })}
                       </p>
                     </>

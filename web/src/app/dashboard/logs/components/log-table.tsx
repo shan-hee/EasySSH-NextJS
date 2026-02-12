@@ -8,6 +8,8 @@ import { useSystemConfig } from "@/hooks/use-system-config"
 import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 import { useTranslations } from "next-intl"
 
+type I18nValues = Record<string, string | number | Date>
+
 interface LogTableProps {
   logs: AuditLog[]
   filteredLogs: AuditLog[]
@@ -32,7 +34,7 @@ interface LogTableProps {
 
 // 格式化时长
 function formatDuration(
-  t: (key: string, values?: Record<string, unknown>) => string,
+  t: (key: string, values?: I18nValues) => string,
   seconds: number | undefined,
 ): string {
   if (!seconds) return "-"

@@ -4,24 +4,34 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Mail, Send } from "lucide-react"
-import { type UseFormReturn } from "react-hook-form"
+import { type FieldValues, type Path, type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-
-import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
-
-interface EmailNotificationTabProps {
-  form: UseFormReturn<IntegrationsConfigFormData>
-  enabledFieldName?: keyof IntegrationsConfigFormData
+type EmailNotificationFields = {
+  enabled?: boolean
+  host?: string
+  port?: number
+  username?: string
+  password?: string
+  from_email?: string
+  from_name?: string
+  use_tls?: boolean
 }
 
-export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: EmailNotificationTabProps) {
+interface EmailNotificationTabProps<TFieldValues extends FieldValues & EmailNotificationFields> {
+  form: UseFormReturn<TFieldValues>
+  enabledFieldName?: Path<TFieldValues>
+}
+
+export function EmailNotificationTab<TFieldValues extends FieldValues & EmailNotificationFields>({
+  form,
+  enabledFieldName = "enabled" as Path<TFieldValues>,
+}: EmailNotificationTabProps<TFieldValues>) {
   const t = useTranslations("settingsIntegrationsEmail")
-  const tCommon = useTranslations("common")
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
   const enabled = form.watch(enabledFieldName)
 
@@ -62,7 +72,7 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
           <div className="grid gap-4 md:grid-cols-2">
             <FormInput
               form={form}
-              name="host"
+              name={"host" as Path<TFieldValues>}
               label={t("fieldHostLabel")}
               placeholder={t("fieldHostPlaceholder")}
               required
@@ -70,7 +80,7 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
 
             <FormInput
               form={form}
-              name="port"
+              name={"port" as Path<TFieldValues>}
               label={t("fieldPortLabel")}
               type="number"
               placeholder={t("fieldPortPlaceholder")}
@@ -82,7 +92,7 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
 
           <FormSwitch
             form={form}
-            name="use_tls"
+            name={"use_tls" as Path<TFieldValues>}
             label={t("fieldUseTlsLabel")}
             description={t("fieldUseTlsDesc")}
           />
@@ -90,7 +100,7 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
           <div className="grid gap-4 md:grid-cols-2">
             <FormInput
               form={form}
-              name="username"
+              name={"username" as Path<TFieldValues>}
               label={t("fieldUsernameLabel")}
               placeholder={t("fieldUsernamePlaceholder")}
               required
@@ -98,7 +108,7 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
 
             <FormInput
               form={form}
-              name="password"
+              name={"password" as Path<TFieldValues>}
               label={t("fieldPasswordLabel")}
               type="password"
               placeholder={t("fieldPasswordPlaceholder")}
@@ -109,7 +119,7 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
           <div className="grid gap-4 md:grid-cols-2">
             <FormInput
               form={form}
-              name="from_email"
+              name={"from_email" as Path<TFieldValues>}
               label={t("fieldFromEmailLabel")}
               type="email"
               placeholder={t("fieldFromEmailPlaceholder")}
@@ -118,7 +128,7 @@ export function EmailNotificationTab({ form, enabledFieldName = "enabled" }: Ema
 
             <FormInput
               form={form}
-              name="from_name"
+              name={"from_name" as Path<TFieldValues>}
               label={t("fieldFromNameLabel")}
               placeholder={t("fieldFromNamePlaceholder")}
               required

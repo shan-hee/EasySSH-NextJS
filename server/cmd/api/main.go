@@ -498,7 +498,7 @@ func main() {
 	if setter, ok := aiChatService.(toolExecutorSetter); ok {
 		setter.SetToolExecutor(aiToolExecutor)
 	}
-	aiChatToolsHandler := rest.NewAIChatToolsHandler(aiChatService, aiToolExecutor)
+	aiChatToolsHandler := rest.NewAIChatToolsHandler(aiToolExecutor)
 	// Docker 处理器（复用监控连接池）
 	dockerHandler := rest.NewDockerHandler(serverService, serverRepo, encryptor, sshHostKeyService.GetHostKeyCallback(), monitorConnectionPool)
 	// 其他处理器
@@ -690,19 +690,19 @@ func main() {
 		dockerRoutes := v1.Group("/docker/:serverId")
 		dockerRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
-			dockerRoutes.GET("/containers", dockerHandler.ListContainers)                // 容器列表
-			dockerRoutes.GET("/containers/:id/logs", dockerHandler.GetContainerLogs)         // 容器日志
+			dockerRoutes.GET("/containers", dockerHandler.ListContainers)                             // 容器列表
+			dockerRoutes.GET("/containers/:id/logs", dockerHandler.GetContainerLogs)                  // 容器日志
 			dockerRoutes.GET("/containers/:id/check-update", dockerHandler.CheckContainerImageUpdate) // 检查镜像更新
-			dockerRoutes.POST("/containers/:id/start", dockerHandler.StartContainer)     // 启动容器
-			dockerRoutes.POST("/containers/:id/stop", dockerHandler.StopContainer)       // 停止容器
-			dockerRoutes.POST("/containers/:id/restart", dockerHandler.RestartContainer) // 重启容器
-			dockerRoutes.POST("/containers/:id/pause", dockerHandler.PauseContainer)     // 暂停容器
-			dockerRoutes.POST("/containers/:id/unpause", dockerHandler.UnpauseContainer) // 恢复容器
-			dockerRoutes.DELETE("/containers/:id", dockerHandler.RemoveContainer)        // 删除容器
-			dockerRoutes.GET("/images", dockerHandler.ListImages)                        // 镜像列表
-			dockerRoutes.GET("/system", dockerHandler.GetSystemInfo)                     // 系统信息
-			dockerRoutes.GET("/stats", dockerHandler.GetStats)                           // 容器统计
-			dockerRoutes.GET("/resources", dockerHandler.GetResources)                   // 资源页签数据（stats + systemInfo）
+			dockerRoutes.POST("/containers/:id/start", dockerHandler.StartContainer)                  // 启动容器
+			dockerRoutes.POST("/containers/:id/stop", dockerHandler.StopContainer)                    // 停止容器
+			dockerRoutes.POST("/containers/:id/restart", dockerHandler.RestartContainer)              // 重启容器
+			dockerRoutes.POST("/containers/:id/pause", dockerHandler.PauseContainer)                  // 暂停容器
+			dockerRoutes.POST("/containers/:id/unpause", dockerHandler.UnpauseContainer)              // 恢复容器
+			dockerRoutes.DELETE("/containers/:id", dockerHandler.RemoveContainer)                     // 删除容器
+			dockerRoutes.GET("/images", dockerHandler.ListImages)                                     // 镜像列表
+			dockerRoutes.GET("/system", dockerHandler.GetSystemInfo)                                  // 系统信息
+			dockerRoutes.GET("/stats", dockerHandler.GetStats)                                        // 容器统计
+			dockerRoutes.GET("/resources", dockerHandler.GetResources)                                // 资源页签数据（stats + systemInfo）
 		}
 
 		// 监控 WebSocket 路由（需要认证）
@@ -979,12 +979,10 @@ func main() {
 		aiChatRoutes := v1.Group("/ai")
 		aiChatRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
-			aiChatRoutes.POST("/chat", aiChatHandler.Chat)              // 聊天（支持流式和非流式）
-			aiChatRoutes.POST("/chat/stream", aiChatHandler.StreamChat) // 流式聊天专用端点
-			aiChatRoutes.GET("/config", aiChatHandler.GetConfig)        // 获取AI配置状态
+			aiChatRoutes.POST("/chat", aiChatHandler.Chat)       // 聊天（支持流式和非流式）
+			aiChatRoutes.GET("/config", aiChatHandler.GetConfig) // 获取AI配置状态
 			// AI工具调用相关路由
 			aiChatRoutes.GET("/tools", aiChatToolsHandler.GetTools)             // 获取可用工具列表
-			aiChatRoutes.POST("/chat/tools", aiChatToolsHandler.ChatWithTools)  // 带工具的聊天
 			aiChatRoutes.POST("/tools/execute", aiChatToolsHandler.ExecuteTool) // 执行工具
 		}
 

@@ -14,7 +14,7 @@ import {
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
 import { EditServerDialog } from "@/components/servers/edit-server-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
-import { serversApi, type Server, type AuthMethod } from "@/lib/api"
+import { serversApi, type Server, type AuthMethod, type ServerStatisticsResponse } from "@/lib/api"
 import {
  Search,
  Plus,
@@ -179,13 +179,12 @@ export default function ServersPage() {
  const [activeTab, setActiveTab] = useState<string>('all')
  const [draggedServer, setDraggedServer] = useState<Server | null>(null)
  const [isMounted, setIsMounted] = useState(false)
- const [statistics, setStatistics] = useState({
+ const [statistics, setStatistics] = useState<ServerStatisticsResponse>({
  total: 0,
  online: 0,
  offline: 0,
- error: 0,
- unknown: 0,
- by_tag: {} as Record<string, number>
+ by_group: {},
+ by_tag: {},
  })
 
  // 配置拖拽传感器
@@ -264,7 +263,13 @@ export default function ServersPage() {
  // 认证基于 HttpOnly Cookie
 
  const stats = await serversApi.getStatistics()
- setStatistics(stats)
+ setStatistics({
+ total: stats.total ?? 0,
+ online: stats.online ?? 0,
+ offline: stats.offline ?? 0,
+ by_group: stats.by_group ?? {},
+ by_tag: stats.by_tag ?? {},
+ })
  } catch (error) {
  console.error("Failed to load statistics:", error)
  }

@@ -108,7 +108,6 @@ export const notificationConfigSchema = smtpConfigSchema
   .merge(webhookConfigSchema)
 
 // 导出类型
-export type AISystemConfigFormData = z.infer<typeof aiSystemConfigSchema>
 export type SMTPConfigFormData = z.infer<typeof smtpConfigSchema>
 export type DingTalkConfigFormData = z.infer<typeof dingTalkConfigSchema>
 export type WeComConfigFormData = z.infer<typeof weComConfigSchema>

@@ -8,6 +8,9 @@ import {
   formatTimestamp,
 } from "@/components/ui/data-table"
 
+type I18nValues = Record<string, string | number | Date>
+type I18nT = (key: string, values?: I18nValues) => string
+
 /**
  * 根据传入的多语言函数创建操作日志表格列定义。
  * 将 `useTranslations("logsAudit")` 写在调用方组件中，再把 `t` 传进来。
@@ -45,7 +48,7 @@ function getResourceLabel(
 }
 
 function formatDurationWithI18n(
-  t: (key: string, values?: Record<string, unknown>) => string,
+  t: I18nT,
   seconds: number | undefined,
 ): string {
   if (!seconds) return "-"
@@ -59,7 +62,7 @@ function formatDurationWithI18n(
 }
 
 export function createAuditLogColumns(
-  t: (key: string, values?: Record<string, unknown>) => string,
+  t: I18nT,
 ): ColumnDef<AuditLog>[] {
   return [
   // 时间列

@@ -10,6 +10,7 @@ import {
   ChartContainer,
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
+import { MONITOR_COLORS } from "../constants/colors";
 
 interface MemoryChartProps {
   data: MemoryData;
@@ -21,11 +22,11 @@ interface MemoryChartProps {
 const chartConfig = {
   ram: {
     label: "RAM",
-    color: "var(--chart-2)",
+    color: MONITOR_COLORS.memory.ram,
   },
   swap: {
     label: "Swap",
-    color: "var(--chart-4)",
+    color: MONITOR_COLORS.memory.swap,
   },
 } satisfies ChartConfig;
 
@@ -46,8 +47,8 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
   );
 
   const colors = useEchartsColors(chartConfig);
-  const ramColor = colors.ram || "#22c55e";
-  const swapColor = colors.swap || "#f97316";
+  const ramColor = colors.ram || MONITOR_COLORS.memory.ram;
+  const swapColor = colors.swap || MONITOR_COLORS.memory.swap;
 
   const option: EChartsOption = React.useMemo(() => {
     const ramPercent = Math.max(0, Math.min(100, chartData.ramPercent));
@@ -183,17 +184,17 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
             <div className="flex items-center gap-1.5">
               <div
                 className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: 'var(--chart-2)' }}
+                style={{ backgroundColor: ramColor }}
               />
               <span
                 className="font-medium"
-                style={{ color: 'var(--chart-2)' }}
+                style={{ color: ramColor }}
               >
                 RAM
               </span>
               <span
                 className="text-xs font-mono font-semibold tabular-nums"
-                style={{ color: 'var(--chart-2)' }}
+                style={{ color: ramColor }}
               >
                 {data.ram.percent}%
               </span>
@@ -208,17 +209,17 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
             <div className="flex items-center gap-1.5">
               <div
                 className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: 'var(--chart-4)' }}
+                style={{ backgroundColor: swapColor }}
               />
               <span
                 className="font-medium"
-                style={{ color: 'var(--chart-4)' }}
+                style={{ color: swapColor }}
               >
                 Swap
               </span>
               <span
                 className="text-xs font-mono font-semibold tabular-nums"
-                style={{ color: 'var(--chart-4)' }}
+                style={{ color: swapColor }}
               >
                 {data.swap.percent}%
               </span>

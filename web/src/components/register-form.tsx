@@ -56,7 +56,7 @@ export function RegisterForm({
     setIsSendingCode(true)
 
     try {
-      await authApi.sendVerificationCode({ email })
+      await authApi.sendVerificationCode(email)
       toast.success(tAuth("registerToastCodeSentTitle"), {
         description: tAuth("registerToastCodeSentDesc"),
       })

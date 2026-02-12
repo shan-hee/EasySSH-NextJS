@@ -10,6 +10,7 @@ import {
   ChartContainer,
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
+import { MONITOR_COLORS } from "../constants/colors";
 
 interface CPUChartProps {
   data: CPUData[];
@@ -22,7 +23,7 @@ interface CPUChartProps {
 const chartConfig = {
   usage: {
     label: "CPU",
-    color: "var(--chart-1)",
+    color: MONITOR_COLORS.cpu.usage,
   },
 } satisfies ChartConfig;
 
@@ -45,7 +46,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
   );
 
   const colors = useEchartsColors(chartConfig);
-  const usageColor = colors.usage || "#4b9cff";
+  const usageColor = colors.usage || MONITOR_COLORS.cpu.usage;
 
   // 动态 Y 轴上限：根据当前数据的最大值自适应
   const dataMax = chartData.length > 0

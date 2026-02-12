@@ -36,7 +36,15 @@ func NewToolExecutorService(
 }
 
 // ExecuteTool 执行工具调用
-func (s *ToolExecutorService) ExecuteTool(ctx context.Context, userID uuid.UUID, toolCall *ToolCall) (*ToolResult, error) {
+func (s *ToolExecutorService) ExecuteTool(ctx context.Context, userID uuid.UUID, toolCall *ToolCall, permissionMode PermissionMode) (*ToolResult, error) {
+	mode := NormalizePermissionMode(string(permissionMode))
+	if !IsToolAllowedInMode(mode, toolCall.Name) {
+		return nil, &ToolPermissionError{
+			Mode:     mode,
+			ToolName: toolCall.Name,
+		}
+	}
+
 	result := &ToolResult{
 		ToolCallID: toolCall.ID,
 	}

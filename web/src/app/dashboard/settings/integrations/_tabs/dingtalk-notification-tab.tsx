@@ -5,21 +5,28 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { MessageSquare, Send } from "lucide-react"
-import { type UseFormReturn } from "react-hook-form"
+import { type FieldValues, type Path, type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
 import { settingsApi } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
-
-interface DingTalkNotificationTabProps {
-  form: UseFormReturn<IntegrationsConfigFormData>
-  enabledFieldName?: keyof IntegrationsConfigFormData
+type DingTalkNotificationFields = {
+  dingtalk_enabled?: boolean
+  dingtalk_webhook_url?: string
+  dingtalk_secret?: string
 }
 
-export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_enabled" }: DingTalkNotificationTabProps) {
+interface DingTalkNotificationTabProps<TFieldValues extends FieldValues & DingTalkNotificationFields> {
+  form: UseFormReturn<TFieldValues>
+  enabledFieldName?: Path<TFieldValues>
+}
+
+export function DingTalkNotificationTab<TFieldValues extends FieldValues & DingTalkNotificationFields>({
+  form,
+  enabledFieldName = "dingtalk_enabled" as Path<TFieldValues>,
+}: DingTalkNotificationTabProps<TFieldValues>) {
   const t = useTranslations("settingsIntegrationsDingTalk")
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
   const enabled = form.watch(enabledFieldName)
@@ -55,7 +62,7 @@ export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_ena
         <>
           <FormInput
             form={form}
-            name="dingtalk_webhook_url"
+            name={"dingtalk_webhook_url" as Path<TFieldValues>}
             label={t("fieldWebhookUrlLabel")}
             description={t("fieldWebhookUrlDesc")}
             type="url"
@@ -65,7 +72,7 @@ export function DingTalkNotificationTab({ form, enabledFieldName = "dingtalk_ena
 
           <FormInput
             form={form}
-            name="dingtalk_secret"
+            name={"dingtalk_secret" as Path<TFieldValues>}
             label={t("fieldSecretLabel")}
             description={t("fieldSecretDesc")}
             type="password"

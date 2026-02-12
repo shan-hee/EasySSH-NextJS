@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import {
@@ -32,11 +31,14 @@ import {
   X,
   Brain,
   Wrench,
+  Shield,
+  Server as ServerIcon,
 } from "lucide-react"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useAIChat } from "@/hooks/use-ai-chat"
 import { useAIConfig } from "@/hooks/use-ai-config"
-import { ChatMessage, ToolCall } from "@/lib/api/ai"
+import type { ChatMessage, ToolCall, PermissionMode } from "@/lib/api/ai"
+import { serversApi, type Server as ManagedServer } from "@/lib/api/servers"
 import { ToolCallList } from "@/components/ai/tool-call-card"
 import { useTranslations } from "next-intl"
 import Link from "next/link"
@@ -65,11 +67,13 @@ import { Actions, Action } from "@/components/ui/shadcn-io/ai/actions"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import {
   Collapsible,
@@ -83,6 +87,10 @@ interface ToolCallState {
   status: "pending" | "executing" | "completed" | "error"
   result?: string
   isError?: boolean
+}
+
+interface ToolCallWithMessage extends ToolCallState {
+  messageId: string
 }
 
 interface Message {
@@ -286,6 +294,28 @@ function countUnresolvedToolCalls(messages: Message[], ignoreToolCallIds?: Set<s
     }
   }
   return count
+}
+
+function collectGroupedToolCalls(messages: Message[]): ToolCallWithMessage[] {
+  const toolCallMap = new Map<string, ToolCallWithMessage>()
+  const orderedIds: string[] = []
+
+  for (const msg of messages) {
+    if (msg.role !== "assistant" || !msg.toolCalls || msg.toolCalls.length === 0) continue
+    for (const tc of msg.toolCalls) {
+      if (!toolCallMap.has(tc.toolCall.id)) {
+        orderedIds.push(tc.toolCall.id)
+      }
+      toolCallMap.set(tc.toolCall.id, {
+        ...tc,
+        messageId: msg.id,
+      })
+    }
+  }
+
+  return orderedIds
+    .map((id) => toolCallMap.get(id))
+    .filter((item): item is ToolCallWithMessage => Boolean(item))
 }
 
 function buildHistoryMessages(
@@ -660,8 +690,10 @@ function MessageBubble({
 // ========== AI 响应区块（统一头像，内容平滑切换） ==========
 function AIResponseBlock({
   message,
+  groupedToolCalls,
   isWaitingForResponse,
   isStreaming,
+  isStreamingByGap,
   onCopy,
   onRegenerate,
   copiedId,
@@ -674,8 +706,10 @@ function AIResponseBlock({
   onExecuteAllToolCalls,
 }: {
   message?: Message
+  groupedToolCalls?: ToolCallWithMessage[]
   isWaitingForResponse: boolean
   isStreaming?: boolean
+  isStreamingByGap?: boolean
   onCopy: (content: string, id: string) => void
   onRegenerate?: () => void
   copiedId: string | null
@@ -703,15 +737,88 @@ function AIResponseBlock({
   // 判断是否正在流式输出思考内容
   const isThinkingStreaming = Boolean(isStreaming && parsedContent.thinking && !parsedContent.content)
 
+  const displayToolCalls = useMemo(() => {
+    if (groupedToolCalls && groupedToolCalls.length > 0) {
+      return groupedToolCalls
+    }
+    if (!message?.toolCalls || !message.id) {
+      return [] as ToolCallWithMessage[]
+    }
+    return message.toolCalls.map((tc) => ({
+      ...tc,
+      messageId: message.id,
+    }))
+  }, [groupedToolCalls, message?.toolCalls, message?.id])
+
+  const toolCallMessageMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const tc of displayToolCalls) {
+      map[tc.toolCall.id] = tc.messageId
+    }
+    return map
+  }, [displayToolCalls])
+
+  const leadingToolCalls = useMemo(() => {
+    if (!message?.id) return [] as ToolCallWithMessage[]
+    return displayToolCalls.filter((tc) => tc.messageId !== message.id)
+  }, [displayToolCalls, message?.id])
+
+  const trailingToolCalls = useMemo(() => {
+    if (!message?.id) return displayToolCalls
+    return displayToolCalls.filter((tc) => tc.messageId === message.id)
+  }, [displayToolCalls, message?.id])
+
   // 判断当前显示状态
   const showLoadingIndicator = isWaitingForResponse && !message?.content
   const showThinkingBlock = parsedContent.thinking
   const showContent = parsedContent.content
   // 只在流式输出时显示工具状态（工具执行完成后不再显示）
   const showToolStatus = isStreaming && toolStatus
+  // 工具调用过程中，可能出现无文本空档，这里补一个“思考中...”指示
+  const hasProgressedToolCall = displayToolCalls.some(
+    (tc) => tc.status === "executing" || tc.status === "completed" || tc.status === "error"
+  )
+  const showToolThinkingIndicator = Boolean(
+    isStreamingByGap &&
+    !showToolStatus &&
+    !showThinkingBlock &&
+    hasProgressedToolCall
+  )
 
   // 是否有实际内容（思考或正文）
   const hasContent = showThinkingBlock || showContent
+
+  const renderToolCallList = (toolCalls: ToolCallWithMessage[]) => {
+    if (!conversationId || toolCalls.length === 0) return null
+
+    return (
+      <div className="mt-2 animate-in fade-in duration-200">
+        <ToolCallList
+          toolCalls={toolCalls.map((item) => ({
+            toolCall: item.toolCall,
+            status: item.status,
+            result: item.result,
+            isError: item.isError,
+          }))}
+          onExecute={(toolCallId) => {
+            const targetMessageId = toolCallMessageMap[toolCallId]
+            if (!targetMessageId) return
+            onExecuteToolCall?.(conversationId, targetMessageId, toolCallId)
+          }}
+          onCancel={(toolCallId) => {
+            const targetMessageId = toolCallMessageMap[toolCallId]
+            if (!targetMessageId) return
+            onCancelToolCall?.(conversationId, targetMessageId, toolCallId)
+          }}
+          onExecuteAll={() => {
+            const firstMessageId = toolCalls[0]?.messageId
+            if (!firstMessageId) return
+            onExecuteAllToolCalls?.(conversationId, firstMessageId)
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -735,6 +842,9 @@ function AIResponseBlock({
             <ToolStatusIndicator status={toolStatus} />
           </div>
         )}
+
+        {/* 聚合模式下，前序轮次产生的工具卡片放在正文前，保持时间顺序 */}
+        {renderToolCallList(leadingToolCalls)}
 
         {/* 思考内容 - 折叠显示，位置与加载指示器对齐 */}
         {showThinkingBlock && (
@@ -765,21 +875,16 @@ function AIResponseBlock({
           </div>
         )}
 
-        {/* 工具调用区域 */}
-        {message?.toolCalls && message.toolCalls.length > 0 && conversationId && (
-          <div className="mt-2 animate-in fade-in duration-200">
-            <ToolCallList
-              toolCalls={message.toolCalls}
-              onExecute={(toolCallId) =>
-                onExecuteToolCall?.(conversationId, message.id, toolCallId)
-              }
-              onCancel={(toolCallId) =>
-                onCancelToolCall?.(conversationId, message.id, toolCallId)
-              }
-              onExecuteAll={() =>
-                onExecuteAllToolCalls?.(conversationId, message.id)
-              }
-            />
+        {/* 当前轮次的工具卡片仍放在正文后 */}
+        {renderToolCallList(trailingToolCalls)}
+
+        {/* 工具调用空档期提示（放在工具列表下方） */}
+        {showToolThinkingIndicator && (
+          <div className="animate-in fade-in duration-200 pt-1">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader size={14} className="text-muted-foreground" />
+              <WaveText text={t("thinkingLabel")} />
+            </div>
           </div>
         )}
 
@@ -926,9 +1031,15 @@ export default function AIAssistantPage() {
   const [renameValue, setRenameValue] = useState("")
   const [isNewChat, setIsNewChat] = useState(false)
   const [isPreparingAttachments, setIsPreparingAttachments] = useState(false)
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("balanced")
+  const [availableServers, setAvailableServers] = useState<ManagedServer[]>([])
+  const [selectedServerIds, setSelectedServerIds] = useState<string[]>([])
+  const [isLoadingServers, setIsLoadingServers] = useState(false)
+  const [serversLoaded, setServersLoaded] = useState(false)
   const { ready } = useAuthReady()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const loadingServersRef = useRef(false)
   const uploadIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
   const conversationsRef = useRef<ConversationData[]>([])
   // 文件附件状态，包含上传进度
@@ -970,6 +1081,27 @@ export default function AIAssistantPage() {
     conversationsRef.current = conversations
   }, [conversations])
 
+  const loadServersForReference = useCallback(async () => {
+    if (loadingServersRef.current) return
+    loadingServersRef.current = true
+    setIsLoadingServers(true)
+    try {
+      const response = await serversApi.list({ page: 1, limit: 1000 })
+      setAvailableServers(response.data || [])
+      setServersLoaded(true)
+    } catch (error) {
+      console.error("Failed to load servers for AI reference:", error)
+    } finally {
+      loadingServersRef.current = false
+      setIsLoadingServers(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!ready || serversLoaded) return
+    void loadServersForReference()
+  }, [ready, serversLoaded, loadServersForReference])
+
   const clearUploadInterval = useCallback((fileId: string) => {
     const interval = uploadIntervalsRef.current.get(fileId)
     if (interval) {
@@ -997,6 +1129,63 @@ export default function AIAssistantPage() {
   }, [currentConversation])
 
   const hasUnresolvedToolCalls = unresolvedToolCallCount > 0
+
+  const permissionModeOptions = useMemo(
+    () => [
+      {
+        value: "readonly" as PermissionMode,
+        label: t("permissionModeReadonly"),
+        description: t("permissionModeReadonlyDesc"),
+        rule: t("permissionContextReadonlyRule"),
+      },
+      {
+        value: "balanced" as PermissionMode,
+        label: t("permissionModeBalanced"),
+        description: t("permissionModeBalancedDesc"),
+        rule: t("permissionContextBalancedRule"),
+      },
+      {
+        value: "privileged" as PermissionMode,
+        label: t("permissionModePrivileged"),
+        description: t("permissionModePrivilegedDesc"),
+        rule: t("permissionContextPrivilegedRule"),
+      },
+    ],
+    [t]
+  )
+
+  const selectedPermissionOption = useMemo(
+    () => permissionModeOptions.find((option) => option.value === permissionMode) || permissionModeOptions[1],
+    [permissionMode, permissionModeOptions]
+  )
+
+  const selectedReferencedServers = useMemo(() => {
+    if (selectedServerIds.length === 0) return [] as ManagedServer[]
+    const selectedSet = new Set(selectedServerIds)
+    return availableServers.filter((server) => selectedSet.has(server.id))
+  }, [availableServers, selectedServerIds])
+
+  const toggleReferencedServer = useCallback((serverId: string) => {
+    setSelectedServerIds((prev) =>
+      prev.includes(serverId)
+        ? prev.filter((id) => id !== serverId)
+        : [...prev, serverId]
+    )
+  }, [])
+
+  const permissionContextForModel = useMemo(() => {
+    const current = selectedPermissionOption || permissionModeOptions[1]
+    return `${t("permissionContextHeader", { mode: current.label })}\n${current.rule}`
+  }, [selectedPermissionOption, permissionModeOptions, t])
+
+  const serverReferenceContextForModel = useMemo(() => {
+    if (selectedReferencedServers.length === 0) return ""
+    const lines = selectedReferencedServers.map((server, idx) => {
+      const displayName = server.name?.trim() || server.host
+      return `${idx + 1}. ${displayName}（ID=${server.id}, ${server.username}@${server.host}:${server.port}, ${server.status}）`
+    })
+    return `${t("referenceContextHeader")}\n${lines.join("\n")}\n${t("referenceContextRule")}`
+  }, [selectedReferencedServers, t])
 
   // 过滤后的对话列表
   // 开发环境：显示所有会话（包括空会话，用于测试）
@@ -1090,7 +1279,7 @@ export default function AIAssistantPage() {
       )
 
       // 执行工具
-      const result = await executeToolCall(toolCallState.toolCall)
+      const result = await executeToolCall(toolCallState.toolCall, permissionMode)
 
       // 更新结果
       setConversations((prev) =>
@@ -1120,7 +1309,7 @@ export default function AIAssistantPage() {
 
       return { toolCallId, content: result.content, isError: result.isError }
     },
-    [executeToolCall]
+    [executeToolCall, permissionMode]
   )
 
   // 执行单个工具调用并继续对话
@@ -1197,7 +1386,8 @@ export default function AIAssistantPage() {
           historyMessages,
           handleDelta,
           (toolCalls) => handleToolCallsReceived(toolCalls, conversationId, newAssistantMessageId),
-          selectedModel || undefined
+          selectedModel || undefined,
+          permissionMode
         )
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : t("chatError")
@@ -1234,7 +1424,7 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
+    [executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, permissionMode, t]
   )
 
   // 取消工具调用
@@ -1263,15 +1453,28 @@ export default function AIAssistantPage() {
   const handleExecuteAllToolCalls = useCallback(
     async (conversationId: string, messageId: string) => {
       const conv = conversationsRef.current.find((c) => c.id === conversationId)
-      const msg = conv?.messages.find((m) => m.id === messageId)
-      const pendingToolCalls = msg?.toolCalls?.filter((tc) => tc.status === "pending") || []
+      if (!conv) return
+
+      const pendingToolCalls = conv.messages.flatMap((msg) =>
+        (msg.toolCalls || [])
+          .filter((tc) => tc.status === "pending")
+          .map((tc) => ({
+            messageId: msg.id,
+            toolCallId: tc.toolCall.id,
+          }))
+      )
 
       if (pendingToolCalls.length === 0) return
 
+      const prioritizedPendingToolCalls = [
+        ...pendingToolCalls.filter((tc) => tc.messageId === messageId),
+        ...pendingToolCalls.filter((tc) => tc.messageId !== messageId),
+      ]
+
       // 执行所有工具并收集结果
       const results: Array<{ toolCallId: string; content: string; isError: boolean }> = []
-      for (const tc of pendingToolCalls) {
-        const result = await executeToolCallInternal(conversationId, messageId, tc.toolCall.id)
+      for (const tc of prioritizedPendingToolCalls) {
+        const result = await executeToolCallInternal(conversationId, tc.messageId, tc.toolCallId)
         if (result) {
           results.push(result)
         }
@@ -1341,7 +1544,8 @@ export default function AIAssistantPage() {
           historyMessages,
           handleDelta,
           (toolCalls) => handleToolCallsReceived(toolCalls, conversationId, newAssistantMessageId),
-          selectedModel || undefined
+          selectedModel || undefined,
+          permissionMode
         )
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : t("chatError")
@@ -1378,7 +1582,7 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, t]
+    [executeToolCallInternal, sendMessageWithTools, handleToolCallsReceived, selectedModel, permissionMode, t]
   )
 
   // 发送消息
@@ -1393,12 +1597,19 @@ export default function AIAssistantPage() {
       clearError()
 
       let userMessageForModel = trimmedInput
+      const controlContextBlocks = [permissionContextForModel]
+      if (serverReferenceContextForModel) {
+        controlContextBlocks.push(serverReferenceContextForModel)
+      }
+      if (controlContextBlocks.length > 0) {
+        userMessageForModel = `${userMessageForModel}\n\n${controlContextBlocks.join("\n\n")}`
+      }
       if (attachedFiles.length > 0) {
         setIsPreparingAttachments(true)
         try {
           const attachmentContext = await buildAttachmentContext(attachedFiles)
           if (attachmentContext) {
-            userMessageForModel = `${trimmedInput}\n\n${attachmentContext}`
+            userMessageForModel = `${userMessageForModel}\n\n${attachmentContext}`
           }
         } finally {
           setIsPreparingAttachments(false)
@@ -1518,7 +1729,8 @@ export default function AIAssistantPage() {
           historyMessages,
           handleDelta,
           (toolCalls) => handleToolCallsReceived(toolCalls, targetConversationId, assistantMessageId),
-          selectedModel || undefined
+          selectedModel || undefined,
+          permissionMode
         )
       } catch (error) {
         // 如果发生错误，创建或更新消息显示错误
@@ -1562,7 +1774,24 @@ export default function AIAssistantPage() {
         setStreamingMessageId(null)
       }
     },
-    [inputMessage, currentConversation, currentConversationId, isLoading, isPreparingAttachments, isNewChat, attachedFiles, clearUploadInterval, sendMessageWithTools, handleToolCallsReceived, clearError, t, selectedModel]
+    [
+      inputMessage,
+      currentConversation,
+      currentConversationId,
+      isLoading,
+      isPreparingAttachments,
+      isNewChat,
+      attachedFiles,
+      clearUploadInterval,
+      sendMessageWithTools,
+      handleToolCallsReceived,
+      clearError,
+      t,
+      selectedModel,
+      permissionMode,
+      permissionContextForModel,
+      serverReferenceContextForModel,
+    ]
   )
 
   // 新建对话
@@ -1817,7 +2046,8 @@ export default function AIAssistantPage() {
         historyMessages,
         onDelta,
         (toolCalls) => handleToolCallsReceived(toolCalls, currentConversationId, assistantMessageId),
-        selectedModel || undefined
+        selectedModel || undefined,
+        permissionMode
       )
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t("chatError")
@@ -1857,7 +2087,7 @@ export default function AIAssistantPage() {
     } finally {
       setStreamingMessageId(null)
     }
-  }, [currentConversation, currentConversationId, isLoading, clearError, sendMessageWithTools, handleToolCallsReceived, t, selectedModel])
+  }, [currentConversation, currentConversationId, isLoading, clearError, sendMessageWithTools, handleToolCallsReceived, t, selectedModel, permissionMode])
 
   // 导出对话
   const handleExportConversation = useCallback(() => {
@@ -1965,7 +2195,8 @@ export default function AIAssistantPage() {
         historyMessages,
         onDelta,
         (toolCalls) => handleToolCallsReceived(toolCalls, currentConversationId, assistantMessageId),
-        selectedModel || undefined
+        selectedModel || undefined,
+        permissionMode
       )
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t("chatError")
@@ -2005,7 +2236,7 @@ export default function AIAssistantPage() {
     } finally {
       setStreamingMessageId(null)
     }
-  }, [currentConversation, currentConversationId, isLoading, clearError, sendMessageWithTools, handleToolCallsReceived, t, selectedModel])
+  }, [currentConversation, currentConversationId, isLoading, clearError, sendMessageWithTools, handleToolCallsReceived, t, selectedModel, permissionMode])
 
   // 加载状态
   if (!mounted || !ready) {
@@ -2168,15 +2399,12 @@ export default function AIAssistantPage() {
                 {(() => {
                   const messages = currentConversation?.messages || []
                   const elements: React.ReactNode[] = []
-
-                  // 查找当前正在流式输出的 AI 消息
-                  const streamingAssistantMessage = streamingMessageId
-                    ? messages.find(m => m.id === streamingMessageId)
-                    : null
+                  const hasStreamingAssistantMessage = Boolean(
+                    streamingMessageId && messages.some((msg) => msg.id === streamingMessageId)
+                  )
 
                   for (let i = 0; i < messages.length; i++) {
                     const message = messages[i]
-                    const nextMessage = messages[i + 1]
 
                     if (message.role === "user") {
                       // 渲染用户消息
@@ -2195,46 +2423,57 @@ export default function AIAssistantPage() {
                         />
                       )
 
-                      // 检查是否需要显示 AI 响应区块
-                      const isLastUserMessage = i === messages.length - 1
-                      const hasNextAssistantMessage = nextMessage?.role === "assistant"
-
-                      // 如果是最后一条用户消息且正在加载，或者下一条是正在流式输出的 AI 消息
-                      // 使用固定的 key 来保持组件不被替换
-                      if (isLastUserMessage && isLoading && !hasNextAssistantMessage) {
-                        // 等待响应状态 - 使用固定 key
-                        elements.push(
-                          <AIResponseBlock
-                            key={`ai-response-after-${message.id}`}
-                            isWaitingForResponse={true}
-                            onCopy={handleCopyMessage}
-                            onRegenerate={handleRegenerate}
-                            copiedId={copiedId}
-                            isLast={true}
-                            isLoading={isLoading}
-                            t={t}
-                          />
-                        )
+                      // 聚合同一轮中的连续 assistant 消息，避免重复头像
+                      let groupEnd = i + 1
+                      while (groupEnd < messages.length && messages[groupEnd].role === "assistant") {
+                        groupEnd++
                       }
-                    } else if (message.role === "assistant") {
-                      // 渲染 AI 消息
-                      const isLastMessage = i === messages.length - 1
-                      const prevMessage = messages[i - 1]
-                      // 使用与等待状态相同的 key 格式，确保组件复用
-                      const blockKey = prevMessage?.role === "user"
-                        ? `ai-response-after-${prevMessage.id}`
-                        : message.id
+
+                      const assistantGroup = messages.slice(i + 1, groupEnd)
+                      const isLastUserMessage = groupEnd >= messages.length
+
+                      if (assistantGroup.length === 0) {
+                        // 还在等待首条 assistant 消息
+                        if (isLastUserMessage && isLoading) {
+                          elements.push(
+                            <AIResponseBlock
+                              key={`ai-response-after-${message.id}`}
+                              isWaitingForResponse={true}
+                              onCopy={handleCopyMessage}
+                              onRegenerate={handleRegenerate}
+                              copiedId={copiedId}
+                              isLast={true}
+                              isLoading={isLoading}
+                              t={t}
+                            />
+                          )
+                        }
+                        continue
+                      }
+
+                      const lastAssistantMessage = assistantGroup[assistantGroup.length - 1]
+                      const groupedToolCalls = collectGroupedToolCalls(assistantGroup)
+                      const isGroupStreamingById = assistantGroup.some(
+                        (assistantMsg) => assistantMsg.id === streamingMessageId
+                      )
+                      const isGroupStreamingByGap =
+                        Boolean(isLoading && streamingMessageId) &&
+                        !hasStreamingAssistantMessage &&
+                        groupEnd === messages.length
+                      const isGroupStreaming = isGroupStreamingById || isGroupStreamingByGap
 
                       elements.push(
                         <AIResponseBlock
-                          key={blockKey}
-                          message={message}
+                          key={`ai-response-after-${message.id}`}
+                          message={lastAssistantMessage}
+                          groupedToolCalls={groupedToolCalls}
                           isWaitingForResponse={false}
-                          isStreaming={streamingMessageId === message.id}
+                          isStreaming={isGroupStreaming}
+                          isStreamingByGap={isGroupStreamingByGap}
                           onCopy={handleCopyMessage}
                           onRegenerate={handleRegenerate}
                           copiedId={copiedId}
-                          isLast={isLastMessage}
+                          isLast={groupEnd === messages.length}
                           isLoading={isLoading}
                           t={t}
                           conversationId={currentConversationId}
@@ -2243,6 +2482,51 @@ export default function AIAssistantPage() {
                           onExecuteAllToolCalls={handleExecuteAllToolCalls}
                         />
                       )
+
+                      // 跳过已被合并渲染的 assistant 消息
+                      i = groupEnd - 1
+                    } else if (i === 0) {
+                      // 兼容历史数据：会话第一条就是 assistant 时也进行分组渲染
+                      let groupEnd = i
+                      while (groupEnd < messages.length && messages[groupEnd].role === "assistant") {
+                        groupEnd++
+                      }
+
+                      const assistantGroup = messages.slice(i, groupEnd)
+                      const lastAssistantMessage = assistantGroup[assistantGroup.length - 1]
+                      const groupedToolCalls = collectGroupedToolCalls(assistantGroup)
+                      const isGroupStreamingById = assistantGroup.some(
+                        (assistantMsg) => assistantMsg.id === streamingMessageId
+                      )
+                      const isGroupStreamingByGap =
+                        Boolean(isLoading && streamingMessageId) &&
+                        !hasStreamingAssistantMessage &&
+                        groupEnd === messages.length
+                      const isGroupStreaming = isGroupStreamingById || isGroupStreamingByGap
+
+                      if (lastAssistantMessage) {
+                        elements.push(
+                          <AIResponseBlock
+                            key={`ai-response-leading-${lastAssistantMessage.id}`}
+                            message={lastAssistantMessage}
+                            groupedToolCalls={groupedToolCalls}
+                            isWaitingForResponse={false}
+                            isStreaming={isGroupStreaming}
+                            isStreamingByGap={isGroupStreamingByGap}
+                            onCopy={handleCopyMessage}
+                            onRegenerate={handleRegenerate}
+                            copiedId={copiedId}
+                            isLast={groupEnd === messages.length}
+                            isLoading={isLoading}
+                            t={t}
+                            conversationId={currentConversationId}
+                            onExecuteToolCall={handleExecuteToolCall}
+                            onCancelToolCall={handleCancelToolCall}
+                            onExecuteAllToolCalls={handleExecuteAllToolCalls}
+                          />
+                        )
+                      }
+                      i = groupEnd - 1
                     }
                   }
 
@@ -2283,13 +2567,14 @@ export default function AIAssistantPage() {
                 </Suggestions>
               )}
 
-              {/* 输入框容器 - 带背景光晕 */}
               {hasUnresolvedToolCalls && (
                 <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{t("pendingToolsHint", { count: unresolvedToolCallCount })}</span>
                 </div>
               )}
+
+              {/* 输入框容器 - 带背景光晕 */}
               <div className="relative">
                 {/* 背景光晕效果 */}
                 <div className="absolute -inset-4 bg-gradient-to-t from-primary/20 via-primary/10 to-transparent blur-xl rounded-3xl opacity-100 animate-pulse" />
@@ -2338,6 +2623,28 @@ export default function AIAssistantPage() {
                               </button>
                             </div>
                           ))}
+                        </div>
+                      )}
+                      {selectedReferencedServers.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 px-3 pt-2 pb-1 animate-in fade-in duration-200">
+                          <span className="text-[11px] text-muted-foreground">
+                            {t("referencedServersLabel")}
+                          </span>
+                          {selectedReferencedServers.map((server) => {
+                            const displayName = server.name?.trim() || server.host
+                            return (
+                              <button
+                                key={server.id}
+                                type="button"
+                                onClick={() => toggleReferencedServer(server.id)}
+                                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs text-primary hover:bg-primary/10 transition-colors"
+                              >
+                                <ServerIcon className="h-3 w-3" />
+                                <span className="max-w-[140px] truncate">{displayName}</span>
+                                <X className="h-3 w-3" />
+                              </button>
+                            )
+                          })}
                         </div>
                       )}
                       <PromptInputTextarea
@@ -2391,6 +2698,112 @@ export default function AIAssistantPage() {
                           </Link>
                         ) : null}
 
+                        {/* 权限控制 */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2.5 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                              disabled={!isConfigured || hasUnresolvedToolCalls || isPreparingAttachments}
+                            >
+                              <Shield className="h-3.5 w-3.5" />
+                              <span className="max-w-[84px] truncate">{selectedPermissionOption.label}</span>
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" side="top" className="w-72">
+                            <DropdownMenuLabel>{t("permissionControl")}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuRadioGroup
+                              value={permissionMode}
+                              onValueChange={(value) => setPermissionMode(value as PermissionMode)}
+                            >
+                              {permissionModeOptions.map((option) => (
+                                <DropdownMenuRadioItem key={option.value} value={option.value}>
+                                  <div className="flex min-w-0 flex-col">
+                                    <span className="font-medium">{option.label}</span>
+                                    <span className="text-xs text-muted-foreground">{option.description}</span>
+                                  </div>
+                                </DropdownMenuRadioItem>
+                              ))}
+                            </DropdownMenuRadioGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {/* 选择服务器 */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2.5 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                              disabled={!isConfigured || hasUnresolvedToolCalls || isPreparingAttachments}
+                            >
+                              <ServerIcon className="h-3.5 w-3.5" />
+                              <span className="max-w-[88px] truncate">
+                                {selectedReferencedServers.length > 0
+                                  ? t("referenceServerSelected", { count: selectedReferencedServers.length })
+                                  : t("referenceServer")}
+                              </span>
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" side="top" className="w-80">
+                            <DropdownMenuLabel>{t("referenceServer")}</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => void loadServersForReference()}
+                              disabled={isLoadingServers}
+                            >
+                              <ServerIcon className="h-4 w-4" />
+                              {isLoadingServers ? t("referenceServerLoading") : t("referenceServerRefresh")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setSelectedServerIds([])}
+                              disabled={selectedServerIds.length === 0}
+                            >
+                              <X className="h-4 w-4" />
+                              {t("referenceServerClear")}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <div className="px-2 pb-1 text-xs text-muted-foreground">
+                              {t("referenceServerHint")}
+                            </div>
+                            <div className="max-h-56 overflow-y-auto">
+                              {isLoadingServers ? (
+                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                  {t("referenceServerLoading")}
+                                </div>
+                              ) : availableServers.length === 0 ? (
+                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                  {t("referenceServerEmpty")}
+                                </div>
+                              ) : (
+                                availableServers.map((server) => {
+                                  const displayName = server.name?.trim() || server.host
+                                  const checked = selectedServerIds.includes(server.id)
+                                  return (
+                                    <DropdownMenuCheckboxItem
+                                      key={server.id}
+                                      checked={checked}
+                                      onCheckedChange={() => toggleReferencedServer(server.id)}
+                                    >
+                                      <div className="flex min-w-0 flex-col">
+                                        <span className="truncate font-medium">{displayName}</span>
+                                        <span className="truncate text-xs text-muted-foreground">
+                                          {server.username}@{server.host}:{server.port}
+                                        </span>
+                                      </div>
+                                    </DropdownMenuCheckboxItem>
+                                  )
+                                })
+                              )}
+                            </div>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
                         {/* 文件上传按钮 */}
                         <input
                           ref={fileInputRef}
@@ -2438,18 +2851,6 @@ export default function AIAssistantPage() {
                     </PromptInputToolbar>
                   </PromptInput>
                 </div>
-              </div>
-
-              {/* 快捷键提示 */}
-              <div className="mt-2 text-center text-xs text-muted-foreground">
-                <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
-                  Enter
-                </kbd>{" "}
-                {t("panelHintSend")} •{" "}
-                <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">
-                  Shift+Enter
-                </kbd>{" "}
-                {t("panelHintNewline")}
               </div>
 
               {/* 安全提示 */}

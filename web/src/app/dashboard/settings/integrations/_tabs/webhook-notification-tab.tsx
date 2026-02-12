@@ -5,18 +5,23 @@ import { SettingsSection } from "@/components/settings/settings-section"
 import { FormInput, FormSwitch, FormSelect } from "@/components/settings/form-field"
 import { Button } from "@/components/ui/button"
 import { Webhook, Send } from "lucide-react"
-import { type UseFormReturn } from "react-hook-form"
+import { type FieldValues, type Path, type UseFormReturn } from "react-hook-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { useSettingsAPI } from "@/hooks/settings/use-settings-api"
-import { settingsApi } from "@/lib/api/settings"
+import { settingsApi, type WebhookMethod } from "@/lib/api/settings"
 import { toast } from "sonner"
 
-import { type IntegrationsConfigFormData } from "@/schemas/settings/integrations.schema"
+type WebhookNotificationFields = {
+  webhook_enabled?: boolean
+  webhook_url?: string
+  webhook_method?: WebhookMethod
+  webhook_secret?: string
+}
 
-interface WebhookNotificationTabProps {
-  form: UseFormReturn<IntegrationsConfigFormData>
-  enabledFieldName?: keyof IntegrationsConfigFormData
+interface WebhookNotificationTabProps<TFieldValues extends FieldValues & WebhookNotificationFields> {
+  form: UseFormReturn<TFieldValues>
+  enabledFieldName?: Path<TFieldValues>
 }
 
 const methodOptions = [
@@ -24,7 +29,10 @@ const methodOptions = [
   { label: "GET", value: "GET" },
 ]
 
-export function WebhookNotificationTab({ form, enabledFieldName = "webhook_enabled" }: WebhookNotificationTabProps) {
+export function WebhookNotificationTab<TFieldValues extends FieldValues & WebhookNotificationFields>({
+  form,
+  enabledFieldName = "webhook_enabled" as Path<TFieldValues>,
+}: WebhookNotificationTabProps<TFieldValues>) {
   const t = useTranslations("settingsIntegrationsWebhook")
   const { execute: testConnection, isLoading: isTesting } = useSettingsAPI()
   const enabled = form.watch(enabledFieldName)
@@ -61,7 +69,7 @@ export function WebhookNotificationTab({ form, enabledFieldName = "webhook_enabl
         <>
           <FormInput
             form={form}
-            name="webhook_url"
+            name={"webhook_url" as Path<TFieldValues>}
             label={t("fieldUrlLabel")}
             description={t("fieldUrlDesc")}
             type="url"
@@ -71,7 +79,7 @@ export function WebhookNotificationTab({ form, enabledFieldName = "webhook_enabl
 
           <FormSelect
             form={form}
-            name="webhook_method"
+            name={"webhook_method" as Path<TFieldValues>}
             label={t("fieldMethodLabel")}
             description={t("fieldMethodDesc")}
             options={methodOptions}
@@ -80,7 +88,7 @@ export function WebhookNotificationTab({ form, enabledFieldName = "webhook_enabl
 
           <FormInput
             form={form}
-            name="webhook_secret"
+            name={"webhook_secret" as Path<TFieldValues>}
             label={t("fieldSecretLabel")}
             description={t("fieldSecretDesc")}
             type="password"

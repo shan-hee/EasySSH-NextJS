@@ -21,22 +21,27 @@ func NewAIChatHandler(service aichat.Service) *AIChatHandler {
 
 // ChatRequestDTO 聊天请求DTO
 type ChatRequestDTO struct {
-	Messages []ChatMessageDTO `json:"messages" binding:"required,min=1"`
-	Model    string           `json:"model,omitempty"`
-	Stream   bool             `json:"stream"`
+	Messages       []ChatMessageDTO `json:"messages" binding:"required,min=1"`
+	Model          string           `json:"model,omitempty"`
+	Stream         bool             `json:"stream"`
+	EnableTools    bool             `json:"enable_tools,omitempty"`
+	PermissionMode string           `json:"permission_mode,omitempty" binding:"omitempty,oneof=readonly balanced privileged"`
 }
 
 // ChatMessageDTO 聊天消息DTO
 type ChatMessageDTO struct {
-	Role    string `json:"role" binding:"required,oneof=user assistant system"`
-	Content string `json:"content" binding:"required"`
+	Role       string        `json:"role" binding:"required,oneof=user assistant system tool"`
+	Content    string        `json:"content"`
+	ToolCalls  []ToolCallDTO `json:"tool_calls,omitempty"`
+	ToolCallID string        `json:"tool_call_id,omitempty"`
 }
 
 // ChatResponseDTO 聊天响应DTO
 type ChatResponseDTO struct {
-	Content string        `json:"content"`
-	Model   string        `json:"model,omitempty"`
-	Usage   *ChatUsageDTO `json:"usage,omitempty"`
+	Content   string        `json:"content"`
+	Model     string        `json:"model,omitempty"`
+	Usage     *ChatUsageDTO `json:"usage,omitempty"`
+	ToolCalls []ToolCallDTO `json:"tool_calls,omitempty"`
 }
 
 // ChatUsageDTO 使用统计DTO
@@ -70,27 +75,28 @@ func (h *AIChatHandler) Chat(c *gin.Context) {
 
 	// 如果是流式请求，使用SSE
 	if dto.Stream {
-		h.streamChat(c, userID, &dto)
+		h.streamChat(c, &dto)
 		return
 	}
 
 	// 转换为领域模型
-	messages := make([]aichat.ChatMessage, len(dto.Messages))
-	for i, m := range dto.Messages {
-		messages[i] = aichat.ChatMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		}
-	}
+	messages := convertChatMessages(dto.Messages)
 
 	req := &aichat.ChatRequest{
-		Messages: messages,
-		Model:    dto.Model,
-		Stream:   false,
+		Messages:       messages,
+		Model:          dto.Model,
+		Stream:         false,
+		EnableTools:    dto.EnableTools,
+		PermissionMode: aichat.NormalizePermissionMode(dto.PermissionMode),
 	}
 
 	// 调用服务
-	resp, err := h.service.Chat(c.Request.Context(), userID, req)
+	var resp *aichat.ChatResponse
+	if dto.EnableTools {
+		resp, err = h.service.ChatWithTools(c.Request.Context(), userID, req)
+	} else {
+		resp, err = h.service.Chat(c.Request.Context(), userID, req)
+	}
 	if err != nil {
 		if err == aichat.ErrAINotConfigured {
 			RespondError(c, http.StatusServiceUnavailable, "ai_not_configured", "AI service is not configured")
@@ -102,8 +108,9 @@ func (h *AIChatHandler) Chat(c *gin.Context) {
 
 	// 转换为DTO
 	respDTO := &ChatResponseDTO{
-		Content: resp.Content,
-		Model:   resp.Model,
+		Content:   resp.Content,
+		Model:     resp.Model,
+		ToolCalls: convertToolCalls(resp.ToolCalls),
 	}
 	if resp.Usage != nil {
 		respDTO.Usage = &ChatUsageDTO{
@@ -117,7 +124,7 @@ func (h *AIChatHandler) Chat(c *gin.Context) {
 }
 
 // streamChat 流式聊天（SSE）
-func (h *AIChatHandler) streamChat(c *gin.Context, userID interface{}, dto *ChatRequestDTO) {
+func (h *AIChatHandler) streamChat(c *gin.Context, dto *ChatRequestDTO) {
 	// 解析用户ID
 	uid, err := getUserIDFromContext(c)
 	if err != nil {
@@ -126,18 +133,14 @@ func (h *AIChatHandler) streamChat(c *gin.Context, userID interface{}, dto *Chat
 	}
 
 	// 转换为领域模型
-	messages := make([]aichat.ChatMessage, len(dto.Messages))
-	for i, m := range dto.Messages {
-		messages[i] = aichat.ChatMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		}
-	}
+	messages := convertChatMessages(dto.Messages)
 
 	req := &aichat.ChatRequest{
-		Messages: messages,
-		Model:    dto.Model,
-		Stream:   true,
+		Messages:       messages,
+		Model:          dto.Model,
+		Stream:         true,
+		EnableTools:    dto.EnableTools,
+		PermissionMode: aichat.NormalizePermissionMode(dto.PermissionMode),
 	}
 
 	// 设置SSE头
@@ -150,30 +153,59 @@ func (h *AIChatHandler) streamChat(c *gin.Context, userID interface{}, dto *Chat
 	c.Writer.Flush()
 
 	// 调用流式服务
-	err = h.service.StreamChat(c.Request.Context(), uid, req, func(delta *aichat.StreamDelta) error {
-		// 构造SSE事件
-		event := struct {
-			Content string `json:"content,omitempty"`
-			Done    bool   `json:"done,omitempty"`
-		}{
-			Content: delta.Content,
-			Done:    delta.Done,
-		}
+	if dto.EnableTools {
+		err = h.service.StreamChatWithTools(c.Request.Context(), uid, req, func(delta *aichat.StreamDelta) error {
+			// 构造SSE事件
+			event := struct {
+				Content   string        `json:"content,omitempty"`
+				Done      bool          `json:"done,omitempty"`
+				ToolCalls []ToolCallDTO `json:"tool_calls,omitempty"`
+			}{
+				Content:   delta.Content,
+				Done:      delta.Done,
+				ToolCalls: convertToolCalls(delta.ToolCalls),
+			}
 
-		data, err := json.Marshal(event)
-		if err != nil {
-			return err
-		}
+			data, err := json.Marshal(event)
+			if err != nil {
+				return err
+			}
 
-		// 写入SSE格式
-		_, err = fmt.Fprintf(c.Writer, "data: %s\n\n", data)
-		if err != nil {
-			return err
-		}
+			// 写入SSE格式
+			_, err = fmt.Fprintf(c.Writer, "data: %s\n\n", data)
+			if err != nil {
+				return err
+			}
 
-		c.Writer.Flush()
-		return nil
-	})
+			c.Writer.Flush()
+			return nil
+		})
+	} else {
+		err = h.service.StreamChat(c.Request.Context(), uid, req, func(delta *aichat.StreamDelta) error {
+			// 构造SSE事件
+			event := struct {
+				Content string `json:"content,omitempty"`
+				Done    bool   `json:"done,omitempty"`
+			}{
+				Content: delta.Content,
+				Done:    delta.Done,
+			}
+
+			data, err := json.Marshal(event)
+			if err != nil {
+				return err
+			}
+
+			// 写入SSE格式
+			_, err = fmt.Fprintf(c.Writer, "data: %s\n\n", data)
+			if err != nil {
+				return err
+			}
+
+			c.Writer.Flush()
+			return nil
+		})
+	}
 
 	if err != nil {
 		// 发送错误事件
@@ -188,33 +220,6 @@ func (h *AIChatHandler) streamChat(c *gin.Context, userID interface{}, dto *Chat
 		fmt.Fprintf(c.Writer, "data: %s\n\n", data)
 		c.Writer.Flush()
 	}
-}
-
-// StreamChat 流式聊天（SSE）端点
-// @Summary 流式聊天
-// @Tags AI聊天
-// @Accept json
-// @Produce text/event-stream
-// @Param request body ChatRequestDTO true "聊天请求"
-// @Success 200 {string} string "SSE stream"
-// @Router /api/v1/ai/chat/stream [post]
-func (h *AIChatHandler) StreamChat(c *gin.Context) {
-	// 获取用户ID
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	var dto ChatRequestDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
-		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
-		return
-	}
-
-	// 强制使用流式
-	dto.Stream = true
-	h.streamChat(c, userID, &dto)
 }
 
 // GetConfig 获取当前用户的有效AI配置（不包含敏感信息）
@@ -252,4 +257,43 @@ func (h *AIChatHandler) GetConfig(c *gin.Context) {
 		"models":     config.Models,
 		"has_key":    config.APIKey != "",
 	})
+}
+
+func convertChatMessages(messages []ChatMessageDTO) []aichat.ChatMessage {
+	result := make([]aichat.ChatMessage, len(messages))
+	for i, m := range messages {
+		msg := aichat.ChatMessage{
+			Role:       m.Role,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+		}
+		if len(m.ToolCalls) > 0 {
+			msg.ToolCalls = make([]aichat.ToolCall, len(m.ToolCalls))
+			for j, tc := range m.ToolCalls {
+				msg.ToolCalls[j] = aichat.ToolCall{
+					ID:        tc.ID,
+					Name:      tc.Name,
+					Arguments: tc.Arguments,
+				}
+			}
+		}
+		result[i] = msg
+	}
+	return result
+}
+
+func convertToolCalls(toolCalls []aichat.ToolCall) []ToolCallDTO {
+	if len(toolCalls) == 0 {
+		return nil
+	}
+	result := make([]ToolCallDTO, len(toolCalls))
+	for i, tc := range toolCalls {
+		result[i] = ToolCallDTO{
+			ID:        tc.ID,
+			Name:      tc.Name,
+			Arguments: tc.Arguments,
+			Dangerous: aichat.IsDangerousTool(tc.Name),
+		}
+	}
+	return result
 }

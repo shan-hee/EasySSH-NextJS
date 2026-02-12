@@ -12,7 +12,7 @@ import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { useAuthReady } from "@/hooks/use-auth-ready"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 
 const statusColors = {
   active: "bg-green-100 text-green-800",
@@ -77,7 +77,7 @@ export default function TerminalSessionsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const t = useTranslations("terminalSessions")
-  const locale = t.locale ?? "zh-CN"
+  const locale = useLocale()
 
   // 加载数据
   const loadData = async () => {

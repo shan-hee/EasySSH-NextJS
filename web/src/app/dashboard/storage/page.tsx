@@ -72,6 +72,8 @@ import { sftpApi, type GlobalTrashItem, type TrashItemStatus, type TrashSettings
 import { ColumnDef } from "@tanstack/react-table"
 import { Checkbox } from "@/components/ui/checkbox"
 
+type I18nValues = Record<string, string | number | Date>
+
 // 格式化文件大小
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B"
@@ -84,7 +86,7 @@ function formatFileSize(bytes: number): string {
 // 格式化相对时间（需要传入翻译函数）
 function formatRelativeTime(
   dateStr: string,
-  t: (key: string, values?: Record<string, unknown>) => string
+  t: (key: string, values?: I18nValues) => string
 ): string {
   if (!dateStr) return "-"
   const date = new Date(dateStr)
@@ -597,6 +599,7 @@ export default function TrashPage() {
 
           if (!canOperate) {
             const statusTextKey = {
+              active: "actionUnavailable",
               restored: "statusRestored",
               purged: "statusPurged",
               missing: "statusMissing",

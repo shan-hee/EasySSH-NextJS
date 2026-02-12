@@ -28,6 +28,7 @@ export interface CompletionDataResponse {
 
 export interface ScriptItem {
   name: string
+  content: string
   description: string
   executions: number
   tags: string[]

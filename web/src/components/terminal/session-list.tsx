@@ -55,6 +55,7 @@ interface Session {
   duration: string
   commandsCount: number
   dataTransferred: string
+  exitCode?: number
 }
 
 interface SessionListProps {

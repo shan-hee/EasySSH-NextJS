@@ -54,6 +54,14 @@ export interface RegisterRequest {
   run_mode?: "demo" | "development" | "production"
 }
 
+export interface InitializeAdminRequest {
+  username: string
+  email: string
+  password: string
+  run_mode?: "demo" | "development" | "production"
+  verification_code?: string
+}
+
 /**
  * 发送验证码请求
  */
@@ -230,7 +238,7 @@ export const authApi = {
   /**
    * 初始化管理员账户
    */
-  async initializeAdmin(data: RegisterRequest): Promise<RegisterResponse> {
+  async initializeAdmin(data: InitializeAdminRequest): Promise<RegisterResponse> {
     return apiFetch<RegisterResponse>("/auth/initialize-admin", {
       method: "POST",
       body: data,
