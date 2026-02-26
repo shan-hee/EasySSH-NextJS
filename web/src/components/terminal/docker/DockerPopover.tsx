@@ -373,6 +373,7 @@ function DockerPopoverContent({
           ) : (
             <ImageList
               images={imagesData?.images ?? []}
+              containers={containersData?.containers ?? []}
               onRefresh={fetchImagesData}
               isLoading={imagesLoading}
             />
