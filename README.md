@@ -6,6 +6,12 @@
 
 提供直观的 Web 界面进行远程服务器管理，支持终端模拟、文件传输、系统监控等功能
 
+[![Version](https://img.shields.io/badge/version-1.0.31-blue)](https://github.com/shan-hee/EasySSH-NextJS/releases)
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://go.dev/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.1-61DAFB?logo=react)](https://react.dev/)
+[![i18n](https://img.shields.io/badge/i18n-ready-green)](https://github.com/shan-hee/EasySSH-NextJS)
+
 [![Docker Image Version](https://img.shields.io/docker/v/shanheee/easyssh?label=Docker&logo=docker&sort=semver)](https://hub.docker.com/r/shanheee/easyssh)
 [![Docker Image Size](https://img.shields.io/docker/image-size/shanheee/easyssh/latest?logo=docker)](https://hub.docker.com/r/shanheee/easyssh)
 [![Docker Pulls](https://img.shields.io/docker/pulls/shanheee/easyssh?logo=docker)](https://hub.docker.com/r/shanheee/easyssh)
@@ -20,27 +26,34 @@
 
 ## 功能特性
 
-- 🖥️ **Web 终端**：基于 xterm.js 的全功能终端模拟器，支持多标签页
-- 📁 **文件管理**：SFTP 文件浏览、上传下载、在线编辑（Monaco Editor）
-- 📊 **系统监控**：实时 CPU、内存、磁盘、网络监控（WebSocket）
-- 🔐 **安全认证**：OAuth 2.0 + PKCE 授权流程，支持双因素认证（2FA）
-- 🎨 **现代 UI**：基于 Radix UI + Tailwind CSS 的响应式界面
-- 🐳 **容器化部署**：单容器部署，支持 amd64/arm64 架构
-- 🤖 **AI 集成**：Vercel AI SDK 支持（可选）
+- 🖥️ **Web 终端**：基于 xterm.js 5.5.0 的全功能终端模拟器，支持多标签页、WebGL 渲染、命令补全
+- 📁 **文件管理**：SFTP 文件浏览、批量操作、Monaco Editor 0.55.1 在线编辑、回收站机制
+- 📊 **系统监控**：实时 CPU、内存、磁盘、网络监控，支持多数据源（EasySSH/Nezha/Komari），Protobuf 高效传输
+- 🐳 **Docker 管理**：容器生命周期管理、镜像管理、Compose 项目分组（v1.0.31+）、实时日志查看
+- 🤖 **AI 助手**：多提供商支持（Claude/GPT/Gemini）、流式响应、工具调用、权限模式控制
+- ⚙️ **自动化任务**：定时任务（Cron）、批量执行、脚本管理、通知集成（邮件/钉钉/企业微信/Webhook）
+- 🔐 **安全认证**：OAuth 2.0 + PKCE 授权流程，支持双因素认证（2FA）、账户锁定、登录检测
+- 🎨 **现代 UI**：基于 Radix UI + Tailwind CSS 4 的响应式界面，支持国际化（next-intl）
 
 ## 技术栈
 
 ### 前端
-- **框架**：Next.js 16 (App Router + 静态导出) + React 19
-- **UI**：Radix UI + Shadcn/ui + Tailwind CSS 4.x
-- **终端**：xterm.js
-- **编辑器**：Monaco Editor
+- **框架**：Next.js 16 (Turbopack) + React 19.1.2 + TypeScript 5
+- **UI 组件**：Radix UI + shadcn/ui + Tailwind CSS 4
+- **终端**：xterm.js 5.5.0（WebGL 渲染、多主题支持）
+- **代码编辑器**：Monaco Editor 0.55.1
+- **状态管理**：Zustand 5.0.8 + React Query 5.90.10
+- **数据可视化**：ECharts 6.0
+- **国际化**：next-intl 4.4.0
 
 ### 后端
-- **语言**：Go 1.24+
-- **框架**：Gin + GORM
-- **数据库**：PostgreSQL 16+ / Redis 7+
-- **SSH**：golang.org/x/crypto/ssh
+- **语言**：Go 1.24
+- **框架**：Gin 1.10.0 + GORM 1.25.12
+- **数据库**：PostgreSQL 16+ + Redis 7+
+- **SSH/SFTP**：golang.org/x/crypto + pkg/sftp 1.13.6
+- **AI 集成**：go-anthropic v2.16.3 + go-openai v1.41.2
+- **WebSocket**：Gorilla WebSocket 1.5.3
+- **任务调度**：robfig/cron v3.0.1
 
 ### 架构设计
 
@@ -233,6 +246,19 @@ COOKIE_SECURE=true             # HTTPS: true | HTTP: false
 COOKIE_SAMESITE=lax            # 同域: lax | 跨域+HTTPS: none
 ```
 
+### 关键环境变量说明
+
+| 变量名 | 说明 | 默认值 | 必需 | 生成方式/示例 |
+|--------|------|--------|------|--------------|
+| PORT | 后端服务端口 | 8520 | 否 | 8520 |
+| DB_HOST | PostgreSQL 主机地址 | postgres | 是 | Docker: postgres / 本地: localhost |
+| DB_PASSWORD | 数据库密码 | - | 是 | `openssl rand -base64 16` |
+| JWT_SECRET | JWT 签名密钥 | - | 是 | `openssl rand -base64 48` |
+| ENCRYPTION_KEY | 数据加密密钥（2FA等） | - | 是 | `openssl rand -base64 32` |
+| COOKIE_SECURE | Cookie 安全标志 | true | 否 | HTTPS: true / HTTP: false |
+| COOKIE_SAMESITE | Cookie 同站策略 | lax | 否 | lax / none / strict |
+| REDIS_HOST | Redis 主机地址 | redis | 是 | Docker: redis / 本地: localhost |
+
 ### 配置说明
 
 - **开发环境**：使用 `./scripts/dev.sh` 自动配置，或手动编辑 `.env`
@@ -240,23 +266,6 @@ COOKIE_SAMESITE=lax            # 同域: lax | 跨域+HTTPS: none
 - **Docker 部署**：配置已内置在 `docker-compose.yml` 中
 
 完整配置项请参考 [.env.example](.env.example)
-
-## 认证与安全
-
-### OAuth 2.0 + PKCE 流程
-
-- **登录**：`POST /oauth/authorize` + `POST /oauth/token`（支持 2FA）
-- **Token 策略**：
-  - `access_token`：短期 JWT，存储在内存，用于 API 和 WebSocket 鉴权
-  - `refresh_token`：长期 JWT，HttpOnly Cookie，用于自动续期
-- **自动续期**：`/api/v1/auth/status` 检测到 access_token 失效时自动刷新
-
-### WebSocket 鉴权
-
-- 终端：`/api/v1/ssh/terminal/:server_id?token=<access_token>`
-- 监控：`/api/v1/monitor/server/:server_id?interval=2`
-
-详细文档请参考 [docs/auth-pkce-migration-plan.md](docs/auth-pkce-migration-plan.md)
 
 ## 贡献指南
 
