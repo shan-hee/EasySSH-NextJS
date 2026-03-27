@@ -2,6 +2,8 @@
 
 # EasySSH
 
+<img src="web/public/logo.svg" alt="EasySSH Logo" width="120" />
+
 **现代化的 SSH 管理平台**
 
 提供直观的 Web 界面进行远程服务器管理，支持终端模拟、文件传输、系统监控等功能
