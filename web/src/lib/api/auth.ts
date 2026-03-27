@@ -164,10 +164,10 @@ export const authApi = {
 
   /**
    * 用户登出
-   * Cookie 会自动携带,无需传递 token
+   * 主流程调用 /oauth/logout，以便携带 Path=/api/v1/oauth 的 refresh_token Cookie
    */
   async logout(): Promise<void> {
-    return apiFetch<void>("/auth/logout", {
+    return apiFetch<void>("/oauth/logout", {
       method: "POST",
     })
   },
@@ -217,7 +217,7 @@ export const authApi = {
     }
 
     // 未认证（可能仅存在 refresh_token Cookie），尝试静默刷新一次
-    // 注意：refresh_token 保存在 HttpOnly 且 Path=/oauth 的 Cookie 中，
+    // 注意：refresh_token 保存在 HttpOnly 且 Path=/api/v1/oauth 的 Cookie 中，
     // 无法通过 document.cookie 在 /login 或 /dashboard 等路径检测是否存在，
     // 因此这里不再依赖前端读取 Cookie，而是直接尝试调用统一的 refresh 工具。
     try {

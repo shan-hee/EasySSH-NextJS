@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"fmt"
+	"strings"
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -65,27 +66,32 @@ func (s *totpService) GenerateBackupCodes() ([]string, error) {
 	return codes, nil
 }
 
-// VerifyBackupCode 验证备份码并返回剩余的备份码（加密后）
-func (s *totpService) VerifyBackupCode(encryptedCodes, code string) (bool, string, error) {
-	// 解密备份码
-	storedCodes, err := DecryptBackupCodes(encryptedCodes)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to decrypt backup codes: %w", err)
+// VerifyBackupCode 验证备份码并返回更新后的存储值。
+// 备份码仅以带前缀的 HMAC 哈希列表形式存储。
+func (s *totpService) VerifyBackupCode(storedCodes, code string) (bool, string, error) {
+	normalizedCode := strings.ToUpper(strings.TrimSpace(code))
+	if normalizedCode == "" {
+		return false, "", nil
 	}
 
-	// 查找并移除使用过的备份码
-	for i, storedCode := range storedCodes {
-		if storedCode == code {
-			// 移除这个备份码
-			storedCodes = append(storedCodes[:i], storedCodes[i+1:]...)
+	key, err := getEncryptionKey()
+	if err != nil {
+		return false, "", err
+	}
 
-			// 加密剩余的备份码
-			updatedEncryptedCodes, err := EncryptBackupCodes(storedCodes)
+	hashes, err := decodeBackupCodeHashes(storedCodes)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to decode backup code hashes: %w", err)
+	}
+
+	for i, storedHash := range hashes {
+		if verifyHashedBackupCode(storedHash, normalizedCode, key) {
+			hashes = append(hashes[:i], hashes[i+1:]...)
+			updatedHashes, err := encodeBackupCodeHashes(hashes)
 			if err != nil {
-				return false, "", fmt.Errorf("failed to encrypt updated backup codes: %w", err)
+				return false, "", fmt.Errorf("failed to encode updated backup code hashes: %w", err)
 			}
-
-			return true, updatedEncryptedCodes, nil
+			return true, updatedHashes, nil
 		}
 	}
 

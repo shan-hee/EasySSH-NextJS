@@ -139,6 +139,25 @@ export function isApiError(error: unknown): error is ApiError {
   )
 }
 
+function shouldOmitAuthHeader(url: string): boolean {
+  return (
+    url.includes("/oauth/authorize") ||
+    url.includes("/oauth/token") ||
+    url.includes("/oauth/google/verify")
+  )
+}
+
+function shouldIncludeCookies(url: string): boolean {
+  return (
+    url.includes("/oauth/token") ||
+    url.includes("/oauth/logout") ||
+    url.includes("/oauth/google/verify") ||
+    url.includes("/auth/logout") ||
+    url.includes("/auth/register") ||
+    url.includes("/auth/initialize-admin")
+  )
+}
+
 type ApiFetchOptions = {
   method?: HttpMethod
   headers?: HeadersInit
@@ -224,27 +243,6 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   throw lastError
 }
 
-export function getCookieValue(name: string): string | null {
-  if (typeof document === "undefined") return null
-  try {
-    const pattern = `(?:^|; )${name.replace(/[$()*+./?[\\\]^{|}-]/g, "\\$&")}=([^;]*)`
-    const match = document.cookie.match(new RegExp(pattern))
-    return match ? decodeURIComponent(match[1]) : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * 获取 CSRF Token（从 Cookie 中读取）
- */
-export function getCsrfToken(): string | null {
-  return getCookieValue("easyssh_csrf_token")
-}
-
-/**
- * 内部 fetch 实现,支持超时
- */
 async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 'retry' | 'maxRetries'> = {}): Promise<T> {
   // 构建请求URL
   // 如果path是完整URL则直接使用
@@ -257,18 +255,14 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     url = `${apiUrl}${path}`
   }
 
-  // OAuth 端点不需要也不应该附带 Authorization 头
-  const isOAuthEndpoint =
-    url.includes("/oauth/authorize") || url.includes("/oauth/token")
-
   const headers: HeadersInit = {
     Accept: "application/json",
     ...options.headers,
   }
 
   // 如有可用的 access_token，则自动附加 Bearer 认证头
-  // 注意：对 /oauth/* 端点不附加 Authorization，避免干扰 PKCE 与 CORS
-  if (!isOAuthEndpoint) {
+  // 注意：登录建链与刷新端点不附加 Authorization，避免干扰 PKCE / Token 交换
+  if (!shouldOmitAuthHeader(url)) {
     const currentToken = getCurrentAccessToken()
     if (currentToken) {
       const headersRecord = headers as Record<string, string>
@@ -292,13 +286,13 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   const signal = options.signal || controller.signal
 
   // 选择 credentials 策略：
-  // - 默认 same-origin
-  // - 若在浏览器端且请求为跨源绝对 URL，则自动使用 include 以携带 Cookie（跨域直连场景）
+  // - 默认 same-origin，业务 API 只走 Bearer，不自动携带 Cookie
+  // - 仅对会建立/刷新/清理 refresh_token Cookie 的认证端点，在跨域时使用 include
   let credentials: RequestCredentials = 'same-origin'
   try {
     if (typeof window !== 'undefined') {
       const reqUrl = new URL(url, window.location.href)
-      if (reqUrl.origin !== window.location.origin) {
+      if (reqUrl.origin !== window.location.origin && shouldIncludeCookies(url)) {
         credentials = 'include'
       }
     }
@@ -311,22 +305,6 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     headers,
     credentials,
     signal,
-  }
-
-  // CSRF：Cookie 鉴权下的双提交保护
-  // - 对非安全方法，自动附带 X-CSRF-Token（若客户端存在 csrf cookie）
-  const method = (options.method ?? "GET").toUpperCase()
-  const unsafe = method !== "GET" && method !== "HEAD" && method !== "OPTIONS"
-  if (unsafe) {
-    const csrf = getCookieValue("easyssh_csrf_token")
-    if (csrf) {
-      const headersRecord = headers as Record<string, string>
-      const hasCsrfHeader =
-        Object.keys(headersRecord).some((k) => k.toLowerCase() === "x-csrf-token")
-      if (!hasCsrfHeader) {
-        headersRecord["X-CSRF-Token"] = csrf
-      }
-    }
   }
 
   if (options.body !== undefined && options.body !== null) {

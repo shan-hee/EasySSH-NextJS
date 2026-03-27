@@ -94,7 +94,7 @@ type Service interface {
 	Enable2FA(ctx context.Context, userID uuid.UUID, code string) ([]string, error)
 
 	// Disable2FA 禁用双因子认证
-	Disable2FA(ctx context.Context, userID uuid.UUID, password string) error
+	Disable2FA(ctx context.Context, userID uuid.UUID, code string) error
 
 	// Generate2FASecret 生成 2FA secret（第一步）
 	Generate2FASecret(ctx context.Context, userID uuid.UUID) (string, string, error)
@@ -495,26 +495,9 @@ func (s *authService) RegisterOAuthUser(ctx context.Context, username, email, av
 }
 
 func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) {
-	// 先刷新令牌（验证 JWT token 的有效性）
-	newAccessToken, newRefreshToken, err := s.jwtService.RefreshToken(refreshToken)
-	if err != nil {
-		return "", "", err
-	}
-
-	// 验证会话是否存在（安全检查：撤销的会话不能刷新 token）
-	// 当前实现：始终使用“旧的” refresh token 哈希查找会话，
-	// 然后在生成了 newRefreshToken 时，再把会话记录中的哈希更新为新的。
 	tokenHashToFind := s.hashToken(refreshToken)
-	if newRefreshToken != "" {
-		// 即使生成了新 token，此处仍然用旧 token 的哈希查找会话，
-		// 因为数据库中当前存储的就是旧 token 的哈希值。
-		tokenHashToFind = s.hashToken(refreshToken)
-	}
-
 	session, err := s.repo.FindSessionByRefreshToken(ctx, tokenHashToFind)
 	if err != nil || session == nil {
-		// 会话不存在或已被撤销，拒绝刷新
-		// 注意：token 已经生成了，但我们不返回它
 		return "", "", ErrSessionNotFound
 	}
 
@@ -525,10 +508,18 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return "", "", ErrSessionExpired
 	}
 
-    // 更新会话活动时间 + 滑动闲置过期
-    session.UpdateActivity()
-    // 与 JWT 刷新闲置窗口对齐：每次刷新将会话过期时间顺延
-    session.ExpiresAt = time.Now().Add(s.sessionIdleDuration)
+	newAccessToken, newRefreshToken, err := s.jwtService.RefreshToken(refreshToken)
+	if err != nil {
+		if errors.Is(err, ErrTokenFamilyRevoked) || errors.Is(err, ErrTokenReuseDetected) {
+			_ = s.repo.DeleteSession(ctx, session.ID)
+		}
+		return "", "", err
+	}
+
+	// 更新会话活动时间 + 滑动闲置过期
+	session.UpdateActivity()
+	// 与 JWT 刷新闲置窗口对齐：每次刷新将会话过期时间顺延
+	session.ExpiresAt = time.Now().Add(s.sessionIdleDuration)
 
 	// 如果生成了新的 refresh token，更新会话中的 token 哈希
 	if newRefreshToken != "" {
@@ -536,8 +527,7 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	}
 
 	if err := s.repo.UpdateSession(ctx, session); err != nil {
-		// 更新失败不应阻止令牌刷新，记录错误
-		fmt.Printf("Failed to update session activity: %v\n", err)
+		return "", "", fmt.Errorf("%w: %v", ErrSessionSyncFailed, err)
 	}
 
 	return newAccessToken, newRefreshToken, nil
@@ -872,6 +862,10 @@ func (s *authService) initializeProductionMode(ctx context.Context, adminUser *U
 	return nil
 }
 
+func (s *authService) resolveTwoFactorSecret(user *User) (string, error) {
+	return DecryptTOTPSecret(user.TwoFactorSecret)
+}
+
 // Generate2FASecret 生成 2FA secret（第一步：生成但不保存）
 func (s *authService) Generate2FASecret(ctx context.Context, userID uuid.UUID) (string, string, error) {
 	// 查找用户
@@ -886,8 +880,13 @@ func (s *authService) Generate2FASecret(ctx context.Context, userID uuid.UUID) (
 		return "", "", fmt.Errorf("failed to generate TOTP secret: %w", err)
 	}
 
+	encryptedSecret, err := EncryptTOTPSecret(secret)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to encrypt TOTP secret: %w", err)
+	}
+
 	// 临时保存 secret 到数据库（此时还未启用 2FA）
-	user.TwoFactorSecret = secret
+	user.TwoFactorSecret = encryptedSecret
 	if err := s.repo.Update(ctx, user); err != nil {
 		return "", "", fmt.Errorf("failed to save TOTP secret: %w", err)
 	}
@@ -913,8 +912,13 @@ func (s *authService) Enable2FA(ctx context.Context, userID uuid.UUID, code stri
 		return nil, errors.New("2FA secret not generated, please generate first")
 	}
 
+	secret, err := s.resolveTwoFactorSecret(user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load TOTP secret: %w", err)
+	}
+
 	// 验证 TOTP 代码
-	if !s.totpService.ValidateCode(user.TwoFactorSecret, code) {
+	if !s.totpService.ValidateCode(secret, code) {
 		return nil, errors.New("invalid 2FA code")
 	}
 
@@ -924,15 +928,15 @@ func (s *authService) Enable2FA(ctx context.Context, userID uuid.UUID, code stri
 		return nil, fmt.Errorf("failed to generate backup codes: %w", err)
 	}
 
-	// 加密备份码后存储
-	encryptedBackupCodes, err := EncryptBackupCodes(backupCodes)
+	// 备份码采用不可逆哈希存储
+	hashedBackupCodes, err := HashBackupCodes(backupCodes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt backup codes: %w", err)
+		return nil, fmt.Errorf("failed to hash backup codes: %w", err)
 	}
 
 	// 启用 2FA
 	user.TwoFactorEnabled = true
-	user.BackupCodes = encryptedBackupCodes
+	user.BackupCodes = hashedBackupCodes
 
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to enable 2FA: %w", err)
@@ -970,8 +974,13 @@ func (s *authService) Disable2FA(ctx context.Context, userID uuid.UUID, code str
 		return errors.New("2FA is not enabled")
 	}
 
+	secret, err := s.resolveTwoFactorSecret(user)
+	if err != nil {
+		return fmt.Errorf("failed to load TOTP secret: %w", err)
+	}
+
 	// 验证 2FA 代码
-	if !s.totpService.ValidateCode(user.TwoFactorSecret, code) {
+	if !s.totpService.ValidateCode(secret, code) {
 		return errors.New("invalid 2FA code")
 	}
 
@@ -996,8 +1005,13 @@ func (s *authService) Verify2FACode(ctx context.Context, userID uuid.UUID, code 
 		return false, errors.New("2FA is not enabled")
 	}
 
+	secret, err := s.resolveTwoFactorSecret(user)
+	if err != nil {
+		return false, fmt.Errorf("failed to load TOTP secret: %w", err)
+	}
+
 	// 首先尝试验证 TOTP 代码
-	if s.totpService.ValidateCode(user.TwoFactorSecret, code) {
+	if s.totpService.ValidateCode(secret, code) {
 		return true, nil
 	}
 
@@ -1049,13 +1063,13 @@ func (s *authService) CreateAuthorizationCode(
 	// 将授权码数据存储到 Redis（使用 Hash 结构）
 	key := fmt.Sprintf("auth_code:%s", code)
 	data := map[string]interface{}{
-		"user_id":                userID.String(),
-		"client_id":              clientID,
-		"redirect_uri":           redirectURI,
-		"scope":                  scope,
-		"code_challenge":         codeChallenge,
-		"code_challenge_method":  strings.ToUpper(codeChallengeMethod),
-		"created_at":             time.Now().Unix(),
+		"user_id":               userID.String(),
+		"client_id":             clientID,
+		"redirect_uri":          redirectURI,
+		"scope":                 scope,
+		"code_challenge":        codeChallenge,
+		"code_challenge_method": strings.ToUpper(codeChallengeMethod),
+		"created_at":            time.Now().Unix(),
 	}
 
 	// 存储到 Redis

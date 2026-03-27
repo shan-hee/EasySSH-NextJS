@@ -154,10 +154,10 @@ server/
 ## 🎯 API 端点
 
 ### 认证 & 授权 (5 个)
-- `POST /oauth/authorize` - 使用用户名密码 + PKCE 发起授权请求（支持 2FA）
-- `POST /oauth/token` - 使用授权码/refresh_token 换取 access_token
+- `POST /api/v1/oauth/authorize` - 使用邮箱密码 + PKCE 发起授权请求（支持 2FA）
+- `POST /api/v1/oauth/token` - 使用授权码/refresh_token 换取 access_token
 - `POST /api/v1/auth/register` - 用户注册
-- `POST /api/v1/auth/logout` - 退出登录（撤销当前会话）
+- `POST /api/v1/oauth/logout` - 推荐登出端点（完整撤销当前会话）
 - `GET /api/v1/users/me` - 获取当前用户信息
 
 ### 服务器管理 (7 个)
@@ -238,9 +238,9 @@ server/
 - ✅ **传输**: 支持 HTTPS（生产环境）
 
 ### 认证授权
-- ✅ **OAuth 2.0 + PKCE 登录**：通过 `/oauth/authorize` + `/oauth/token` 的 Authorization Code + PKCE 流程完成用户名密码登录（支持 2FA）
+- ✅ **OAuth 2.0 + PKCE 登录**：通过 `/api/v1/oauth/authorize` + `/api/v1/oauth/token` 的 Authorization Code + PKCE 流程完成邮箱密码登录（支持 2FA）
 - ✅ **访问令牌 (Access Token)**：短期 JWT，仅通过 `Authorization: Bearer <token>` 传递，由前端内存存储和自动刷新管理
-- ✅ **刷新令牌 (Refresh Token)**：长期 JWT，仅存放于 HttpOnly Cookie（`Path=/oauth`），只在 `POST /oauth/token` 的 `grant_type=refresh_token` 流程中使用
+- ✅ **刷新令牌 (Refresh Token)**：长期 JWT，仅存放于 HttpOnly Cookie（`Path=/api/v1/oauth`），只在 `POST /api/v1/oauth/token` 和推荐的 `POST /api/v1/oauth/logout` 流程中使用
 - ✅ **会话管理**：每次登录创建独立会话 `session_id`，写入 access_token claims，并记录到 `user_sessions` 表，用于“当前会话标记”和远程注销
 - ✅ **令牌黑名单**：Redis 存储已注销访问令牌（登出/踢下线后立即失效）
 - ✅ **RBAC**：基于角色的访问控制（Admin/User/Viewer）

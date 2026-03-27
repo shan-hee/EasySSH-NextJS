@@ -1,9 +1,6 @@
 package rest
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +23,6 @@ import (
 const (
 	RefreshTokenCookieName = "easyssh_refresh_token"
 	AccessTokenCookieName  = "easyssh_access_token"
-	CSRFTokenCookieName    = "easyssh_csrf_token"
 )
 
 // CookieConfig Cookie 配置（用于类型断言）
@@ -77,37 +73,6 @@ func getCookieConfig(c *gin.Context, securityService security.Service) (secure b
 	return secure, domain, sameSite
 }
 
-func setAccessTokenCookie(c *gin.Context, accessToken string, securityService security.Service, maxAge int) {
-	secure, domain, sameSite := getCookieConfig(c, securityService)
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     AccessTokenCookieName,
-		Value:    accessToken,
-		Path:     "/api/v1",
-		Domain:   domain,
-		MaxAge:   maxAge,
-		Secure:   secure,
-		HttpOnly: true,
-		SameSite: sameSite,
-	})
-}
-
-// setCSRFCookie 设置 CSRF Token Cookie
-// 注意：CSRF Cookie 必须设置 HttpOnly=false，以便前端 JavaScript 能够读取并附加到请求头
-// 这是双提交 Cookie 防护模式（Double Submit Cookie）的必要条件
-func setCSRFCookie(c *gin.Context, csrfToken string, securityService security.Service, maxAge int) {
-	secure, domain, sameSite := getCookieConfig(c, securityService)
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     CSRFTokenCookieName,
-		Value:    csrfToken,
-		Path:     "/",
-		Domain:   domain,
-		MaxAge:   maxAge,
-		Secure:   secure,
-		HttpOnly: false, // 必须为 false，前端 JS 需要读取此值并附加到 X-CSRF-Token 请求头
-		SameSite: sameSite,
-	})
-}
-
 // setAuthCookies 设置认证相关的 HttpOnly Cookie（仅用于 refresh_token）
 func setAuthCookies(c *gin.Context, refreshToken string, securityService security.Service, refreshTokenMaxAge int) {
 	secure, domain, sameSite := getCookieConfig(c, securityService)
@@ -156,20 +121,6 @@ func clearAccessTokenCookie(c *gin.Context, securityService security.Service) {
 	})
 }
 
-func clearCSRFCookie(c *gin.Context, securityService security.Service) {
-	secure, domain, sameSite := getCookieConfig(c, securityService)
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     CSRFTokenCookieName,
-		Value:    "",
-		Path:     "/",
-		Domain:   domain,
-		MaxAge:   -1,
-		Secure:   secure,
-		HttpOnly: false,
-		SameSite: sameSite,
-	})
-}
-
 // extractDeviceInfo 从请求中提取设备信息
 func extractDeviceInfo(c *gin.Context) (deviceType, deviceName, ipAddress, userAgent string) {
 	// 获取 User-Agent
@@ -213,20 +164,6 @@ func extractDeviceInfo(c *gin.Context) (deviceType, deviceName, ipAddress, userA
 	}
 
 	return deviceType, deviceName, ipAddress, userAgent
-}
-
-func newCSRFToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
-// hashRefreshToken 对 refresh token 进行哈希处理
-func hashRefreshToken(token string) string {
-	hash := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(hash[:])
 }
 
 // AuthHandler 认证处理器
@@ -306,11 +243,10 @@ type UpdateProfileRequest struct {
 
 // AuthResponse 认证响应
 type AuthResponse struct {
-	User         interface{} `json:"user"`
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	TokenType    string      `json:"token_type"`
-	ExpiresIn    int         `json:"expires_in"` // 秒
+	User        interface{} `json:"user"`
+	AccessToken string      `json:"access_token"`
+	TokenType   string      `json:"token_type"`
+	ExpiresIn   int         `json:"expires_in"` // 秒
 }
 
 // OAuthAuthorizeRequest PKCE 授权请求（开发版：采用 JSON 提交邮箱密码）
@@ -604,21 +540,21 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if strings.TrimSpace(refreshToken) != "" {
 		setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
 	}
+	clearAccessTokenCookie(c, h.securityService)
 
 	// 在上下文中记录用户信息，便于审计日志使用
 	c.Set("user_id", user.ID.String())
 	c.Set("username", user.Username)
 
 	RespondCreated(c, AuthResponse{
-		User:         user.ToPublic(),
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    h.accessTokenTTLSeconds,
+		User:        user.ToPublic(),
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   h.accessTokenTTLSeconds,
 	})
 }
 
-// OAuthAuthorize 使用用户名密码 + PKCE 创建授权码（开发版：JSON 接口，不做浏览器跳转）
+// OAuthAuthorize 使用邮箱密码 + PKCE 创建授权码（开发版：JSON 接口，不做浏览器跳转）
 // POST /api/v1/oauth/authorize
 func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 	var req OAuthAuthorizeRequest
@@ -790,12 +726,6 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 		// access_token 仅通过响应体返回，前端仅存内存；清理历史遗留的 access_token Cookie
 		clearAccessTokenCookie(c, h.securityService)
 
-		// 设置 CSRF Token Cookie（双提交：Cookie + Header/Form）
-		if csrfToken, err := newCSRFToken(); err == nil {
-			// CSRF token 生命周期与 access_token 一致即可
-			setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
-		}
-
 		// 在上下文中记录用户信息，便于审计日志使用
 		c.Set("user_id", user.ID.String())
 		c.Set("username", user.Username)
@@ -815,6 +745,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 
 		if refreshToken == "" {
 			clearAuthCookies(c, h.securityService)
+			clearAccessTokenCookie(c, h.securityService)
 			RespondError(c, http.StatusUnauthorized, "invalid_token", "Missing refresh token")
 			return
 		}
@@ -823,9 +754,13 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidToken) ||
 				errors.Is(err, auth.ErrExpiredToken) ||
+				errors.Is(err, auth.ErrTokenFamilyRevoked) ||
+				errors.Is(err, auth.ErrTokenReuseDetected) ||
 				errors.Is(err, auth.ErrSessionNotFound) ||
-				errors.Is(err, auth.ErrSessionExpired) {
+				errors.Is(err, auth.ErrSessionExpired) ||
+				errors.Is(err, auth.ErrSessionSyncFailed) {
 				clearAuthCookies(c, h.securityService)
+				clearAccessTokenCookie(c, h.securityService)
 				RespondError(c, http.StatusUnauthorized, "invalid_token", "Invalid or expired refresh token")
 				return
 			}
@@ -841,13 +776,6 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 		// access_token 仅通过响应体返回，前端仅存内存；清理历史遗留的 access_token Cookie
 		clearAccessTokenCookie(c, h.securityService)
 
-		// 如果缺少 CSRF Cookie，则补发一个
-		if _, err := c.Cookie(CSRFTokenCookieName); err != nil {
-			if csrfToken, err := newCSRFToken(); err == nil {
-				setCSRFCookie(c, csrfToken, h.securityService, h.accessTokenTTLSeconds)
-			}
-		}
-
 		RespondSuccess(c, OAuthTokenResponse{
 			AccessToken: newAccessToken,
 			TokenType:   "Bearer",
@@ -860,6 +788,7 @@ func (h *AuthHandler) OAuthToken(c *gin.Context) {
 }
 
 // Logout 用户登出
+// POST /api/v1/oauth/logout
 // POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
 	// 从 Authorization 头获取 access_token（Bearer）
@@ -868,13 +797,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		parts := strings.Fields(authHeader)
 		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
 			accessToken = strings.TrimSpace(parts[1])
-		}
-	}
-
-	// 同时支持 Cookie：用于下载/WS 等难以设置 Header 的场景
-	if accessToken == "" {
-		if cookieToken, err := c.Cookie(AccessTokenCookieName); err == nil {
-			accessToken = strings.TrimSpace(cookieToken)
 		}
 	}
 
@@ -888,14 +810,19 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if accessToken == "" && refreshToken == "" {
 		clearAuthCookies(c, h.securityService)
 		clearAccessTokenCookie(c, h.securityService)
-		clearCSRFCookie(c, h.securityService)
 		RespondSuccessWithMessage(c, nil, "Logged out successfully")
 		return
 	}
 
-	// 尝试根据 access_token 中的 session_id 撤销当前会话（不会阻止后续流程）
+	// 优先尝试根据 access_token 中的 session_id 撤销当前会话（不会阻止后续流程）
 	if accessToken != "" {
 		if claims, err := h.jwtService.ValidateToken(accessToken); err == nil {
+			if claims.SessionID != uuid.Nil {
+				_ = h.authService.RevokeSession(c.Request.Context(), claims.UserID, claims.SessionID)
+			}
+		}
+	} else if refreshToken != "" {
+		if claims, err := h.jwtService.ValidateToken(refreshToken); err == nil {
 			if claims.SessionID != uuid.Nil {
 				_ = h.authService.RevokeSession(c.Request.Context(), claims.UserID, claims.SessionID)
 			}
@@ -912,7 +839,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	// 清除 HttpOnly Cookie
 	clearAuthCookies(c, h.securityService)
 	clearAccessTokenCookie(c, h.securityService)
-	clearCSRFCookie(c, h.securityService)
 
 	RespondSuccessWithMessage(c, nil, "Logged out successfully")
 }
@@ -1199,7 +1125,7 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 		}
 
 		// 刷新逻辑由前端 apiFetch 统一处理:
-		// 收到 401 时自动调用 /oauth/token (grant_type=refresh_token) 并重放原请求，
+		// 收到 401 时自动调用 /api/v1/oauth/token (grant_type=refresh_token) 并重放原请求，
 		// 因此此处不再直接读取 refresh_token Cookie。
 	}
 
@@ -1299,14 +1225,14 @@ func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
 
 	// 设置 HttpOnly Cookie
 	setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
+	clearAccessTokenCookie(c, h.securityService)
 
 	// 返回用户信息和令牌
 	RespondSuccess(c, AuthResponse{
-		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    h.accessTokenTTLSeconds,
+		User:        user,
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   h.accessTokenTTLSeconds,
 	})
 }
 
@@ -1354,7 +1280,7 @@ type Enable2FAResponse struct {
 }
 
 // Generate2FASecret 生成 2FA secret（第一步）
-// GET /api/v1/auth/2fa/generate
+// GET /api/v1/users/me/2fa/generate
 func (h *AuthHandler) Generate2FASecret(c *gin.Context) {
 	// 从上下文获取用户 ID
 	userIDStr, exists := c.Get("user_id")
@@ -1383,7 +1309,7 @@ func (h *AuthHandler) Generate2FASecret(c *gin.Context) {
 }
 
 // Enable2FA 启用双因子认证（第二步）
-// POST /api/v1/auth/2fa/enable
+// POST /api/v1/users/me/2fa/enable
 func (h *AuthHandler) Enable2FA(c *gin.Context) {
 	// 从上下文获取用户 ID
 	userIDStr, exists := c.Get("user_id")
@@ -1426,7 +1352,7 @@ func (h *AuthHandler) Enable2FA(c *gin.Context) {
 }
 
 // Disable2FA 禁用双因子认证
-// POST /api/v1/auth/2fa/disable
+// POST /api/v1/users/me/2fa/disable
 func (h *AuthHandler) Disable2FA(c *gin.Context) {
 	// 从上下文获取用户 ID
 	userIDStr, exists := c.Get("user_id")
@@ -1534,7 +1460,7 @@ func (h *AuthHandler) Verify2FACode(c *gin.Context) {
 		c.Set("username", user.Username)
 	}
 
-	// 返回授权码和 state，由前端继续调用 /oauth/token 换取 access_token
+	// 返回授权码和 state，由前端继续调用 /api/v1/oauth/token 换取 access_token
 	RespondSuccess(c, OAuthAuthorizeResponse{
 		Code:  code,
 		State: req.State,

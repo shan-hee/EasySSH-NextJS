@@ -1,4 +1,4 @@
-import { apiFetch, getApiUrl, getAuthHeaders, getCsrfToken } from "@/lib/api-client"
+import { apiFetch, getApiUrl, getAuthHeaders } from "@/lib/api-client"
 
 // ========== 类型定义 ==========
 
@@ -93,21 +93,16 @@ export async function streamChat(
   signal?: AbortSignal
 ): Promise<void> {
   const url = getApiUrl("/ai/chat")
-  const csrfToken = getCsrfToken()
 
   const headers: Record<string, string> = {
     ...getAuthHeaders(),
     "Content-Type": "application/json",
-  }
-  if (csrfToken) {
-    headers["X-CSRF-Token"] = csrfToken
   }
 
   const response = await fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify({ ...request, stream: true }),
-    credentials: "include",
     signal,
   })
 
@@ -204,21 +199,16 @@ export async function streamChatWithTools(
   signal?: AbortSignal
 ): Promise<void> {
   const url = getApiUrl("/ai/chat")
-  const csrfToken = getCsrfToken()
 
   const headers: Record<string, string> = {
     ...getAuthHeaders(),
     "Content-Type": "application/json",
-  }
-  if (csrfToken) {
-    headers["X-CSRF-Token"] = csrfToken
   }
 
   const response = await fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify({ ...request, stream: true, enable_tools: true }),
-    credentials: "include",
     signal,
   })
 

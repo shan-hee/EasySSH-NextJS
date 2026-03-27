@@ -113,7 +113,7 @@ components:
         - redirect_uri
         - code_challenge
         - code_challenge_method
-        - username
+        - email
         - password
       properties:
         response_type:
@@ -142,10 +142,11 @@ components:
           example: S256
         state:
           type: string
-          description: 防 CSRF 的随机字符串，将在响应中原样返回
-        username:
+          description: 前端自定义的关联参数，后端会原样返回
+        email:
           type: string
-          example: admin
+          format: email
+          example: admin@example.com
         password:
           type: string
           format: password
@@ -639,21 +640,16 @@ paths:
   # ========================================
   # 认证
   # ========================================
-  # 登录采用 OAuth 2.0 Authorization Code + PKCE（端点 /oauth/*）
-  # 业务 API 使用 Bearer Token 认证，登出接口位于 /api/v1/auth/logout
+  # 登录采用 OAuth 2.0 Authorization Code + PKCE（实际路径为 /api/v1/oauth/*）
+  # 业务 API 使用 Bearer Token 认证，推荐登出接口为 /api/v1/oauth/logout
   /oauth/authorize:
     post:
       tags:
         - auth
-      summary: 使用用户名密码 + PKCE 创建授权码
+      summary: 使用邮箱密码 + PKCE 创建授权码
       description: |
-        前端以 JSON 方式提交用户名密码与 PKCE 参数，成功时返回授权码；
+        前端以 JSON 方式提交邮箱密码与 PKCE 参数，成功时返回授权码；
         如用户启用 2FA，则返回 requires_2fa=true 与临时令牌。
-      servers:
-        - url: http://localhost:8521
-          description: 本地开发环境（根路径）
-        - url: https://api.easyssh.example.com
-          description: 生产环境（根路径）
       requestBody:
         required: true
         content:
@@ -688,11 +684,6 @@ paths:
       description: |
         当 grant_type=authorization_code 时，从请求体读取授权码等参数；
         当 grant_type=refresh_token 时，从 HttpOnly Cookie 中读取 refresh_token。
-      servers:
-        - url: http://localhost:8521
-          description: 本地开发环境（根路径）
-        - url: https://api.easyssh.example.com
-          description: 生产环境（根路径）
       requestBody:
         required: true
         content:
@@ -719,11 +710,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /auth/logout:
+  /oauth/logout:
     post:
       tags:
         - auth
       summary: 用户登出
+      description: |
+        推荐的登出端点。浏览器会将 Path=/api/v1/oauth 的 refresh_token Cookie
+        发送到该路径，后端可据此完整撤销 refresh token 与当前会话。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: 用户登出（兼容别名）
+      deprecated: true
+      description: |
+        兼容旧客户端的别名端点。由于 refresh_token Cookie 的 Path 为 /api/v1/oauth，
+        该路径通常收不到 refresh cookie，因此不建议作为主流程使用。
       security:
         - bearerAuth: []
       responses:

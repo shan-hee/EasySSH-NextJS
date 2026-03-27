@@ -43,10 +43,10 @@ type GoogleVerifyRequest struct {
 
 // GoogleVerifyResponse Google 验证响应
 type GoogleVerifyResponse struct {
-	AccessToken  string      `json:"access_token"`
-	TokenType    string      `json:"token_type"`
-	ExpiresIn    int         `json:"expires_in"`
-	User         interface{} `json:"user"`
+	AccessToken string      `json:"access_token"`
+	TokenType   string      `json:"token_type"`
+	ExpiresIn   int         `json:"expires_in"`
+	User        interface{} `json:"user"`
 }
 
 // GoogleVerify 验证 Google ID Token 并登录/注册用户
@@ -157,15 +157,16 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 	if refreshToken != "" {
 		setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTL)
 	}
+	clearAccessTokenCookie(c, h.securityService)
 
 	// 在上下文中记录用户信息，便于审计日志使用
 	c.Set("user_id", user.ID.String())
 	c.Set("username", user.Username)
 
 	RespondSuccess(c, GoogleVerifyResponse{
-		AccessToken:  accessToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    h.accessTokenTTL,
-		User:         user.ToPublic(),
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   h.accessTokenTTL,
+		User:        user.ToPublic(),
 	})
 }

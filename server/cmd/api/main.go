@@ -533,7 +533,6 @@ func main() {
 	r.Use(middleware.SecurityHeaders())                              // 安全响应头
 	r.Use(middleware.SecurityConfigCache(securityService))           // 安全配置缓存(避免重复查询)
 	r.Use(middleware.CORS(cfg, securityService))                     // 跨域（支持动态配置）
-	r.Use(middleware.CSRFMiddleware())                               // CSRF 防护（Cookie 鉴权场景）
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）
 
@@ -598,6 +597,7 @@ func main() {
 			// 与 /oauth 前缀下的端点保持一一对应，便于前端统一通过 /api/v1 调用
 			oauthRoutes.POST("/authorize", middleware.LoginRateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.OAuthAuthorize) // 开发版 PKCE 授权码端点（含登录验证）
 			oauthRoutes.POST("/token", authHandler.OAuthToken)                                                                                        // 交换/刷新 access_token
+			oauthRoutes.POST("/logout", authHandler.Logout)                                                                                           // 推荐登出端点（可携带 refresh_token Cookie）
 			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify)                                                                             // 验证 Google ID Token
 		}
 

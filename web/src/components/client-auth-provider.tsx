@@ -17,7 +17,7 @@ interface ClientAuthContextType {
 
 const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined)
 
-// 纯 Cookie-only 模式：不在前端存储任何 token
+// Bearer-only 主链路：access_token 仅存内存，refresh_token 仅存 HttpOnly Cookie
 
 interface ClientAuthProviderProps {
   children: ReactNode
@@ -28,7 +28,7 @@ interface ClientAuthProviderProps {
  * 客户端认证 Provider
  * 接收服务端验证的初始用户数据,避免客户端加载闪烁
  *
- * 注意: Token 现在由后端通过 HttpOnly Cookie 管理,前端不再直接操作 localStorage
+ * 注意: access_token 仅保存在内存中，refresh_token 由后端通过 HttpOnly Cookie 管理
  */
 export function ClientAuthProvider({ children, initialUser }: ClientAuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser)

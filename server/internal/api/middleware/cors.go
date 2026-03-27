@@ -27,8 +27,8 @@ func CORS(cfg *config.Config, securityService security.Service) gin.HandlerFunc 
 			fmt.Sprintf("http://localhost:%d", cfg.Server.WebDevPort),
 		}
 		allowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
-		// 默认允许常用头 + Authorization（Bearer）+ CSRF 头（Cookie 鉴权）
-		allowedHeaders = []string{"Content-Type", "Authorization", "X-CSRF-Token"}
+		// 默认允许常用头 + Authorization（Bearer）
+		allowedHeaders = []string{"Content-Type", "Authorization"}
 
 		// 尝试从请求上下文缓存读取配置，避免重复查询数据库
 		var corsConfig *security.CORSConfig

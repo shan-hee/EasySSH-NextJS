@@ -428,8 +428,6 @@ export const sftpApi = {
       if (token) {
         xhr.setRequestHeader("Authorization", `Bearer ${token}`)
       }
-      // 保留 Cookie 认证（用于跨域场景下的刷新等）
-      xhr.withCredentials = true
       xhr.send(formData)
     })
   },
@@ -503,7 +501,6 @@ export const sftpApi = {
 
     const response = await fetch(`${apiUrl}/sftp/${serverId}/batch-download?ticket=${encodeURIComponent(ticket)}`, {
       method: "POST",
-      credentials: "include",
     })
 
     if (!response.ok) {

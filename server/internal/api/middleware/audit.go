@@ -166,12 +166,12 @@ func getResource(c *gin.Context) string {
 func determineAction(method, path string) auditlog.ActionType {
 	// 认证相关
 	// 登录：现在通过 OAuth 2.0 Authorization Code + PKCE 完成，
-	// 前端调用 /oauth/authorize 或 /api/v1/oauth/authorize + /oauth/token 完成登录流程。
+	// 前端调用 /api/v1/oauth/authorize + /api/v1/oauth/token 完成登录流程。
 	// 这里将 authorize 端点视为登录操作入口，用于审计记录。
 	if method == "POST" && (path == "/oauth/authorize" || path == "/api/v1/oauth/authorize") {
 		return auditlog.ActionLogin
 	}
-	if method == "POST" && path == "/api/v1/auth/logout" {
+	if method == "POST" && (path == "/api/v1/oauth/logout" || path == "/api/v1/auth/logout") {
 		return auditlog.ActionLogout
 	}
 

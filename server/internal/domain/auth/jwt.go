@@ -14,9 +14,11 @@ import (
 )
 
 var (
-	ErrInvalidToken   = errors.New("invalid token")
-	ErrExpiredToken   = errors.New("token expired")
-	ErrTokenBlacklisted = errors.New("token has been blacklisted")
+	ErrInvalidToken       = errors.New("invalid token")
+	ErrExpiredToken       = errors.New("token expired")
+	ErrTokenBlacklisted   = errors.New("token has been blacklisted")
+	ErrTokenFamilyRevoked = errors.New("token family has been revoked")
+	ErrTokenReuseDetected = errors.New("refresh token reuse detected")
 )
 
 // Claims JWT 声明
@@ -25,11 +27,11 @@ type Claims struct {
 	Username       string    `json:"username"`
 	Email          string    `json:"email"`
 	Role           UserRole  `json:"role"`
-	SessionID      uuid.UUID `json:"session_id,omitempty"`       // 会话ID（用于标记当前会话）
-	TokenFamily    string    `json:"token_family,omitempty"`     // 令牌家族ID（用于轮换）
-	TokenVersion   int       `json:"token_version,omitempty"`    // 令牌版本号
-	AbsoluteExpiry int64     `json:"absolute_expiry,omitempty"`  // 绝对过期时间戳
-	LastUsed       int64     `json:"last_used,omitempty"`        // 最后使用时间戳
+	SessionID      uuid.UUID `json:"session_id,omitempty"`      // 会话ID（用于标记当前会话）
+	TokenFamily    string    `json:"token_family,omitempty"`    // 令牌家族ID（用于轮换）
+	TokenVersion   int       `json:"token_version,omitempty"`   // 令牌版本号
+	AbsoluteExpiry int64     `json:"absolute_expiry,omitempty"` // 绝对过期时间戳
+	LastUsed       int64     `json:"last_used,omitempty"`       // 最后使用时间戳
 	jwt.RegisteredClaims
 }
 
@@ -62,35 +64,66 @@ type JWTService interface {
 
 // jwtService JWT 服务实现
 type jwtService struct {
-	secretKey                 []byte
-	accessTokenDuration       time.Duration
-	refreshIdleExpireDuration time.Duration // 闲置过期时间
+	secretKey                     []byte
+	accessTokenDuration           time.Duration
+	refreshIdleExpireDuration     time.Duration // 闲置过期时间
 	refreshAbsoluteExpireDuration time.Duration // 绝对过期时间
-	refreshRotate             bool          // 是否启用令牌轮换
-	refreshReuseDetection     bool          // 是否启用复用检测
-	redisClient               *redis.Client
+	refreshRotate                 bool          // 是否启用令牌轮换
+	refreshReuseDetection         bool          // 是否启用复用检测
+	redisClient                   *redis.Client
 }
 
 // JWTConfig JWT 配置
 type JWTConfig struct {
-	SecretKey                 string
-	AccessTokenDuration       time.Duration
-	RefreshIdleExpireDuration time.Duration // 闲置过期时间
+	SecretKey                     string
+	AccessTokenDuration           time.Duration
+	RefreshIdleExpireDuration     time.Duration // 闲置过期时间
 	RefreshAbsoluteExpireDuration time.Duration // 绝对过期时间
-	RefreshRotate             bool          // 是否启用令牌轮换
-	RefreshReuseDetection     bool          // 是否启用复用检测
+	RefreshRotate                 bool          // 是否启用令牌轮换
+	RefreshReuseDetection         bool          // 是否启用复用检测
 }
+
+// markRefreshTokenUsedScript 以原子方式处理 refresh token 复用检测。
+// 返回值：
+// - "ok"：首次使用，已成功标记
+// - "family_revoked"：该 token family 已被撤销
+// - "reuse_detected"：检测到同一 refresh token 被重复使用，脚本已撤销整个 family
+var markRefreshTokenUsedScript = redis.NewScript(`
+	local revokedKey = KEYS[1]
+	local usedKey = KEYS[2]
+	local familyKey = KEYS[3]
+	local ttl = tonumber(ARGV[1])
+
+	if redis.call('EXISTS', revokedKey) == 1 then
+		return "family_revoked"
+	end
+
+	if redis.call('SETNX', usedKey, "1") == 1 then
+		if ttl and ttl > 0 then
+			redis.call('EXPIRE', usedKey, ttl)
+		end
+		return "ok"
+	end
+
+	if ttl and ttl > 0 then
+		redis.call('SET', revokedKey, "1", 'EX', ttl)
+	else
+		redis.call('SET', revokedKey, "1")
+	end
+	redis.call('DEL', familyKey)
+	return "reuse_detected"
+`)
 
 // NewJWTService 创建 JWT 服务
 func NewJWTService(config JWTConfig, redisClient *redis.Client) JWTService {
 	return &jwtService{
-		secretKey:                 []byte(config.SecretKey),
-		accessTokenDuration:       config.AccessTokenDuration,
-		refreshIdleExpireDuration: config.RefreshIdleExpireDuration,
+		secretKey:                     []byte(config.SecretKey),
+		accessTokenDuration:           config.AccessTokenDuration,
+		refreshIdleExpireDuration:     config.RefreshIdleExpireDuration,
 		refreshAbsoluteExpireDuration: config.RefreshAbsoluteExpireDuration,
-		refreshRotate:             config.RefreshRotate,
-		refreshReuseDetection:     config.RefreshReuseDetection,
-		redisClient:               redisClient,
+		refreshRotate:                 config.RefreshRotate,
+		refreshReuseDetection:         config.RefreshReuseDetection,
+		redisClient:                   redisClient,
 	}
 }
 
@@ -262,7 +295,7 @@ func (s *jwtService) ValidateToken(tokenString string) (*Claims, error) {
 		revokedKey := fmt.Sprintf("revoked_family:%s", claims.TokenFamily)
 		exists, err := s.redisClient.Exists(ctx, revokedKey).Result()
 		if err == nil && exists > 0 {
-			return nil, errors.New("token family has been revoked")
+			return nil, ErrTokenFamilyRevoked
 		}
 	}
 
@@ -299,24 +332,43 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 
 	// 复用检测：检查令牌是否已被使用过
 	if s.refreshReuseDetection && claims.TokenFamily != "" {
-		usedKey := fmt.Sprintf("used_token:%s:v%d", claims.TokenFamily, claims.TokenVersion)
-		exists, err := s.redisClient.Exists(ctx, usedKey).Result()
-		if err != nil {
-			return "", "", fmt.Errorf("failed to check token reuse: %w", err)
-		}
-		if exists > 0 {
-			// 令牌被重复使用！这是安全威胁，立即撤销整个令牌家族
-			s.revokeTokenFamily(claims.TokenFamily)
-			return "", "", errors.New("refresh token reuse detected - all tokens in this family have been revoked")
+		ttl := time.Until(time.Unix(claims.AbsoluteExpiry, 0))
+		if ttl <= 0 {
+			return "", "", ErrExpiredToken
 		}
 
-		// 标记此令牌已被使用
-		ttl := time.Until(time.Unix(claims.AbsoluteExpiry, 0))
-		if ttl > 0 {
-			err = s.redisClient.Set(ctx, usedKey, "1", ttl).Err()
-			if err != nil {
-				return "", "", fmt.Errorf("failed to mark token as used: %w", err)
-			}
+		ttlSeconds := int64(ttl / time.Second)
+		if ttlSeconds < 1 {
+			ttlSeconds = 1
+		}
+
+		revokedKey := fmt.Sprintf("revoked_family:%s", claims.TokenFamily)
+		usedKey := fmt.Sprintf("used_token:%s:v%d", claims.TokenFamily, claims.TokenVersion)
+		familyKey := fmt.Sprintf("token_family:%s", claims.TokenFamily)
+
+		result, err := markRefreshTokenUsedScript.Run(
+			ctx,
+			s.redisClient,
+			[]string{revokedKey, usedKey, familyKey},
+			ttlSeconds,
+		).Result()
+		if err != nil {
+			return "", "", fmt.Errorf("failed to enforce token reuse detection: %w", err)
+		}
+
+		status, ok := result.(string)
+		if !ok {
+			return "", "", fmt.Errorf("failed to parse token reuse detection result")
+		}
+
+		switch status {
+		case "ok":
+		case "family_revoked":
+			return "", "", ErrTokenFamilyRevoked
+		case "reuse_detected":
+			return "", "", ErrTokenReuseDetected
+		default:
+			return "", "", fmt.Errorf("unexpected token reuse detection result: %s", status)
 		}
 	}
 
@@ -345,10 +397,10 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 		newRefreshToken, err := s.generateRefreshToken(
 			user,
 			now,
-			claims.TokenFamily,      // 保持相同的家族ID
-			claims.TokenVersion+1,   // 版本号+1
-			claims.AbsoluteExpiry,   // 保持相同的绝对过期时间
-			sessionIDPtr,            // 保持相同的会话ID（如有）
+			claims.TokenFamily,    // 保持相同的家族ID
+			claims.TokenVersion+1, // 版本号+1
+			claims.AbsoluteExpiry, // 保持相同的绝对过期时间
+			sessionIDPtr,          // 保持相同的会话ID（如有）
 		)
 		if err != nil {
 			return "", "", fmt.Errorf("failed to generate new refresh token: %w", err)
@@ -366,19 +418,6 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 
 	// 未启用轮换时，只返回新的访问令牌，刷新令牌返回空字符串
 	return newAccessToken, "", nil
-}
-
-// revokeTokenFamily 撤销整个令牌家族（用于复用检测）
-func (s *jwtService) revokeTokenFamily(tokenFamily string) {
-	ctx := context.Background()
-	familyKey := fmt.Sprintf("token_family:%s", tokenFamily)
-
-	// 标记令牌家族为已撤销
-	revokedKey := fmt.Sprintf("revoked_family:%s", tokenFamily)
-	_ = s.redisClient.Set(ctx, revokedKey, "1", s.refreshAbsoluteExpireDuration).Err()
-
-	// 删除令牌家族
-	_ = s.redisClient.Del(ctx, familyKey).Err()
 }
 
 // hashTokenForKey 计算令牌的 SHA-256 哈希，用于 Redis Key（避免完整令牌作为 Key 影响性能）
@@ -418,7 +457,7 @@ func (s *jwtService) GenerateTempToken(userID string) (string, error) {
 	tokenID := uuid.New().String()
 
 	claims := jwt.RegisteredClaims{
-		ID:        tokenID, // JWT ID，用于 Redis 存储
+		ID:        tokenID,                                      // JWT ID，用于 Redis 存储
 		ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)), // 5 分钟有效期
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
