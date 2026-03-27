@@ -110,15 +110,6 @@ EasySSH 当前采用的是一套明确的 `Bearer-only + Refresh Cookie` 方案�
 
 - `POST /api/v1/oauth/logout`
 
-兼容别名：
-
-- `POST /api/v1/auth/logout`
-
-区别是：
-
-- `/api/v1/oauth/logout` 能收到 Path 为 `/api/v1/oauth` 的 `refresh_token` Cookie，因此可以完整撤销 refresh token
-- `/api/v1/auth/logout` 仍可作为兼容别名，但浏览器通常不会把 refresh cookie 发送到这个路径，所以不应再作为主流程使用
-
 登出时，服务端会：
 
 - 优先从 `Authorization` 头读取 access token
@@ -259,8 +250,7 @@ EasySSH 当前采用的是一套明确的 `Bearer-only + Refresh Cookie` 方案�
 | --- | --- |
 | `POST /api/v1/oauth/authorize` | 邮箱密码 + PKCE 创建授权码 |
 | `POST /api/v1/oauth/token` | 使用授权码或 refresh token 换取 access token |
-| `POST /api/v1/oauth/logout` | 推荐登出端点，能携带 refresh cookie |
-| `POST /api/v1/auth/logout` | 兼容别名，不建议作为主流程 |
+| `POST /api/v1/oauth/logout` | 登出端点，撤销 refresh token |
 | `POST /api/v1/auth/2fa/verify` | 登录场景下验证 2FA，并继续签发授权码 |
 | `GET /api/v1/users/me/2fa/generate` | 生成 2FA secret 与二维码 URL |
 | `POST /api/v1/users/me/2fa/enable` | 启用 2FA |
@@ -283,7 +273,7 @@ EasySSH 当前采用的是一套明确的 `Bearer-only + Refresh Cookie` 方案�
 | `JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS` | `30` | refresh token 绝对过期时间 |
 | `JWT_REFRESH_ROTATE` | `true` | 是否启用 refresh token 轮换 |
 | `JWT_REFRESH_REUSE_DETECTION` | `true` | 是否启用 refresh token 复用检测 |
-| `COOKIE_SECURE` | `true` | HTTPS 环境必须为 `true` |
+| `COOKIE_SECURE` | `true` | HTTPS 环境必须为 `true`；本地 HTTP 开发须设为 `false` |
 | `COOKIE_DOMAIN` | 空 | Cookie 域名，留空表示当前域 |
 | `COOKIE_SAMESITE` | `lax` | `lax` / `none` / `strict` |
 

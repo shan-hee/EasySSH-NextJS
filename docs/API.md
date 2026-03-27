@@ -67,6 +67,8 @@ OpenAPI 规范定义了以下模块：
 | `logs` | 日志管理 | `/logs` |
 | `users` | 用户管理 | `/users`, `/users/me` |
 
+> 表中路径均为 `/api/v1` 前缀下的相对路径，完整路径格式为 `/api/v1/<path>`，例如 `/api/v1/oauth/authorize`。
+
 ## 前后端通信
 
 ### 通信方式（Authorization Code + PKCE + Bearer）
@@ -144,8 +146,12 @@ const me = await apiFetch('/users/me'); // 内部会自动添加 Bearer 头
 ### WebSocket 连接（系统监控）
 
 ```typescript
-// 连接到监控 WS（生产同源；开发按需替换端口）
-const ws = new WebSocket(`ws://localhost:8521/api/v1/monitor/server/${serverId}?interval=2`);
+// 开发环境
+const ws = new WebSocket(`ws://localhost:8520/api/v1/monitor/server/${serverId}?interval=2`);
+
+// 生产环境（同源部署，自动适配 ws/wss）
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/monitor/server/${serverId}?interval=2`);
 
 ws.onopen = () => {
   console.log('Monitor connection established');
@@ -165,7 +171,7 @@ ws.onmessage = (event) => {
 
 ```bash
 # 安装工具
-go install github.com/deepmap/oapi-codegen/v2/cmd/oapi-codegen@latest
+go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 
 # 生成类型定义
 cd server
@@ -360,5 +366,5 @@ func main() {
 
 - [OpenAPI 3.1 规范](https://spec.openapis.org/oas/v3.1.0)
 - [openapi-fetch 文档](https://openapi-ts.pages.dev/openapi-fetch/)
-- [oapi-codegen 文档](https://github.com/deepmap/oapi-codegen)
+- [oapi-codegen 文档](https://github.com/oapi-codegen/oapi-codegen)
 - [Next.js Rewrites](https://nextjs.org/docs/app/api-reference/next-config-js/rewrites)

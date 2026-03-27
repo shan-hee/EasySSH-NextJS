@@ -113,7 +113,7 @@ docker run -d \
   -e REDIS_HOST=your-redis-host \
   -e REDIS_PORT=6379 \
   -e JWT_SECRET=$(openssl rand -base64 48) \
-  -e ENCRYPTION_KEY=$(openssl rand -base64 24) \
+  -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
   shanheee/easyssh:latest
 ```
 
@@ -224,7 +224,7 @@ ENV=production                 # development | production
 
 # 服务端口
 PORT=8520                      # 后端服务端口
-WEB_DEV_PORT=3000              # 前端开发端口（仅开发环境）
+WEB_PORT=3000                  # 前端开发端口（仅开发环境）
 
 # 数据库 (PostgreSQL)
 DB_HOST=postgres               # Docker: postgres | 开发: localhost
@@ -239,7 +239,7 @@ REDIS_PORT=6379
 
 # 安全配置 ⚠️ 生产环境必须修改
 JWT_SECRET=CHANGE_ME           # 生成: openssl rand -base64 48
-ENCRYPTION_KEY=CHANGE_ME       # 生成: openssl rand -base64 24
+ENCRYPTION_KEY=CHANGE_ME       # 生成: openssl rand -base64 32
 
 # Cookie 策略
 COOKIE_SECURE=true             # HTTPS: true | HTTP: false
