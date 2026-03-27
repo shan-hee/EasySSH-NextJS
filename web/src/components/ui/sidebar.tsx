@@ -107,7 +107,7 @@ function SidebarProvider({
           _setOpen(persistedState)
         }
       }
-    } catch (_) {
+    } catch {
       // no-op if localStorage access fails
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -671,10 +671,16 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<"div"> & {
   showIcon?: boolean
 }) {
-  // Random width between 50 to 90%.
+  const skeletonId = React.useId()
+
+  // Use a stable pseudo-random width between 50% and 90%.
   const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
-  }, [])
+    let hash = 0
+    for (let i = 0; i < skeletonId.length; i += 1) {
+      hash = (hash * 31 + skeletonId.charCodeAt(i)) % 41
+    }
+    return `${50 + hash}%`
+  }, [skeletonId])
 
   return (
     <div

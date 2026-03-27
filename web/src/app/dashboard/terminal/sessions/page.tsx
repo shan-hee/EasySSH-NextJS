@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -80,7 +80,7 @@ export default function TerminalSessionsPage() {
   const locale = useLocale()
 
   // 加载数据
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -100,13 +100,13 @@ export default function TerminalSessionsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [t])
 
   // 初始加载（仅在已认证且全局状态就绪时触发）
   useEffect(() => {
     if (!ready) return
     loadData()
-  }, [ready])
+  }, [ready, loadData])
 
   // 客户端搜索过滤
   const filteredSessions = sessions.filter(session => {

@@ -19,7 +19,6 @@ import {
   LogOut,
   Info,
   Paintbrush,
-  Mail,
   Activity,
 } from "lucide-react"
 
@@ -333,7 +332,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setAvatarPreview(reader.result as string)
     }
     reader.readAsDataURL(file)
-  }, [])
+  }, [tAccount])
 
   // 清空头像预览（不立即保存）
   const handleRemoveAvatar = React.useCallback(() => {
@@ -972,41 +971,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
         endpoint: endpoint || undefined,
         token: token || undefined,
         set_active: true,  // 设为当前激活的数据源
-      })
-      toast.success(tAccount("monitorSaveSuccess"))
-      refreshUser() // 刷新用户数据
-    } catch (error: unknown) {
-      toast.error(getErrorMessage(error, tAccount("monitorSaveFailed")))
-    } finally {
-      setMonitorLoading(false)
-    }
-  }, [monitorForm, refreshUser, tAccount])
-
-  // 仅保存数据源配置（不切换激活状态）
-  const handleSaveMonitorConfig = React.useCallback(async (dsType: "nezha" | "komari") => {
-    let endpoint = ""
-    let token = ""
-    if (dsType === "nezha") {
-      endpoint = monitorForm.nezhaEndpoint
-      token = monitorForm.nezhaToken
-    } else if (dsType === "komari") {
-      endpoint = monitorForm.komariEndpoint
-      token = monitorForm.komariToken
-    }
-
-    // 验证必填字段
-    if (!endpoint) {
-      toast.error(tAccount("monitorEndpointRequired"))
-      return
-    }
-
-    setMonitorLoading(true)
-    try {
-      await authApi.updateMonitorDataSource({
-        data_source: dsType,
-        endpoint: endpoint || undefined,
-        token: token || undefined,
-        set_active: false,  // 仅保存配置，不切换激活状态
       })
       toast.success(tAccount("monitorSaveSuccess"))
       refreshUser() // 刷新用户数据

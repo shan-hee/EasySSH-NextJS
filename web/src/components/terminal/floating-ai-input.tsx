@@ -77,7 +77,7 @@ export function FloatingAiInput({ isOpen }: FloatingAiInputProps) {
               className="shadow-2xl border-primary/20 bg-background/95 backdrop-blur-xl ring-1 ring-primary/10"
             >
               <PromptInputTextarea
-                ref={inputRef as any}
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={tAI("panelInputPlaceholder")}

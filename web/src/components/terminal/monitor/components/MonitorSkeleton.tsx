@@ -5,8 +5,6 @@
  */
 
 import React from 'react';
-import { useTranslations } from "next-intl";
-import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**
@@ -31,8 +29,15 @@ const SystemInfoSkeleton: React.FC = () => (
 /**
  * CPU/网络 曲线图骨架（Area/Line Chart）
  */
-const LineChartSkeleton: React.FC<{ title: string; showPercentage?: boolean }> = ({
-  title,
+function getLineSkeletonHeight(index: number): number {
+  return 32 + Math.sin(index * 0.5) * 22 + (index % 4) * 4
+}
+
+function getBarSkeletonWidth(index: number): string {
+  return `${62 + index * 16}%`
+}
+
+const LineChartSkeleton: React.FC<{ showPercentage?: boolean }> = ({
   showPercentage = true
 }) => (
   <div className="space-y-1">
@@ -61,7 +66,7 @@ const LineChartSkeleton: React.FC<{ title: string; showPercentage?: boolean }> =
       {/* 模拟曲线 */}
       <div className="h-full flex items-end justify-between gap-0.5 pl-6 pr-1 pb-2">
         {Array.from({ length: 20 }).map((_, i) => {
-          const height = 20 + Math.sin(i * 0.5) * 30 + Math.random() * 20;
+          const height = getLineSkeletonHeight(i);
           return (
             <Skeleton
               key={i}
@@ -149,7 +154,7 @@ const BarChartSkeleton: React.FC = () => (
           <Skeleton
             className="h-6 flex-1"
             style={{
-              width: `${60 + Math.random() * 30}%`,
+              width: getBarSkeletonWidth(i),
             }}
           />
         </div>
@@ -162,7 +167,6 @@ const BarChartSkeleton: React.FC = () => (
  * 监控面板完整骨架屏
  */
 export const MonitorSkeleton: React.FC = () => {
-  const t = useTranslations("terminalMonitor");
   return (
     <div className="w-full py-1.5 px-3 space-y-1.5">
       {/* 系统信息骨架 - 148px */}
@@ -172,7 +176,7 @@ export const MonitorSkeleton: React.FC = () => {
 
       {/* CPU 曲线图骨架 - 134px */}
       <div className="min-h-[134px]">
-        <LineChartSkeleton title={t("cpuLabel")} showPercentage={true} />
+        <LineChartSkeleton showPercentage={true} />
       </div>
 
       {/* 内存 径向图骨架 - 134px */}
@@ -182,7 +186,7 @@ export const MonitorSkeleton: React.FC = () => {
 
       {/* 网络 曲线图骨架 - 134px */}
       <div className="min-h-[134px]">
-        <LineChartSkeleton title={t("networkLabel")} showPercentage={false} />
+        <LineChartSkeleton showPercentage={false} />
       </div>
 
       {/* 磁盘 柱状图骨架 - 134px */}

@@ -118,10 +118,10 @@ export class CompletionEngine {
 
     if (this.config.enableQuotaAllocation && this.config.sourceQuotas) {
       // 使用配额分配
-      limitedItems = this.allocateWithQuota(uniqueItems, effectivePrefix)
+      limitedItems = this.allocateWithQuota(uniqueItems)
     } else {
       // 使用原有的简单排序+截取
-      const sortedItems = this.sortItems(uniqueItems, effectivePrefix)
+      const sortedItems = this.sortItems(uniqueItems)
       limitedItems = sortedItems.slice(0, this.config.maxItems)
     }
 
@@ -189,8 +189,7 @@ export class CompletionEngine {
    * 3. 如果有剩余空间，按优先级继续分配
    */
   private allocateWithQuota(
-    items: CompletionItem[],
-    prefix: string
+    items: CompletionItem[]
   ): CompletionItem[] {
     const quotaConfigs = this.config.sourceQuotas || DEFAULT_SOURCE_QUOTAS
     const totalLimit = this.config.maxItems
@@ -206,7 +205,7 @@ export class CompletionEngine {
     }
 
     for (const [providerName, groupItems] of itemsByProvider) {
-      groupItems.sort((a, b) => this.compareItems(a, b, prefix))
+      groupItems.sort((a, b) => this.compareItems(a, b))
       itemsByProvider.set(providerName, groupItems)
     }
 
@@ -242,7 +241,7 @@ export class CompletionEngine {
       }
     }
 
-    remainingPool.sort((a, b) => this.compareItems(a.item, b.item, prefix))
+    remainingPool.sort((a, b) => this.compareItems(a.item, b.item))
 
     // 将配额配置转换为映射，便于快速查找 max / softMax
     const quotaMap = new Map<string, SourceQuotaConfig>()
@@ -313,8 +312,7 @@ export class CompletionEngine {
    */
   private compareItems(
     a: CompletionItem,
-    b: CompletionItem,
-    _prefix: string
+    b: CompletionItem
   ): number {
     // 1. 先按匹配分数排序（由各 Provider 基于整行内容计算）
     const aScore = a.score || 0
@@ -334,10 +332,9 @@ export class CompletionEngine {
    * 排序补全项
    */
   private sortItems(
-    items: CompletionItem[],
-    prefix: string
+    items: CompletionItem[]
   ): CompletionItem[] {
-    return items.sort((a, b) => this.compareItems(a, b, prefix))
+    return items.sort((a, b) => this.compareItems(a, b))
   }
 
   /**

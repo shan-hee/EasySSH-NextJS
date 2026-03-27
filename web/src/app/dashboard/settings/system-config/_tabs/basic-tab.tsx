@@ -129,6 +129,8 @@ export function BasicTab() {
             {logoUrl && (
               <div className="rounded-lg border p-4">
                 <p className="text-sm font-medium mb-2">{t("logoPreviewTitle")}</p>
+                {/* 这里需要预览任意用户输入的外部图片 URL，不适合强制切到 next/image。 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={logoUrl}
                   alt={t("logoPreviewTitle")}
@@ -152,6 +154,8 @@ export function BasicTab() {
             {faviconUrl && (
               <div className="rounded-lg border p-4">
                 <p className="text-sm font-medium mb-2">{t("faviconPreviewTitle")}</p>
+                {/* 这里需要预览任意用户输入的外部图片 URL，不适合强制切到 next/image。 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={faviconUrl}
                   alt={t("faviconPreviewTitle")}

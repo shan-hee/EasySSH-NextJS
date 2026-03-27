@@ -184,7 +184,7 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
       onExport: handleExportSession,
       onDelete: handleDelete,
     },
-    (key, values) => t(key as any, values)
+    (key, values) => t(key as Parameters<typeof t>[0], values)
   )
 
   // 状态筛选选项

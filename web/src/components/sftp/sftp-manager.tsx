@@ -1,14 +1,12 @@
 "use client"
 
-import { useState, useRef, useEffect, useLayoutEffect, DragEvent, useMemo, useCallback, useDeferredValue, startTransition } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, DragEvent, useMemo, useCallback, useDeferredValue, startTransition, type HTMLAttributes } from "react"
 import { createPortal } from "react-dom"
 import { SftpSessionProvider } from "@/contexts/sftp-session-context"
 import "@/components/Folder.css"
 import "@/components/File.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { useDownloadExcludePatterns, useDefaultDownloadMode } from "@/hooks/use-system-config"
 import {
   Table,
@@ -28,21 +26,14 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from "@/components/ui/tooltip"
 import {
   FolderOpen,
   Upload,
-  Download,
-  Trash2,
   RefreshCw,
   Search,
   ArrowLeft,
@@ -50,16 +41,12 @@ import {
   MoreHorizontal,
   Eye,
   EyeOff,
-  Edit,
   FolderPlus,
   ChevronRight,
   Activity,
-  XCircle,
   X,
-  CheckCircle2,
   Maximize2,
   Minimize2,
-  Clock,
   GripVertical,
   LayoutGrid,
   List,
@@ -70,7 +57,6 @@ import {
   FileVideo,
   FileAudio,
   Database,
-  Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parseFileSize } from "@/lib/format-utils"
@@ -90,6 +76,7 @@ import { computeFloatingPosition } from "@/lib/overlay-position"
 import { setDragSourceSessionId } from "@/lib/drag-state"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { getErrorMessage } from "@/lib/error-utils"
+import type { BatchDeleteResult } from "@/hooks/useSftpSession"
 
 type FileItem = Pick<SftpFileItem, "name" | "type" | "size" | "modified" | "permissions"> & {
   sizeBytes?: number
@@ -120,7 +107,7 @@ interface SftpManagerProps {
   onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
-  onBatchDelete?: (fileNames: string[]) => Promise<{ success: string[]; failed: any[]; total: number }>
+  onBatchDelete?: (fileNames: string[]) => Promise<BatchDeleteResult>
   onBatchDownload?: (fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) => Promise<void>
   onCreateFolder: (name: string) => void
   onCreateFile?: (name: string) => void
@@ -131,8 +118,8 @@ interface SftpManagerProps {
   onSaveFile?: (fileName: string, content: string) => Promise<void>
   onRenameSession?: (newLabel: string) => void
   onToggleFullscreen?: () => void
-  dragHandleListeners?: any
-  dragHandleAttributes?: any
+  dragHandleListeners?: HTMLAttributes<HTMLDivElement>
+  dragHandleAttributes?: HTMLAttributes<HTMLDivElement>
   // 传输任务管理(从外部传入)
   transferTasks?: TransferTask[]
   onClearCompletedTransfers?: () => void
@@ -200,7 +187,7 @@ export function SftpManager(props: SftpManagerProps) {
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [isDragging, setIsDragging] = useState(false)
-  const [_dragCounter, setDragCounter] = useState(0)
+  const [, setDragCounter] = useState(0)
   // 视图模式：根据上下文 + 本地偏好初始化
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window !== 'undefined') {
@@ -229,7 +216,6 @@ export function SftpManager(props: SftpManagerProps) {
   const [tempSessionLabel, setTempSessionLabel] = useState(sessionLabel)
   const [draggedFileName, setDraggedFileName] = useState<string | null>(null)
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [editorState, setEditorState] = useState<{
     isOpen: boolean
     fileName: string
@@ -596,68 +582,6 @@ export function SftpManager(props: SftpManagerProps) {
     setDraggedFileName(null)
   }
 
-  // 文件拖拽处理（用于拖入文件夹）- 预留功能
-  const _handleFileDragStart = (fileName: string) => {
-    setDraggedFileName(fileName)
-  }
-
-  const _handleFileDragEnd = () => {
-    setDraggedFileName(null)
-    setDragOverFolder(null)
-  }
-
-  const _handleFileDragOver = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", _targetIndex: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (targetFileName === draggedFileName) {
-      setDragOverFolder(null)
-      setDragOverIndex(null)
-      return
-    }
-
-    // 如果目标是文件夹，高亮文件夹（用于移入）
-    if (targetType === "directory") {
-      setDragOverFolder(targetFileName)
-      setDragOverIndex(null)
-    } else {
-      // 如果目标是文件，显示插入位置（用于排序）
-      setDragOverFolder(null)
-      setDragOverIndex(_targetIndex)
-    }
-  }
-
-  const _handleFileDragLeave = () => {
-    setDragOverFolder(null)
-    setDragOverIndex(null)
-  }
-
-  const _handleFileDrop = (e: React.DragEvent, targetFileName: string, targetType: "file" | "directory", _targetIndex: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (!draggedFileName || draggedFileName === targetFileName) {
-      setDragOverFolder(null)
-      setDragOverIndex(null)
-      return
-    }
-
-    // 移动文件到文件夹
-    if (targetType === "directory" && dragOverFolder) {
-      // TODO: 调用实际的移动API
-      // onRename(draggedFileName, `${targetFileName}/${draggedFileName}`)
-    }
-    // 文件排序（暂时只是视觉效果，实际不改变服务器顺序）
-    else if (dragOverIndex !== null) {
-      // 注意：SFTP文件列表顺序通常由服务器决定，客户端排序可能无意义
-      // 如果需要持久化排序，需要后端支持
-    }
-
-    setDragOverFolder(null)
-    setDragOverIndex(null)
-    setDraggedFileName(null)
-  }
-
   // 空白区域右键菜单
   const handleBlankContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -863,7 +787,7 @@ export function SftpManager(props: SftpManagerProps) {
     }
     setCreatingNew(null)
     setEditingFileName("")
-  }, [editingFileName, creatingNew, onCreateFolder, onCreateFile, onSaveFile, onRefresh])
+  }, [editingFileName, creatingNew, onCreateFolder, onCreateFile, onSaveFile])
 
   // 延迟处理创建失焦
   const handleCreateBlur = useCallback((e: React.FocusEvent) => {
@@ -1221,15 +1145,6 @@ export function SftpManager(props: SftpManagerProps) {
     // 默认文件
     return <FileText className="h-4 w-4 text-muted-foreground" />
   }, [])
-
-  // 文件大小格式化（预留功能）
-  const _formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return "0 B"
-    const k = 1024
-    const sizes = ["B", "KB", "MB", "GB", "TB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
 
   // 路径分段 - 根据编辑器状态动态选择路径源
   const displayPath = editorState.isOpen ? editorState.filePath : currentPath

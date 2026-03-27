@@ -132,7 +132,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
         icon: Activity,
       })),
     }
-  }, [logs])
+  }, [logs, t])
 
   // 可见列配置
   const visibleColumns = useMemo(

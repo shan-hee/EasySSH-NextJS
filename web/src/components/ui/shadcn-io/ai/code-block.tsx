@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import type { ComponentProps, HTMLAttributes, ReactNode } from 'react';
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import Prism from 'prismjs';
 
 // 导入常用语言支持
@@ -67,20 +67,17 @@ export const CodeBlock = ({
   children,
   ...props
 }: CodeBlockProps) => {
-  const codeRef = useRef<HTMLElement>(null);
-  const [highlightedCode, setHighlightedCode] = useState<string>('');
   const normalizedLang = normalizeLanguage(language);
 
-  useEffect(() => {
+  const highlightedCode = useMemo(() => {
     // 检查语言是否支持
     const grammar = Prism.languages[normalizedLang];
     if (grammar) {
-      const highlighted = Prism.highlight(code, grammar, normalizedLang);
-      setHighlightedCode(highlighted);
-    } else {
-      // 不支持的语言，直接显示原始代码
-      setHighlightedCode(escapeHtml(code));
+      return Prism.highlight(code, grammar, normalizedLang);
     }
+
+    // 不支持的语言，直接显示原始代码
+    return escapeHtml(code);
   }, [code, normalizedLang]);
 
   // 生成行号
@@ -109,7 +106,6 @@ export const CodeBlock = ({
             <div className="flex">
               {lineNumbers}
               <code
-                ref={codeRef}
                 className={cn(
                   'prism-code flex-1',
                   `language-${normalizedLang}`

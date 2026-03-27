@@ -18,8 +18,6 @@ import {
   InputOTPSlot,
   InputOTPSeparator,
 } from "@/components/ui/input-otp"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
 import { Eye, EyeOff, Lock, Mail } from "lucide-react"
 import { toast } from "@/components/ui/sonner"
 import { useSystemConfig } from "@/contexts/system-config-context"
@@ -210,8 +208,8 @@ export function LoginForm({
   }
 
   // 处理 2FA 表单提交
-  const handle2FASubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handle2FASubmit = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (isLoading) return
 
     if (!twoFactorCode || twoFactorCode.length !== 6) {
@@ -266,7 +264,20 @@ export function LoginForm({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [
+    codeChallenge,
+    codeVerifier,
+    getRedirectTarget,
+    isLoading,
+    pkceState,
+    redirectUri,
+    refreshConfig,
+    router,
+    setToken,
+    tAuth,
+    tempToken,
+    twoFactorCode,
+  ])
 
   // 返回到账号密码登录
   const handleBack = () => {
@@ -335,10 +346,10 @@ export function LoginForm({
   useEffect(() => {
     if (twoFactorCode.length === 6 && requires2FA && !isLoading) {
       void (async () => {
-        await handle2FASubmit(new Event("submit") as any)
+        await handle2FASubmit()
       })()
     }
-  }, [twoFactorCode, requires2FA, isLoading])
+  }, [twoFactorCode, requires2FA, isLoading, handle2FASubmit])
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>

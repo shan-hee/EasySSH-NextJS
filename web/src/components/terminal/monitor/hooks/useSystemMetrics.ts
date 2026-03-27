@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import type { SystemMetrics, CPUData, NetworkData } from '../types/metrics';
+import type { CPUData, NetworkData } from '../types/metrics';
 
 /**
  * 生成随机数值 (带范围)

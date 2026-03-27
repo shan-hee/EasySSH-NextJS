@@ -45,7 +45,7 @@ import {
   performRename,
   performSaveFile,
   performBatchDelete,
-  upsertFileItem,
+  type BatchDeleteResult,
 } from "@/hooks/useSftpSession"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 	import { useClientAuth } from "@/components/client-auth-provider"
@@ -296,7 +296,7 @@ interface SftpSessionContentProps {
   onUploadSession: (sessionId: string, files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownloadSession: (sessionId: string, fileName: string) => void
   onDeleteSession: (sessionId: string, fileName: string) => void
-  onBatchDeleteSession: (sessionId: string, fileNames: string[]) => Promise<{ success: string[]; failed: any[]; total: number }>
+  onBatchDeleteSession: (sessionId: string, fileNames: string[]) => Promise<BatchDeleteResult>
   onBatchDownloadSession: (sessionId: string, fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) => Promise<void>
   onCreateFolderSession: (sessionId: string, name: string) => void
   onCreateFileSession: (sessionId: string, name: string) => void
@@ -308,8 +308,8 @@ interface SftpSessionContentProps {
   onRenameSessionLabel: (sessionId: string, newLabel: string) => void
   onToggleFullscreen: (sessionId: string) => void
   // 来自 SortableSession 的拖拽句柄注入
-  dragHandleListeners?: any
-  dragHandleAttributes?: any
+  dragHandleListeners?: React.HTMLAttributes<HTMLDivElement>
+  dragHandleAttributes?: React.HTMLAttributes<HTMLDivElement>
 }
 
 const SftpSessionContent = React.memo(function SftpSessionContent({
@@ -458,7 +458,7 @@ export default function SftpPage() {
  sessionsRef.current = sessions
 
  // 文件传输管理
- const { tasks: transferTasks, uploadFile, clearCompleted, cancelTask, createTransferTask, addTask, updateTask, directTransfer, cancelDirectTransfer } = useFileTransfer()
+ const { tasks: transferTasks, uploadFile, clearCompleted, cancelTask, directTransfer } = useFileTransfer()
 
  // 加载服务器列表
  const loadServers = useCallback(async () => {

@@ -9,7 +9,7 @@ let version = "1.0.0"; // 默认版本
 try {
   const versionPath = join(__dirname, "..", "VERSION");
   version = readFileSync(versionPath, "utf-8").trim();
-} catch (error) {
+} catch {
   console.warn("无法读取 VERSION 文件，使用默认版本:", version);
 }
 

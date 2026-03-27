@@ -39,9 +39,9 @@ const BreadcrumbItemRenderer = memo<{
     const getTitle = () => {
       // 约定：以 "nav." 开头的 title 表示导航命名空间的 key
       if (item.title.startsWith("nav.")) {
-        const key = item.title.slice(4) as keyof typeof tNav
+        const key = item.title.slice(4) as Parameters<typeof tNav>[0]
         try {
-          return tNav(key as any)
+          return tNav(key)
         } catch {
           return item.title
         }

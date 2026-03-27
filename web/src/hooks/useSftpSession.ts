@@ -464,7 +464,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         throw error;
       }
     },
-    [serverId, currentPath, fileTransfer, refresh]
+    [serverId, currentPath, fileTransfer, refresh, tSftp]
   );
 
   /**
@@ -564,7 +564,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         throw error;
       }
     },
-    [serverId, currentPath]
+    [serverId, currentPath, tSftp]
   );
 
   /**
@@ -621,7 +621,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         throw error;
       }
     },
-    [serverId, currentPath]
+    [serverId, currentPath, tSftp]
   );
 
   // 初始加载

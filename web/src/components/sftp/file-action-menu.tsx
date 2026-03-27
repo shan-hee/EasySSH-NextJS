@@ -44,6 +44,77 @@ interface FileActionMenuProps {
   onAction: (action: FileAction) => void
 }
 
+type FileActionMenuItemProps = {
+  mode: "dropdown" | "context"
+  className: string
+  onClick: () => void
+  children: React.ReactNode
+}
+
+function FileActionMenuItem({
+  mode,
+  className,
+  onClick,
+  children,
+}: FileActionMenuItemProps) {
+  return mode === "dropdown" ? (
+    <DropdownMenuItem className={className} onClick={onClick}>
+      {children}
+    </DropdownMenuItem>
+  ) : (
+    <button type="button" className={className} onClick={onClick}>
+      {children}
+    </button>
+  )
+}
+
+function FileActionMenuSeparator({ mode, className }: { mode: "dropdown" | "context"; className: string }) {
+  return mode === "dropdown" ? (
+    <DropdownMenuSeparator className={className} />
+  ) : (
+    <div className={className} />
+  )
+}
+
+function KeyboardShortcut({ children }: { children: string }) {
+  return (
+    <kbd className={cn(
+      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+    )}>
+      {children}
+    </kbd>
+  )
+}
+
+function RecommendedBadge({ children }: { children: string }) {
+  return (
+    <span className={cn(
+      "text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary",
+    )}>
+      {children}
+    </span>
+  )
+}
+
+function DownloadTooltip({
+  children,
+  content,
+}: {
+  children: React.ReactNode
+  content: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8} className="max-w-[280px]">
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 /**
  * 统一的文件操作菜单组件
  * 支持两种渲染模式：dropdown（行操作列）和 context（右键菜单）
@@ -56,13 +127,8 @@ export function FileActionMenu({
 }: FileActionMenuProps) {
   const t = useTranslations("sftp")
   const recommendedLabel = t("actionRecommended")
-  const isContext = mode === "context"
   const isMultiSelect = selectedFilesCount > 1
   const isSingleSelect = selectedFilesCount === 1
-
-  // 根据模式选择不同的组件类型
-  const MenuItem = mode === "dropdown" ? DropdownMenuItem : "button"
-  const Separator = mode === "dropdown" ? DropdownMenuSeparator : "div"
 
   // 通用样式
   const itemClassName = mode === "dropdown"
@@ -77,52 +143,11 @@ export function FileActionMenu({
     ? cn("focus:bg-red-500 focus:text-white text-red-600 dark:text-red-400")
     : cn("w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 hover:text-destructive rounded-sm")
 
-  // 快捷键组件 - 两个菜单都显示
-  const KeyboardShortcut = ({ children }: { children: string }) => {
-    return (
-      <kbd className={cn(
-        "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-      )}>
-        {children}
-      </kbd>
-    )
-  }
-
-  // 推荐标签 - 两个菜单都显示
-  const RecommendedBadge = () => {
-    return (
-      <span className={cn(
-        "text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary",
-      )}>
-        {recommendedLabel}
-      </span>
-    )
-  }
-
-  // 下载选项的 Tooltip 包装器 - 两个菜单都显示
-  const DownloadTooltip = ({
-    children,
-    content
-  }: {
-    children: React.ReactNode
-    content: string
-  }) => {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {children}
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8} className="max-w-[280px]">
-          {content}
-        </TooltipContent>
-      </Tooltip>
-    )
-  }
-
   return (
     <>
       {/* 打开/编辑 */}
-      <MenuItem
+      <FileActionMenuItem
+        mode={mode}
         className={itemClassName}
         onClick={() => onAction("open")}
       >
@@ -131,37 +156,40 @@ export function FileActionMenu({
           {file.type === "directory" ? t("contextOpen") : t("contextEdit")}
         </span>
         <KeyboardShortcut>⏎</KeyboardShortcut>
-      </MenuItem>
+      </FileActionMenuItem>
 
       {/* 下载 */}
       {file.type === "file" ? (
         /* 单文件下载 */
-        <MenuItem
+        <FileActionMenuItem
+          mode={mode}
           className={itemClassName}
           onClick={() => onAction("download")}
         >
           <Download className="h-4 w-4 mr-2" />
           <span className="flex-1">{t("actionDownload")}</span>
           <KeyboardShortcut>⌘D</KeyboardShortcut>
-        </MenuItem>
+        </FileActionMenuItem>
       ) : (
         /* 文件夹下载 - 双选项 */
         <>
           {/* 快速下载 */}
           <DownloadTooltip content={t("actionDownloadFastTooltip")}>
-            <MenuItem
+            <FileActionMenuItem
+              mode={mode}
               className={itemClassName}
               onClick={() => onAction("download-fast")}
             >
               <Zap className="h-4 w-4 mr-2 text-yellow-500" />
               <span className="flex-1">{t("actionDownloadFast")}</span>
-              <RecommendedBadge />
-            </MenuItem>
+              <RecommendedBadge>{recommendedLabel}</RecommendedBadge>
+            </FileActionMenuItem>
           </DownloadTooltip>
 
           {/* 兼容下载 */}
           <DownloadTooltip content={t("actionDownloadCompatibleTooltip")}>
-            <MenuItem
+            <FileActionMenuItem
+              mode={mode}
               className={itemClassName}
               onClick={() => onAction("download-compatible")}
             >
@@ -170,40 +198,43 @@ export function FileActionMenu({
                 {t("actionDownloadCompatible")}
               </span>
               <KeyboardShortcut>⌘D</KeyboardShortcut>
-            </MenuItem>
+            </FileActionMenuItem>
           </DownloadTooltip>
         </>
       )}
 
-      <Separator className={separatorClassName} />
+      <FileActionMenuSeparator mode={mode} className={separatorClassName} />
 
       {/* 重命名 - 右键菜单仅单选时显示 */}
       {(mode === "dropdown" || isSingleSelect || selectedFilesCount === 0) && (
-        <MenuItem
+        <FileActionMenuItem
+          mode={mode}
           className={itemClassName}
           onClick={() => onAction("rename")}
         >
           <Edit className="h-4 w-4 mr-2" />
           <span className="flex-1">{t("actionRename")}</span>
           <KeyboardShortcut>F2</KeyboardShortcut>
-        </MenuItem>
+        </FileActionMenuItem>
       )}
 
       {/* 修改权限 - 右键菜单仅单选时显示 */}
       {(mode === "dropdown" || isSingleSelect || selectedFilesCount === 0) && (
-        <MenuItem
+        <FileActionMenuItem
+          mode={mode}
           className={itemClassName}
           onClick={() => onAction("chmod")}
         >
           <FileText className="h-4 w-4 mr-2" />
           <span className="flex-1">{t("actionChangePermissions")}</span>
-        </MenuItem>
+        </FileActionMenuItem>
       )}
 
-      <Separator className={separatorClassName} />
+      <FileActionMenuSeparator mode={mode} className={separatorClassName} />
 
       {/* 删除 */}
-      <MenuItem
+      <FileActionMenuItem
+        mode={mode}
         className={deleteClassName}
         onClick={() => onAction("delete")}
       >
@@ -214,7 +245,7 @@ export function FileActionMenu({
             : t("actionDeleteSingle")}
         </span>
         <KeyboardShortcut>⌫</KeyboardShortcut>
-      </MenuItem>
+      </FileActionMenuItem>
     </>
   )
 }

@@ -114,7 +114,7 @@ export default function ScriptsPage() {
      setLoading(false)
      setRefreshing(false)
    }
- }, [page, pageSize])
+ }, [page, pageSize, t])
 
  // 刷新脚本列表
  const handleRefresh = async () => {

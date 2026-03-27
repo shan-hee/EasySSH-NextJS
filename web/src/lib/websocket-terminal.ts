@@ -311,7 +311,7 @@ export class TerminalWebSocket {
   /**
    * 处理控制消息
    */
-  private handleControlMessage(message: { type: string; data?: any }): void {
+  private handleControlMessage(message: { type: string; data?: unknown }): void {
     switch (message.type) {
       case "handshake_complete":
         // WebSocket握手完成，SSH连接正在建立
@@ -348,7 +348,16 @@ export class TerminalWebSocket {
         break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)
-        this.onError?.(new Error(message.data?.message || "服务器错误"))
+        this.onError?.(
+          new Error(
+            message.data &&
+              typeof message.data === "object" &&
+              "message" in message.data &&
+              typeof message.data.message === "string"
+              ? message.data.message
+              : "服务器错误"
+          )
+        )
         break
       case "closed":
         // 服务器关闭连接

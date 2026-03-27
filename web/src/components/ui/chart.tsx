@@ -38,12 +38,17 @@ type ChartContainerProps = Omit<React.ComponentProps<"div">, "children"> & {
   children: (size: { width: number; height: number }) => React.ReactNode
 }
 
+type ChartSize = {
+  width: number
+  height: number
+}
+
 const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
   ({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
   const containerRef = React.useRef<HTMLDivElement | null>(null)
-  const [ready, setReady] = React.useState(false)
+  const [size, setSize] = React.useState<ChartSize>({ width: 0, height: 0 })
 
   // 合并外部 ref 与内部 ref
   const setRefs = React.useCallback(
@@ -64,14 +69,17 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
 
     const measure = () => {
       const rect = node.getBoundingClientRect()
-      setReady(rect.width > 1 && rect.height > 1)
+      setSize({
+        width: rect.width,
+        height: rect.height,
+      })
     }
     measure()
 
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0]
       const { width, height } = entry.contentRect
-      setReady(width > 1 && height > 1)
+      setSize({ width, height })
     })
     ro.observe(node)
     return () => ro.disconnect()
@@ -89,11 +97,8 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        {ready && containerRef.current ? (
-          children({
-            width: containerRef.current.clientWidth,
-            height: containerRef.current.clientHeight,
-          })
+        {size.width > 1 && size.height > 1 ? (
+          children(size)
         ) : (
           // 预占位以避免布局抖动
           <div className="w-full h-full" />
@@ -107,7 +112,7 @@ ChartContainer.displayName = "ChartContainer"
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
-    ([_, config]) => config.theme || config.color
+    ([, itemConfig]) => itemConfig.theme || itemConfig.color
   )
 
   if (!colorConfig.length) {
@@ -139,22 +144,38 @@ ${colorConfig
 }
 
 // 占位 Tooltip 组件，保留 API 但不依赖具体图表库
-const ChartTooltip: React.FC<any> = () => null
+type ChartPrimitiveProps = React.HTMLAttributes<HTMLDivElement>
+
+const ChartTooltip: React.FC<ChartPrimitiveProps> = () => null
+
+type TooltipPayloadValue = number | string
+type TooltipPayloadData = {
+  fill?: string
+} & Record<string, unknown>
 
 type TooltipPayloadItem = {
   color?: string
   name?: string
-  value?: number | string
+  value?: TooltipPayloadValue
   dataKey?: string
-  payload?: any
+  payload?: TooltipPayloadData
 }
 
 type ChartTooltipContentProps = React.HTMLAttributes<HTMLDivElement> & {
   active?: boolean
   payload?: TooltipPayloadItem[]
-  label?: any
-  formatter?: (...args: any[]) => React.ReactNode
-  labelFormatter?: (...args: any[]) => React.ReactNode
+  label?: React.ReactNode
+  formatter?: (
+    value: TooltipPayloadValue,
+    name: string,
+    item: TooltipPayloadItem,
+    index: number,
+    payload?: TooltipPayloadData
+  ) => React.ReactNode
+  labelFormatter?: (
+    value: React.ReactNode,
+    payload: TooltipPayloadItem[]
+  ) => React.ReactNode
   labelClassName?: string
   hideLabel?: boolean
   hideIndicator?: boolean
@@ -250,7 +271,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
                 )}
               >
                 {formatter && item?.value !== undefined && item.name ? (
-                  formatter(item.value, item.name, item as any, index, item.payload)
+                  formatter(item.value, item.name, item, index, item.payload)
                 ) : (
                   <>
                     {itemConfig?.icon ? (
@@ -308,7 +329,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, ChartTooltipContent
 ChartTooltipContent.displayName = "ChartTooltipContent"
 
 // 占位 Legend 组件，保留 API 但不依赖具体图表库
-const ChartLegend: React.FC<any> = () => null
+const ChartLegend: React.FC<ChartPrimitiveProps> = () => null
 
 type LegendPayloadItem = {
   dataKey?: string

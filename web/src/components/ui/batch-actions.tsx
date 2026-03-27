@@ -12,7 +12,7 @@ import { Download, Trash2, Eye, Copy, MoreHorizontal } from "lucide-react"
 import { AuditLog } from "@/lib/api/audit-logs"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/hooks/use-system-config"
-import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { formatInTimezone } from "@/utils/datetime"
 
 interface BatchActionsProps {
   selectedLogs: AuditLog[]
@@ -33,8 +33,8 @@ export function BatchActions({
 
   const { user } = useClientAuth()
   const { data: systemConfig } = useSystemConfig()
-  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
-  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+  void user
+  void systemConfig
 
   if (!hasSelection) {
     return null
@@ -161,7 +161,13 @@ export function BatchActions({
 }
 
 // 导出工具函数
-export function exportLogsToCSV(logs: AuditLog[]): string {
+export function exportLogsToCSV(
+  logs: AuditLog[],
+  options?: {
+    locale?: "zh-CN" | "en-US"
+    timezone?: string
+  }
+): string {
   const headers = [
     '时间',
     '用户',
@@ -173,11 +179,8 @@ export function exportLogsToCSV(logs: AuditLog[]): string {
     '耗时'
   ]
 
-  // 使用统一的时区和语言格式化时间
-  const { user } = useClientAuth()
-  const { data: systemConfig } = useSystemConfig()
-  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
-  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
+  const effectiveLocale = options?.locale
+  const effectiveTimezone = options?.timezone
 
   const rows = logs.map(log => [
     formatInTimezone(log.created_at, {}, effectiveLocale, effectiveTimezone),

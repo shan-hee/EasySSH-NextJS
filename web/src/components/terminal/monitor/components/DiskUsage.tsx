@@ -98,8 +98,21 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
         textStyle: {
           fontSize: 11,
         },
-        formatter: (params: any) => {
-          const list = Array.isArray(params) ? params : [params];
+        formatter: (params) => {
+          const list = (Array.isArray(params) ? params : [params]) as Array<{
+            color?: string
+            data?: {
+              used?: number
+              value?: number
+              free?: number
+              unit?: string
+              total?: number
+              totalUnit?: string
+              usedColor?: string
+              freeColor?: string
+              percent?: number
+            }
+          }>;
           if (!list.length) return "";
           const base = list[0];
           const data = base.data || {};
@@ -255,7 +268,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
       {/* 图表区域 - 固定高度 106px */}
       <div className="h-[106px] w-full">
         <ChartContainer config={colorConfig} className="h-full w-full aspect-auto">
-          {(_size) => (
+          {() => (
             <ReactECharts
               option={option}
               style={{ width: "100%", height: "100%" }}

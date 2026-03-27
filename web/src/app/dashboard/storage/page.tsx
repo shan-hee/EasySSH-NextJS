@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -269,7 +269,7 @@ export default function TrashPage() {
         const map = new Map<string, ServerType>()
         serverList.forEach((server) => map.set(server.id, server))
         setServersMap(map)
-      } catch (error) {
+      } catch {
         toast.error(t("loadServersFailed"))
       } finally {
         setLoadingServers(false)
@@ -277,7 +277,7 @@ export default function TrashPage() {
     }
 
     loadServers()
-  }, [ready])
+  }, [ready, t])
 
   // 加载回收站内容
   const loadTrash = useCallback(async () => {

@@ -74,22 +74,26 @@ export function EditServerDialog({ open, onOpenChange, onSubmit, initialData }: 
   // 当initialData变化时更新表单
   useEffect(() => {
     if (initialData && open) {
-      setFormData({
-        name: initialData.name || "",
-        host: initialData.host || "",
-        port: initialData.port || "22",
-        username: initialData.username || "",
-        authMethod: initialData.authMethod || "password",
-        password: initialData.password || "",
-        privateKey: initialData.privateKey || "",
-        rememberPassword: initialData.rememberPassword || false,
-        tags: initialData.tags || [],
-        description: initialData.description || "",
-        group: initialData.group || "",
-        jumpServer: initialData.jumpServer || "",
-        autoConnect: initialData.autoConnect || false,
-        keepAlive: initialData.keepAlive !== undefined ? initialData.keepAlive : true,
-      })
+      const timer = setTimeout(() => {
+        setFormData({
+          name: initialData.name || "",
+          host: initialData.host || "",
+          port: initialData.port || "22",
+          username: initialData.username || "",
+          authMethod: initialData.authMethod || "password",
+          password: initialData.password || "",
+          privateKey: initialData.privateKey || "",
+          rememberPassword: initialData.rememberPassword || false,
+          tags: initialData.tags || [],
+          description: initialData.description || "",
+          group: initialData.group || "",
+          jumpServer: initialData.jumpServer || "",
+          autoConnect: initialData.autoConnect || false,
+          keepAlive: initialData.keepAlive !== undefined ? initialData.keepAlive : true,
+        })
+      }, 0)
+
+      return () => clearTimeout(timer)
     }
   }, [initialData, open])
 

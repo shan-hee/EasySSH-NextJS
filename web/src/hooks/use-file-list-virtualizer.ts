@@ -62,6 +62,8 @@ export function useFileListVirtualizer({
     return () => 40
   }, [viewMode])
 
+  // TanStack Virtual 需要返回命令式 virtualizer 实例，这里按官方推荐方式使用。
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: virtualCount,
     getScrollElement: () => scrollElementRef.current,

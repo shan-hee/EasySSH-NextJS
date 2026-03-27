@@ -32,6 +32,9 @@ interface ExecutionHistoryColumnsOptions {
   formatDuration: (ms: number) => string
 }
 
+type I18nValues = Record<string, string | number | Date>
+type I18nT = (key: string, values?: I18nValues) => string
+
 const triggerTypeColors: Record<string, string> = {
   schedule: "bg-blue-50 text-blue-700 border-blue-200",
   manual: "bg-green-50 text-green-700 border-green-200",
@@ -40,9 +43,8 @@ const triggerTypeColors: Record<string, string> = {
 /**
  * 创建执行记录表格列定义
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createExecutionHistoryColumns(
-  t: (key: string, values?: any) => string,
+  t: I18nT,
   options: ExecutionHistoryColumnsOptions
 ): ColumnDef<TaskExecution>[] {
   const { onViewDetails, onRetry, onDownloadOutput, getTriggerTypeLabel, formatDate, formatDuration } = options

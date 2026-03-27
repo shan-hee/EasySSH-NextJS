@@ -9,13 +9,13 @@ import {
   type UseFormReturn,
 } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
+import type * as z4 from "zod/v4/core"
 import { toast } from "sonner"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 
 interface UseSettingsFormOptions<T extends FieldValues> {
-  schema: z.ZodTypeAny
+  schema: z4.$ZodType<T, T>
   loadFn: () => Promise<T>
   saveFn: (data: T) => Promise<void>
   onSuccess?: () => void
@@ -56,9 +56,12 @@ export function useSettingsForm<T extends FieldValues>({
   const t = useTranslations("settingsCommon")
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  // 当前 zod / resolvers 的类型声明存在版本细节不兼容，
+  // 这里保留官方 zodResolver 运行时实现，仅隔离有问题的重载推断。
+  const createResolver = zodResolver as unknown as (schema: unknown) => Resolver<T>
 
   const form = useForm<T>({
-    resolver: zodResolver(schema as any) as Resolver<T>,
+    resolver: createResolver(schema),
     defaultValues: defaultValues as DefaultValues<T> | undefined,
   })
 

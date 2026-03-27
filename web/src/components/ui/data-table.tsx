@@ -164,6 +164,8 @@ export function DataTable<TData, TValue = unknown>({
 
   const densityClasses = getDensityClasses(density)
 
+  // TanStack Table 的 hook 按设计会返回带有命令式能力的对象，这里保留其官方用法。
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import {
   Bot,
@@ -15,8 +14,6 @@ import {
   Code,
   FileText,
   Zap,
-  User,
-  MessageSquare,
   Download,
   Copy,
   Check,
@@ -116,9 +113,6 @@ interface AttachedFile {
   progress: number
   uploading: boolean
 }
-
-// 快捷模板图标映射
-const quickTemplateIcons = [Terminal, Code, FileText, Zap] as const
 
 function createLocalId(prefix: string = "id") {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -732,7 +726,7 @@ function AIResponseBlock({
       parsedContent: thinkingResult,
       toolStatus: toolStatusResult.toolStatus
     }
-  }, [message?.content])
+  }, [message])
 
   // 判断是否正在流式输出思考内容
   const isThinkingStreaming = Boolean(isStreaming && parsedContent.thinking && !parsedContent.content)
@@ -748,7 +742,7 @@ function AIResponseBlock({
       ...tc,
       messageId: message.id,
     }))
-  }, [groupedToolCalls, message?.toolCalls, message?.id])
+  }, [groupedToolCalls, message])
 
   const toolCallMessageMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -761,12 +755,12 @@ function AIResponseBlock({
   const leadingToolCalls = useMemo(() => {
     if (!message?.id) return [] as ToolCallWithMessage[]
     return displayToolCalls.filter((tc) => tc.messageId !== message.id)
-  }, [displayToolCalls, message?.id])
+  }, [displayToolCalls, message])
 
   const trailingToolCalls = useMemo(() => {
     if (!message?.id) return displayToolCalls
     return displayToolCalls.filter((tc) => tc.messageId === message.id)
-  }, [displayToolCalls, message?.id])
+  }, [displayToolCalls, message])
 
   // 判断当前显示状态
   const showLoadingIndicator = isWaitingForResponse && !message?.content
@@ -1061,7 +1055,6 @@ export default function AIAssistantPage() {
     executeToolCall,
     isLoading,
     stop: stopGenerating,
-    error: aiError,
     clearError,
   } = useAIChat()
 
@@ -2250,7 +2243,7 @@ export default function AIAssistantPage() {
     <>
       <PageHeader
         title={t("pageTitle")}
-        titleDropdown={(trigger) => (
+        titleDropdown={() => (
           <div className="flex items-center gap-1">
             <DropdownMenu onOpenChange={(open) => !open && setSearchQuery("")}>
               <DropdownMenuTrigger asChild>
@@ -2648,7 +2641,7 @@ export default function AIAssistantPage() {
                         </div>
                       )}
                       <PromptInputTextarea
-                        ref={inputRef as any}
+                        ref={inputRef}
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
                         placeholder={

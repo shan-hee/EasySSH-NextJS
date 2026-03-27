@@ -104,8 +104,15 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         textStyle: {
           fontSize: 11,
         },
-        formatter: (params: any) => {
-          const p = Array.isArray(params) ? params[0] : params;
+        formatter: (params) => {
+          const p = (
+            Array.isArray(params) ? params[0] : params
+          ) as {
+            axisValue?: string;
+            data?: number | { usage?: number };
+            value?: number;
+          } | undefined;
+          if (!p) return "";
           const raw = p.data;
           const value =
             typeof raw === "number"
@@ -199,7 +206,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         },
       ],
     };
-  }, [chartData, usageColor, maxValue]);
+  }, [chartData, usageColor, maxValue, t]);
 
   return (
     <div className="space-y-1">
@@ -231,7 +238,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
-            {(_size) => (
+            {() => (
               <ReactECharts
                 option={option}
                 style={{ width: "100%", height: "100%" }}

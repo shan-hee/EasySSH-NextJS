@@ -154,7 +154,7 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
         icon: User,
       })),
     }
-  }, [logs])
+  }, [logs, t])
 
   // 可见列配置
   const visibleColumns = useMemo(

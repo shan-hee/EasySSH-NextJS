@@ -50,7 +50,6 @@ const triggerTypeColors: Record<string, string> = {
 
 export default function AutomationHistoryPage() {
   const t = useTranslations("automationHistory")
-  const tCommon = useTranslations("common")
   const { ready } = useAuthReady()
   const { user } = useClientAuth()
   const { data: systemConfig } = useSystemConfig()
@@ -303,18 +302,14 @@ export default function AutomationHistoryPage() {
   const successRate = totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0
 
   // 创建表格列配置
-  const columns = useMemo(
-    () =>
-      createExecutionHistoryColumns(t, {
-        onViewDetails: handleViewDetails,
-        onRetry: handleRetry,
-        onDownloadOutput: handleDownloadOutput,
-        getTriggerTypeLabel,
-        formatDate,
-        formatDuration,
-      }),
-    [t, effectiveLocale, effectiveTimezone]
-  )
+  const columns = createExecutionHistoryColumns(t, {
+    onViewDetails: handleViewDetails,
+    onRetry: handleRetry,
+    onDownloadOutput: handleDownloadOutput,
+    getTriggerTypeLabel,
+    formatDate,
+    formatDuration,
+  })
 
   // 筛选选项
   const filterOptions = useMemo(() => ({

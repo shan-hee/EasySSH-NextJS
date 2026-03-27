@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import LightRays from "@/components/LightRays"
 import { AuthI18nProvider } from "@/providers/auth-i18n-provider"
@@ -11,15 +10,9 @@ export default function AuthLayout({
   children: React.ReactNode
 }) {
   const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  // 等待客户端挂载，避免 hydration 不匹配
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // 根据主题选择光线颜色和参数
-  const isLightTheme = mounted && resolvedTheme === "light"
+  const isLightTheme = resolvedTheme === "light"
   const raysColor = isLightTheme ? "#3b82f6" : "#ffffff"
   const raysOpacity = isLightTheme ? "opacity-30" : "opacity-60"
 

@@ -14,7 +14,6 @@ import { LocalCommandProvider } from "@/lib/completion/providers/local-command-p
 import { RemoteHistoryProvider } from "@/lib/completion/providers/remote-history-provider"
 import { ScriptProvider } from "@/lib/completion/providers/script-provider"
 import { SessionProvider } from "@/lib/completion/providers/session-provider"
-import type { ScriptItem } from "@/lib/completion/providers/script-provider"
 import {
   parseCompletionContext,
   getCursorScreenPosition,
@@ -680,6 +679,7 @@ export function WebTerminal({
     onCommand,
     closeCompletion,
     applyCompletionItem,
+    completionAutoDelay,
     // 移除 completionState 的单个字段依赖,使用 state setter 函数形式
     // 移除 handleCompletionRequest,使用 ref 替代
   ])
@@ -915,7 +915,7 @@ export function WebTerminal({
     }
 
     return true
-  }, [matchesShortcut, terminal, sendInput])
+  }, [matchesShortcut, terminal])
 
   useEffect(() => {
     if (!terminal || !terminalReady) return

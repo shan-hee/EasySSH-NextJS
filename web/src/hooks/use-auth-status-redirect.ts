@@ -27,6 +27,13 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
   const hasSettledRef = useRef(false)
 
   useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const scheduleSetIsChecking = (value: boolean) => {
+      timers.push(setTimeout(() => {
+        setIsChecking(value)
+      }, 0))
+    }
+
     // login 页: 如果已经完成过一次初始检查(确认停留在登录页),
     // 后续仅关注"已认证"的场景,避免再次进入全屏加载态
     if (page === "login" && hasSettledRef.current) {
@@ -39,8 +46,10 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
 
     // 等待系统配置 / 认证状态加载完成
     if (isLoading) {
-      setIsChecking(true)
-      return
+      scheduleSetIsChecking(true)
+      return () => {
+        timers.forEach(clearTimeout)
+      }
     }
 
     // 如果加载失败（authStatus 为空），按“未认证且已初始化失败未知”处理
@@ -48,10 +57,12 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
       if (page === "home") {
         router.replace("/login")
       } else {
-        setIsChecking(false)
+        scheduleSetIsChecking(false)
         hasSettledRef.current = true
       }
-      return
+      return () => {
+        timers.forEach(clearTimeout)
+      }
     }
 
     const status = authStatus
@@ -66,7 +77,7 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
     if (status.account_locked) {
       if (page === "login") {
         // 已在登录页，显示锁定提示
-        setIsChecking(false)
+        scheduleSetIsChecking(false)
         hasSettledRef.current = true
       } else {
         const params = new URLSearchParams()
@@ -79,7 +90,9 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
         }
         router.replace(`/login?${params.toString()}`)
       }
-      return
+      return () => {
+        timers.forEach(clearTimeout)
+      }
     }
 
     // 已认证 → 统一跳转到 /dashboard
@@ -92,8 +105,12 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
     if (page === "home") {
       router.replace("/login")
     } else {
-      setIsChecking(false)
+      scheduleSetIsChecking(false)
       hasSettledRef.current = true
+    }
+
+    return () => {
+      timers.forEach(clearTimeout)
     }
   }, [authStatus, isLoading, page, router])
 

@@ -43,6 +43,23 @@ interface FormTextareaProps<TFieldValues extends FieldValues> extends BaseFormFi
   rows?: number
 }
 
+type TranslationFn = ReturnType<typeof useTranslations>
+
+function getTranslatedErrorMessage(t: TranslationFn, error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined
+  }
+
+  const rawMessage = "message" in error ? error.message : undefined
+  if (typeof rawMessage !== "string") {
+    return undefined
+  }
+
+  return rawMessage.startsWith("settingsValidation.")
+    ? t(rawMessage as Parameters<TranslationFn>[0])
+    : rawMessage
+}
+
 /**
  * 表单输入字段
  */
@@ -61,11 +78,7 @@ export function FormInput<TFieldValues extends FieldValues>({
 }: FormInputProps<TFieldValues>) {
   const t = useTranslations()
   const error = form.formState.errors[name]
-  const rawMessage = (error as any)?.message as string | undefined
-  const message =
-    rawMessage && rawMessage.startsWith("settingsValidation.")
-      ? t(rawMessage as any)
-      : rawMessage
+  const message = getTranslatedErrorMessage(t, error)
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -143,11 +156,7 @@ export function FormSelect<TFieldValues extends FieldValues>({
 }: FormSelectProps<TFieldValues>) {
   const t = useTranslations()
   const error = form.formState.errors[name]
-  const rawMessage = (error as any)?.message as string | undefined
-  const message =
-    rawMessage && rawMessage.startsWith("settingsValidation.")
-      ? t(rawMessage as any)
-      : rawMessage
+  const message = getTranslatedErrorMessage(t, error)
   const value = form.watch(name)
 
   return (
@@ -198,11 +207,7 @@ export function FormTextarea<TFieldValues extends FieldValues>({
 }: FormTextareaProps<TFieldValues>) {
   const t = useTranslations()
   const error = form.formState.errors[name]
-  const rawMessage = (error as any)?.message as string | undefined
-  const message =
-    rawMessage && rawMessage.startsWith("settingsValidation.")
-      ? t(rawMessage as any)
-      : rawMessage
+  const message = getTranslatedErrorMessage(t, error)
 
   return (
     <div className={cn("space-y-2", className)}>

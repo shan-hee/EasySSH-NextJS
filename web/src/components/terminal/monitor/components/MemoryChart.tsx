@@ -77,14 +77,21 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
         textStyle: {
           fontSize: 11,
         },
-        formatter: (params: any) => {
-          const isRam = params.seriesName === "RAM";
+        formatter: (params) => {
+          const point = (
+            Array.isArray(params) ? params[0] : params
+          ) as {
+            seriesName?: string
+            color?: string
+          } | undefined;
+          if (!point) return ""
+          const isRam = point.seriesName === "RAM";
           const mem = isRam ? data.ram : data.swap;
           return `
             <div style="font-size:11px;">
               <div style="margin-bottom:4px;">${isRam ? "RAM" : "Swap"}</div>
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${params.color};"></span>
+                <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${point.color};"></span>
                 <span>${memoryTooltipUsedLabel}</span>
                 <span style="font-family:var(--font-jetbrains-mono),ui-monospace;font-weight:600;">
                   ${mem.value} ${mem.unit}
@@ -233,7 +240,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
         {/* 右侧:径向条形图 */}
         <div className="w-[100px] h-[100px] relative flex-shrink-0">
           <ChartContainer config={chartConfig} className="w-full h-full">
-            {(_size) => (
+            {() => (
               <ReactECharts
                 option={option}
                 style={{ width: "100%", height: "100%" }}

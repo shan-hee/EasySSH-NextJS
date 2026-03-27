@@ -91,7 +91,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
         setRefreshing(false)
       }
     },
-    []
+    [t]
   )
 
   // 初始加载数据（纯 CSR 模式，仅在已认证且全局状态就绪时触发）
@@ -99,8 +99,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     if (initialData) return
     if (!ready) return
     loadData(page, pageSize)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, initialData])
+  }, [ready, initialData, loadData, page, pageSize])
 
   // 刷新数据
   const handleRefresh = async () => {
@@ -127,7 +126,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
   )
 
   // 删除传输记录（使用 API + 乐观更新）
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     if (!confirm(t("confirmDelete"))) {
       return
     }
@@ -147,7 +146,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
         await loadData(page, pageSize)
       }
     })
-  }
+  }, [loadData, page, pageSize, setOptimisticTransfers, startTransition, t])
 
   // 创建列定义（依赖 t 和删除回调）
   const columns = useMemo(

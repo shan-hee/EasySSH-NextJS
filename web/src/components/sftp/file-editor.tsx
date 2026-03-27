@@ -34,7 +34,6 @@ interface FileEditorProps {
 
 export function FileEditor({
   fileName,
-  filePath,
   fileContent,
   isOpen,
   onClose,
@@ -48,9 +47,9 @@ export function FileEditor({
   const [isModified, setIsModified] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [wordWrap, setWordWrap] = useState<'on' | 'off'>('on')
-  const [fontSize, setFontSize] = useState(13)
-  const [showMinimap, setShowMinimap] = useState(false) // 默认关闭小地图提升性能
+  const wordWrap: 'on' | 'off' = 'on'
+  const fontSize = 13
+  const showMinimap = false // 默认关闭小地图提升性能
   const editorRef = useState<unknown | null>(null)
 
   // 缓存文件统计信息，避免每次渲染都计算
@@ -126,30 +125,6 @@ export function FileEditor({
   const handleReset = () => {
     setContent(fileContent || '')
     setIsModified(false)
-  }
-
-  // 切换自动换行（预留功能）
-  const _toggleWordWrap = () => {
-    setWordWrap(prev => prev === 'on' ? 'off' : 'on')
-  }
-
-  // 调整字体大小（预留功能）
-  const _increaseFontSize = () => {
-    setFontSize(prev => Math.min(prev + 1, 24))
-  }
-
-  const _decreaseFontSize = () => {
-    setFontSize(prev => Math.max(prev - 1, 10))
-  }
-
-  // 切换小地图（预留功能）
-  const _toggleMinimap = () => {
-    setShowMinimap(prev => !prev)
-  }
-
-  // 复制全部内容（预留功能）
-  const _copyAll = () => {
-    navigator.clipboard.writeText(content)
   }
 
   // 查找

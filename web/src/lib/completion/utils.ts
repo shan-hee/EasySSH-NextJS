@@ -5,6 +5,21 @@
 import type { Terminal } from "@xterm/xterm"
 import type { CompletionContext } from "./types"
 
+type TerminalWithRenderDimensions = Terminal & {
+  _core?: {
+    _renderService?: {
+      dimensions?: {
+        css?: {
+          cell?: {
+            width: number
+            height: number
+          }
+        }
+      }
+    }
+  }
+}
+
 /**
  * 从终端获取当前输入行
  * @param terminal xterm.js 终端实例
@@ -119,7 +134,7 @@ export function getCursorScreenPosition(terminal: Terminal): {
   const padding = 16 // 终端内边距
 
   // 方案1: 尝试使用内部API获取精确尺寸
-  const dimensions = (terminal as any)._core?._renderService?.dimensions
+  const dimensions = (terminal as TerminalWithRenderDimensions)._core?._renderService?.dimensions
   if (dimensions?.css?.cell) {
     const lineHeight = dimensions.css.cell.height
     const lineTop = padding + cursorY * lineHeight
@@ -209,7 +224,6 @@ export function applyCompletion(
  * @returns 纯文本
  */
 export function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
 }
 

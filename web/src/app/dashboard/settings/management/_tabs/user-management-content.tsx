@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,7 +33,7 @@ import { usersApi, type UserDetail, type UserRole } from "@/lib/api"
 import { SkeletonCard } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
-import { createUserColumns } from "@/app/dashboard/users/components/user-columns"
+import { useUserColumns } from "@/app/dashboard/users/components/user-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 
@@ -81,7 +81,7 @@ export function UserManagementContent() {
   const [newPassword, setNewPassword] = useState("")
 
   // 加载用户列表
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       const [usersRes, statsRes] = await Promise.all([
         usersApi.list({ page: 1, limit: 100 }),
@@ -109,7 +109,7 @@ export function UserManagementContent() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [t])
 
   // 刷新数据
   const handleRefresh = async () => {
@@ -121,7 +121,7 @@ export function UserManagementContent() {
   useEffect(() => {
     if (!ready) return
     loadUsers()
-  }, [ready])
+  }, [ready, loadUsers])
 
   // 创建用户
   const handleCreateUser = async () => {
@@ -230,7 +230,7 @@ export function UserManagementContent() {
   }
 
   // 表格列定义
-  const columns = createUserColumns({
+  const columns = useUserColumns({
     onEdit: handleOpenEditDialog,
     onChangePassword: handleOpenPasswordDialog,
     onDelete: handleDeleteUser,

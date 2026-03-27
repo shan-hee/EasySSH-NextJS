@@ -104,8 +104,8 @@ function TerminalPageContent() {
 
    if (server) {
      // 服务器存在，更新会话信息（不限制在线/离线状态）
-     setSessions(prev => {
-       const updated = prev.map(s => {
+     const timer = setTimeout(() => {
+       setSessions(prev => prev.map(s => {
          // 只更新我们初始创建的 auto- 会话
          if (s.id === pendingSession.id) {
            return {
@@ -122,31 +122,33 @@ function TerminalPageContent() {
            }
          }
          return s
-       })
-
-       // 设置激活的会话
+       }))
        setActiveSessionId(pendingSession.id)
+     }, 0)
 
-       return updated
-     })
+     return () => clearTimeout(timer)
    } else {
      // 服务器不存在，回退到快速连接
      toast.error(t("errorServerNotFound"))
 
      const now = Date.now()
-     setSessions([{
-       id: "quick-initial",
-       serverId: 0,
-       serverName: quickConnectName,
-       host: "",
-       port: undefined,
-       username: "",
-       isConnected: false,
-       status: "disconnected",
-       lastActivity: now,
-       type: "quick",
-       pinned: false,
-     }])
+     const timer = setTimeout(() => {
+       setSessions([{
+         id: "quick-initial",
+         serverId: 0,
+         serverName: quickConnectName,
+         host: "",
+         port: undefined,
+         username: "",
+         isConnected: false,
+         status: "disconnected",
+         lastActivity: now,
+         type: "quick",
+         pinned: false,
+       }])
+     }, 0)
+
+     return () => clearTimeout(timer)
    }
  }
  }
@@ -194,7 +196,11 @@ function TerminalPageContent() {
 
  useEffect(() => {
    if (!ready) return
-   loadServers()
+   const timer = setTimeout(() => {
+     void loadServers()
+   }, 0)
+
+   return () => clearTimeout(timer)
  }, [loadServers, ready])
 
  // 读取通用设置（仅使用本地存储集成）- 异步化避免阻塞初始渲染

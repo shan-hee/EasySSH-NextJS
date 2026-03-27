@@ -306,6 +306,15 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     stop,
     clearError,
   } = useAIChat()
+  const modelOptions = models.length > 0 ? models : ["auto"]
+  const resolvedModel =
+    model && modelOptions.includes(model)
+      ? model
+      : (
+          defaultModel && modelOptions.includes(defaultModel)
+            ? defaultModel
+            : modelOptions[0]
+        )
 
   const toChatMessages = useCallback(
     (items: Message[]): ChatMessage[] =>
@@ -366,18 +375,6 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     }
   }, [messages, isExpanded, isChatLoading, scrollToBottom])
 
-  useEffect(() => {
-    if (models.length === 0) {
-      return
-    }
-
-    const nextModel =
-      defaultModel && models.includes(defaultModel) ? defaultModel : models[0]
-    if (!model || !models.includes(model)) {
-      setModel(nextModel)
-    }
-  }, [models, defaultModel, model])
-
   // 延迟启用过渡动画，避免初始渲染时的动画冲突
   useEffect(() => {
     // 组件挂载后立即启用动画（父组件已确保不在加载期间渲染）
@@ -390,8 +387,8 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   // 打开时聚焦输入框并清除错误
   useEffect(() => {
     if (isOpen) {
-      setError(null)
       const timer = setTimeout(() => {
+        setError(null)
         inputRef.current?.focus()
       }, ANIMATION_DELAY)
       return () => clearTimeout(timer)
@@ -427,7 +424,11 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     if (messages.length === 0 && !isChatLoading) return
     if (isExpanded && messageHeight > AUTO_COLLAPSE_HEIGHT) return
 
-    expandPanel()
+    const timer = setTimeout(() => {
+      expandPanel()
+    }, 0)
+
+    return () => clearTimeout(timer)
   }, [isOpen, messages.length, isChatLoading, isExpanded, messageHeight, expandPanel])
 
   // ========== 事件处理器 ==========
@@ -472,7 +473,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
             )
           )
         },
-        model === "auto" ? undefined : model
+        resolvedModel === "auto" ? undefined : resolvedModel
       )
     } catch (err) {
       const errorMessage =
@@ -497,9 +498,9 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     messages,
     sendMessage,
     toChatMessages,
-    model,
     tAI,
     expandPanel,
+    resolvedModel,
   ])
 
   const handleClearConversation = useCallback(() => {
@@ -518,8 +519,6 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     onClose()
   }, [isChatLoading, stop, onClose])
 
-  const modelOptions = models.length > 0 ? models : ["auto"]
-  const resolvedModel = modelOptions.includes(model) ? model : modelOptions[0]
   const configStatusText = isConfigLoading
     ? tAI("checkingConfig")
     : isConfigured
@@ -828,7 +827,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
                   className="shadow-2xl border-primary/20 bg-background/95 backdrop-blur-xl ring-1 ring-primary/10"
                 >
                   <PromptInputTextarea
-                    ref={inputRef as any}
+                    ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={

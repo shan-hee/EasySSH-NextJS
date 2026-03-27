@@ -7,7 +7,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { monitor } from '@/lib/proto/metrics';
 import { getWsUrl } from '@/lib/config';
 import { createAuthTicket } from '@/lib/auth-ticket';
-import { useMonitorStore, WSStatus, type MonitorMetrics as StoreMonitorMetrics } from '@/stores/monitor-store';
+import { useMonitorStore, WSStatus } from '@/stores/monitor-store';
 
 // 重新导出 WSStatus 供外部使用
 export { WSStatus };
@@ -63,6 +63,15 @@ interface UseMonitorWebSocketOptions {
   latencyIntervalMs?: number;
 }
 
+type PendingLatencyUpdate = {
+  localLatencyMs?: number;
+  localLatencySmoothedMs?: number;
+  localLatencyDevMs?: number;
+  localLatencyUpMs?: number;
+  localLatencyDownMs?: number;
+  clockOffsetMs?: number;
+}
+
 /**
  * 监控 WebSocket Hook
  *
@@ -98,15 +107,6 @@ export function useMonitorWebSocket({
 
   // React Strict Mode 防护：标记当前组件是否已挂载
   const isMountedRef = useRef(false);
-  // 存储待处理的延迟更新，批量提交避免频繁重新渲染
-  const pendingLatencyUpdateRef = useRef<{
-    localLatencyMs?: number;
-    localLatencySmoothedMs?: number;
-    localLatencyDevMs?: number;
-    localLatencyUpMs?: number;
-    localLatencyDownMs?: number;
-    clockOffsetMs?: number;
-  } | null>(null);
 
   // ==================== 核心改动：从 Store 获取和管理监控连接 ====================
   const getConnection = useMonitorStore(state => state.getConnection)
@@ -425,7 +425,7 @@ export function useMonitorWebSocket({
                 const rtt = Math.max(0, Math.round(t3 - t0));
 
                 // 准备批量更新
-                const updates: typeof pendingLatencyUpdateRef.current = {
+                const updates: PendingLatencyUpdate = {
                   localLatencyMs: rtt,
                 };
 
@@ -458,7 +458,6 @@ export function useMonitorWebSocket({
 
                 if (typeof t1 === 'number' && typeof t2 === 'number') {
                   // NTP 风格估算
-                  const delay = (t3 - t0) - (t2 - t1);
                   const offset = ((t1 - t0) + (t2 - t3)) / 2;
                   const up = t1 - (t0 + offset);
                   const down = t3 - (t2 + offset);
@@ -571,7 +570,7 @@ export function useMonitorWebSocket({
       if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
         try {
           ws.close(1000, 'Client disconnected');
-        } catch (err) {
+        } catch {
           // 忽略关闭过程中的错误（例如连接已经在关闭中）
           // 这在 React Strict Mode 的双重调用中很常见
         }

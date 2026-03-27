@@ -65,6 +65,7 @@ export function TerminalComponent({
   const [isFullscreen, setIsFullscreen] = useState(false)
   // ==================== 方案A：多页签并发加载状态管理 ====================
   const [loadingSessionIds, setLoadingSessionIds] = useState<Set<string>>(new Set())
+  const [initializedSessionIds, setInitializedSessionIds] = useState<Set<string>>(new Set())
   const [loaderStates, setLoaderStates] = useState<Record<string, "entering" | "loading" | "exiting">>({})
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
@@ -78,7 +79,11 @@ export function TerminalComponent({
   // 当外部传入 activeSessionId 时，切换激活的会话
   useEffect(() => {
     if (externalActiveSessionId) {
-      setActiveSession(externalActiveSessionId)
+      const timer = setTimeout(() => {
+        setActiveSession(externalActiveSessionId)
+      }, 0)
+
+      return () => clearTimeout(timer)
     }
   }, [externalActiveSessionId])
 
@@ -151,12 +156,14 @@ export function TerminalComponent({
         targetIndex = Math.min(deletedIndex, sessions.length - 1)
       }
 
-      setActiveSession(sessions[targetIndex].id)
+      const timer = setTimeout(() => {
+        setActiveSession(sessions[targetIndex].id)
+      }, 0)
+
+      return () => clearTimeout(timer)
     }
   }, [active, sessions, activeSession])
 
-  // 记录已经完成一次初始化（展示过加载遮罩并完成退出动画）的会话，避免重复触发
-  const initializedSessionsRef = useRef<Set<string>>(new Set())
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // 保存设置到 localStorage（使用防抖优化性能）
@@ -267,7 +274,7 @@ export function TerminalComponent({
 
   const handleAnimationComplete = (sessionId: string) => {
     // 退出动画完成后，标记该会话已初始化并清除加载状态
-    initializedSessionsRef.current.add(sessionId)
+    setInitializedSessionIds((prev) => new Set(prev).add(sessionId))
     // 从加载集合中移除
     setLoadingSessionIds(prev => {
       const next = new Set(prev)
@@ -283,7 +290,11 @@ export function TerminalComponent({
   }
 
   const isActiveSessionLoading = loadingSessionIds.has(activeSession)
-  const shouldForceLoading = !!(active && active.type !== 'quick' && !initializedSessionsRef.current.has(active.id))
+  const shouldForceLoading = !!(
+    active &&
+    active.type !== 'quick' &&
+    !initializedSessionIds.has(active.id)
+  )
   const effectiveIsLoading = !!(active && active.type !== 'quick' && (isActiveSessionLoading || shouldForceLoading))
 
   // 当从"快速连接"升级为"终端"或首次连接新会话时，立刻设置为加载中
@@ -291,21 +302,29 @@ export function TerminalComponent({
     if (shouldForceLoading && active) {
       // 若还未设置当前加载会话，则添加到加载集合
       if (!loadingSessionIds.has(active.id)) {
-        setLoadingSessionIds(prev => new Set(prev).add(active.id))
-        setLoaderStates(prev => ({ ...prev, [active.id]: "entering" }))
+        const timer = setTimeout(() => {
+          setLoadingSessionIds(prev => new Set(prev).add(active.id))
+          setLoaderStates(prev => ({ ...prev, [active.id]: "entering" }))
+        }, 0)
+
+        return () => clearTimeout(timer)
       }
     } else if (!shouldForceLoading && active && loadingSessionIds.has(active.id)) {
       // 如果切换到已初始化的会话，清除加载状态
-      setLoadingSessionIds(prev => {
-        const next = new Set(prev)
-        next.delete(active.id)
-        return next
-      })
-      setLoaderStates(prev => {
-        const next = { ...prev }
-        delete next[active.id]
-        return next
-      })
+      const timer = setTimeout(() => {
+        setLoadingSessionIds(prev => {
+          const next = new Set(prev)
+          next.delete(active.id)
+          return next
+        })
+        setLoaderStates(prev => {
+          const next = { ...prev }
+          delete next[active.id]
+          return next
+        })
+      }, 0)
+
+      return () => clearTimeout(timer)
     }
   }, [shouldForceLoading, active, loadingSessionIds])
 

@@ -69,8 +69,12 @@ export function ChmodDialog({
     // 只在对话框打开且有有效权限时才解析
     if (open && currentPermissions) {
       const newMode = parsePermissions(currentPermissions)
-      setMode(newMode)
-      setOctalInput(newMode.toString(8).padStart(3, '0'))
+      const timer = setTimeout(() => {
+        setMode(newMode)
+        setOctalInput(newMode.toString(8).padStart(3, '0'))
+      }, 0)
+
+      return () => clearTimeout(timer)
     }
   }, [currentPermissions, open])
 

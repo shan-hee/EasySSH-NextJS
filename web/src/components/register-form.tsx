@@ -13,7 +13,6 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { authApi } from "@/lib/api/auth"
 import { FadeSlideIn } from "@/components/ui/fade-slide-in"
 import { getErrorMessage } from "@/lib/error-utils"
-import { useAuthStore } from "@/stores/auth-store"
 import { useTranslations } from "next-intl"
 
 export function RegisterForm({
@@ -22,7 +21,6 @@ export function RegisterForm({
 }: React.ComponentProps<"div">) {
   const router = useRouter()
   const { config, refreshConfig } = useSystemConfig()
-  const setToken = useAuthStore((state) => state.setToken)
   const tAuth = useTranslations("auth")
 
   const [isLoading, setIsLoading] = useState(false)
@@ -105,7 +103,7 @@ export function RegisterForm({
 
     try {
       // 调用注册 API（用户名由后端自动生成）
-      const response = await authApi.register({
+      await authApi.register({
         email,
         password,
         verification_code: verificationCode,

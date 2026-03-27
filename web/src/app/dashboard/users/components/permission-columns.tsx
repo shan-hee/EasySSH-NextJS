@@ -117,7 +117,7 @@ interface PermissionColumnsOptions {
   onDelete?: (permissionId: string, name: string) => void
 }
 
-export function createPermissionColumns(options?: PermissionColumnsOptions): ColumnDef<Permission, unknown>[] {
+export function usePermissionColumns(options?: PermissionColumnsOptions): ColumnDef<Permission, unknown>[] {
   const t = useTranslations("users")
 
   // 模块图标和颜色

@@ -29,12 +29,6 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
-// 格式化速度
-function formatSpeed(bytesPerSecond: number | undefined): string {
-  if (!bytesPerSecond || bytesPerSecond === 0) return '-'
-  return `${formatFileSize(bytesPerSecond)}/s`
-}
-
 // 格式化时长
 function formatDuration(
   t: (key: string, values?: I18nValues) => string,

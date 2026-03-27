@@ -6,6 +6,8 @@ import { X, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SftpManager } from "@/components/sftp/sftp-manager"
 import type { TransferTask } from "@/hooks/useFileTransfer"
+import type { SftpFileItem } from "@/lib/sftp-file-utils"
+import type { BatchDeleteResult } from "@/hooks/useSftpSession"
 
 interface FileManagerPanelProps {
   isOpen: boolean
@@ -17,7 +19,7 @@ interface FileManagerPanelProps {
   username: string
   isConnected: boolean
   currentPath: string
-  files: any[]
+  files: SftpFileItem[]
   sessionId: string
   sessionLabel: string
   isLoading?: boolean // 是否正在加载文件列表
@@ -25,7 +27,7 @@ interface FileManagerPanelProps {
   onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
-  onBatchDelete?: (fileNames: string[]) => Promise<{ success: string[]; failed: any[]; total: number }>
+  onBatchDelete?: (fileNames: string[]) => Promise<BatchDeleteResult>
   onBatchDownload?: (fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) => Promise<void>
   onCreateFolder: (name: string) => void
   onCreateFile?: (name: string) => void
@@ -54,31 +56,23 @@ export function FileManagerPanel({
    onCancelTransfer,
   ...sftpProps
 }: FileManagerPanelProps) {
-  const [width, setWidth] = useState(600) // 默认宽度
+  const [width, setWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 600
+    }
+    const savedWidth = window.localStorage.getItem("file-manager-panel-width")
+    return savedWidth ? parseInt(savedWidth, 10) : 600
+  })
   const [isResizing, setIsResizing] = useState(false)
-  const [isMounted, setIsMounted] = useState(false)
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
   const internalContainer = mountContainer || null
   const topOffset = anchorTop ?? 0
 
-  // 处理客户端挂载
-  useEffect(() => {
-    setIsMounted(true)
-
-    // 从 localStorage 恢复宽度
-    const savedWidth = localStorage.getItem('file-manager-panel-width')
-    if (savedWidth) {
-      setWidth(parseInt(savedWidth, 10))
-    }
-  }, [])
-
   // 保存宽度到 localStorage
   useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem('file-manager-panel-width', width.toString())
-    }
-  }, [width, isMounted])
+    localStorage.setItem('file-manager-panel-width', width.toString())
+  }, [width])
 
   // 快捷键支持 (Ctrl/Cmd + E)
   useEffect(() => {
@@ -146,8 +140,6 @@ export function FileManagerPanel({
       return () => window.removeEventListener('resize', checkMobile)
     }
   }, [internalContainer])
-
-  if (!isMounted) return null
 
   const panelContent = (
     <>

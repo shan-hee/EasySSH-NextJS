@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,8 +37,8 @@ import { permissionsApi, usersApi, type Permission, type UserDetail, type UserRo
 import { SkeletonStatsCard, SkeletonTable } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
-import { createUserColumns } from "./components/user-columns"
-import { createPermissionColumns, staticPermissions } from "./components/permission-columns"
+import { useUserColumns } from "./components/user-columns"
+import { usePermissionColumns, staticPermissions } from "./components/permission-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { Server, FolderKey, Terminal, FileText, Settings } from "lucide-react"
 
@@ -123,7 +123,7 @@ export default function UsersPage() {
   })
 
   // 加载用户列表
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       const [usersRes, statsRes] = await Promise.all([
         usersApi.list({ page: 1, limit: 100 }),
@@ -152,10 +152,10 @@ export default function UsersPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [t])
 
   // 加载权限列表
-  const loadPermissions = async () => {
+  const loadPermissions = useCallback(async () => {
     try {
       const res = await permissionsApi.list({ page: 1, limit: 200 })
       const list = Array.isArray(res?.data) ? res.data : []
@@ -166,7 +166,7 @@ export default function UsersPage() {
       setPermissions(staticPermissions)
       toast.error(getErrorMessage(error, t("permToastLoadFailed")))
     }
-  }
+  }, [t])
 
   // 刷新数据
   const handleRefresh = async () => {
@@ -179,7 +179,7 @@ export default function UsersPage() {
     if (!ready) return
     loadUsers()
     loadPermissions()
-  }, [ready])
+  }, [ready, loadPermissions, loadUsers])
 
   // 创建用户
   const handleCreateUser = async () => {
@@ -505,7 +505,7 @@ export default function UsersPage() {
   }
 
   // 创建列定义
-  const columns = createUserColumns({
+  const columns = useUserColumns({
     onEdit: handleEdit,
     onDelete: handleDelete,
     onChangePassword: handleOpenPasswordDialog,
@@ -527,7 +527,7 @@ export default function UsersPage() {
   ]
 
   // 权限列定义
-  const permissionColumns = createPermissionColumns({
+  const permissionColumns = usePermissionColumns({
     onEdit: handleEditPermission,
     onDelete: handleDeletePermission,
   })

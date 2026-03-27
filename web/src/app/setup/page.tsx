@@ -48,7 +48,7 @@ function SetupPageInner() {
       // 需要初始化，显示欢迎页面
       setStep("welcome")
     }
-  }, [authStatus, isLoading, router, step])
+  }, [authStatus, isLoading, router, step, tSetup])
 
   const handleStartSetup = () => {
     setStep("mode-selection")
@@ -103,9 +103,13 @@ function SetupPageInner() {
     } catch (error: unknown) {
       console.error("Failed to initialize admin:", error)
       if (error && typeof error === "object" && "detail" in error) {
+        const detail =
+          "detail" in error
+            ? error.detail
+            : undefined
         setError(
           tSetup("initFailedWithDetail", {
-            detail: JSON.stringify((error as any).detail),
+            detail: JSON.stringify(detail),
           }),
         )
       } else {

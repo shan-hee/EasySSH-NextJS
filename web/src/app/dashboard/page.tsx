@@ -529,7 +529,7 @@ export default function DashboardPage() {
         clearInterval(autoRefreshRef.current)
       }
     }
-  }, [ready, loadServersStream, startCountdown])
+  }, [ready, loadStats, loadServersStream, startCountdown])
 
   // 手动刷新数据
   const handleRefresh = () => {

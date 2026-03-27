@@ -8,7 +8,6 @@ import {
   Terminal,
   FileText,
   FolderOpen,
-  Activity,
   Users,
 } from "lucide-react"
 import { useTranslations } from "next-intl"
@@ -128,7 +127,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
   )
   const groupCore = React.useMemo(
     () => all.filter((i) => [tNav("connections"), tNav("automation"), tNav("file")].includes(i.title)),
-    [all]
+    [all, tNav]
   )
   const groupObserveAudit = React.useMemo(
     () => all.filter((i) => [tNav("logs")].includes(i.title)),

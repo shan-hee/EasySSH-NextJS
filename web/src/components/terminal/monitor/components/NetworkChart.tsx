@@ -140,12 +140,23 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         textStyle: {
           fontSize: 11,
         },
-        formatter: (params: any) => {
-          const list = Array.isArray(params) ? params : [params];
+        formatter: (params) => {
+          const list = (Array.isArray(params) ? params : [params]) as Array<{
+            axisValue?: string;
+            data?: number | { value?: number };
+            seriesName?: string;
+            color?: string;
+            value?: number;
+          }>;
           const label = list[0]?.axisValue ?? "";
           const lines = list
-            .map((p: any) => {
-              const value = typeof p.data === "number" ? p.data : p.data?.value ?? 0;
+            .map((p) => {
+              const value =
+                typeof p.data === "number"
+                  ? p.data
+                  : typeof p.value === "number"
+                  ? p.value
+                  : p.data?.value ?? 0;
               const name =
                 p.seriesName === "download"
                   ? t("downloadLabel")
@@ -256,7 +267,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         },
       ],
     };
-  }, [chartData, downloadColor, uploadColor, maxValue]);
+  }, [chartData, downloadColor, uploadColor, maxValue, t]);
 
   return (
     <div className="space-y-1">
@@ -287,7 +298,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
-            {(_size) => (
+            {() => (
               <ReactECharts
                 option={option}
                 style={{ width: "100%", height: "100%" }}

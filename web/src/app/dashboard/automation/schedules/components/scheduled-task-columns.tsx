@@ -33,6 +33,9 @@ interface ScheduledTaskColumnsOptions {
   formatDate: (dateString: string | undefined) => string
 }
 
+type I18nValues = Record<string, string | number | Date>
+type I18nT = (key: string, values?: I18nValues) => string
+
 /**
  * 获取任务类型图标
  */
@@ -61,9 +64,8 @@ function calculateSuccessRate(task: ScheduledTask): string {
 /**
  * 创建定时任务表格列定义
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createScheduledTaskColumns(
-  t: (key: string, values?: any) => string,
+  t: I18nT,
   options: ScheduledTaskColumnsOptions
 ): ColumnDef<ScheduledTask>[] {
   const { onToggle, onTrigger, onEdit, onDelete, formatDate } = options

@@ -34,7 +34,6 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
   const [user, setUser] = useState<User | null>(initialUser)
   const router = useRouter()
   const { refreshConfig } = useSystemConfig()
-  const setToken = useAuthStore((state) => state.setToken)
   const clearToken = useAuthStore((state) => state.clearToken)
 
   // 同步 initialUser 的变化（用于乐观渲染场景）

@@ -60,6 +60,7 @@ export function useSftpUploadWebSocket({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(false);
   const enabledRef = useRef(enabled);
+  const reconnectConnectRef = useRef<() => void>(() => {});
 
   // 更新 enabled 引用
   useEffect(() => {
@@ -162,7 +163,7 @@ export function useSftpUploadWebSocket({
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectTimeoutRef.current = null;
             if (enabledRef.current && isMountedRef.current) {
-              connect();
+              reconnectConnectRef.current();
             }
           }, 2000);
         }
@@ -174,6 +175,10 @@ export function useSftpUploadWebSocket({
       }
     })()
   }, [taskId, onProgress, onComplete, onError, disconnect]);
+
+  useEffect(() => {
+    reconnectConnectRef.current = connect;
+  }, [connect]);
 
   // 挂载和卸载处理
   useEffect(() => {
@@ -187,11 +192,17 @@ export function useSftpUploadWebSocket({
 
   // 根据 enabled 自动连接/断开
   useEffect(() => {
-    if (enabled) {
-      connect();
-    } else {
-      disconnect();
-    }
+    const timer = setTimeout(() => {
+      if (enabled) {
+        connect();
+      } else {
+        disconnect();
+      }
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+    };
   }, [enabled, connect, disconnect]);
 
   return {

@@ -58,9 +58,6 @@ export function SkeletonTable({
   showActions = true,
   className,
 }: SkeletonTableProps) {
-  const totalColumns =
-    columns + (showCheckbox ? 1 : 0) + (showActions ? 1 : 0)
-
   return (
     <div className={cn("w-full space-y-3", className)}>
       {/* 表头 */}

@@ -150,9 +150,6 @@ export function CompletionPopup({
 
   // 当弹窗在上方时，反转列表顺序
   const displayItems = placement === "top" ? [...items].reverse() : items
-  // 计算反转后的选中索引
-  const displaySelectedIndex =
-    placement === "top" ? items.length - 1 - selectedIndex : selectedIndex
 
   return (
     <Popover open={true} onOpenChange={(open) => !open && onClose()}>

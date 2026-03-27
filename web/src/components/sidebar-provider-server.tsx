@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { SidebarProvider } from "@/components/ui/sidebar"
 
 /**
@@ -14,15 +14,14 @@ export default function SidebarProviderServer({
   children: React.ReactNode
   className?: string
 }) {
-  const [defaultOpen, setDefaultOpen] = useState(true)
-
-  useEffect(() => {
-    // 从 localStorage 读取侧边栏状态
-    const persisted = localStorage.getItem("sidebar_state")
-    if (persisted !== null) {
-      setDefaultOpen(persisted === "true")
+  const [defaultOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return true
     }
-  }, [])
+
+    const persisted = localStorage.getItem("sidebar_state")
+    return persisted !== null ? persisted === "true" : true
+  })
 
   return (
     <SidebarProvider defaultOpen={defaultOpen} className={className}>

@@ -37,7 +37,7 @@ interface UserColumnsOptions {
   onUnlock?: (userId: string, username: string) => void
 }
 
-export function createUserColumns(options?: UserColumnsOptions): ColumnDef<UserDetail, unknown>[] {
+export function useUserColumns(options?: UserColumnsOptions): ColumnDef<UserDetail, unknown>[] {
   const { user } = useClientAuth()
   const { data: systemConfig } = useSystemConfig()
   const t = useTranslations("users")

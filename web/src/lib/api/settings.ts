@@ -124,6 +124,13 @@ export interface GetSystemConfigResponse {
   config: SystemConfig
 }
 
+export interface SaveCompletionConfigRequest {
+  completion_enabled?: boolean
+  completion_providers?: Partial<NonNullable<SystemConfig["completion_providers"]>>
+  completion_quotas?: Partial<NonNullable<SystemConfig["completion_quotas"]>>
+  completion_cache?: Partial<NonNullable<SystemConfig["completion_cache"]>>
+}
+
 /**
  * 标签/会话设置
  */
@@ -390,7 +397,7 @@ export const settingsApi = {
   /**
    * 保存补全配置
    */
-  async saveCompletionConfig(config: Partial<SystemConfig>): Promise<void> {
+  async saveCompletionConfig(config: SaveCompletionConfigRequest): Promise<void> {
     return apiFetch<void>("/settings/system/completion", {
       method: "PATCH",
       body: config,

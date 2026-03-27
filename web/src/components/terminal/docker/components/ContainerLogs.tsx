@@ -4,7 +4,7 @@
 
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -39,7 +39,7 @@ export function ContainerLogs({
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // 加载日志
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     if (!containerId) return
     setLoading(true)
     try {
@@ -56,7 +56,7 @@ export function ContainerLogs({
     } finally {
       setLoading(false)
     }
-  }
+  }, [containerId, serverId, tailLines])
 
   // 下载日志
   const downloadLogs = () => {
@@ -74,7 +74,7 @@ export function ContainerLogs({
     if (open && containerId) {
       fetchLogs()
     }
-  }, [open, containerId, tailLines])
+  }, [open, containerId, fetchLogs])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -25,8 +25,12 @@ export function ConnectionLoader({
 
   // 处理外部 state 变化
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+
     if (state === "entering") {
-      setAnimationState("entering")
+      timer = setTimeout(() => {
+        setAnimationState("entering")
+      }, 0)
       isEnteringRef.current = true
       pendingExitRef.current = false
     } else if (state === "exiting") {
@@ -35,10 +39,20 @@ export function ConnectionLoader({
         pendingExitRef.current = true
       } else {
         // 否则立即切换到退出
-        setAnimationState("exiting")
+        timer = setTimeout(() => {
+          setAnimationState("exiting")
+        }, 0)
       }
     } else {
-      setAnimationState(state)
+      timer = setTimeout(() => {
+        setAnimationState(state)
+      }, 0)
+    }
+
+    return () => {
+      if (timer) {
+        clearTimeout(timer)
+      }
     }
   }, [state])
 

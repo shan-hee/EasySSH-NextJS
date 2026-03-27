@@ -332,6 +332,8 @@ export const sftpApi = {
    * 获取下载URL
    */
   getDownloadUrl(serverId: string, path: string): string {
+    void serverId
+    void path
     throw new Error("getDownloadUrl 已弃用：下载需使用一次性 ticket（请使用 downloadFile 或 createAuthTicket）")
   },
 
@@ -375,9 +377,10 @@ export const sftpApi = {
               resolve(null)
               return
             }
-            const parsed = JSON.parse(raw)
-            if (parsed && typeof parsed === "object" && "data" in parsed && (parsed as any).data) {
-              resolve((parsed as any).data as FileInfo)
+            const parsed: unknown = JSON.parse(raw)
+            if (parsed && typeof parsed === "object" && "data" in parsed) {
+              const { data } = parsed as { data?: FileInfo | null }
+              resolve(data ?? null)
             } else {
               resolve(null)
             }
@@ -387,8 +390,12 @@ export const sftpApi = {
           }
         } else {
           try {
-            const error = JSON.parse(xhr.responseText)
-            reject(new Error(error.message || "Upload failed"))
+            const error: unknown = JSON.parse(xhr.responseText)
+            const message =
+              error && typeof error === "object" && "message" in error && typeof error.message === "string"
+                ? error.message
+                : "Upload failed"
+            reject(new Error(message))
           } catch {
             reject(new Error(`Upload failed with status ${xhr.status}`))
           }

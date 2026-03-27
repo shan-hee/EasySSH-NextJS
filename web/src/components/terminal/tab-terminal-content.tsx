@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useRef } from 'react'
+import React, { useState } from 'react'
 import { MonitorWebSocketProvider } from './monitor/contexts/MonitorWebSocketContext'
 import { Button } from '@/components/ui/button'
 import { Maximize2, Minimize2, Settings, FolderOpen, Activity, Bot } from 'lucide-react'
@@ -47,7 +47,6 @@ interface TabTerminalContentProps {
 
 export function TabTerminalContent({
   session,
-  isActive,
   settings,
   effectiveIsLoading,
   loaderState,
@@ -62,7 +61,7 @@ export function TabTerminalContent({
   onStartConnectionFromQuick,
 }: TabTerminalContentProps) {
   // 浮动面板根容器
-  const floatingPanelRootRef = useRef<HTMLDivElement>(null)
+  const [floatingPanelRoot, setFloatingPanelRoot] = useState<HTMLDivElement | null>(null)
 
   // 从 Store 获取当前页签的 UI 状态
   const tabState = useTabUIStore((state) => state.getTabState(session.id))
@@ -207,7 +206,7 @@ export function TabTerminalContent({
           {/* 终端区域 */}
           <div className="flex-1 min-w-0 relative">
             {/* 文件管理器悬浮挂载根，位于终端容器内部 */}
-            <div ref={floatingPanelRootRef} className="absolute inset-0 pointer-events-none" />
+            <div ref={setFloatingPanelRoot} className="absolute inset-0 pointer-events-none" />
 
             {session.type === 'quick' ? (
               <QuickConnect
@@ -255,7 +254,7 @@ export function TabTerminalContent({
           <FileManagerPanel
             isOpen={isFileManagerOpen}
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
-            mountContainer={floatingPanelRootRef.current || undefined}
+            mountContainer={floatingPanelRoot || undefined}
             anchorTop={TOOLBAR_HEIGHT}
             serverId={String(session.serverId)}
             serverName={session.serverName || ''}

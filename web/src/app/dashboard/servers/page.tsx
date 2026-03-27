@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -196,18 +196,6 @@ export default function ServersPage() {
    })
  )
 
- // 客户端挂载检测
- useEffect(() => {
-   setIsMounted(true)
- }, [])
-
- // 加载服务器列表
- useEffect(() => {
-   if (!ready) return
-   loadServers()
-   loadStatistics()
- }, [ready])
-
  // 根据搜索词和激活的标签过滤服务器
  useEffect(() => {
  let filtered = [...servers]
@@ -234,7 +222,12 @@ export default function ServersPage() {
  setFilteredServers(filtered)
  }, [servers, searchTerm, activeTab])
 
- async function loadServers() {
+ // 客户端挂载检测
+ useEffect(() => {
+   setIsMounted(true)
+ }, [])
+
+ const loadServers = useCallback(async () => {
  try {
  setLoading(true)
  // 认证基于 HttpOnly Cookie，无需本地令牌
@@ -256,9 +249,9 @@ export default function ServersPage() {
  } finally {
  setLoading(false)
  }
- }
+ }, [t])
 
- async function loadStatistics() {
+ const loadStatistics = useCallback(async () => {
  try {
  // 认证基于 HttpOnly Cookie
 
@@ -273,7 +266,14 @@ export default function ServersPage() {
  } catch (error) {
  console.error("Failed to load statistics:", error)
  }
- }
+ }, [])
+
+ // 加载服务器列表
+ useEffect(() => {
+   if (!ready) return
+   loadServers()
+   loadStatistics()
+ }, [ready, loadServers, loadStatistics])
 
  const handleConnect = (serverId: string) => {
  // 查找服务器以获取名称
