@@ -7,6 +7,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useTheme } from 'next-themes'
 import { MonitorWebSocketProvider } from './monitor/contexts/MonitorWebSocketContext'
 import { Button } from '@/components/ui/button'
 import { Maximize2, Minimize2, Settings, FolderOpen, Activity, Bot } from 'lucide-react'
@@ -24,6 +25,7 @@ import { useTabUIStore } from '@/stores/tab-ui-store'
 import type { TerminalSession } from './types'
 import type { TerminalSettings } from './terminal-settings-dialog'
 import { useTranslations } from "next-intl"
+import { getTerminalTheme, withTerminalBackgroundOpacity } from './terminal-themes'
 
 // 工具栏固定高度常量 (py-1.5 + h-7 按钮 + border-b)
 const TOOLBAR_HEIGHT = 44 // px
@@ -83,6 +85,21 @@ export function TabTerminalContent({
     : ''
   const monitorEnabled = !!(session.type !== 'quick' && session.isConnected)
   const tTerminal = useTranslations("terminal")
+  const { theme: appTheme, resolvedTheme } = useTheme()
+  const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
+  const initialIsDark =
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const effectiveAppTheme: 'light' | 'dark' =
+    currentAppTheme === 'system' || !currentAppTheme
+      ? (initialIsDark ? 'dark' : 'light')
+      : currentAppTheme
+  const pageTheme = getTerminalTheme(settings.theme, effectiveAppTheme)
+  const pageBackgroundColor =
+    settings.opacity < 100
+      ? withTerminalBackgroundOpacity(pageTheme.background, settings.opacity / 100)
+      : pageTheme.background
+  const hasBackgroundImage = settings.backgroundImage.trim().length > 0
+  const enableTerminalWebgl = true
 
   return (
     <MonitorWebSocketProvider
@@ -91,7 +108,24 @@ export function TabTerminalContent({
       interval={settings.monitorInterval || 2}
       latencyIntervalMs={5000}
     >
-      <div className="flex-1 flex flex-col h-full relative">
+      <div className="flex-1 flex flex-col h-full relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none"
+          style={{ backgroundColor: pageBackgroundColor }}
+        />
+
+        {hasBackgroundImage && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${settings.backgroundImage})`,
+              opacity: settings.backgroundImageOpacity / 100,
+            }}
+          />
+        )}
+
         {/* 加载动画覆盖层 - 覆盖整个页签内容 */}
         {effectiveIsLoading && session.type !== 'quick' && (
           <div className="absolute inset-0 z-[60]">
@@ -104,148 +138,150 @@ export function TabTerminalContent({
           </div>
         )}
 
-        {/* 工具栏 - 只在非快速连接且非加载时显示 */}
-        {session.type !== 'quick' && !effectiveIsLoading && (
-          <div
-            className={cn(
-              'border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-sm transition-colors',
-              'bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/90 dark:to-black dark:border-zinc-800/30',
-              'relative z-10'
-            )}
-          >
-            {/* 左侧工具图标组 */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                aria-label={tTerminal("ariaFileManager")}
-                title={tTerminal("titleFileManagerWithShortcut")}
-                onClick={() => setTabState(session.id, { isFileManagerOpen: !isFileManagerOpen })}
-              >
-                <FolderOpen className="h-3.5 w-3.5" />
-              </Button>
+        <div className="relative z-10 flex flex-1 min-h-0 flex-col">
+          {/* 工具栏 - 只在非快速连接且非加载时显示 */}
+          {session.type !== 'quick' && !effectiveIsLoading && (
+            <div
+              className={cn(
+                'border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-md transition-colors',
+                'border-zinc-200/70 bg-gradient-to-b from-white/70 via-white/55 to-white/40',
+                'dark:border-zinc-800/40 dark:from-black/65 dark:via-black/50 dark:to-black/35'
+              )}
+            >
+              {/* 左侧工具图标组 */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  aria-label={tTerminal("ariaFileManager")}
+                  title={tTerminal("titleFileManagerWithShortcut")}
+                  onClick={() => setTabState(session.id, { isFileManagerOpen: !isFileManagerOpen })}
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
 
-              <NetworkLatencyPopover />
+                <NetworkLatencyPopover />
 
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                aria-label={tTerminal("ariaMonitor")}
-                title={tTerminal("titleMonitor")}
-                onClick={() => setTabState(session.id, { isMonitorOpen: !isMonitorOpen })}
-              >
-                <Activity className="h-3.5 w-3.5" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  aria-label={tTerminal("ariaMonitor")}
+                  title={tTerminal("titleMonitor")}
+                  onClick={() => setTabState(session.id, { isMonitorOpen: !isMonitorOpen })}
+                >
+                  <Activity className="h-3.5 w-3.5" />
+                </Button>
 
-              <DockerPopover
-                serverId={String(session.serverId)}
-                sessionId={session.id}
-                isConnected={session.isConnected || false}
-              />
+                <DockerPopover
+                  serverId={String(session.serverId)}
+                  sessionId={session.id}
+                  isConnected={session.isConnected || false}
+                />
 
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                aria-label={tTerminal("ariaAiAssistant")}
-                title={tTerminal("titleAiAssistantWithShortcut")}
-                onClick={() => setTabState(session.id, { isAiInputOpen: !isAiInputOpen })}
-              >
-                <Bot className="h-3.5 w-3.5" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  aria-label={tTerminal("ariaAiAssistant")}
+                  title={tTerminal("titleAiAssistantWithShortcut")}
+                  onClick={() => setTabState(session.id, { isAiInputOpen: !isAiInputOpen })}
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {/* 右侧工具按钮 */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  onClick={onToggleFullscreen}
+                  title={
+                    isFullscreen
+                      ? tTerminal("titleExitFullscreen")
+                      : tTerminal("titleEnterFullscreen")
+                  }
+                >
+                  {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  onClick={onToggleSettings}
+                  title={tTerminal("titleSettings")}
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
+          )}
 
-            {/* 右侧工具按钮 */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                onClick={onToggleFullscreen}
-                title={
-                  isFullscreen
-                    ? tTerminal("titleExitFullscreen")
-                    : tTerminal("titleEnterFullscreen")
-                }
+          {/* 内容区域：监控面板 + 终端 */}
+          <div className="flex-1 min-h-0 relative flex">
+            {/* 监控面板 - 左侧固定 280px */}
+            {session.type !== 'quick' && (
+              <div
+                className={cn(
+                  'transition-all duration-300 ease-out overflow-hidden border-r backdrop-blur-md',
+                  'border-zinc-200/70 bg-gradient-to-b from-white/72 via-white/58 to-white/46',
+                  'dark:border-zinc-800/40 dark:from-zinc-950/42 dark:via-zinc-950/28 dark:to-zinc-950/18',
+                  isMonitorOpen
+                    ? 'w-[280px] opacity-100 translate-x-0'
+                    : 'w-0 opacity-0 -translate-x-4'
+                )}
               >
-                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent hover:text-accent-foreground"
-                onClick={onToggleSettings}
-                title={tTerminal("titleSettings")}
-              >
-                <Settings className="h-3.5 w-3.5" />
-              </Button>
+                {isMonitorOpen && session.isConnected && (
+                  <MonitorPanel />
+                )}
+              </div>
+            )}
+
+            {/* 终端区域 */}
+            <div className="flex-1 min-w-0 relative">
+              {/* 文件管理器悬浮挂载根，位于终端容器内部 */}
+              <div ref={setFloatingPanelRoot} className="absolute inset-0 pointer-events-none" />
+
+              {session.type === 'quick' ? (
+                <QuickConnect
+                  servers={servers}
+                  isLoading={serversLoading}
+                  onSelectServer={onStartConnectionFromQuick}
+                />
+              ) : (
+                <WebTerminal
+                  sessionId={session.id}
+                  serverId={typeof session.serverId === 'string' ? session.serverId : undefined}
+                  serverName={session.serverName}
+                  host={session.host}
+                  username={session.username}
+                  isConnected={session.isConnected}
+                  onCommand={onCommand}
+                  onLoadingChange={onLoadingChange}
+                  theme={settings.theme}
+                  fontSize={settings.fontSize}
+                  fontFamily={settings.fontFamily}
+                  cursorStyle={settings.cursorStyle}
+                  cursorBlink={settings.cursorBlink}
+                  scrollback={settings.scrollback}
+                  rightClickPaste={settings.rightClickPaste}
+                  copyOnSelect={settings.copyOnSelect}
+                  copyShortcut={settings.copyShortcut}
+                  pasteShortcut={settings.pasteShortcut}
+                  clearShortcut={settings.clearShortcut}
+                  completionEnabled={settings.completionEnabled}
+                  completionTrigger={settings.completionTrigger}
+                  completionAutoDelay={settings.completionAutoDelay}
+                  completionMaxItems={settings.completionMaxItems}
+                  completionShowIcon={settings.completionShowIcon}
+                  completionShowDescription={settings.completionShowDescription}
+                  enableWebgl={enableTerminalWebgl}
+                />
+              )}
             </div>
-          </div>
-        )}
-
-        {/* 内容区域：监控面板 + 终端 */}
-        <div className="flex-1 min-h-0 relative flex">
-          {/* 监控面板 - 左侧固定 280px */}
-          <div
-            className={cn(
-              'transition-all duration-300 ease-out overflow-hidden',
-              'border-r border-zinc-200 dark:border-zinc-800/30',
-              'bg-white dark:bg-black',
-              isMonitorOpen && session.type !== 'quick'
-                ? 'w-[280px] opacity-100 translate-x-0'
-                : 'w-0 opacity-0 -translate-x-4'
-            )}
-          >
-            {isMonitorOpen && session.type !== 'quick' && session.isConnected && (
-              <MonitorPanel />
-            )}
-          </div>
-
-          {/* 终端区域 */}
-          <div className="flex-1 min-w-0 relative">
-            {/* 文件管理器悬浮挂载根，位于终端容器内部 */}
-            <div ref={setFloatingPanelRoot} className="absolute inset-0 pointer-events-none" />
-
-            {session.type === 'quick' ? (
-              <QuickConnect
-                servers={servers}
-                isLoading={serversLoading}
-                onSelectServer={onStartConnectionFromQuick}
-              />
-            ) : (
-              <WebTerminal
-                sessionId={session.id}
-                serverId={typeof session.serverId === 'string' ? session.serverId : undefined}
-                serverName={session.serverName}
-                host={session.host}
-                username={session.username}
-                isConnected={session.isConnected}
-                onCommand={onCommand}
-                onLoadingChange={onLoadingChange}
-                theme={settings.theme}
-                fontSize={settings.fontSize}
-                fontFamily={settings.fontFamily}
-                cursorStyle={settings.cursorStyle}
-                cursorBlink={settings.cursorBlink}
-                scrollback={settings.scrollback}
-                rightClickPaste={settings.rightClickPaste}
-                copyOnSelect={settings.copyOnSelect}
-                opacity={settings.opacity}
-                backgroundImage={settings.backgroundImage}
-                backgroundImageOpacity={settings.backgroundImageOpacity}
-                copyShortcut={settings.copyShortcut}
-                pasteShortcut={settings.pasteShortcut}
-                clearShortcut={settings.clearShortcut}
-                completionEnabled={settings.completionEnabled}
-                completionTrigger={settings.completionTrigger}
-                completionAutoDelay={settings.completionAutoDelay}
-                completionMaxItems={settings.completionMaxItems}
-                completionShowIcon={settings.completionShowIcon}
-                completionShowDescription={settings.completionShowDescription}
-              />
-            )}
           </div>
         </div>
 

@@ -147,3 +147,21 @@ export function getTerminalTheme(
       return darkTheme
   }
 }
+
+export function withTerminalBackgroundOpacity(color: string, opacity: number): string {
+  const normalized = color.replace('#', '')
+
+  if (normalized.length !== 6) {
+    return color
+  }
+
+  const r = parseInt(normalized.slice(0, 2), 16)
+  const g = parseInt(normalized.slice(2, 4), 16)
+  const b = parseInt(normalized.slice(4, 6), 16)
+
+  if ([r, g, b].some(Number.isNaN)) {
+    return color
+  }
+
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`
+}

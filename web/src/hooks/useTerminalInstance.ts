@@ -14,6 +14,7 @@ export interface TerminalConfig {
   cursorStyle: 'block' | 'underline' | 'bar'
   cursorBlink: boolean
   scrollback: number
+  enableWebgl?: boolean
 }
 
 /**
@@ -33,6 +34,59 @@ export function useTerminalInstance(
   const setTerminal = useTerminalStore(state => state.setTerminal)
   const updateMountState = useTerminalStore(state => state.updateMountState)
 
+  const setWebglAddon = (addon: { dispose: () => void } | null) => {
+    const instance = getTerminal(sessionId)
+    if (!instance) return
+
+    setTerminal(sessionId, {
+      ...instance,
+      webglAddon: addon,
+    })
+  }
+
+  const syncRendererMode = async (
+    terminal: TerminalInstanceState["terminal"],
+    enableWebgl: boolean
+  ) => {
+    const instance = getTerminal(sessionId)
+    if (!instance || instance.terminal !== terminal) return
+
+    if (!enableWebgl) {
+      if (instance.webglAddon) {
+        instance.webglAddon.dispose()
+        setWebglAddon(null)
+        terminal.refresh(0, terminal.rows - 1)
+      }
+      return
+    }
+
+    if (instance.webglAddon) {
+      return
+    }
+
+    try {
+      const { WebglAddon } = await import('@xterm/addon-webgl')
+      const currentInstance = getTerminal(sessionId)
+
+      if (!currentInstance || currentInstance.terminal !== terminal || currentInstance.webglAddon) {
+        return
+      }
+
+      const webglAddon = new WebglAddon()
+
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose()
+        setWebglAddon(null)
+      })
+
+      terminal.loadAddon(webglAddon)
+      setWebglAddon(webglAddon)
+      terminal.refresh(0, terminal.rows - 1)
+    } catch {
+      // WebGL 不可用时自动降级到默认渲染器
+    }
+  }
+
   // 确保只在客户端执行
   useEffect(() => {
     setIsClient(true)
@@ -46,11 +100,15 @@ export function useTerminalInstance(
 
     // 如果实例已存在，直接挂载
     if (existingInstance) {
+      existingInstance.terminal.options.allowTransparency = true
+      void syncRendererMode(existingInstance.terminal, config.enableWebgl !== false)
+
       // 检查是否已经挂载到当前容器
       if (!existingInstance.isMounted || existingInstance.container !== containerRef.current) {
         try {
           existingInstance.terminal.open(containerRef.current)
           existingInstance.fitAddon.fit()
+          existingInstance.terminal.refresh(0, existingInstance.terminal.rows - 1)
           updateMountState(sessionId, true, containerRef.current)
           setTerminalReady(true)
         } catch (error) {
@@ -97,7 +155,7 @@ export function useTerminalInstance(
           letterSpacing: 0,
           // 性能优化选项
           allowProposedApi: true,
-          allowTransparency: false,
+          allowTransparency: true,
           disableStdin: false,
           fastScrollModifier: 'shift',
           // 降低滚轮灵敏度，避免一次滚动跳动过多
@@ -116,28 +174,13 @@ export function useTerminalInstance(
         // 打开终端
         terminal.open(containerRef.current!)
         fitAddon.fit()
-
-        // 尝试加载 WebGL 渲染器（GPU 加速）
-        requestAnimationFrame(async () => {
-          try {
-            const { WebglAddon } = await import('@xterm/addon-webgl')
-            const webglAddon = new WebglAddon()
-
-            // 监听 WebGL 上下文丢失
-            webglAddon.onContextLoss(() => {
-              webglAddon.dispose()
-            })
-
-            terminal.loadAddon(webglAddon)
-          } catch {
-            // WebGL 不可用时自动降级到 Canvas 渲染器
-          }
-        })
+        terminal.refresh(0, terminal.rows - 1)
 
         // 创建实例状态
         const instanceState: TerminalInstanceState = {
           terminal,
           fitAddon,
+          webglAddon: null,
           wsConnection: null,
           isMounted: true,
           container: containerRef.current,
@@ -147,6 +190,8 @@ export function useTerminalInstance(
         // 保存到全局 Store
         setTerminal(sessionId, instanceState)
         setTerminalReady(true)
+
+        void syncRendererMode(terminal, config.enableWebgl !== false)
       } catch (error) {
         console.error(`[useTerminalInstance] 创建终端实例失败:`, error)
       } finally {
@@ -164,6 +209,15 @@ export function useTerminalInstance(
     // 注意：这里只依赖 sessionId 和 isClient，config 变化不会重新创建实例
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, isClient, enabled])
+
+  useEffect(() => {
+    const instance = getTerminal(sessionId)
+    if (!instance?.terminal) return
+
+    void syncRendererMode(instance.terminal, config.enableWebgl !== false)
+    // 这里不把 getTerminal/syncRendererMode 放进依赖，避免无意义重复执行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, config.enableWebgl])
 
   // 返回终端实例和状态
   const instance = getTerminal(sessionId)

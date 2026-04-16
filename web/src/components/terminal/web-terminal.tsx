@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useLayoutEffect, useState } from "react
 import { useTheme } from "next-themes"
 import { useTranslations } from "next-intl"
 import { ConnectionLoader } from "./connection-loader"
-import { getTerminalTheme } from "./terminal-themes"
+import { getTerminalTheme, withTerminalBackgroundOpacity } from "./terminal-themes"
 import { CompletionPopup } from "./completion-popup"
 import type { Terminal } from "@xterm/xterm"
 import { useTerminalInstance } from "@/hooks/useTerminalInstance"
@@ -49,9 +49,6 @@ interface WebTerminalProps {
   scrollback?: number
   rightClickPaste?: boolean
   copyOnSelect?: boolean
-  opacity?: number
-  backgroundImage?: string
-  backgroundImageOpacity?: number
   copyShortcut?: string
   pasteShortcut?: string
   clearShortcut?: string
@@ -62,6 +59,7 @@ interface WebTerminalProps {
   completionMaxItems?: number
   completionShowIcon?: boolean
   completionShowDescription?: boolean
+  enableWebgl?: boolean
 }
 
 export function WebTerminal({
@@ -82,9 +80,6 @@ export function WebTerminal({
   scrollback = 1000,
   rightClickPaste = true,
   copyOnSelect = true,
-  opacity = 95,
-  backgroundImage = '',
-  backgroundImageOpacity = 20,
   copyShortcut = 'Ctrl+Shift+C',
   pasteShortcut = 'Ctrl+Shift+V',
   clearShortcut = 'Ctrl+L',
@@ -94,6 +89,7 @@ export function WebTerminal({
   completionMaxItems = 10,
   completionShowIcon = true,
   completionShowDescription = true,
+  enableWebgl = true,
 }: WebTerminalProps) {
   const tTerminal = useTranslations("terminal")
 
@@ -114,17 +110,23 @@ export function WebTerminal({
 
   // 获取终端主题
   const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
+  const transparentTerminalBackground = withTerminalBackgroundOpacity(terminalTheme.background, 0)
+  const terminalRendererTheme = {
+    ...terminalTheme,
+    background: transparentTerminalBackground,
+  }
 
   // ==================== 核心改动：从 Store 获取终端实例 ====================
   const { terminal, fitAddon, terminalReady, containerRef, isClient } = useTerminalInstance(
     sessionId,
     {
-      theme: terminalTheme,
+      theme: terminalRendererTheme,
       fontSize,
       fontFamily: `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`,
       cursorStyle,
       cursorBlink,
       scrollback,
+      enableWebgl,
     },
     true // enabled
   )
@@ -140,9 +142,6 @@ export function WebTerminal({
   const { sendInput, resize, ws } = useWebSocketConnection({
     sessionId,
     serverId,
-    serverName,
-    host,
-    username,
     isConnected,
     terminal,
     cols: terminal?.cols || 80,
@@ -184,49 +183,64 @@ export function WebTerminal({
   useLayoutEffect(() => {
     if (!terminal) return
 
-    const newTerminalTheme = getTerminalTheme(theme, effectiveAppTheme)
-    terminal.options.theme = newTerminalTheme
-  }, [theme, effectiveAppTheme, terminal])
+    terminal.options.allowTransparency = true
+    terminal.options.theme = {
+      ...getTerminalTheme(theme, effectiveAppTheme),
+      background: transparentTerminalBackground,
+    }
 
-  // ==================== 监听字体设置变化 ====================
-  useEffect(() => {
+    requestAnimationFrame(() => {
+      terminal.refresh(0, terminal.rows - 1)
+    })
+  }, [theme, effectiveAppTheme, terminal, transparentTerminalBackground])
+
+  // ==================== 同步终端渲染相关设置 ====================
+  useLayoutEffect(() => {
     if (!terminal || !terminalReady) return
+
+    let shouldRefresh = false
+
     if (terminal.options.fontSize !== fontSize) {
       terminal.options.fontSize = fontSize
+      shouldRefresh = true
     }
-  }, [fontSize, terminalReady, terminal])
 
-  useEffect(() => {
-    if (!terminal || !terminalReady) return
     const newFontFamily = `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`
     if (terminal.options.fontFamily !== newFontFamily) {
       terminal.options.fontFamily = newFontFamily
+      shouldRefresh = true
     }
-  }, [fontFamily, terminalReady, terminal])
 
-  // ==================== 监听光标设置变化 ====================
-  useEffect(() => {
-    if (!terminal || !terminalReady) return
     if (terminal.options.cursorStyle !== cursorStyle) {
       terminal.options.cursorStyle = cursorStyle
       terminal.options.cursorWidth = cursorStyle === 'bar' ? 2 : 1
+      shouldRefresh = true
     }
-  }, [cursorStyle, terminalReady, terminal])
 
-  useEffect(() => {
-    if (!terminal || !terminalReady) return
     if (terminal.options.cursorBlink !== cursorBlink) {
       terminal.options.cursorBlink = cursorBlink
+      shouldRefresh = true
     }
-  }, [cursorBlink, terminalReady, terminal])
 
-  // ==================== 监听回滚缓冲行数变化 ====================
-  useEffect(() => {
-    if (!terminal || !terminalReady) return
     if (terminal.options.scrollback !== scrollback) {
       terminal.options.scrollback = scrollback
+      shouldRefresh = true
     }
-  }, [scrollback, terminalReady, terminal])
+
+    if (shouldRefresh) {
+      requestAnimationFrame(() => {
+        terminal.refresh(0, terminal.rows - 1)
+      })
+    }
+  }, [
+    cursorBlink,
+    cursorStyle,
+    fontFamily,
+    fontSize,
+    scrollback,
+    terminal,
+    terminalReady,
+  ])
 
   // ==================== 监听滚动灵敏度设置变化 ====================
   useEffect(() => {
@@ -940,47 +954,17 @@ export function WebTerminal({
     )
   }
 
-  // 获取当前终端主题用于背景色
-  const currentTheme = getTerminalTheme(theme, effectiveAppTheme)
-
-  // 计算背景样式
-  const backgroundStyle: React.CSSProperties = {
-    backgroundColor: currentTheme.background,
-  }
-
-  // 应用透明度
-  if (opacity < 100) {
-    const rgb = currentTheme.background || '#000000'
-    const r = parseInt(rgb.slice(1, 3), 16)
-    const g = parseInt(rgb.slice(3, 5), 16)
-    const b = parseInt(rgb.slice(5, 7), 16)
-    backgroundStyle.backgroundColor = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`
-  }
-
-  // 应用背景图片
-  if (backgroundImage) {
-    backgroundStyle.backgroundImage = `url(${backgroundImage})`
-    backgroundStyle.backgroundSize = 'cover'
-    backgroundStyle.backgroundPosition = 'center'
-    backgroundStyle.backgroundRepeat = 'no-repeat'
-    backgroundStyle.backgroundBlendMode = 'overlay'
-    if (backgroundImageOpacity < 100) {
-      backgroundStyle.opacity = backgroundImageOpacity / 100
-    }
-  }
-
   return (
     <div className="h-full w-full relative overflow-hidden">
       {/* 终端容器 */}
       <div
         ref={containerRef}
         className="h-full w-full terminal-container"
-        style={backgroundStyle}
       />
 
       {/* 补全弹窗 */}
-      {completionState.visible && terminal && terminal.options.theme && (
-        <TerminalThemeProvider theme={terminal.options.theme}>
+      {completionState.visible && terminal && (
+        <TerminalThemeProvider theme={terminalTheme}>
           <CompletionPopup
             items={completionState.items}
             selectedIndex={completionState.selectedIndex}
@@ -999,6 +983,11 @@ export function WebTerminal({
           /* 阻断终端滚动向页面的滚动链传递 */
           overscroll-behavior: contain;
           overscroll-behavior-y: contain;
+        }
+        .terminal-container .xterm,
+        .terminal-container .xterm-screen,
+        .terminal-container .xterm-viewport {
+          background: transparent !important;
         }
         .terminal-container .xterm {
           padding: 16px;

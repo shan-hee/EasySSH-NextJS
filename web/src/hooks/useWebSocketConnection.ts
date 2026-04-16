@@ -15,9 +15,6 @@ import type { Terminal } from '@xterm/xterm'
 export interface WebSocketConnectionConfig {
   sessionId: string
   serverId?: string
-  serverName: string
-  host: string
-  username: string
   isConnected: boolean
   terminal: Terminal | undefined
   cols: number
@@ -35,9 +32,6 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const {
     sessionId,
     serverId,
-    serverName,
-    host,
-    username,
     isConnected,
     cols,
     rows,
@@ -129,14 +123,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
         },
         onConnected: () => {
           onLoadingChangeRef.current?.(false)
-          // 动态获取终端实例
-          const inst = getTerminal(sessionId)
-          if (inst?.terminal) {
-            inst.terminal.writeln(`\x1b[1;32m✓\x1b[0m \x1b[2mConnected to\x1b[0m \x1b[1m${serverName}\x1b[0m \x1b[2m(${host})\x1b[0m`)
-            inst.terminal.writeln(`\x1b[2m┌─ User:\x1b[0m \x1b[36m${username}\x1b[0m`)
-            inst.terminal.writeln(`\x1b[2m└─ Session:\x1b[0m \x1b[33m${sessionId}\x1b[0m`)
-            inst.terminal.writeln('')
-          }
+          // 连接成功后不再向终端注入额外提示，避免污染 SSH 输出
+          // 并规避透明背景 + WebGL 场景下的局部黑底伪影
         },
         onDisconnected: () => {
           const inst = getTerminal(sessionId)

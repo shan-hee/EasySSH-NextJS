@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useTheme } from "next-themes"
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react"
 import { KeyboardShortcutInput } from "./keyboard-shortcut-input"
 import { useTranslations } from "next-intl"
+import { getTerminalTheme, withTerminalBackgroundOpacity } from "./terminal-themes"
 
 export interface TerminalSettings {
   // 终端设置
@@ -115,8 +117,22 @@ export function TerminalSettingsDialog({
   onSettingsChange,
 }: TerminalSettingsDialogProps) {
   const t = useTranslations("terminalSettings")
+  const { theme: appTheme, resolvedTheme } = useTheme()
   const [localSettings, setLocalSettings] = useState(settings)
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const deferredApplyTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
+  const initialIsDark =
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const effectiveAppTheme: 'light' | 'dark' =
+    currentAppTheme === 'system' || !currentAppTheme
+      ? (initialIsDark ? 'dark' : 'light')
+      : currentAppTheme
+  const previewTheme = getTerminalTheme(localSettings.theme, effectiveAppTheme)
+  const previewBackgroundColor =
+    localSettings.opacity < 100
+      ? withTerminalBackgroundOpacity(previewTheme.background, localSettings.opacity / 100)
+      : previewTheme.background
 
   // 当传入的 settings 变化时，同步到 localSettings
   useEffect(() => {
@@ -126,26 +142,29 @@ export function TerminalSettingsDialog({
   // 清理定时器
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current)
+      if (deferredApplyTimerRef.current) {
+        clearTimeout(deferredApplyTimerRef.current)
       }
     }
   }, [])
 
   const handleSave = () => {
-    // 清除防抖定时器
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current)
+    // 清除待提交的延迟更新，确保以当前表单值立即生效
+    if (deferredApplyTimerRef.current) {
+      clearTimeout(deferredApplyTimerRef.current)
+      deferredApplyTimerRef.current = null
     }
-    // 立即应用设置
     onSettingsChange(localSettings)
     onOpenChange(false)
   }
 
   const handleReset = () => {
     const resetSettings = defaultSettings
+    if (deferredApplyTimerRef.current) {
+      clearTimeout(deferredApplyTimerRef.current)
+      deferredApplyTimerRef.current = null
+    }
     setLocalSettings(resetSettings)
-    // 立即应用重置的设置（不需要防抖）
     onSettingsChange(resetSettings)
   }
 
@@ -155,15 +174,25 @@ export function TerminalSettingsDialog({
   ) => {
     const newSettings = { ...localSettings, [key]: value }
     setLocalSettings(newSettings)
+    onSettingsChange(newSettings)
+  }
 
-    // 使用防抖机制，延迟 300ms 后才应用设置（实时预览）
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current)
+  const updateSettingDeferred = <K extends keyof TerminalSettings>(
+    key: K,
+    value: TerminalSettings[K],
+    delay = 150
+  ) => {
+    const newSettings = { ...localSettings, [key]: value }
+    setLocalSettings(newSettings)
+
+    if (deferredApplyTimerRef.current) {
+      clearTimeout(deferredApplyTimerRef.current)
     }
 
-    debounceTimerRef.current = setTimeout(() => {
+    deferredApplyTimerRef.current = setTimeout(() => {
       onSettingsChange(newSettings)
-    }, 300)
+      deferredApplyTimerRef.current = null
+    }, delay)
   }
 
   return (
@@ -375,7 +404,7 @@ export function TerminalSettingsDialog({
                 <Input
                   id="backgroundImage"
                   value={localSettings.backgroundImage}
-                  onChange={(e) => updateSetting('backgroundImage', e.target.value)}
+                  onChange={(e) => updateSettingDeferred('backgroundImage', e.target.value)}
                   placeholder={t("backgroundImagePlaceholder")}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -409,13 +438,27 @@ export function TerminalSettingsDialog({
               {localSettings.backgroundImage && (
                 <div className="rounded-lg border p-4 space-y-2">
                   <Label>{t("previewLabel")}</Label>
-                  <div
-                    className="w-full h-32 rounded-md bg-cover bg-center bg-no-repeat border"
-                    style={{
-                      backgroundImage: `url(${localSettings.backgroundImage})`,
-                      opacity: localSettings.backgroundImageOpacity / 100,
-                    }}
-                  />
+                  <div className="relative w-full h-32 rounded-md border overflow-hidden">
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0"
+                      style={{ backgroundColor: previewBackgroundColor }}
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                      style={{
+                        backgroundImage: `url(${localSettings.backgroundImage})`,
+                        opacity: localSettings.backgroundImageOpacity / 100,
+                      }}
+                    />
+                    <div
+                      className="absolute inset-0 flex items-center px-4 text-sm font-medium"
+                      style={{ color: previewTheme.foreground }}
+                    >
+                      root@easyssh:~# systemctl status ssh
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

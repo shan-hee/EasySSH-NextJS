@@ -8,12 +8,17 @@ import type { Terminal } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
 import { TerminalWebSocket } from '@/lib/websocket-terminal'
 
+type DisposableAddon = {
+  dispose: () => void
+}
+
 /**
  * 终端实例状态
  */
 export interface TerminalInstanceState {
   terminal: Terminal
   fitAddon: FitAddon
+  webglAddon: DisposableAddon | null
   wsConnection: TerminalWebSocket | null
   isMounted: boolean
   container: HTMLDivElement | null
