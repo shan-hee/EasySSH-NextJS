@@ -1,15 +1,15 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { TerminalAgentTimeline } from "@/components/ai-agent/terminal-agent-timeline"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bot, User, Sparkles, Loader2, Square, Trash2, Settings2, X, Brain, ChevronRight } from "lucide-react"
+import { Sparkles, Square, Trash2, Settings2, X } from "lucide-react"
 import { useTranslations } from "next-intl"
 import Link from "next/link"
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import {
   PromptInput,
@@ -24,9 +24,8 @@ import {
   PromptInputModelSelectValue,
 } from "@/components/ui/shadcn-io/ai/prompt-input"
 import { Button } from "@/components/ui/button"
-import { useAIChat } from "@/hooks/use-ai-chat"
+import { useAgentSession } from "@/hooks/use-agent-session"
 import { useAIConfig } from "@/hooks/use-ai-config"
-import type { ChatMessage } from "@/lib/api/ai"
 // 注意：使用简化的代码块样式，避免引入额外依赖
 // 如果需要完整语法高亮，可以后续使用 shiki（你已安装）
 
@@ -37,249 +36,27 @@ const MAX_HEIGHT_RATIO = 0.5
 const MIN_DRAG_DISTANCE = 5
 const AUTO_COLLAPSE_HEIGHT = 50
 
-// ========== 类型定义 ==========
-type MessageRole = "user" | "assistant"
-
-interface Message {
-  id: string
-  role: MessageRole
-  content: string
-  timestamp: Date
-}
-
-interface ParsedContent {
-  thinking: string | null
-  content: string
-}
-
-interface ParsedToolStatus {
-  toolStatus: string | null
-  content: string
-}
-
-interface ParsedAssistantMessage extends ParsedContent {
-  toolStatus: string | null
-}
-
 interface AiAssistantPanelProps {
   isOpen: boolean
   onClose: () => void
 }
 
-function parseThinkingContent(text: string): ParsedContent {
-  const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i)
-
-  if (thinkMatch) {
-    const thinking = thinkMatch[1].trim()
-    const content = text.replace(/<think>[\s\S]*?<\/think>/i, "").trim()
-    return { thinking, content }
-  }
-
-  const unclosedMatch = text.match(/<think>([\s\S]*)$/i)
-  if (unclosedMatch) {
-    return { thinking: unclosedMatch[1].trim(), content: "" }
-  }
-
-  return { thinking: null, content: text }
-}
-
-function parseToolStatus(text: string): ParsedToolStatus {
-  const toolStatusMatches = text.match(/<tool-status>([\s\S]*?)<\/tool-status>/gi)
-
-  if (toolStatusMatches && toolStatusMatches.length > 0) {
-    const lastMatch = toolStatusMatches[toolStatusMatches.length - 1]
-    const statusMatch = lastMatch.match(/<tool-status>([\s\S]*?)<\/tool-status>/i)
-    const toolStatus = statusMatch ? statusMatch[1].trim() : null
-    const content = text.replace(/<tool-status>[\s\S]*?<\/tool-status>/gi, "").trim()
-    return { toolStatus, content }
-  }
-
-  const unclosedMatch = text.match(/<tool-status>([\s\S]*)$/i)
-  if (unclosedMatch) {
-    return {
-      toolStatus: unclosedMatch[1].trim(),
-      content: text.replace(/<tool-status>[\s\S]*$/i, "").trim(),
-    }
-  }
-
-  return { toolStatus: null, content: text }
-}
-
-function parseAssistantMessageContent(text: string): ParsedAssistantMessage {
-  const toolStatusResult = parseToolStatus(text)
-  const thinkingResult = parseThinkingContent(toolStatusResult.content)
-  return {
-    toolStatus: toolStatusResult.toolStatus,
-    thinking: thinkingResult.thinking,
-    content: thinkingResult.content,
-  }
-}
-
-function sanitizeAssistantContentForHistory(text: string): string {
-  return parseAssistantMessageContent(text).content
-}
-
-// ========== 消息内容渲染组件 ==========
-// 支持代码块和换行（使用优化的样式）
-const MessageContent = memo(({ content }: { content: string }) => {
-  // 使用正则提取代码块：```language\ncode```
-  const parts = content.split(/```(\w+)?\n?([\s\S]*?)```/g)
-
-  return (
-    <div className="space-y-2">
-      {parts.map((part, index) => {
-        // index % 3 === 1 是语言标识，index % 3 === 2 是代码内容
-        if (index % 3 === 2) {
-          const language = parts[index - 1] || 'text'
-          return (
-            <div key={index} className="relative group">
-              {/* 语言标签 */}
-              {language && language !== 'text' && (
-                <div className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-background/80 rounded border border-border">
-                  {language}
-                </div>
-              )}
-              {/* 代码块 */}
-              <pre className="bg-zinc-950 dark:bg-zinc-900/50 rounded-md p-3 overflow-x-auto border border-zinc-800/50">
-                <code className="text-xs font-mono text-zinc-100 dark:text-zinc-300 leading-relaxed">
-                  {part.trim()}
-                </code>
-              </pre>
-            </div>
-          )
-        } else if (index % 3 === 0 && part) {
-          // 普通文本
-          return (
-            <div key={index} className="whitespace-pre-wrap">
-              {part}
-            </div>
-          )
-        }
-        return null
-      })}
-    </div>
-  )
-})
-
-MessageContent.displayName = 'MessageContent'
-
-// ========== 消息项组件 ==========
-// 使用 memo 优化，避免所有消息在新消息到来时重新渲染
-const MessageItem = memo(({
-  message,
-  thinkingLabel,
-  thinkingProcessLabel,
-  isStreaming,
-}: {
-  message: Message
-  thinkingLabel: string
-  thinkingProcessLabel: string
-  isStreaming?: boolean
-}) => {
-  const [isThinkingOpen, setIsThinkingOpen] = useState(false)
-  const parsedAssistant = useMemo(
-    () => (message.role === "assistant" ? parseAssistantMessageContent(message.content) : null),
-    [message.role, message.content]
-  )
-
-  const isThinkingStreaming = Boolean(
-    isStreaming && parsedAssistant?.thinking && !parsedAssistant?.content
-  )
-  const hasAssistantVisualContent = Boolean(
-    parsedAssistant?.toolStatus || parsedAssistant?.thinking || parsedAssistant?.content
-  )
-
-  if (message.role === "user") {
-    return (
-      <div className="flex gap-3 items-start flex-row-reverse">
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-primary text-primary-foreground"
-          aria-hidden="true"
-        >
-          <User className="h-3.5 w-3.5" />
-        </div>
-
-        <div className="flex flex-col gap-1 max-w-[85%] items-end">
-          <div className="px-3 py-2 rounded-lg text-sm bg-primary text-primary-foreground">
-            <MessageContent content={message.content} />
-          </div>
-          <span className="text-xs text-muted-foreground px-1">
-            {message.timestamp.toLocaleTimeString(undefined, {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
-        </div>
-      </div>
-    )
-  }
-
-  if (!hasAssistantVisualContent) {
-    return null
-  }
-
-  return (
-    <div className="flex gap-3 items-start">
-      <div
-        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-muted text-muted-foreground"
-        aria-hidden="true"
-      >
-        <Bot className="h-3.5 w-3.5" />
-      </div>
-
-      <div className="flex flex-col gap-1.5 max-w-[85%] items-start">
-        {parsedAssistant?.toolStatus && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border/60 bg-muted/60 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>{parsedAssistant.toolStatus}</span>
-          </div>
-        )}
-
-        {parsedAssistant?.thinking && (
-          <Collapsible open={isThinkingOpen} onOpenChange={setIsThinkingOpen}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Brain className="h-3.5 w-3.5" />
-                <span>{isThinkingStreaming ? thinkingLabel : thinkingProcessLabel}</span>
-                <ChevronRight
-                  className={cn("h-3.5 w-3.5 transition-transform", isThinkingOpen && "rotate-90")}
-                />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-1 px-3 py-2 rounded-lg text-xs bg-muted/70 text-muted-foreground whitespace-pre-wrap">
-                {parsedAssistant.thinking}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-
-        {parsedAssistant?.content && (
-          <div className="px-3 py-2 rounded-lg text-sm bg-muted text-foreground">
-            <MessageContent content={parsedAssistant.content} />
-          </div>
-        )}
-
-        <span className="text-xs text-muted-foreground px-1">
-          {message.timestamp.toLocaleTimeString(undefined, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </span>
-      </div>
-    </div>
-  )
-})
-
-MessageItem.displayName = 'MessageItem'
-
 export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   // ========== 状态管理 ==========
   const tAI = useTranslations("aiAssistant")
   const { isConfigured, isLoading: isConfigLoading, models, model: defaultModel } = useAIConfig()
+  const {
+    session,
+    transport,
+    timeline,
+    tasks,
+    error,
+    canSend: canSendToSession,
+    startNewSession,
+    sendMessage,
+    confirmTask,
+    cancelSession,
+  } = useAgentSession()
 
   const [input, setInput] = useState("")
   const [model, setModel] = useState("auto")
@@ -290,7 +67,6 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   const [dragStartHeight, setDragStartHeight] = useState(DEFAULT_MESSAGE_HEIGHT)
   const [hasMoved, setHasMoved] = useState(false)
   const [shouldAnimate, setShouldAnimate] = useState(false)
-  const [error, setError] = useState<string | null>(null) // 错误状态
 
   // ========== Refs ==========
   const containerRef = useRef<HTMLDivElement>(null)
@@ -298,14 +74,6 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const wasOpenRef = useRef(false)
 
-  // ========== 消息数据 ==========
-  const [messages, setMessages] = useState<Message[]>([])
-  const {
-    sendMessage,
-    isLoading: isChatLoading,
-    stop,
-    clearError,
-  } = useAIChat()
   const modelOptions = models.length > 0 ? models : ["auto"]
   const resolvedModel =
     model && modelOptions.includes(model)
@@ -315,18 +83,29 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
             ? defaultModel
             : modelOptions[0]
         )
-
-  const toChatMessages = useCallback(
-    (items: Message[]): ChatMessage[] =>
-      items.map((item) => ({
-        role: item.role,
-        content:
-          item.role === "assistant"
-            ? sanitizeAssistantContentForHistory(item.content)
-            : item.content,
-      })),
-    []
+  const activeModel = resolvedModel === "auto" ? undefined : resolvedModel
+  const messageCount = timeline.filter((entry) => entry.kind === "message" && entry.data).length
+  const runningTasks = tasks.filter((task) => task.status === "running" || task.status === "queued")
+  const pendingConfirmationTasks = tasks.filter((task) => task.status === "waiting_confirm")
+  const hasPendingAssistantMessage = timeline.some(
+    (entry) => entry.kind === "message" && entry.data?.role === "assistant" && Boolean(entry.data.pending)
   )
+  const isSessionRunning = session?.status === "running"
+  const shouldShowLoadingIndicator =
+    isSessionRunning &&
+    !hasPendingAssistantMessage &&
+    runningTasks.length === 0 &&
+    pendingConfirmationTasks.length === 0
+  const canSend =
+    !!input.trim() &&
+    isConfigured &&
+    !isConfigLoading &&
+    canSendToSession
+  const configStatusText = isConfigLoading
+    ? tAI("checkingConfig")
+    : !isConfigured
+      ? tAI("aiNotConfigured")
+      : `${tAI("statusOnline")} · ${resolvedModel} · ${transport === "ws" ? tAI("transportWs") : transport === "sse" ? tAI("transportSse") : transport === "connecting_ws" ? tAI("transportConnecting") : tAI("transportIdle")}`
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const viewport = scrollAreaRef.current?.querySelector(
@@ -368,27 +147,21 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   }, [getPanelMaxHeight, messageHeight])
 
   // ========== Effects ==========
-  // 自动滚动到底部（平滑滚动）
   useEffect(() => {
     if (isExpanded) {
-      scrollToBottom(isChatLoading ? "auto" : "smooth")
+      scrollToBottom(isSessionRunning ? "auto" : "smooth")
     }
-  }, [messages, isExpanded, isChatLoading, scrollToBottom])
+  }, [timeline, isExpanded, isSessionRunning, shouldShowLoadingIndicator, scrollToBottom])
 
-  // 延迟启用过渡动画，避免初始渲染时的动画冲突
   useEffect(() => {
-    // 组件挂载后立即启用动画（父组件已确保不在加载期间渲染）
-    // 使用 requestAnimationFrame 确保在下一帧启用，避免初始渲染闪烁
     requestAnimationFrame(() => {
       setShouldAnimate(true)
     })
   }, [])
 
-  // 打开时聚焦输入框并清除错误
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => {
-        setError(null)
         inputRef.current?.focus()
       }, ANIMATION_DELAY)
       return () => clearTimeout(timer)
@@ -396,13 +169,30 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   }, [isOpen])
 
   useEffect(() => {
+    if (!isOpen || !isConfigured || isConfigLoading || session || transport !== "idle" || error) {
+      return
+    }
+
+    void startNewSession({
+      model: activeModel,
+      permissionMode: "balanced",
+    })
+  }, [
+    isOpen,
+    isConfigured,
+    isConfigLoading,
+    session,
+    transport,
+    error,
+    startNewSession,
+    activeModel,
+  ])
+
+  useEffect(() => {
     if (!isOpen) return
 
     const handleEscClose = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
-      if (isChatLoading) {
-        stop()
-      }
       onClose()
     }
 
@@ -410,7 +200,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     return () => {
       window.removeEventListener("keydown", handleEscClose)
     }
-  }, [isOpen, onClose, isChatLoading, stop])
+  }, [isOpen, onClose])
 
   useEffect(() => {
     if (!isOpen) {
@@ -421,7 +211,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     const justOpened = !wasOpenRef.current
     wasOpenRef.current = true
     if (!justOpened) return
-    if (messages.length === 0 && !isChatLoading) return
+    if (timeline.length === 0 && !isSessionRunning && pendingConfirmationTasks.length === 0) return
     if (isExpanded && messageHeight > AUTO_COLLAPSE_HEIGHT) return
 
     const timer = setTimeout(() => {
@@ -429,123 +219,56 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     }, 0)
 
     return () => clearTimeout(timer)
-  }, [isOpen, messages.length, isChatLoading, isExpanded, messageHeight, expandPanel])
+  }, [
+    isOpen,
+    timeline.length,
+    isSessionRunning,
+    pendingConfirmationTasks.length,
+    isExpanded,
+    messageHeight,
+    expandPanel,
+  ])
 
-  // ========== 事件处理器 ==========
-  // 使用 useCallback 缓存，避免子组件不必要的重渲染
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isChatLoading || !isConfigured || isConfigLoading) return
+    if (!input.trim() || !isConfigured || isConfigLoading) return
 
     const userInput = input.trim()
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: userInput,
-      timestamp: new Date(),
-    }
-
-    const assistantMessageId = crypto.randomUUID()
-    const assistantMessage: Message = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: new Date(),
-    }
-
     expandPanel()
-    setInput("")
-    setError(null)
-    clearError()
 
-    const nextMessages = [...messages, userMessage]
-    setMessages((prev) => [...prev, userMessage, assistantMessage])
-
-    try {
-      await sendMessage(
-        toChatMessages(nextMessages),
-        (delta) => {
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === assistantMessageId
-                ? { ...message, content: `${message.content}${delta}` }
-                : message
-            )
-          )
-        },
-        resolvedModel === "auto" ? undefined : resolvedModel
-      )
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : tAI("panelErrorSendFailed")
-      setError(errorMessage)
-
-      // 若 assistant 还未收到任何内容，则移除空消息
-      setMessages((prev) => {
-        const target = prev.find((message) => message.id === assistantMessageId)
-        if (!target || target.content.trim()) {
-          return prev
-        }
-        return prev.filter((message) => message.id !== assistantMessageId)
+    if (!session && transport === "idle") {
+      await startNewSession({
+        model: activeModel,
+        permissionMode: "balanced",
       })
+    }
+
+    const sent = await sendMessage(userInput)
+    if (sent) {
+      setInput("")
     }
   }, [
     input,
-    isChatLoading,
     isConfigured,
     isConfigLoading,
-    clearError,
-    messages,
     sendMessage,
-    toChatMessages,
-    tAI,
     expandPanel,
-    resolvedModel,
+    session,
+    transport,
+    startNewSession,
+    activeModel,
   ])
 
   const handleClearConversation = useCallback(() => {
-    if (isChatLoading) {
-      stop()
-    }
-    setMessages([])
-    setError(null)
-    clearError()
-  }, [isChatLoading, stop, clearError])
+    void startNewSession({
+      model: activeModel,
+      permissionMode: "balanced",
+    })
+  }, [startNewSession, activeModel])
 
   const handleClosePanel = useCallback(() => {
-    if (isChatLoading) {
-      stop()
-    }
     onClose()
-  }, [isChatLoading, stop, onClose])
-
-  const configStatusText = isConfigLoading
-    ? tAI("checkingConfig")
-    : isConfigured
-      ? `${tAI("statusOnline")} · ${resolvedModel}`
-      : tAI("aiNotConfigured")
-  const canSend =
-    !!input.trim() && isConfigured && !isConfigLoading && !isChatLoading
-  const latestAssistantMessage = useMemo(() => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index].role === "assistant") {
-        return messages[index]
-      }
-    }
-    return null
-  }, [messages])
-  const latestAssistantParsed = useMemo(
-    () =>
-      latestAssistantMessage
-        ? parseAssistantMessageContent(latestAssistantMessage.content)
-        : null,
-    [latestAssistantMessage]
-  )
-  const shouldShowLoadingIndicator =
-    isChatLoading &&
-    !latestAssistantParsed?.toolStatus &&
-    !latestAssistantParsed?.thinking &&
-    !latestAssistantParsed?.content
+  }, [onClose])
 
   // 拖拽开始处理
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -751,7 +474,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
                     variant="ghost"
                     size="sm"
                     className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                    disabled={messages.length === 0 && !isChatLoading}
+                    disabled={timeline.length === 0 && !session}
                     onClick={handleClearConversation}
                   >
                     <Trash2 className="h-3.5 w-3.5 mr-1" />
@@ -780,35 +503,12 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
                   aria-label={tAI("panelAriaHistoryLabel")}
                   className="px-4 pt-2 pb-4 flex flex-col gap-3"
                 >
-                  {messages.length === 0 && !isChatLoading && (
-                    <div className="text-xs text-muted-foreground px-1 py-2">
-                      {tAI("emptyDescriptionIntro")}
-                    </div>
-                  )}
-                  {messages.map((message) => (
-                    <MessageItem
-                      key={message.id}
-                      message={message}
-                      thinkingLabel={tAI("thinkingLabel")}
-                      thinkingProcessLabel={tAI("thinkingProcess")}
-                      isStreaming={
-                        isChatLoading &&
-                        message.role === "assistant" &&
-                        message.id === latestAssistantMessage?.id
-                      }
-                    />
-                  ))}
-                  {shouldShowLoadingIndicator && (
-                    <div className="flex gap-3 items-start">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
-                        <Bot className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="px-3 py-2 rounded-lg text-sm bg-muted text-foreground flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>{tAI("panelThinking")}</span>
-                      </div>
-                    </div>
-                  )}
+                  <TerminalAgentTimeline
+                    entries={timeline}
+                    tText={tAI}
+                    onConfirmTask={confirmTask}
+                    shouldShowLoadingIndicator={shouldShowLoadingIndicator}
+                  />
                 </div>
               </ScrollArea>
             </div>
@@ -838,7 +538,12 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
                           : tAI("panelInputPlaceholder")
                     }
                     className="min-h-[60px] text-base"
-                    disabled={isConfigLoading || !isConfigured || isChatLoading}
+                    disabled={
+                      isConfigLoading ||
+                      !isConfigured ||
+                      transport === "connecting_ws" ||
+                      (Boolean(session) && !canSendToSession)
+                    }
                   />
 
                   <PromptInputToolbar>
@@ -878,16 +583,16 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
 
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">
-                        {tAI("sidebarMessageCount", { count: messages.length })}
+                        {tAI("sidebarMessageCount", { count: messageCount })}
                       </span>
 
-                      {isChatLoading ? (
+                      {isSessionRunning ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={stop}
+                          onClick={() => void cancelSession()}
                           aria-label={tAI("stopGenerating")}
                           title={tAI("stopGenerating")}
                         >

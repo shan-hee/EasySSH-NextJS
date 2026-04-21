@@ -6,6 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
+    "test": "node --import tsx --test $(find src -name '*.test.ts' -print)",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "openapi:gen": "openapi-typescript ../shared/openapi.yaml -o src/types/openapi.ts"

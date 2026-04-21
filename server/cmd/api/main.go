@@ -486,19 +486,12 @@ func main() {
 	notificationConfigHandler := rest.NewNotificationConfigHandler(notificationConfigService)
 	aiConfigHandler := rest.NewAIConfigHandler(aiConfigService)
 	userAIConfigHandler := rest.NewUserAIConfigHandler(userAIConfigService)
-	// AI聊天服务和处理器
-	aiChatService := aichat.NewService(aiConfigService, userAIConfigService)
-	aiChatHandler := rest.NewAIChatHandler(aiChatService)
-	// AI工具执行器和处理器
+	aiRuntimeConfigHandler := rest.NewAIRuntimeConfigHandler(aichat.NewConfigResolver(aiConfigService, userAIConfigService))
+	// AI 工具执行器和会话运行时
 	aiToolExecutor := aichat.NewToolExecutorService(serverService, sftpHandler.GetPool(), encryptor)
-	// 注入工具执行器到 AI 聊天服务（用于自动工具调用循环）
-	type toolExecutorSetter interface {
-		SetToolExecutor(executor *aichat.ToolExecutorService)
-	}
-	if setter, ok := aiChatService.(toolExecutorSetter); ok {
-		setter.SetToolExecutor(aiToolExecutor)
-	}
-	aiChatToolsHandler := rest.NewAIChatToolsHandler(aiToolExecutor)
+	aiRuntimeManager := aichat.NewRuntimeManager(aiConfigService, userAIConfigService, aiToolExecutor)
+	aiSessionHandler := rest.NewAISessionHandler(aiRuntimeManager)
+	aiSessionWSHandler := ws.NewAISessionHandler(aiRuntimeManager, securityService)
 	// Docker 处理器（复用监控连接池）
 	dockerHandler := rest.NewDockerHandler(serverService, serverRepo, encryptor, sshHostKeyService.GetHostKeyCallback(), monitorConnectionPool)
 	// 其他处理器
@@ -979,11 +972,13 @@ func main() {
 		aiChatRoutes := v1.Group("/ai")
 		aiChatRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
-			aiChatRoutes.POST("/chat", aiChatHandler.Chat)       // 聊天（支持流式和非流式）
-			aiChatRoutes.GET("/config", aiChatHandler.GetConfig) // 获取AI配置状态
-			// AI工具调用相关路由
-			aiChatRoutes.GET("/tools", aiChatToolsHandler.GetTools)             // 获取可用工具列表
-			aiChatRoutes.POST("/tools/execute", aiChatToolsHandler.ExecuteTool) // 执行工具
+			aiChatRoutes.GET("/config", aiRuntimeConfigHandler.GetConfig)
+			aiChatRoutes.POST("/sessions", aiSessionHandler.CreateSession)
+			aiChatRoutes.POST("/sessions/:session_id/messages", aiSessionHandler.SendMessage)
+			aiChatRoutes.GET("/sessions/:session_id/events", aiSessionHandler.StreamEvents)
+			aiChatRoutes.POST("/sessions/:session_id/tasks/:task_id/confirm", aiSessionHandler.ConfirmTask)
+			aiChatRoutes.DELETE("/sessions/:session_id", aiSessionHandler.CloseSession)
+			aiChatRoutes.GET("/sessions/:session_id/ws", aiSessionWSHandler.HandleSession)
 		}
 
 		// 备份恢复路由（需要认证）

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { getAIConfig, AIConfigStatus } from "@/lib/api/ai"
+import { getAIConfig, AIConfigStatus } from "@/lib/api/ai-config"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 
 /**

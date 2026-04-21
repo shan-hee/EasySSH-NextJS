@@ -44,6 +44,8 @@ tags:
     description: 日志管理
   - name: users
     description: 用户管理
+  - name: ai
+    description: AI Agent 会话运行时
 
 components:
   securitySchemes:
@@ -304,6 +306,250 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    # ========================================
+    # AI Agent
+    # ========================================
+    AIPermissionMode:
+      type: string
+      enum: [readonly, balanced, privileged]
+      example: balanced
+
+    AITransportType:
+      type: string
+      enum: [ws, sse]
+      example: ws
+
+    AISessionStatus:
+      type: string
+      enum: [idle, running, waiting_confirmation, closed]
+      example: idle
+
+    AITaskStatus:
+      type: string
+      enum: [queued, waiting_confirm, running, succeeded, failed, cancelled]
+      example: waiting_confirm
+
+    AIToolView:
+      type: object
+      required: [name, description, dangerous]
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        dangerous:
+          type: boolean
+
+    AIMessageView:
+      type: object
+      required: [id, role, content, created_at]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, system, tool]
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AITaskView:
+      type: object
+      required:
+        - id
+        - tool_call_id
+        - tool_name
+        - status
+        - dangerous
+        - requires_confirmation
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        tool_call_id:
+          type: string
+        tool_name:
+          type: string
+        tool_display_name:
+          type: string
+        summary:
+          type: string
+        status:
+          $ref: '#/components/schemas/AITaskStatus'
+        dangerous:
+          type: boolean
+        requires_confirmation:
+          type: boolean
+        arguments:
+          type: object
+          additionalProperties: true
+        result:
+          type: string
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AIAssistantEventData:
+      type: object
+      required: [message_id]
+      properties:
+        message_id:
+          type: string
+        delta:
+          type: string
+        content:
+          type: string
+
+    AIConfirmationView:
+      type: object
+      required: [task_id, status, created_at]
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+        decision:
+          type: string
+          enum: [confirm, reject]
+        created_at:
+          type: string
+          format: date-time
+
+    AIErrorView:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+    AISessionView:
+      type: object
+      required:
+        - id
+        - model
+        - permission_mode
+        - status
+        - created_at
+        - updated_at
+        - messages
+        - tasks
+        - available_tools
+        - default_transport
+      properties:
+        id:
+          type: string
+          format: uuid
+        model:
+          type: string
+        permission_mode:
+          $ref: '#/components/schemas/AIPermissionMode'
+        status:
+          $ref: '#/components/schemas/AISessionStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIMessageView'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AITaskView'
+        available_tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIToolView'
+        default_transport:
+          $ref: '#/components/schemas/AITransportType'
+
+    AIEvent:
+      type: object
+      required: [id, type, session_id, created_at]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - session.started
+            - assistant.delta
+            - assistant.completed
+            - task.created
+            - task.updated
+            - confirmation.requested
+            - confirmation.resolved
+            - error
+            - session.completed
+        session_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        session:
+          $ref: '#/components/schemas/AISessionView'
+        assistant:
+          $ref: '#/components/schemas/AIAssistantEventData'
+        task:
+          $ref: '#/components/schemas/AITaskView'
+        confirmation:
+          $ref: '#/components/schemas/AIConfirmationView'
+        error:
+          $ref: '#/components/schemas/AIErrorView'
+
+    CreateAISessionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        permission_mode:
+          $ref: '#/components/schemas/AIPermissionMode'
+
+    CreateAISessionResponse:
+      type: object
+      required: [session_id, session, default_transport]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        session:
+          $ref: '#/components/schemas/AISessionView'
+        default_transport:
+          $ref: '#/components/schemas/AITransportType'
+
+    SendAISessionMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+        context:
+          type: string
+
+    ConfirmAISessionTaskRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [confirm, reject]
 
     ServerCreate:
       type: object
@@ -746,6 +992,186 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+
+  # ========================================
+  # AI Agent
+  # ========================================
+  /ai/config:
+    get:
+      tags:
+        - ai
+      summary: 获取 AI 配置状态
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 返回当前用户可用的 AI 配置状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configured:
+                    type: boolean
+                  provider:
+                    type: string
+                  model:
+                    type: string
+                  models:
+                    type: array
+                    items:
+                      type: string
+                  has_key:
+                    type: boolean
+                  message:
+                    type: string
+
+  /ai/sessions:
+    post:
+      tags:
+        - ai
+      summary: 创建临时 AI 会话
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAISessionRequest'
+      responses:
+        '201':
+          description: 会话创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAISessionResponse'
+
+  /ai/sessions/{session_id}/messages:
+    post:
+      tags:
+        - ai
+      summary: 向 AI 会话发送用户消息
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendAISessionMessageRequest'
+      responses:
+        '202':
+          description: 消息已入队，后续结果通过 SSE 或 WS 返回
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 会话当前不可接受新消息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ai/sessions/{session_id}/events:
+    get:
+      tags:
+        - ai
+      summary: 订阅 AI 会话 SSE 事件流
+      description: |
+        输出统一的 `AIEvent` JSON 负载。每个 SSE 事件的 data 字段都对应同一套事件 schema。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SSE 事件流，data 载荷遵循 AIEvent schema
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: 每个事件的 data 字段都是一个 AIEvent JSON 对象
+
+  /ai/sessions/{session_id}/tasks/{task_id}/confirm:
+    post:
+      tags:
+        - ai
+      summary: 确认或拒绝危险任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmAISessionTaskRequest'
+      responses:
+        '202':
+          description: 确认决策已接受
+        '404':
+          description: 会话或任务不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 当前任务不处于可确认状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ai/sessions/{session_id}:
+    delete:
+      tags:
+        - ai
+      summary: 主动关闭 AI 会话
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 会话已关闭
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   # ========================================
   # 服务器管理

@@ -23,6 +23,7 @@ const (
 	TicketTypeWSMonitor      TicketType = "ws_monitor"
 	TicketTypeWSSFTPUpload   TicketType = "ws_sftp_upload"
 	TicketTypeWSSFTPTransfer TicketType = "ws_sftp_transfer"
+	TicketTypeWSAISession    TicketType = "ws_ai_session"
 
 	TicketTypeSFTPDownload      TicketType = "sftp_download"
 	TicketTypeSFTPBatchDownload TicketType = "sftp_batch_download"
@@ -34,6 +35,7 @@ func (t TicketType) IsValid() bool {
 		TicketTypeWSMonitor,
 		TicketTypeWSSFTPUpload,
 		TicketTypeWSSFTPTransfer,
+		TicketTypeWSAISession,
 		TicketTypeSFTPDownload,
 		TicketTypeSFTPBatchDownload:
 		return true
@@ -197,4 +199,3 @@ func newRandomTicketValue(n int) (string, error) {
 	// URL-safe，避免 +/=
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
-

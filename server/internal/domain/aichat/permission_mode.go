@@ -65,30 +65,3 @@ func IsToolAllowedInMode(mode PermissionMode, toolName string) bool {
 		return true
 	}
 }
-
-// GetAvailableToolsByPermission 根据权限模式返回可见工具列表
-func GetAvailableToolsByPermission(mode PermissionMode) []ToolDefinition {
-	allTools := GetAvailableTools()
-	filtered := make([]ToolDefinition, 0, len(allTools))
-	for _, tool := range allTools {
-		if IsToolAllowedInMode(mode, tool.Name) {
-			filtered = append(filtered, tool)
-		}
-	}
-	return filtered
-}
-
-// GetPermissionModeRule 返回当前权限模式的系统规则描述
-func GetPermissionModeRule(mode PermissionMode) string {
-	normalized := NormalizePermissionMode(string(mode))
-	switch normalized {
-	case PermissionModeReadOnly:
-		return "当前是只读分析模式：仅允许查询、读取、分析。严禁执行 execute_command、write_file、create_directory、delete_file；如果用户要求这些操作，请明确说明权限限制并给出只读替代方案。"
-	case PermissionModePrivileged:
-		return "当前是高权限模式：可使用系统允许的全部工具；涉及高风险操作前，必须先说明风险与回滚方案。"
-	case PermissionModeBalanced:
-		fallthrough
-	default:
-		return "当前是标准模式：可使用系统允许的全部工具；涉及高风险操作时，遵循系统确认流程。"
-	}
-}

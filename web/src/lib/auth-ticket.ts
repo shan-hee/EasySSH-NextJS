@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/api-client"
 export type AuthTicketType =
   | "ws_terminal"
   | "ws_monitor"
+  | "ws_ai_session"
   | "ws_sftp_upload"
   | "ws_sftp_transfer"
   | "sftp_download"
@@ -12,6 +13,7 @@ export interface CreateTicketInput {
   type: AuthTicketType
   server_id?: string
   task_id?: string
+  session_id?: string
   path?: string
   paths?: string[]
   mode?: string
@@ -31,4 +33,3 @@ export async function createAuthTicket(input: CreateTicketInput): Promise<Create
     timeout: 10000,
   })
 }
-
