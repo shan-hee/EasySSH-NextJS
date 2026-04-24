@@ -98,17 +98,30 @@ type ErrorView struct {
 	Message string `json:"message"`
 }
 
+type SessionListItem struct {
+	ID             string        `json:"id"`
+	Model          string        `json:"model"`
+	PermissionMode string        `json:"permission_mode"`
+	Status         SessionStatus `json:"status"`
+	Title          string        `json:"title"`
+	CustomTitle    bool          `json:"custom_title"`
+	MessageCount   int           `json:"message_count"`
+	TaskCount      int           `json:"task_count"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
+}
+
 type SessionView struct {
-	ID               string         `json:"id"`
-	Model            string         `json:"model"`
-	PermissionMode   string         `json:"permission_mode"`
-	Status           SessionStatus  `json:"status"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	Messages         []MessageView  `json:"messages"`
-	Tasks            []TaskView     `json:"tasks"`
-	AvailableTools   []ToolView     `json:"available_tools"`
-	DefaultTransport TransportType  `json:"default_transport"`
+	ID               string        `json:"id"`
+	Model            string        `json:"model"`
+	PermissionMode   string        `json:"permission_mode"`
+	Status           SessionStatus `json:"status"`
+	CreatedAt        time.Time     `json:"created_at"`
+	UpdatedAt        time.Time     `json:"updated_at"`
+	Messages         []MessageView `json:"messages"`
+	Tasks            []TaskView    `json:"tasks"`
+	AvailableTools   []ToolView    `json:"available_tools"`
+	DefaultTransport TransportType `json:"default_transport"`
 }
 
 type Event struct {

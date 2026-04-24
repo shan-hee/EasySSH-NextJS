@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useReducer, useRef } from "react"
 import {
+  cancelAISession,
   closeAISession,
   confirmAISessionTask,
   connectAISessionWebSocket,
   createAISession,
+  getAISession,
+  getLatestAISession,
   openAISessionEventStream,
   sendAISessionMessage,
   type PermissionMode,
@@ -29,6 +32,7 @@ export function useAgentSession() {
   const sseAbortControllerRef = useRef<AbortController | null>(null)
   const pingTimerRef = useRef<number | null>(null)
   const closingSessionIdRef = useRef<string | null>(null)
+  const latestRestoreAttemptedRef = useRef(false)
   const stateRef = useRef(state)
 
   useEffect(() => {
@@ -157,6 +161,73 @@ export function useAgentSession() {
     }
   }, [])
 
+
+  const applyRestoredSession = useCallback(
+    async (response: { session_id: string; session: SessionView; default_transport: SessionView["default_transport"] }) => {
+      cleanupTransport()
+      currentSessionIdRef.current = response.session_id
+      closingSessionIdRef.current = null
+      dispatch({ type: "reset" })
+      dispatch({
+        type: "event",
+        event: {
+          id: createLocalId("restore"),
+          type: "session.started",
+          session_id: response.session_id,
+          created_at: new Date().toISOString(),
+          session: response.session,
+        },
+      })
+
+      await connectTransport(response.session_id, response.default_transport)
+      return true
+    },
+    [cleanupTransport, connectTransport]
+  )
+
+  const restoreLatestSession = useCallback(async () => {
+    if (latestRestoreAttemptedRef.current || currentSessionIdRef.current || stateRef.current.transport !== "idle") {
+      return false
+    }
+
+    latestRestoreAttemptedRef.current = true
+    dispatch({ type: "transport", transport: "connecting_ws" })
+
+    try {
+      const response = await getLatestAISession()
+      if (!response) {
+        dispatch({ type: "transport", transport: "idle" })
+        return false
+      }
+
+      return await applyRestoredSession(response)
+    } catch (error) {
+      dispatch({ type: "transport", transport: "idle" })
+      pushLocalError(error instanceof Error ? error.message : String(error), "restore_session_failed")
+      return false
+    }
+  }, [applyRestoredSession, pushLocalError])
+
+  const restoreSession = useCallback(
+    async (sessionId: string) => {
+      if (!sessionId) {
+        return false
+      }
+
+      dispatch({ type: "transport", transport: "connecting_ws" })
+
+      try {
+        const response = await getAISession(sessionId)
+        return await applyRestoredSession(response)
+      } catch (error) {
+        dispatch({ type: "transport", transport: "idle" })
+        pushLocalError(error instanceof Error ? error.message : String(error), "restore_session_failed")
+        return false
+      }
+    },
+    [applyRestoredSession, pushLocalError]
+  )
+
   const startNewSession = useCallback(
     async (input: { model?: string; permissionMode?: PermissionMode }) => {
       await closeCurrentRemoteSession()
@@ -164,6 +235,7 @@ export function useAgentSession() {
 
       currentSessionIdRef.current = null
       closingSessionIdRef.current = null
+      latestRestoreAttemptedRef.current = true
       dispatch({ type: "reset" })
       dispatch({ type: "transport", transport: "connecting_ws" })
 
@@ -274,7 +346,7 @@ export function useAgentSession() {
         return
       }
 
-      await closeAISession(sessionId)
+      await cancelAISession(sessionId)
     } catch (error) {
       pushLocalError(error instanceof Error ? error.message : String(error), "cancel_session_failed")
     }
@@ -285,15 +357,15 @@ export function useAgentSession() {
     cleanupTransport()
     currentSessionIdRef.current = null
     closingSessionIdRef.current = null
+    latestRestoreAttemptedRef.current = true
     dispatch({ type: "reset" })
   }, [cleanupTransport, closeCurrentRemoteSession])
 
   useEffect(() => {
     return () => {
-      void closeCurrentRemoteSession()
       cleanupTransport()
     }
-  }, [cleanupTransport, closeCurrentRemoteSession])
+  }, [cleanupTransport])
 
   const timelineEntries = resolveTimelineItems(state)
 
@@ -316,6 +388,8 @@ export function useAgentSession() {
     availableTools,
     error: state.error,
     canSend,
+    restoreLatestSession,
+    restoreSession,
     startNewSession,
     sendMessage,
     confirmTask,

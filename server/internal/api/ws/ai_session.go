@@ -187,7 +187,7 @@ func (h *AISessionHandler) HandleSession(c *gin.Context) {
 				}
 			}
 		case "session.cancel":
-			if err := h.manager.CloseSession(userID, sessionID); err != nil {
+			if err := h.manager.CancelSession(c.Request.Context(), userID, sessionID); err != nil {
 				select {
 				case localEvents <- runtimeErrorEvent(sessionID, "session_cancel_failed", err.Error()):
 				default:

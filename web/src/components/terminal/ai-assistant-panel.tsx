@@ -52,6 +52,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     tasks,
     error,
     canSend: canSendToSession,
+    restoreLatestSession,
     startNewSession,
     sendMessage,
     confirmTask,
@@ -173,9 +174,14 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       return
     }
 
-    void startNewSession({
-      model: activeModel,
-      permissionMode: "balanced",
+    void restoreLatestSession().then((restored) => {
+      if (restored) {
+        return
+      }
+      void startNewSession({
+        model: activeModel,
+        permissionMode: "balanced",
+      })
     })
   }, [
     isOpen,
@@ -184,6 +190,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     session,
     transport,
     error,
+    restoreLatestSession,
     startNewSession,
     activeModel,
   ])

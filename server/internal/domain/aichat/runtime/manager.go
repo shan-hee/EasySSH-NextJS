@@ -44,6 +44,7 @@ type Manager struct {
 	resolver   ConfigResolver
 	factory    TurnRunner
 	registry   *registry.ToolRegistry
+	store      SessionStore
 	ttl        time.Duration
 	maxRounds  int
 	cleanupGap time.Duration
@@ -56,6 +57,7 @@ type session struct {
 	id             string
 	userID         uuid.UUID
 	model          string
+	title          string
 	permissionMode string
 	status         SessionStatus
 	createdAt      time.Time
@@ -104,6 +106,10 @@ func NewManager(resolver ConfigResolver, factory TurnRunner, toolRegistry *regis
 	return manager
 }
 
+func (m *Manager) SetSessionStore(store SessionStore) {
+	m.store = store
+}
+
 func (m *Manager) CreateSession(ctx context.Context, userID uuid.UUID, input CreateSessionInput) (*SessionView, error) {
 	now := time.Now()
 	sessionID := uuid.NewString()
@@ -123,13 +129,151 @@ func (m *Manager) CreateSession(ctx context.Context, userID uuid.UUID, input Cre
 	m.mu.Lock()
 	m.sessions[sessionID] = s
 	view := m.snapshotSessionLocked(s)
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(ctx, snapshot)
 	return &view, nil
 }
 
 func (m *Manager) GetSession(userID uuid.UUID, sessionID string) (*SessionView, error) {
-	s, err := m.getSession(userID, sessionID)
+	s, err := m.getOrRestoreSession(context.Background(), userID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	view := m.snapshotSession(s)
+	return &view, nil
+}
+
+func (m *Manager) ListSessions(ctx context.Context, userID uuid.UUID, query string, limit, offset int) ([]SessionListItem, int64, error) {
+	if m.store != nil {
+		snapshots, total, err := m.store.List(ctx, userID, strings.TrimSpace(query), limit, offset)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		items := make([]SessionListItem, 0, len(snapshots))
+		for _, snapshot := range snapshots {
+			items = append(items, sessionListItemFromSnapshot(snapshot))
+		}
+		return items, total, nil
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	items := make([]SessionListItem, 0)
+	query = strings.ToLower(strings.TrimSpace(query))
+	for _, s := range m.sessions {
+		if s.userID != userID {
+			continue
+		}
+		item := sessionListItemFromSnapshot(m.snapshotForPersistenceLocked(s))
+		if query != "" && !strings.Contains(strings.ToLower(item.Title), query) {
+			continue
+		}
+		items = append(items, item)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].UpdatedAt.After(items[j].UpdatedAt)
+	})
+
+	total := int64(len(items))
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+	if offset >= len(items) {
+		return nil, total, nil
+	}
+	end := offset + limit
+	if end > len(items) {
+		end = len(items)
+	}
+	return items[offset:end], total, nil
+}
+
+func (m *Manager) RenameSession(ctx context.Context, userID uuid.UUID, sessionID, title string) error {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return ErrEmptyMessageContent
+	}
+	if len([]rune(title)) > 80 {
+		title = string([]rune(title)[:80])
+	}
+
+	if m.store != nil {
+		if err := m.store.Rename(ctx, userID, sessionID, title); err != nil {
+			return err
+		}
+	}
+
+	m.mu.Lock()
+	if s, ok := m.sessions[sessionID]; ok && s.userID == userID {
+		s.title = title
+		s.updatedAt = time.Now()
+		snapshot := m.snapshotForPersistenceLocked(s)
+		m.mu.Unlock()
+		m.saveSnapshot(ctx, snapshot)
+		return nil
+	}
+	m.mu.Unlock()
+
+	if m.store == nil {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+func (m *Manager) DeleteSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
+	if m.store != nil {
+		if err := m.store.Delete(ctx, userID, sessionID); err != nil {
+			return err
+		}
+	}
+
+	m.mu.Lock()
+	if s, ok := m.sessions[sessionID]; ok && s.userID == userID {
+		cancel := s.currentRun
+		subs := cloneSubscribersLocked(s)
+		delete(m.sessions, sessionID)
+		s.subscribers = make(map[string]chan Event)
+		s.closed = true
+		s.processing = false
+		s.currentRun = nil
+		m.mu.Unlock()
+
+		if cancel != nil {
+			cancel()
+		}
+		for _, ch := range subs {
+			close(ch)
+		}
+		return nil
+	}
+	m.mu.Unlock()
+
+	if m.store == nil {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+func (m *Manager) GetLatestActiveSession(ctx context.Context, userID uuid.UUID) (*SessionView, error) {
+	if m.store == nil {
+		return nil, ErrSessionNotFound
+	}
+
+	snapshot, err := m.store.GetLatestActive(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := m.restoreSnapshot(snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +283,7 @@ func (m *Manager) GetSession(userID uuid.UUID, sessionID string) (*SessionView, 
 }
 
 func (m *Manager) Subscribe(userID uuid.UUID, sessionID string) (<-chan Event, func(), error) {
-	s, err := m.getSession(userID, sessionID)
+	s, err := m.getOrRestoreSession(context.Background(), userID, sessionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -184,7 +328,7 @@ func (m *Manager) SendUserMessage(ctx context.Context, userID uuid.UUID, session
 		return ErrEmptyMessageContent
 	}
 
-	s, err := m.getSession(userID, sessionID)
+	s, err := m.getOrRestoreSession(ctx, userID, sessionID)
 	if err != nil {
 		return err
 	}
@@ -217,14 +361,16 @@ func (m *Manager) SendUserMessage(ctx context.Context, userID uuid.UUID, session
 	s.status = SessionStatusRunning
 	s.processing = true
 	s.updatedAt = now
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(ctx, snapshot)
 	go m.runSession(sessionID)
 	return nil
 }
 
 func (m *Manager) ConfirmTask(ctx context.Context, userID uuid.UUID, sessionID, taskID string, decision Decision) error {
-	s, err := m.getSession(userID, sessionID)
+	s, err := m.getOrRestoreSession(ctx, userID, sessionID)
 	if err != nil {
 		return err
 	}
@@ -258,8 +404,10 @@ func (m *Manager) ConfirmTask(ctx context.Context, userID uuid.UUID, sessionID, 
 		confirmationStatus = string(TaskStatusCancelled)
 	}
 	s.updatedAt = now
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(ctx, snapshot)
 	m.emitEvent(s, Event{
 		ID:        uuid.NewString(),
 		Type:      EventConfirmationResolved,
@@ -277,8 +425,42 @@ func (m *Manager) ConfirmTask(ctx context.Context, userID uuid.UUID, sessionID, 
 	return nil
 }
 
+func (m *Manager) CancelSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
+	s, err := m.getOrRestoreSession(ctx, userID, sessionID)
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	if s.closed {
+		m.mu.Unlock()
+		return ErrSessionClosed
+	}
+	cancel := s.currentRun
+	s.currentRun = nil
+	s.processing = false
+	s.status = SessionStatusIdle
+	s.updatedAt = time.Now()
+	view := m.snapshotSessionLocked(s)
+	snapshot := m.snapshotForPersistenceLocked(s)
+	m.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	m.saveSnapshot(ctx, snapshot)
+	m.emitEvent(s, Event{
+		ID:        uuid.NewString(),
+		Type:      EventSessionCompleted,
+		SessionID: s.id,
+		CreatedAt: time.Now(),
+		Session:   &view,
+	})
+	return nil
+}
+
 func (m *Manager) CloseSession(userID uuid.UUID, sessionID string) error {
-	s, err := m.getSession(userID, sessionID)
+	s, err := m.getOrRestoreSession(context.Background(), userID, sessionID)
 	if err != nil {
 		return err
 	}
@@ -300,6 +482,7 @@ func (m *Manager) closeSession(s *session) {
 	s.currentRun = nil
 	s.processing = false
 	view := m.snapshotSessionLocked(s)
+	snapshot := m.snapshotForPersistenceLocked(s)
 	subs := cloneSubscribersLocked(s)
 	s.subscribers = make(map[string]chan Event)
 	delete(m.sessions, s.id)
@@ -309,6 +492,7 @@ func (m *Manager) closeSession(s *session) {
 		cancel()
 	}
 
+	m.saveSnapshot(context.Background(), snapshot)
 	m.emitToSubscribers(subs, Event{
 		ID:        uuid.NewString(),
 		Type:      EventSessionCompleted,
@@ -396,6 +580,10 @@ func (m *Manager) runSession(sessionID string) {
 			return nil
 		})
 		if err != nil {
+			if ctx.Err() != nil {
+				m.completeTurn(s, false)
+				return
+			}
 			m.failSessionTurn(s, "provider_error", err.Error())
 			return
 		}
@@ -419,7 +607,9 @@ func (m *Manager) runSession(sessionID string) {
 				s.currentRun = nil
 				s.updatedAt = time.Now()
 			}
+			snapshot := m.snapshotForPersistenceLocked(s)
 			m.mu.Unlock()
+			m.saveSnapshot(context.Background(), snapshot)
 			return
 		}
 	}
@@ -449,15 +639,19 @@ func (m *Manager) resolvePendingTask(sessionID, taskID string, decision Decision
 		s.processing = false
 		s.currentRun = nil
 		s.updatedAt = time.Now()
+		snapshot := m.snapshotForPersistenceLocked(s)
 		m.mu.Unlock()
+		m.saveSnapshot(context.Background(), snapshot)
 		return
 	}
 
 	s.status = SessionStatusRunning
 	s.processing = true
 	s.updatedAt = time.Now()
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(context.Background(), snapshot)
 	go m.runSession(sessionID)
 }
 
@@ -472,8 +666,10 @@ func (m *Manager) executeTask(ctx context.Context, s *session, taskID string) {
 	task.view.UpdatedAt = time.Now()
 	s.updatedAt = task.view.UpdatedAt
 	view := task.view
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(context.Background(), snapshot)
 	m.emitTaskEvent(s, EventTaskUpdated, view)
 
 	result, err := task.spec.Executor(ctx, s.userID, task.toolCall.Arguments)
@@ -510,8 +706,10 @@ func (m *Manager) executeTask(ctx context.Context, s *session, taskID string) {
 		ToolCallID: task.toolCall.ID,
 	})
 	view = task.view
+	snapshot = m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(context.Background(), snapshot)
 	m.emitTaskEvent(s, EventTaskUpdated, view)
 }
 
@@ -534,8 +732,10 @@ func (m *Manager) rejectTask(s *session, taskID string) {
 		ToolCallID: task.toolCall.ID,
 	})
 	view := task.view
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(context.Background(), snapshot)
 	m.emitTaskEvent(s, EventTaskUpdated, view)
 }
 
@@ -581,8 +781,10 @@ func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([
 				ToolCallID: tc.ID,
 			})
 			s.updatedAt = now
+			snapshot := m.snapshotForPersistenceLocked(s)
 			m.mu.Unlock()
 
+			m.saveSnapshot(context.Background(), snapshot)
 			m.emitTaskEvent(s, EventTaskCreated, view)
 			m.emitTaskEvent(s, EventTaskUpdated, view)
 			continue
@@ -596,8 +798,10 @@ func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([
 		}
 		s.taskOrder = append(s.taskOrder, taskID)
 		s.updatedAt = now
+		snapshot := m.snapshotForPersistenceLocked(s)
 		m.mu.Unlock()
 
+		m.saveSnapshot(context.Background(), snapshot)
 		m.emitTaskEvent(s, EventTaskCreated, view)
 
 		if spec.ConfirmStrategy == registry.ConfirmUser {
@@ -607,8 +811,10 @@ func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([
 			task.view.UpdatedAt = time.Now()
 			view = task.view
 			s.updatedAt = task.view.UpdatedAt
+			snapshot = m.snapshotForPersistenceLocked(s)
 			m.mu.Unlock()
 
+			m.saveSnapshot(context.Background(), snapshot)
 			pendingConfirm = true
 			m.emitTaskEvent(s, EventTaskUpdated, view)
 			m.emitEvent(s, Event{
@@ -643,8 +849,10 @@ func (m *Manager) finalizeAssistantTurn(s *session, messageID string, result pro
 	})
 	s.updatedAt = time.Now()
 	content := result.Content
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(context.Background(), snapshot)
 	m.emitEvent(s, Event{
 		ID:        uuid.NewString(),
 		Type:      EventAssistantCompleted,
@@ -659,10 +867,12 @@ func (m *Manager) finalizeAssistantTurn(s *session, messageID string, result pro
 
 func (m *Manager) appendAssistantDelta(s *session, messageID, delta string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	s.appendAssistantDelta(messageID, delta)
 	s.updatedAt = time.Now()
+	snapshot := m.snapshotForPersistenceLocked(s)
+	m.mu.Unlock()
+
+	m.saveSnapshot(context.Background(), snapshot)
 }
 
 func (m *Manager) completeTurn(s *session, closed bool) {
@@ -678,8 +888,10 @@ func (m *Manager) completeTurn(s *session, closed bool) {
 		s.updatedAt = time.Now()
 	}
 	view := m.snapshotSessionLocked(s)
+	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
+	m.saveSnapshot(context.Background(), snapshot)
 	m.emitEvent(s, Event{
 		ID:        uuid.NewString(),
 		Type:      EventSessionCompleted,
@@ -825,6 +1037,131 @@ func (m *Manager) cleanupLoop() {
 				close(ch)
 			}
 		}
+	}
+}
+
+func (m *Manager) getOrRestoreSession(ctx context.Context, userID uuid.UUID, sessionID string) (*session, error) {
+	if s, ok := m.getSessionByID(sessionID); ok && s.userID == userID {
+		return s, nil
+	}
+	if m.store == nil {
+		return nil, ErrSessionNotFound
+	}
+
+	snapshot, err := m.store.Get(ctx, userID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return m.restoreSnapshot(snapshot)
+}
+
+func (m *Manager) restoreSnapshot(snapshot *SessionSnapshot) (*session, error) {
+	if snapshot == nil || snapshot.Status == SessionStatusClosed {
+		return nil, ErrSessionNotFound
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if existing, ok := m.sessions[snapshot.ID]; ok {
+		return existing, nil
+	}
+
+	s := &session{
+		id:             snapshot.ID,
+		userID:         snapshot.UserID,
+		model:          snapshot.Model,
+		title:          snapshot.Title,
+		permissionMode: normalizePermissionMode(snapshot.PermissionMode),
+		status:         snapshot.Status,
+		createdAt:      snapshot.CreatedAt,
+		updatedAt:      snapshot.UpdatedAt,
+		messages:       append([]provider.Message(nil), snapshot.Messages...),
+		messageViews:   append([]MessageView(nil), snapshot.MessageViews...),
+		tasks:          make(map[string]*taskState),
+		taskOrder:      append([]string(nil), snapshot.TaskOrder...),
+		subscribers:    make(map[string]chan Event),
+	}
+
+	for _, persistedTask := range snapshot.Tasks {
+		spec, _ := m.registry.Get(persistedTask.View.ToolName)
+		s.tasks[persistedTask.View.ID] = &taskState{
+			spec:     spec,
+			toolCall: persistedTask.ToolCall,
+			view:     persistedTask.View,
+		}
+	}
+
+	m.sessions[s.id] = s
+	return s, nil
+}
+
+func (m *Manager) snapshotForPersistenceLocked(s *session) SessionSnapshot {
+	tasks := make([]PersistedTask, 0, len(s.taskOrder))
+	for _, taskID := range s.taskOrder {
+		if task, ok := s.tasks[taskID]; ok {
+			tasks = append(tasks, PersistedTask{
+				ToolCall: task.toolCall,
+				View:     task.view,
+			})
+		}
+	}
+
+	return SessionSnapshot{
+		ID:             s.id,
+		UserID:         s.userID,
+		Model:          s.model,
+		Title:          s.title,
+		PermissionMode: s.permissionMode,
+		Status:         s.status,
+		CreatedAt:      s.createdAt,
+		UpdatedAt:      s.updatedAt,
+		Messages:       append([]provider.Message(nil), s.messages...),
+		MessageViews:   append([]MessageView(nil), s.messageViews...),
+		Tasks:          tasks,
+		TaskOrder:      append([]string(nil), s.taskOrder...),
+	}
+}
+
+func (m *Manager) saveSnapshot(ctx context.Context, snapshot SessionSnapshot) {
+	if m.store == nil {
+		return
+	}
+	_ = m.store.Save(ctx, snapshot)
+}
+
+func sessionListItemFromSnapshot(snapshot SessionSnapshot) SessionListItem {
+	title := strings.TrimSpace(snapshot.Title)
+	customTitle := title != ""
+	if title == "" {
+		title = "新会话"
+		for _, message := range snapshot.MessageViews {
+			if message.Role != "user" {
+				continue
+			}
+			content := strings.TrimSpace(message.Content)
+			if content == "" {
+				continue
+			}
+			title = content
+			if runes := []rune(title); len(runes) > 40 {
+				title = string(runes[:40]) + "…"
+			}
+			break
+		}
+	}
+
+	return SessionListItem{
+		ID:             snapshot.ID,
+		Model:          snapshot.Model,
+		PermissionMode: snapshot.PermissionMode,
+		Status:         snapshot.Status,
+		Title:          title,
+		CustomTitle:    customTitle,
+		MessageCount:   len(snapshot.MessageViews),
+		TaskCount:      len(snapshot.Tasks),
+		CreatedAt:      snapshot.CreatedAt,
+		UpdatedAt:      snapshot.UpdatedAt,
 	}
 }
 

@@ -45,6 +45,7 @@ export interface TaskView {
   error?: string
   created_at: string
   updated_at: string
+  custom_title: boolean
 }
 
 export interface AssistantEventData {
@@ -63,6 +64,18 @@ export interface ConfirmationView {
 export interface ErrorView {
   code: string
   message: string
+}
+
+export interface SessionListItem {
+  id: string
+  model: string
+  permission_mode: PermissionMode
+  status: AgentSessionStatus
+  title: string
+  message_count: number
+  task_count: number
+  created_at: string
+  updated_at: string
 }
 
 export interface SessionView {
@@ -101,6 +114,11 @@ export interface CreateSessionResponse {
   default_transport: AgentTransportType
 }
 
+export interface ListSessionsResponse {
+  items: SessionListItem[]
+  total: number
+}
+
 export interface SendSessionMessageInput {
   content: string
   context?: string
@@ -108,6 +126,34 @@ export interface SendSessionMessageInput {
 
 export interface ConfirmTaskInput {
   decision: "confirm" | "reject"
+}
+
+export async function listAISessions(input: { page?: number; limit?: number; q?: string } = {}): Promise<ListSessionsResponse> {
+  const params = new URLSearchParams()
+  if (input.page) {
+    params.set("page", String(input.page))
+  }
+  if (input.limit) {
+    params.set("limit", String(input.limit))
+  }
+  if (input.q?.trim()) {
+    params.set("q", input.q.trim())
+  }
+  const query = params.toString()
+  return apiFetch<ListSessionsResponse>(`/ai/sessions${query ? `?${query}` : ""}`)
+}
+
+export async function getLatestAISession(): Promise<CreateSessionResponse | null> {
+  const sessions = await listAISessions({ limit: 1 })
+  const latest = sessions.items[0]
+  if (!latest) {
+    return null
+  }
+  return getAISession(latest.id)
+}
+
+export async function getAISession(sessionId: string): Promise<CreateSessionResponse> {
+  return apiFetch<CreateSessionResponse>(`/ai/sessions/${sessionId}`)
 }
 
 export async function createAISession(input: CreateSessionInput): Promise<CreateSessionResponse> {
@@ -131,10 +177,27 @@ export async function confirmAISessionTask(sessionId: string, taskId: string, in
   })
 }
 
-export async function closeAISession(sessionId: string): Promise<void> {
+export async function cancelAISession(sessionId: string): Promise<void> {
+  await apiFetch<{ cancelled: boolean }>(`/ai/sessions/${sessionId}/cancel`, {
+    method: "POST",
+  })
+}
+
+export async function renameAISession(sessionId: string, title: string): Promise<void> {
+  await apiFetch<{ updated: boolean }>(`/ai/sessions/${sessionId}`, {
+    method: "PATCH",
+    body: { title },
+  })
+}
+
+export async function deleteAISession(sessionId: string): Promise<void> {
   await apiFetch<string>(`/ai/sessions/${sessionId}`, {
     method: "DELETE",
   })
+}
+
+export async function closeAISession(sessionId: string): Promise<void> {
+  await deleteAISession(sessionId)
 }
 
 export interface SessionEventStreamHandlers {

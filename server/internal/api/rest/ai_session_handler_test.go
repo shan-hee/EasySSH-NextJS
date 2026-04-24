@@ -78,10 +78,15 @@ func newTestAISessionRouter(userID uuid.UUID, handler *AISessionHandler) *gin.En
 	router.Use(func(c *gin.Context) {
 		c.Set("user_id", userID.String())
 	})
+	router.GET("/sessions", handler.ListSessions)
+	router.GET("/sessions/latest", handler.GetLatestSession)
 	router.POST("/sessions", handler.CreateSession)
+	router.GET("/sessions/:session_id", handler.GetSession)
+	router.PATCH("/sessions/:session_id", handler.RenameSession)
 	router.POST("/sessions/:session_id/messages", handler.SendMessage)
+	router.POST("/sessions/:session_id/cancel", handler.CancelSession)
 	router.POST("/sessions/:session_id/tasks/:task_id/confirm", handler.ConfirmTask)
-	router.DELETE("/sessions/:session_id", handler.CloseSession)
+	router.DELETE("/sessions/:session_id", handler.DeleteSession)
 	return router
 }
 

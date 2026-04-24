@@ -17,6 +17,7 @@ import (
 	"github.com/easyssh/server/internal/api/rest"
 	"github.com/easyssh/server/internal/api/ws"
 	"github.com/easyssh/server/internal/domain/aichat"
+	"github.com/easyssh/server/internal/domain/aichat/runtime"
 	"github.com/easyssh/server/internal/domain/aiconfig"
 	"github.com/easyssh/server/internal/domain/auditlog"
 	"github.com/easyssh/server/internal/domain/auth"
@@ -116,11 +117,12 @@ func main() {
 		&sftp.TrashItem{},                    // SFTP 回收站索引表
 		&sftp.TrashSettings{},                // SFTP 回收站用户设置表
 		// 安全增强相关表
-		&auth.LoginAttempt{},     // 登录尝试记录表
-		&auth.TrustedDevice{},    // 可信设备表
-		&auth.LoginAlert{},       // 登录告警表
-		&auth.RSAKeyPair{},       // RSA 密钥对表
-		&permission.Permission{}, // 权限定义表
+		&auth.LoginAttempt{},       // 登录尝试记录表
+		&auth.TrustedDevice{},      // 可信设备表
+		&auth.LoginAlert{},         // 登录告警表
+		&auth.RSAKeyPair{},         // RSA 密钥对表
+		&permission.Permission{},   // 权限定义表
+		&runtime.AISessionRecord{}, // AI 会话持久化表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
 	}
@@ -490,6 +492,7 @@ func main() {
 	// AI 工具执行器和会话运行时
 	aiToolExecutor := aichat.NewToolExecutorService(serverService, sftpHandler.GetPool(), encryptor)
 	aiRuntimeManager := aichat.NewRuntimeManager(aiConfigService, userAIConfigService, aiToolExecutor)
+	aiRuntimeManager.SetSessionStore(runtime.NewGormSessionStore(database))
 	aiSessionHandler := rest.NewAISessionHandler(aiRuntimeManager)
 	aiSessionWSHandler := ws.NewAISessionHandler(aiRuntimeManager, securityService)
 	// Docker 处理器（复用监控连接池）
@@ -973,11 +976,16 @@ func main() {
 		aiChatRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			aiChatRoutes.GET("/config", aiRuntimeConfigHandler.GetConfig)
+			aiChatRoutes.GET("/sessions", aiSessionHandler.ListSessions)
+			aiChatRoutes.GET("/sessions/latest", aiSessionHandler.GetLatestSession)
 			aiChatRoutes.POST("/sessions", aiSessionHandler.CreateSession)
+			aiChatRoutes.GET("/sessions/:session_id", aiSessionHandler.GetSession)
+			aiChatRoutes.PATCH("/sessions/:session_id", aiSessionHandler.RenameSession)
 			aiChatRoutes.POST("/sessions/:session_id/messages", aiSessionHandler.SendMessage)
+			aiChatRoutes.POST("/sessions/:session_id/cancel", aiSessionHandler.CancelSession)
 			aiChatRoutes.GET("/sessions/:session_id/events", aiSessionHandler.StreamEvents)
 			aiChatRoutes.POST("/sessions/:session_id/tasks/:task_id/confirm", aiSessionHandler.ConfirmTask)
-			aiChatRoutes.DELETE("/sessions/:session_id", aiSessionHandler.CloseSession)
+			aiChatRoutes.DELETE("/sessions/:session_id", aiSessionHandler.DeleteSession)
 			aiChatRoutes.GET("/sessions/:session_id/ws", aiSessionWSHandler.HandleSession)
 		}
 

@@ -534,6 +534,57 @@ components:
         default_transport:
           $ref: '#/components/schemas/AITransportType'
 
+    AISessionListItem:
+      type: object
+      required: [id, model, permission_mode, status, title, custom_title, message_count, task_count, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        model:
+          type: string
+        permission_mode:
+          $ref: '#/components/schemas/AIPermissionMode'
+        status:
+          $ref: '#/components/schemas/AISessionStatus'
+        title:
+          type: string
+          description: 会话标题。未手动命名时从首条用户消息生成。
+        custom_title:
+          type: boolean
+          description: 是否为用户手动重命名的标题。
+        message_count:
+          type: integer
+        task_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ListAISessionsResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AISessionListItem'
+        total:
+          type: integer
+
+    RenameAISessionRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: 新的会话标题，服务端会 trim 并限制长度。
+
     SendAISessionMessageRequest:
       type: object
       required: [content]
@@ -1027,6 +1078,37 @@ paths:
                     type: string
 
   /ai/sessions:
+    get:
+      tags:
+        - ai
+      summary: 查询 AI 会话列表
+      description: 返回当前用户的 AI 会话快照列表，按 updated_at 倒序排列。用于会话列表抽屉、历史恢复和后续多会话入口。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+            maximum: 100
+        - name: q
+          in: query
+          description: 按会话标题或消息快照文本搜索。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 会话列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAISessionsResponse'
     post:
       tags:
         - ai
@@ -1046,6 +1128,147 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateAISessionResponse'
+
+  /ai/sessions/latest:
+    get:
+      tags:
+        - ai
+      summary: 恢复最近活跃 AI 会话
+      description: 返回当前用户最近一个未关闭的 AI 会话快照。Dashboard 和 Terminal 会用它在刷新或打开面板后恢复会话。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 最近未关闭会话
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAISessionResponse'
+        '404':
+          description: 没有可恢复会话
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ai/sessions/{session_id}:
+    get:
+      tags:
+        - ai
+      summary: 获取指定 AI 会话快照
+      description: 从内存 runtime 或 ai_sessions 持久化快照恢复指定会话，用于会话列表点击切换。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 会话快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAISessionResponse'
+        '404':
+          description: 会话不存在或已关闭
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+        - ai
+      summary: 重命名 AI 会话
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameAISessionRequest'
+      responses:
+        '200':
+          description: 已重命名
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: boolean
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - ai
+      summary: 删除 AI 会话
+      description: 从会话列表移除指定会话快照，并停止对应运行中 runtime。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 已删除
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ai/sessions/{session_id}/cancel:
+    post:
+      tags:
+        - ai
+      summary: 中断 AI 会话当前回复
+      description: 取消当前模型回复或工具执行，将会话恢复为空闲状态，但保留会话快照与历史记录。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 已中断
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cancelled:
+                    type: boolean
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /ai/sessions/{session_id}/messages:
     post:
@@ -1149,33 +1372,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /ai/sessions/{session_id}:
-    delete:
-      tags:
-        - ai
-      summary: 主动关闭 AI 会话
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: 会话已关闭
-        '404':
-          description: 会话不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
-  # ========================================
-  # 服务器管理
-  # ========================================
   /servers:
     get:
       tags:

@@ -2,13 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import Link from "next/link"
-import { Bot, Check, ChevronRight, Code2, FileText, Loader2, Plus, RefreshCw, Send, Server as ServerIcon, Shield, Terminal, X, Zap } from "lucide-react"
+import { Check, History, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Send, Server as ServerIcon, Shield, Square, SquarePen, Trash2, X } from "lucide-react"
 
 import { DashboardAgentTimeline } from "@/components/ai-agent/dashboard-agent-timeline"
+import {
+  ComposerReferenceChips,
+  MAX_COMPOSER_ATTACHMENTS,
+  PromptTemplateGrid,
+  buildAgentMessageContext,
+  createComposerAttachment,
+  sortReferencedServers,
+  type ComposerAttachment,
+} from "@/components/ai-agent/composer"
 import { PageHeader } from "@/components/page-header"
 import { toast } from "@/components/ui/sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   Command,
   CommandEmpty,
@@ -22,6 +32,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   PromptInput,
   PromptInputModelSelect,
@@ -44,207 +68,17 @@ import { useAgentSession } from "@/hooks/use-agent-session"
 import { useAIConfig } from "@/hooks/use-ai-config"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { serversApi, type Server as ManagedServer } from "@/lib/api"
-import type { PermissionMode } from "@/lib/api/ai-agent"
-import { getServerDisplayName, getServerShortName } from "@/lib/server-utils"
+import { deleteAISession, listAISessions, renameAISession, type PermissionMode, type SessionListItem } from "@/lib/api/ai-agent"
+import { getServerDisplayName } from "@/lib/server-utils"
 import { cn } from "@/lib/utils"
 import { useTranslations } from "next-intl"
-
-type Translate = ReturnType<typeof useTranslations>
-
-const MAX_ATTACHMENTS = 5
-const ATTACHMENT_TEXT_READ_LIMIT = 64 * 1024
-const ATTACHMENT_TEXT_PREVIEW_LIMIT = 12_000
-
-type ComposerAttachment = {
-  id: string
-  name: string
-  size: number
-  type: string
-  source: "text" | "metadata"
-  content?: string
-  truncated: boolean
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) {
-    return `${bytes} B`
-  }
-
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function sortServers(servers: ManagedServer[]) {
-  return [...servers].sort((left, right) => {
-    if (left.status !== right.status) {
-      return left.status === "online" ? -1 : 1
-    }
-
-    return getServerDisplayName(left).localeCompare(getServerDisplayName(right))
-  })
-}
-
-function isTextLikeFile(file: File) {
-  const lowerName = file.name.toLowerCase()
-  const textExtensions = [
-    ".txt",
-    ".log",
-    ".md",
-    ".json",
-    ".yml",
-    ".yaml",
-    ".xml",
-    ".csv",
-    ".conf",
-    ".ini",
-    ".sh",
-    ".bash",
-    ".zsh",
-    ".py",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".jsx",
-    ".go",
-    ".rs",
-    ".java",
-    ".sql",
-    ".env",
-  ]
-
-  return (
-    file.type.startsWith("text/") ||
-    file.type.includes("json") ||
-    file.type.includes("xml") ||
-    file.type.includes("yaml") ||
-    file.type.includes("javascript") ||
-    file.type.includes("typescript") ||
-    textExtensions.some((extension) => lowerName.endsWith(extension))
-  )
-}
-
-async function createComposerAttachment(file: File): Promise<ComposerAttachment> {
-  const id = `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`
-
-  if (!isTextLikeFile(file)) {
-    return {
-      id,
-      name: file.name,
-      size: file.size,
-      type: file.type || "application/octet-stream",
-      source: "metadata",
-      truncated: false,
-    }
-  }
-
-  const rawText = await file.slice(0, ATTACHMENT_TEXT_READ_LIMIT).text()
-  const sanitizedText = rawText.replace(/\u0000/g, "")
-  const content = sanitizedText.slice(0, ATTACHMENT_TEXT_PREVIEW_LIMIT)
-  const truncated =
-    file.size > ATTACHMENT_TEXT_READ_LIMIT ||
-    sanitizedText.length > ATTACHMENT_TEXT_PREVIEW_LIMIT
-
-  return {
-    id,
-    name: file.name,
-    size: file.size,
-    type: file.type || "text/plain",
-    source: "text",
-    content,
-    truncated,
-  }
-}
-
-function WelcomePanel({
-  onUseTemplate,
-  tText,
-}: {
-  onUseTemplate: (prompt: string) => void
-  tText: Translate
-}) {
-  const templates = useMemo(
-    () => [
-      {
-        icon: Terminal,
-        titleKey: "templateRunCommandTitle" as const,
-        descKey: "templateRunCommandDesc" as const,
-        promptKey: "templateRunCommandPrompt" as const,
-      },
-      {
-        icon: Code2,
-        titleKey: "templateScriptTitle" as const,
-        descKey: "templateScriptDesc" as const,
-        promptKey: "templateScriptPrompt" as const,
-      },
-      {
-        icon: FileText,
-        titleKey: "templateLogsTitle" as const,
-        descKey: "templateLogsDesc" as const,
-        promptKey: "templateLogsPrompt" as const,
-      },
-      {
-        icon: Zap,
-        titleKey: "templatePerfTitle" as const,
-        descKey: "templatePerfDesc" as const,
-        promptKey: "templatePerfPrompt" as const,
-      },
-    ],
-    []
-  )
-
-  return (
-    <div className="flex h-full min-h-[420px] flex-col items-center justify-center px-4 py-8 md:px-8">
-      <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center">
-        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-          <Bot className="h-8 w-8 text-foreground" />
-        </div>
-
-        <h2 className="text-center text-2xl font-semibold">{tText("cardTitle")}</h2>
-        <p className="mt-3 max-w-2xl text-center text-muted-foreground">
-          {tText("emptyDescriptionIntro")}
-        </p>
-
-        <div className="mt-10 grid w-full max-w-3xl gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {templates.map((template) => {
-            const Icon = template.icon
-            return (
-              <button
-                key={template.titleKey}
-                type="button"
-                className={cn(
-                  "group relative rounded-xl border border-border/60 bg-card/70 p-4 text-left shadow-sm transition-all duration-200",
-                  "hover:border-primary/20 hover:bg-accent/30"
-                )}
-                onClick={() => onUseTemplate(tText(template.promptKey))}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover:bg-primary/10">
-                    <Icon className="h-5 w-5 text-foreground/80 group-hover:text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{tText(template.titleKey)}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{tText(template.descKey)}</div>
-                  </div>
-                </div>
-                <ChevronRight className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100" />
-              </button>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function AIAssistantPage() {
   const t = useTranslations("aiAssistant")
   const { ready } = useAuthReady()
   const { isLoading, isConfigured, models } = useAIConfig()
   const agentSession = useAgentSession()
-  const { session, sessionId, pendingConfirmationTasks, error, startNewSession, sendMessage, confirmTask } = agentSession
+  const { session, sessionId, pendingConfirmationTasks, error, restoreLatestSession, restoreSession, startNewSession, sendMessage, confirmTask, cancelSession, closeSession } = agentSession
 
   const [draft, setDraft] = useState("")
   const [selectedModel, setSelectedModel] = useState("")
@@ -254,6 +88,12 @@ export default function AIAssistantPage() {
   const [selectedServerIds, setSelectedServerIds] = useState<string[]>([])
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
+  const [sessionSheetOpen, setSessionSheetOpen] = useState(false)
+  const [sessionList, setSessionList] = useState<SessionListItem[]>([])
+  const [sessionListLoading, setSessionListLoading] = useState(false)
+  const [sessionSearch, setSessionSearch] = useState("")
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState("")
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -272,7 +112,7 @@ export default function AIAssistantPage() {
 
     try {
       const response = await serversApi.list({ limit: 1000 })
-      setAvailableServers(sortServers(response.data))
+      setAvailableServers(sortReferencedServers(response.data))
     } catch {
       toast.error(t("toastLoadServersFailed"))
     } finally {
@@ -283,6 +123,14 @@ export default function AIAssistantPage() {
   useEffect(() => {
     void loadServers()
   }, [loadServers])
+
+  useEffect(() => {
+    if (!ready || isLoading || !isConfigured || session || agentSession.transport !== "idle") {
+      return
+    }
+
+    void restoreLatestSession()
+  }, [agentSession.transport, isConfigured, isLoading, ready, restoreLatestSession, session])
 
   const permissionOptions = useMemo(
     () =>
@@ -314,14 +162,14 @@ export default function AIAssistantPage() {
     () => availableServers.filter((server) => selectedServerIds.includes(server.id)),
     [availableServers, selectedServerIds]
   )
-  const hasComposerReferences = selectedServers.length > 0 || attachments.length > 0
   const isConfigChecking = !ready || isLoading
   const showConfigAction = ready && !isLoading && !isConfigured
   const modelSelectDisabled = isConfigChecking || !isConfigured || models.length === 0
   const serverReferenceDisabled = !ready || isLoading || !isConfigured
-  const attachmentDisabled = attachmentsLoading || attachments.length >= MAX_ATTACHMENTS || !ready || isLoading || !isConfigured
+  const attachmentDisabled = attachmentsLoading || attachments.length >= MAX_COMPOSER_ATTACHMENTS || !ready || isLoading || !isConfigured
 
   const hasTimeline = visibleTimeline.length > 0
+  const isSessionRunning = session?.status === "running"
   const canSubmit =
     Boolean(draft.trim()) &&
     ready &&
@@ -330,42 +178,10 @@ export default function AIAssistantPage() {
     isConfigured &&
     (!session || session.status === "idle" || session.status === "closed")
 
-  const buildMessageContext = useCallback(() => {
-    const sections: string[] = []
-
-    if (selectedServers.length > 0) {
-      const serverLines = [
-        t("referenceContextHeader"),
-        ...selectedServers.map((server) => (
-          `- ${getServerDisplayName(server)} | ${server.username}@${server.host}:${server.port} | status=${server.status}`
-        )),
-        t("referenceContextRule"),
-      ]
-
-      sections.push(serverLines.join("\n"))
-    }
-
-    if (attachments.length > 0) {
-      const attachmentLines = [t("attachmentContextHeader")]
-
-      attachments.forEach((attachment) => {
-        attachmentLines.push(`- ${attachment.name} (${formatFileSize(attachment.size)}, ${attachment.type || "unknown"})`)
-
-        if (attachment.source === "text" && attachment.content) {
-          attachmentLines.push(attachment.content)
-          if (attachment.truncated) {
-            attachmentLines.push(t("attachmentContextTruncated", { count: ATTACHMENT_TEXT_PREVIEW_LIMIT }))
-          }
-        } else {
-          attachmentLines.push(t("attachmentContextMetadataOnly"))
-        }
-      })
-
-      sections.push(attachmentLines.join("\n"))
-    }
-
-    return sections.length > 0 ? sections.join("\n\n") : undefined
-  }, [attachments, selectedServers, t])
+  const buildMessageContext = useCallback(
+    () => buildAgentMessageContext({ attachments, selectedServers, t }),
+    [attachments, selectedServers, t]
+  )
 
   const submit = async () => {
     const normalizedDraft = draft.trim()
@@ -402,6 +218,7 @@ export default function AIAssistantPage() {
   const handleCreateNewSession = async () => {
     setDraft("")
     setAttachments([])
+    setSessionSheetOpen(false)
     await startNewSession({
       model: selectedModel || undefined,
       permissionMode,
@@ -409,6 +226,90 @@ export default function AIAssistantPage() {
     requestAnimationFrame(() => {
       inputRef.current?.focus()
     })
+  }
+
+  const loadSessionList = useCallback(async () => {
+    if (!ready || isLoading || !isConfigured) {
+      return
+    }
+
+    setSessionListLoading(true)
+    try {
+      const response = await listAISessions({ limit: 30, q: sessionSearch })
+      setSessionList(response.items)
+    } catch {
+      toast.error("加载会话列表失败")
+    } finally {
+      setSessionListLoading(false)
+    }
+  }, [isConfigured, isLoading, ready, sessionSearch])
+
+  useEffect(() => {
+    if (sessionSheetOpen) {
+      void loadSessionList()
+    }
+  }, [loadSessionList, sessionSheetOpen])
+
+  const handleRestoreSession = async (targetSessionId: string) => {
+    if (renamingSessionId) {
+      return
+    }
+
+    const restored = await restoreSession(targetSessionId)
+    if (restored) {
+      setSessionSheetOpen(false)
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+      })
+    }
+  }
+
+  const beginRenameSession = (item: SessionListItem) => {
+    setRenamingSessionId(item.id)
+    setRenameDraft(item.title)
+  }
+
+  const cancelRenameSession = () => {
+    setRenamingSessionId(null)
+    setRenameDraft("")
+  }
+
+  const submitRenameSession = async (targetSessionId: string) => {
+    const title = renameDraft.trim()
+    if (!title) {
+      toast.error("会话名称不能为空")
+      return
+    }
+
+    try {
+      await renameAISession(targetSessionId, title)
+      cancelRenameSession()
+      await loadSessionList()
+      toast.success("会话已重命名")
+    } catch {
+      toast.error("重命名会话失败")
+    }
+  }
+
+  const handleDeleteSession = async (targetSessionId: string) => {
+    const confirmed = window.confirm("确定删除该会话吗？删除后不可在列表中恢复。")
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteAISession(targetSessionId)
+      setSessionList((current) => current.filter((item) => item.id !== targetSessionId))
+      if (targetSessionId === sessionId) {
+        await closeSession()
+        setSessionSheetOpen(false)
+      } else {
+        await loadSessionList()
+      }
+      toast.success("会话已删除")
+    } catch {
+      toast.error("删除会话失败")
+    }
   }
 
   const toggleServerSelection = useCallback((serverId: string) => {
@@ -431,16 +332,16 @@ export default function AIAssistantPage() {
     }
 
     const files = Array.from(fileList)
-    const remainingSlots = MAX_ATTACHMENTS - attachments.length
+    const remainingSlots = MAX_COMPOSER_ATTACHMENTS - attachments.length
 
     if (remainingSlots <= 0) {
-      toast.info(t("attachmentLimitHint", { count: MAX_ATTACHMENTS }))
+      toast.info(t("attachmentLimitHint", { count: MAX_COMPOSER_ATTACHMENTS }))
       event.target.value = ""
       return
     }
 
     if (files.length > remainingSlots) {
-      toast.info(t("attachmentLimitHint", { count: MAX_ATTACHMENTS }))
+      toast.info(t("attachmentLimitHint", { count: MAX_COMPOSER_ATTACHMENTS }))
     }
 
     setAttachmentsLoading(true)
@@ -470,14 +371,191 @@ export default function AIAssistantPage() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <PageHeader title={t("pageTitle")}>
+        <Sheet open={sessionSheetOpen} onOpenChange={setSessionSheetOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9 text-muted-foreground hover:text-foreground"
+              disabled={!ready || isLoading || !isConfigured}
+              onClick={() => void loadSessionList()}
+              aria-label="会话列表"
+              title="会话列表"
+            >
+              <History className="size-4" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[360px] p-0 sm:max-w-md">
+            <SheetHeader className="border-b border-border/60 px-4 py-4">
+              <SheetTitle>会话列表</SheetTitle>
+              <SheetDescription>搜索、恢复或管理最近的 AI 助手会话</SheetDescription>
+            </SheetHeader>
+            <div className="border-b border-border/60 p-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={sessionSearch}
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                  placeholder="搜索会话标题或消息"
+                  className="pl-9 pr-9"
+                />
+                {sessionSearch && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setSessionSearch("")}
+                    aria-label="清空搜索"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              {sessionListLoading ? (
+                <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  加载中
+                </div>
+              ) : sessionList.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
+                  暂无会话
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {sessionList.map((item) => {
+                    const isActive = item.id === sessionId
+                    return (
+                      <div
+                        key={item.id}
+                        role="button"
+                        tabIndex={0}
+                        className={cn(
+                          "w-full rounded-xl border px-3 py-3 text-left transition-colors",
+                          isActive
+                            ? "border-primary/30 bg-primary/10"
+                            : "border-border/60 bg-card/60 hover:bg-accent/40"
+                        )}
+                        onClick={() => void handleRestoreSession(item.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault()
+                            void handleRestoreSession(item.id)
+                          }
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            {renamingSessionId === item.id ? (
+                              <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                                <Input
+                                  autoFocus
+                                  value={renameDraft}
+                                  onChange={(event) => setRenameDraft(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      event.preventDefault()
+                                      void submitRenameSession(item.id)
+                                    }
+                                    if (event.key === "Escape") {
+                                      event.preventDefault()
+                                      cancelRenameSession()
+                                    }
+                                  }}
+                                  className="h-8"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8 shrink-0"
+                                  onClick={() => void submitRenameSession(item.id)}
+                                  aria-label="保存会话名称"
+                                >
+                                  <Check className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8 shrink-0"
+                                  onClick={cancelRenameSession}
+                                  aria-label="取消重命名"
+                                >
+                                  <X className="size-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="truncate text-sm font-medium">{item.title}</div>
+                            )}
+                            <div className="mt-1 truncate text-xs text-muted-foreground">
+                              {item.model || "默认模型"} · {item.message_count} 条消息 · {item.task_count} 个任务
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Badge variant="outline" className="text-[10px]">
+                              {item.status}
+                            </Badge>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7 text-muted-foreground hover:text-foreground"
+                                  onClick={(event) => event.stopPropagation()}
+                                  aria-label="会话操作"
+                                >
+                                  <MoreHorizontal className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    beginRenameSession(item)
+                                  }}
+                                >
+                                  <Pencil className="size-4" />
+                                  重命名
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleDeleteSession(item.id)
+                                  }}
+                                >
+                                  <Trash2 className="size-4" />
+                                  删除
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {new Date(item.updated_at).toLocaleString()}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon"
+          className="size-9 text-muted-foreground hover:text-foreground"
           disabled={!ready || isLoading || !isConfigured}
           onClick={() => void handleCreateNewSession()}
+          aria-label={t("newSession")}
+          title={t("newSession")}
         >
-          <RefreshCw className="size-4" />
-          {t("newSession")}
+          <SquarePen className="size-4" />
         </Button>
       </PageHeader>
 
@@ -495,7 +573,7 @@ export default function AIAssistantPage() {
                 <ConversationScrollButton />
               </Conversation>
             ) : (
-              <WelcomePanel onUseTemplate={handleUseTemplate} tText={t} />
+              <PromptTemplateGrid onUseTemplate={handleUseTemplate} t={t} />
             )}
           </div>
 
@@ -536,7 +614,7 @@ export default function AIAssistantPage() {
             )}
 
             <div className="mx-auto w-full max-w-4xl">
-                <input
+              <input
                   ref={fileInputRef}
                   type="file"
                   multiple
@@ -544,79 +622,23 @@ export default function AIAssistantPage() {
                   onChange={(event) => void handleAttachmentSelection(event)}
                 />
 
-                {hasComposerReferences && (
-                  <div className="mb-2 flex flex-col gap-2 px-1">
-                    {selectedServers.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {t("referencedServersLabel")}
-                        </span>
-                        {selectedServers.map((server) => (
-                          <span
-                            key={server.id}
-                            className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-foreground"
-                            title={getServerDisplayName(server)}
-                          >
-                            <ServerIcon className="size-3.5 text-muted-foreground" />
-                            <span className="max-w-[10rem] truncate">{getServerShortName(server)}</span>
-                            <button
-                              type="button"
-                              className="text-muted-foreground transition-colors hover:text-foreground"
-                              onClick={() => toggleServerSelection(server.id)}
-                            >
-                              <X className="size-3.5" />
-                            </button>
-                          </span>
-                        ))}
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                          onClick={() => setSelectedServerIds([])}
-                        >
-                          {t("referenceServerClear")}
-                        </button>
-                      </div>
-                    )}
+              <ComposerReferenceChips
+                  attachments={attachments}
+                  onClearServers={() => setSelectedServerIds([])}
+                  onRemoveAttachment={removeAttachment}
+                  onToggleServer={toggleServerSelection}
+                  selectedServers={selectedServers}
+                  t={t}
+                />
 
-                    {attachments.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {t("attachedFilesLabel")}
-                        </span>
-                        {attachments.map((attachment) => (
-                          <span
-                            key={attachment.id}
-                            className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-foreground"
-                            title={`${attachment.name} · ${formatFileSize(attachment.size)}`}
-                          >
-                            <FileText className="size-3.5 text-muted-foreground" />
-                            <span className="max-w-[12rem] truncate">{attachment.name}</span>
-                            <span className="text-muted-foreground">{formatFileSize(attachment.size)}</span>
-                            {attachment.truncated && (
-                              <span className="text-muted-foreground">{t("attachmentInlineTruncated")}</span>
-                            )}
-                            <button
-                              type="button"
-                              className="text-muted-foreground transition-colors hover:text-foreground"
-                              onClick={() => removeAttachment(attachment.id)}
-                            >
-                              <X className="size-3.5" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <PromptInput
+              <PromptInput
                   className="border-border/60 bg-card/95 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/80"
                   onSubmit={(event) => {
                     event.preventDefault()
                     void submit()
                   }}
                 >
-                  <PromptInputTextarea
+                <PromptInputTextarea
                     ref={inputRef}
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
@@ -626,36 +648,36 @@ export default function AIAssistantPage() {
                     className="px-4 pt-4"
                   />
 
-                  <PromptInputToolbar className="flex-wrap gap-3 border-t border-border/60 px-2 py-2">
-                    <PromptInputTools className="flex flex-wrap items-center gap-2">
-                      <PromptInputModelSelect
+                <PromptInputToolbar className="flex-wrap gap-3 border-t border-border/60 px-2 py-2">
+                  <PromptInputTools className="flex flex-wrap items-center gap-2">
+                    <PromptInputModelSelect
                         value={selectedModel}
                         onValueChange={setSelectedModel}
                         disabled={modelSelectDisabled}
                       >
-                        <PromptInputModelSelectTrigger className="h-9 rounded-md border-none !bg-transparent px-2.5 text-xs font-normal text-muted-foreground !shadow-none hover:!bg-transparent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:!bg-transparent dark:hover:!bg-transparent [aria-expanded='true']:!bg-transparent [aria-expanded='true']:text-foreground sm:text-sm">
-                          <PromptInputModelSelectValue placeholder={t("modelPlaceholder")} />
+                      <PromptInputModelSelectTrigger className="h-9 rounded-md border-none !bg-transparent px-2.5 text-xs font-normal text-muted-foreground !shadow-none hover:!bg-transparent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:!bg-transparent dark:hover:!bg-transparent [aria-expanded='true']:!bg-transparent [aria-expanded='true']:text-foreground sm:text-sm">
+                        <PromptInputModelSelectValue placeholder={t("modelPlaceholder")} />
                         </PromptInputModelSelectTrigger>
-                        <PromptInputModelSelectContent>
+                      <PromptInputModelSelectContent>
                           {models.map((model) => (
-                            <PromptInputModelSelectItem key={model} value={model}>
+                          <PromptInputModelSelectItem key={model} value={model}>
                               {model}
                             </PromptInputModelSelectItem>
                           ))}
                         </PromptInputModelSelectContent>
                       </PromptInputModelSelect>
 
-                      <PromptInputModelSelect
+                    <PromptInputModelSelect
                         value={permissionMode}
                         onValueChange={(value) => setPermissionMode(value as PermissionMode)}
                         disabled={isConfigChecking}
                       >
-                        <PromptInputModelSelectTrigger className="h-9 rounded-md border-none !bg-transparent px-2.5 text-xs font-normal text-muted-foreground !shadow-none hover:!bg-transparent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:!bg-transparent dark:hover:!bg-transparent [aria-expanded='true']:!bg-transparent [aria-expanded='true']:text-foreground sm:text-sm">
-                          <PromptInputModelSelectValue />
+                      <PromptInputModelSelectTrigger className="h-9 rounded-md border-none !bg-transparent px-2.5 text-xs font-normal text-muted-foreground !shadow-none hover:!bg-transparent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:!bg-transparent dark:hover:!bg-transparent [aria-expanded='true']:!bg-transparent [aria-expanded='true']:text-foreground sm:text-sm">
+                        <PromptInputModelSelectValue />
                         </PromptInputModelSelectTrigger>
-                        <PromptInputModelSelectContent>
+                      <PromptInputModelSelectContent>
                           {permissionOptions.map((option) => (
-                            <PromptInputModelSelectItem key={option.value} value={option.value}>
+                          <PromptInputModelSelectItem key={option.value} value={option.value}>
                               {option.label}
                             </PromptInputModelSelectItem>
                           ))}
@@ -796,15 +818,29 @@ export default function AIAssistantPage() {
                           {pendingConfirmationTasks.length}
                         </Badge>
                       )}
-                      <PromptInputSubmit
-                        disabled={!canSubmit}
-                        size="icon"
-                        className="h-10 w-10"
-                        aria-label={t("send")}
-                        title={t("send")}
-                      >
-                        <Send className="size-4" />
-                      </PromptInputSubmit>
+                      {isSessionRunning ? (
+                        <PromptInputSubmit
+                          type="button"
+                          status="streaming"
+                          size="icon"
+                          className="h-10 w-10"
+                          aria-label="中断回复"
+                          title="中断回复"
+                          onClick={() => void cancelSession()}
+                        >
+                          <Square className="size-4" />
+                        </PromptInputSubmit>
+                      ) : (
+                        <PromptInputSubmit
+                          disabled={!canSubmit}
+                          size="icon"
+                          className="h-10 w-10"
+                          aria-label={t("send")}
+                          title={t("send")}
+                        >
+                          <Send className="size-4" />
+                        </PromptInputSubmit>
+                      )}
                     </div>
                   </PromptInputToolbar>
                 </PromptInput>
@@ -812,7 +848,7 @@ export default function AIAssistantPage() {
                 <div className="mt-2 text-center text-xs text-muted-foreground">
                   {t("safetyNotice")}
                 </div>
-            </div>
+              </div>
           </div>
         </div>
       </div>

@@ -30,6 +30,11 @@ type CreateAISessionResponse struct {
 	DefaultTransport runtime.TransportType `json:"default_transport"`
 }
 
+type ListAISessionsResponse struct {
+	Items []runtime.SessionListItem `json:"items"`
+	Total int64                     `json:"total"`
+}
+
 type AISessionMessageRequest struct {
 	Content string `json:"content" binding:"required"`
 	Context string `json:"context,omitempty"`
@@ -37,6 +42,76 @@ type AISessionMessageRequest struct {
 
 type ConfirmAISessionTaskRequest struct {
 	Decision string `json:"decision" binding:"required,oneof=confirm reject"`
+}
+
+type RenameAISessionRequest struct {
+	Title string `json:"title" binding:"required"`
+}
+
+func (h *AISessionHandler) ListSessions(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	limit, offset := GetPaginationParams(c)
+	items, total, err := h.manager.ListSessions(c.Request.Context(), userID, strings.TrimSpace(c.Query("q")), limit, offset)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "list_sessions_failed", err.Error())
+		return
+	}
+
+	RespondSuccess(c, ListAISessionsResponse{
+		Items: items,
+		Total: total,
+	})
+}
+
+func (h *AISessionHandler) GetSession(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		RespondError(c, http.StatusBadRequest, "invalid_session_id", "session_id is required")
+		return
+	}
+
+	view, err := h.manager.GetSession(userID, sessionID)
+	if err != nil {
+		h.respondRuntimeError(c, err)
+		return
+	}
+
+	RespondSuccess(c, CreateAISessionResponse{
+		SessionID:        view.ID,
+		Session:          view,
+		DefaultTransport: view.DefaultTransport,
+	})
+}
+
+func (h *AISessionHandler) GetLatestSession(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	view, err := h.manager.GetLatestActiveSession(c.Request.Context(), userID)
+	if err != nil {
+		h.respondRuntimeError(c, err)
+		return
+	}
+
+	RespondSuccess(c, CreateAISessionResponse{
+		SessionID:        view.ID,
+		Session:          view,
+		DefaultTransport: view.DefaultTransport,
+	})
 }
 
 func (h *AISessionHandler) CreateSession(c *gin.Context) {
@@ -187,6 +262,75 @@ func (h *AISessionHandler) ConfirmTask(c *gin.Context) {
 			"accepted": true,
 		},
 	})
+}
+
+func (h *AISessionHandler) CancelSession(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		RespondError(c, http.StatusBadRequest, "invalid_session_id", "session_id is required")
+		return
+	}
+
+	if err := h.manager.CancelSession(c.Request.Context(), userID, sessionID); err != nil {
+		h.respondRuntimeError(c, err)
+		return
+	}
+
+	RespondSuccess(c, gin.H{"cancelled": true})
+}
+
+func (h *AISessionHandler) RenameSession(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		RespondError(c, http.StatusBadRequest, "invalid_session_id", "session_id is required")
+		return
+	}
+
+	var req RenameAISessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	if err := h.manager.RenameSession(c.Request.Context(), userID, sessionID, req.Title); err != nil {
+		h.respondRuntimeError(c, err)
+		return
+	}
+
+	RespondSuccess(c, gin.H{"updated": true})
+}
+
+func (h *AISessionHandler) DeleteSession(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		RespondError(c, http.StatusBadRequest, "invalid_session_id", "session_id is required")
+		return
+	}
+
+	if err := h.manager.DeleteSession(c.Request.Context(), userID, sessionID); err != nil {
+		h.respondRuntimeError(c, err)
+		return
+	}
+
+	RespondNoContent(c)
 }
 
 func (h *AISessionHandler) CloseSession(c *gin.Context) {
