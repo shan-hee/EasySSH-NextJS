@@ -77,7 +77,7 @@ function SettingsContent() {
       <PageHeader title={t("pageTitle")} />
       <div className="flex flex-1 flex-col min-h-0 px-4 pt-2">
         {/* 页签栏 */}
-        <div className="flex items-center gap-1 border-b pb-0 mb-0 overflow-x-auto scrollbar-custom shrink-0">
+        <div className="flex items-center gap-1 border-b pb-0 mb-0 overflow-x-auto overflow-y-hidden scrollbar-none shrink-0">
           {tabs.map((tab) => {
             const isActive = tab.id === activeSection
             return (

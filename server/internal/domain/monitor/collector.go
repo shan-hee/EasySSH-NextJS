@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	dockerStatsInitialDelay    = 3 * time.Second
 	dockerStatsRefreshInterval = 15 * time.Second
-	dockerStatsCommandTimeout  = 1200 * time.Millisecond
+	dockerStatsRetryInterval   = 3 * time.Second
+	dockerStatsCommandTimeout  = 6 * time.Second
 )
 
 // Collector 系统指标采集器
@@ -24,7 +24,6 @@ type Collector struct {
 	prevCPU          *CPUStat
 	prevNet          map[string]NetStat
 	prevTime         time.Time
-	createdAt        time.Time
 	sshLatencyMs     int64 // SSH 命令延迟（毫秒）
 	staticSystemInfo *pb.SystemInfo
 	dockerMu         sync.RWMutex
@@ -37,11 +36,10 @@ type Collector struct {
 func NewCollector(client *sshDomain.Client) *Collector {
 	now := time.Now()
 	return &Collector{
-		client:    client,
-		prevCPU:   nil,
-		prevNet:   make(map[string]NetStat),
-		prevTime:  now,
-		createdAt: now,
+		client:   client,
+		prevCPU:  nil,
+		prevNet:  make(map[string]NetStat),
+		prevTime: now,
 	}
 }
 
@@ -533,11 +531,12 @@ func (c *Collector) getDockerStats() *pb.DockerStats {
 	checkedAt := c.dockerCheckedAt
 	c.dockerMu.RUnlock()
 
-	if stats == nil && now.Sub(c.createdAt) < dockerStatsInitialDelay {
-		return nil
+	refreshInterval := dockerStatsRefreshInterval
+	if stats == nil {
+		refreshInterval = dockerStatsRetryInterval
 	}
 
-	needsRefresh := checkedAt.IsZero() || now.Sub(checkedAt) >= dockerStatsRefreshInterval
+	needsRefresh := checkedAt.IsZero() || now.Sub(checkedAt) >= refreshInterval
 	if needsRefresh {
 		c.startDockerStatsRefresh()
 	}
@@ -579,6 +578,18 @@ func cloneDockerStats(stats *pb.DockerStats) *pb.DockerStats {
 
 func (c *Collector) collectDockerStats() (*pb.DockerStats, error) {
 	script := `
+if command -v curl >/dev/null 2>&1; then
+  docker_json=$(curl -sS --fail --max-time 5 --unix-socket /var/run/docker.sock "http://localhost/containers/json?all=1" 2>/dev/null)
+  if [ -n "$docker_json" ]; then
+    running=$(printf '%s' "$docker_json" | grep -o '"State"[[:space:]]*:[[:space:]]*"running"' | wc -l | awk '{ print $1 + 0 }')
+    total=$(printf '%s' "$docker_json" | grep -o '"Id"[[:space:]]*:' | wc -l | awk '{ print $1 + 0 }')
+    echo "installed"
+    echo "${running:-0}"
+    echo "${total:-0}"
+    exit 0
+  fi
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "not_installed"
   echo "0"
@@ -586,22 +597,35 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 0
 fi
 
-info=$(docker info --format '{{.ContainersRunning}} {{.Containers}}' 2>/dev/null)
-if [ -n "$info" ]; then
-  set -- $info
-  echo "installed"
-  echo "${1:-0}"
-  echo "${2:-0}"
-else
-  echo "installed"
-  echo "0"
-  echo "0"
+running_ids=$(docker ps -q 2>/dev/null)
+running_status=$?
+total_ids=$(docker ps -aq 2>/dev/null)
+total_status=$?
+if [ "$running_status" -ne 0 ] || [ "$total_status" -ne 0 ]; then
+  exit 1
 fi
+
+running=$(printf '%s\n' "$running_ids" | awk 'NF { n++ } END { print n + 0 }')
+total=$(printf '%s\n' "$total_ids" | awk 'NF { n++ } END { print n + 0 }')
+echo "installed"
+echo "${running:-0}"
+echo "${total:-0}"
 `
 
 	output, err := c.sshExecWithTimeout(script, dockerStatsCommandTimeout)
-	if err != nil && strings.TrimSpace(output) == "" {
+	output = strings.TrimSpace(output)
+	if err != nil && output == "" {
 		return nil, err
+	}
+
+	lines := strings.Split(output, "\n")
+	if len(lines) < 3 {
+		return nil, fmt.Errorf("invalid docker stats output: %q", output)
+	}
+
+	status := strings.TrimSpace(lines[0])
+	if status != "installed" && status != "not_installed" {
+		return nil, fmt.Errorf("invalid docker stats status: %q", status)
 	}
 
 	return c.parseDocker(output), nil

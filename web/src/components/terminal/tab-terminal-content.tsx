@@ -146,7 +146,6 @@ export function TabTerminalContent({
     isDesktopMonitorOpen &&
     !!session.serverId
   const canUseMobileMonitor = canUseHeavyPanels && isMobileMonitorOpen && !isDesktopLayout
-  const shouldKeepMonitorWarm = shouldReserveInlineMonitor || canUseMobileMonitor
   const toggleMonitor = () => {
     setTabState(
       session.id,
@@ -164,12 +163,12 @@ export function TabTerminalContent({
     '/root'
   )
 
-  // 计算监控参数：后台页签保持终端连接，但不启用监控图表和 Docker 工具栏订阅
+  // 计算监控参数：后台页签保持终端连接，但不启用监控；当前页签保持轻量监控数据源供工具栏使用
   const connectedServerId =
-    shouldKeepMonitorWarm && session.serverId
+    canUseHeavyPanels && session.serverId
       ? session.serverId
       : ''
-  const monitorEnabled = shouldKeepMonitorWarm
+  const monitorEnabled = canUseHeavyPanels
   const tTerminal = useTranslations("terminal")
   const { theme: appTheme, resolvedTheme } = useTheme()
   const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
@@ -265,7 +264,7 @@ export function TabTerminalContent({
                   <DockerPopover
                     serverId={session.serverId ?? ''}
                     sessionId={session.id}
-                    isConnected={connectedServerId !== ''}
+                    isConnected={hasReadyServer}
                   />
                 )}
 

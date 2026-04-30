@@ -1,13 +1,14 @@
 /**
  * Docker 管理弹窗组件
- * - 工具栏统计：来自监控 WebSocket（实时）
- * - 弹窗详情：按需加载，使用 API 获取数据
+ * - 工具栏统计：连接成功后通过 REST 容器列表首刷
+ * - 弹窗详情：复用容器列表缓存，打开弹窗只控制显示隐藏
+ * - 后续同步：监控 WebSocket 仅作为数量变化信号，触发 REST 刷新
  * - 数据缓存：关闭弹窗后保留数据，再次打开显示缓存
  */
 
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { DockerIcon } from './components/DockerIcon'
 import { Button } from '@/components/ui/button'
@@ -66,6 +67,9 @@ interface DockerPopoverProps {
 export function DockerPopover({ serverId, sessionId, isConnected }: DockerPopoverProps) {
   const t = useTranslations('terminal')
   const [open, setOpen] = useState(false)
+  const containersFetchSeqRef = useRef(0)
+  const containersFetchInFlightRef = useRef(false)
+  const lastWsRefreshSignalRef = useRef<string | null>(null)
 
   // 从监控 Store 获取 Docker 统计（实时数据，用于工具栏显示）
   const dockerStats = useMonitorStore(
@@ -92,15 +96,25 @@ export function DockerPopover({ serverId, sessionId, isConnected }: DockerPopove
 
   // 获取容器数据
   const fetchContainersData = useCallback(async () => {
+    if (!serverId || !isConnected || containersFetchInFlightRef.current) {
+      return
+    }
+
+    const fetchSeq = containersFetchSeqRef.current + 1
+    containersFetchSeqRef.current = fetchSeq
+    containersFetchInFlightRef.current = true
+
     setContainersLoading(true)
     setContainersError(null)
     try {
       const res = await dockerApi.listContainers(serverId)
+      if (containersFetchSeqRef.current !== fetchSeq) return
       setContainersData({
         containers: res.data,
         dockerInstalled: true,
       })
     } catch (err) {
+      if (containersFetchSeqRef.current !== fetchSeq) return
       const errMsg = String(err)
       if (errMsg.includes('not installed') || errMsg.includes('not found')) {
         setContainersData({ containers: [], dockerInstalled: false, error: errMsg })
@@ -108,9 +122,18 @@ export function DockerPopover({ serverId, sessionId, isConnected }: DockerPopove
         setContainersError(errMsg)
       }
     } finally {
+      if (containersFetchSeqRef.current !== fetchSeq) return
+      containersFetchInFlightRef.current = false
       setContainersLoading(false)
     }
-  }, [serverId])
+  }, [isConnected, serverId])
+
+  // 连接成功后立即通过 REST 拉一次容器列表，工具栏首帧数量和弹窗列表都以它为准。
+  useEffect(() => {
+    if (!isConnected || !serverId) return
+
+    void fetchContainersData()
+  }, [fetchContainersData, isConnected, serverId])
 
   // 获取镜像数据
   const fetchImagesData = useCallback(async () => {
@@ -181,21 +204,59 @@ export function DockerPopover({ serverId, sessionId, isConnected }: DockerPopove
     resourcesData, resourcesLoading, fetchResourcesData,
   ])
 
-  // 弹窗打开时首次加载容器数据
+  // Docker 图标只控制显示/隐藏，数据加载由连接成功和 WS 变更信号驱动。
   const handleOpenChange = useCallback((isOpen: boolean) => {
     setOpen(isOpen)
-    if (isOpen && !containersData && !containersLoading) {
-      fetchContainersData()
-    }
-  }, [containersData, containersLoading, fetchContainersData])
+  }, [])
 
   // 工具栏显示
-  const runningCount = dockerStats?.containersRunning ?? 0
-  const totalCount = dockerStats?.containersTotal ?? 0
-  const dockerInstalled = dockerStats?.dockerInstalled ?? false
+  const fallbackRunningCount =
+    containersData?.containers.filter((container) => container.state === 'running').length
+  const fallbackTotalCount = containersData?.containers.length
+  const hasContainerFallbackStats = containersData?.dockerInstalled === true
+  const hasConfirmedUnavailable = containersData?.dockerInstalled === false
+  const hasToolbarStats = hasContainerFallbackStats || hasConfirmedUnavailable
+  const runningCount = fallbackRunningCount ?? 0
+  const totalCount = fallbackTotalCount ?? 0
+  const dockerInstalled = hasContainerFallbackStats
+
+  // 后续数量变化仍由监控 WS 提供信号；一旦和 REST 列表数量不同，就刷新 REST 列表。
+  useEffect(() => {
+    if (!isConnected || !serverId || !dockerStats?.dockerInstalled || containersLoading) {
+      return
+    }
+
+    const nextSignal = `${dockerStats.containersRunning}/${dockerStats.containersTotal}`
+    const currentSignal = containersData?.dockerInstalled
+      ? `${fallbackRunningCount ?? 0}/${fallbackTotalCount ?? 0}`
+      : null
+
+    if (nextSignal === currentSignal) {
+      lastWsRefreshSignalRef.current = nextSignal
+      return
+    }
+
+    if (lastWsRefreshSignalRef.current === nextSignal) {
+      return
+    }
+
+    lastWsRefreshSignalRef.current = nextSignal
+    void fetchContainersData()
+  }, [
+    containersData?.dockerInstalled,
+    containersLoading,
+    dockerStats?.containersRunning,
+    dockerStats?.containersTotal,
+    dockerStats?.dockerInstalled,
+    fallbackRunningCount,
+    fallbackTotalCount,
+    fetchContainersData,
+    isConnected,
+    serverId,
+  ])
 
   const getStatusColor = () => {
-    if (!isConnected || !dockerStats) return 'text-muted-foreground'
+    if (!isConnected || !hasToolbarStats) return 'text-muted-foreground'
     if (!dockerInstalled) return 'text-muted-foreground'
     if (runningCount > 0) return 'text-status-connected'
     return 'text-muted-foreground'
@@ -216,7 +277,7 @@ export function DockerPopover({ serverId, sessionId, isConnected }: DockerPopove
               DOCKER
             </span>
             <span className={cn('text-xs tabular-nums font-medium', getStatusColor())}>
-              {isConnected && dockerStats
+              {isConnected && hasToolbarStats
                 ? (dockerInstalled ? `${runningCount}/${totalCount}` : 'N/A')
                 : '--/--'}
             </span>
