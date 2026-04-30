@@ -7,7 +7,11 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { monitor } from '@/lib/proto/metrics';
 import { getWsUrl } from '@/lib/config';
 import { createAuthTicket } from '@/lib/auth-ticket';
-import { useMonitorStore, WSStatus } from '@/stores/monitor-store';
+import {
+  useMonitorStore,
+  WSStatus,
+  type MonitorMetrics as StoreMonitorMetrics,
+} from '@/stores/monitor-store';
 
 // 重新导出 WSStatus 供外部使用
 export { WSStatus };
@@ -70,7 +74,63 @@ type PendingLatencyUpdate = {
   localLatencyUpMs?: number;
   localLatencyDownMs?: number;
   clockOffsetMs?: number;
-}
+};
+
+const toHookMetrics = (metrics: StoreMonitorMetrics): MonitorMetrics => ({
+  systemInfo: {
+    os: metrics.systemInfo.os,
+    hostname: metrics.systemInfo.hostname,
+    cpuModel: metrics.systemInfo.cpuModel,
+    arch: metrics.systemInfo.arch,
+    loadAvg: metrics.systemInfo.loadAvg,
+    uptimeSeconds: metrics.systemInfo.uptimeSeconds,
+    cpuCores: metrics.systemInfo.cpuCores,
+  },
+  cpu: {
+    usagePercent: metrics.cpu.usage,
+    coreCount: metrics.cpu.cores,
+  },
+  memory: {
+    ramUsedBytes: metrics.memory.used,
+    ramTotalBytes: metrics.memory.total,
+    swapUsedBytes: metrics.memory.swapUsed ?? 0,
+    swapTotalBytes: metrics.memory.swapTotal ?? 0,
+  },
+  network: {
+    bytesRecvPerSec: metrics.network.bytesIn,
+    bytesSentPerSec: metrics.network.bytesOut,
+  },
+  disks: metrics.disks,
+  diskTotalPercent: metrics.disk.usagePercent,
+  sshLatencyMs: metrics.sshLatencyMs,
+  timestamp: metrics.timestamp,
+  docker: metrics.docker,
+});
+
+const getInitialConnectionSnapshot = (serverId: string) => {
+  if (!serverId) {
+    return {
+      metrics: null as MonitorMetrics | null,
+      status: WSStatus.DISCONNECTED,
+      history: [] as MonitorMetrics[],
+      localLatencyMs: 0,
+      localLatencySmoothedMs: 0,
+      localLatencyDevMs: 0,
+    }
+  }
+
+  const connection = useMonitorStore.getState().getConnection(serverId)
+  const metrics = connection?.metrics ? toHookMetrics(connection.metrics) : null
+
+  return {
+    metrics,
+    status: connection?.status ?? WSStatus.DISCONNECTED,
+    history: metrics ? [metrics] : [],
+    localLatencyMs: connection?.localLatencyMs ?? 0,
+    localLatencySmoothedMs: connection?.localLatencySmoothedMs ?? 0,
+    localLatencyDevMs: connection?.localLatencyJitter ?? 0,
+  }
+};
 
 /**
  * 监控 WebSocket Hook
@@ -86,22 +146,28 @@ export function useMonitorWebSocket({
   onStatusChange,
   latencyIntervalMs = 5000,
 }: UseMonitorWebSocketOptions) {
-  const [metrics, setMetrics] = useState<MonitorMetrics | null>(null);
-  const [status, setStatus] = useState<WSStatus>(WSStatus.DISCONNECTED);
+  const initialSnapshotRef = useRef<ReturnType<typeof getInitialConnectionSnapshot> | null>(null);
+  if (!initialSnapshotRef.current) {
+    initialSnapshotRef.current = getInitialConnectionSnapshot(serverId);
+  }
+  const initialSnapshot = initialSnapshotRef.current;
+
+  const [metrics, setMetrics] = useState<MonitorMetrics | null>(initialSnapshot.metrics);
+  const [status, setStatus] = useState<WSStatus>(initialSnapshot.status);
   // 历史数据队列 - 维护最近 20 个数据点
-  const metricsHistoryRef = useRef<MonitorMetrics[]>([]);
+  const metricsHistoryRef = useRef<MonitorMetrics[]>(initialSnapshot.history);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   // 本地延迟测量
-  const [localLatencyMs, setLocalLatencyMs] = useState<number>(0);
+  const [localLatencyMs, setLocalLatencyMs] = useState<number>(initialSnapshot.localLatencyMs);
   const [localLatencyUpMs, setLocalLatencyUpMs] = useState<number>(0);
   const [localLatencyDownMs, setLocalLatencyDownMs] = useState<number>(0);
   const [clockOffsetMs, setClockOffsetMs] = useState<number>(0);
   // RTT 平滑（EWMA）与抖动（偏差）
-  const [localLatencySmoothedMs, setLocalLatencySmoothedMs] = useState<number>(0);
-  const [localLatencyDevMs, setLocalLatencyDevMs] = useState<number>(0);
+  const [localLatencySmoothedMs, setLocalLatencySmoothedMs] = useState<number>(initialSnapshot.localLatencySmoothedMs);
+  const [localLatencyDevMs, setLocalLatencyDevMs] = useState<number>(initialSnapshot.localLatencyDevMs);
   const latencyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const visibilityHandlerRef = useRef<(() => void) | null>(null);
 
@@ -131,36 +197,7 @@ export function useMonitorWebSocket({
 
     // 注册订阅者，接收监控数据更新
     const unsubscribe = subscribe(serverId, (newMetrics) => {
-      // 将 Store 的 MonitorMetrics 转换为 Hook 的 MonitorMetrics 格式
-      const hookMetrics: MonitorMetrics = {
-        systemInfo: {
-          os: newMetrics.systemInfo.os,
-          hostname: newMetrics.systemInfo.hostname,
-          cpuModel: newMetrics.systemInfo.cpuModel,
-          arch: newMetrics.systemInfo.arch,
-          loadAvg: newMetrics.systemInfo.loadAvg,
-          uptimeSeconds: newMetrics.systemInfo.uptimeSeconds,
-          cpuCores: newMetrics.systemInfo.cpuCores,
-        },
-        cpu: {
-          usagePercent: newMetrics.cpu.usage,
-          coreCount: newMetrics.cpu.cores,
-        },
-        memory: {
-          ramUsedBytes: newMetrics.memory.used,
-          ramTotalBytes: newMetrics.memory.total,
-          swapUsedBytes: 0,
-          swapTotalBytes: 0,
-        },
-        network: {
-          bytesRecvPerSec: newMetrics.network.bytesIn,
-          bytesSentPerSec: newMetrics.network.bytesOut,
-        },
-        disks: newMetrics.disks,
-        diskTotalPercent: newMetrics.disk.usagePercent,
-        sshLatencyMs: newMetrics.sshLatencyMs,
-        timestamp: newMetrics.timestamp,
-      }
+      const hookMetrics = toHookMetrics(newMetrics)
 
       setMetrics(hookMetrics)
       metricsHistoryRef.current = [...metricsHistoryRef.current, hookMetrics].slice(-20)
@@ -181,6 +218,14 @@ export function useMonitorWebSocket({
     // 同步现有状态
     if (existingConnection) {
       setStatus(existingConnection.status)
+
+      if (existingConnection.metrics) {
+        const hookMetrics = toHookMetrics(existingConnection.metrics)
+        setMetrics(hookMetrics)
+        if (metricsHistoryRef.current.length === 0) {
+          metricsHistoryRef.current = [hookMetrics]
+        }
+      }
 
       // 直接从 MonitorConnectionState 读取延迟数据（不再依赖 metrics 对象）
       if (existingConnection.localLatencyMs !== undefined) {
@@ -343,7 +388,11 @@ export function useMonitorWebSocket({
             setMetrics(formattedMetrics);
 
             // ==================== 核心改动：通过 Store 分发消息给所有订阅者 ====================
-            const storeMetrics = {
+            const ramUsagePercent = formattedMetrics.memory.ramTotalBytes > 0
+              ? (formattedMetrics.memory.ramUsedBytes / formattedMetrics.memory.ramTotalBytes) * 100
+              : 0;
+
+            const storeMetrics: StoreMonitorMetrics = {
               systemInfo: {
                 os: formattedMetrics.systemInfo.os,
                 hostname: formattedMetrics.systemInfo.hostname,
@@ -360,8 +409,10 @@ export function useMonitorWebSocket({
               memory: {
                 total: formattedMetrics.memory.ramTotalBytes,
                 used: formattedMetrics.memory.ramUsedBytes,
-                free: formattedMetrics.memory.ramTotalBytes - formattedMetrics.memory.ramUsedBytes,
-                usagePercent: (formattedMetrics.memory.ramUsedBytes / formattedMetrics.memory.ramTotalBytes) * 100,
+                free: Math.max(0, formattedMetrics.memory.ramTotalBytes - formattedMetrics.memory.ramUsedBytes),
+                usagePercent: ramUsagePercent,
+                swapUsed: formattedMetrics.memory.swapUsedBytes,
+                swapTotal: formattedMetrics.memory.swapTotalBytes,
               },
               disk: {
                 total: formattedMetrics.disks.reduce((acc, d) => acc + d.totalBytes, 0),
@@ -379,13 +430,13 @@ export function useMonitorWebSocket({
               timestamp: formattedMetrics.timestamp,
               sshLatencyMs: formattedMetrics.sshLatencyMs,
               docker: formattedMetrics.docker,
-            }
+            };
 
             // 更新 Store（用于新订阅者获取最新数据）
-            updateMetrics(serverId, storeMetrics)
+            updateMetrics(serverId, storeMetrics);
 
             // 通知所有订阅者（核心：让所有页签都收到数据）
-            notifySubscribers(serverId, storeMetrics)
+            notifySubscribers(serverId, storeMetrics);
           } else if (typeof event.data === 'string') {
             // 处理文本消息（控制消息）
             try {

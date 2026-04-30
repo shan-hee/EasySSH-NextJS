@@ -97,6 +97,7 @@ const messages = {
     systemSettings: "System Settings",
     systemOrg: "System & Organization",
     planPro: "Pro",
+    openSidebar: "Open navigation menu",
   },
   settingsManagement: {
     pageTitle: "Admin & operations",

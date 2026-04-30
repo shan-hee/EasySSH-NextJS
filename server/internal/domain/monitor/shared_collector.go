@@ -22,6 +22,7 @@ type SharedCollector struct {
 	collector   *Collector
 	subscribers map[string]MetricsSubscriber
 	interval    time.Duration
+	lastMetrics *pb.SystemMetrics
 	stopCh      chan struct{}
 	mu          sync.RWMutex
 	running     bool
@@ -40,10 +41,19 @@ func newSharedCollector(serverID string, collector *Collector, interval time.Dur
 
 // Subscribe 添加订阅者
 func (sc *SharedCollector) Subscribe(sub MetricsSubscriber) {
+	subID := sub.ID()
+
 	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.subscribers[sub.ID()] = sub
-	log.Printf("[SharedCollector] 添加订阅者: serverID=%s, subID=%s, total=%d", sc.serverID, sub.ID(), len(sc.subscribers))
+	sc.subscribers[subID] = sub
+	lastMetrics := sc.lastMetrics
+	total := len(sc.subscribers)
+	sc.mu.Unlock()
+
+	log.Printf("[SharedCollector] 添加订阅者: serverID=%s, subID=%s, total=%d", sc.serverID, subID, total)
+
+	if lastMetrics != nil {
+		go sub.OnMetrics(lastMetrics)
+	}
 }
 
 // Unsubscribe 移除订阅者
@@ -113,12 +123,13 @@ func (sc *SharedCollector) collectAndBroadcast() {
 		return
 	}
 
-	sc.mu.RLock()
+	sc.mu.Lock()
+	sc.lastMetrics = metrics
 	subscribers := make([]MetricsSubscriber, 0, len(sc.subscribers))
 	for _, sub := range sc.subscribers {
 		subscribers = append(subscribers, sub)
 	}
-	sc.mu.RUnlock()
+	sc.mu.Unlock()
 
 	// 广播给所有订阅者
 	for _, sub := range subscribers {
@@ -159,8 +170,10 @@ func (m *SharedCollectorManager) GetOrCreate(
 		collector := collectorFactory()
 		sc = newSharedCollector(serverID, collector, interval)
 		m.collectors[serverID] = sc
+		sc.Subscribe(subscriber)
 		sc.Start()
 		log.Printf("[SharedCollectorManager] 创建共享采集器: serverID=%s", serverID)
+		return sc
 	}
 
 	sc.Subscribe(subscriber)

@@ -16,10 +16,13 @@ import {
 import { useTerminalStore } from '@/stores/terminal-store'
 import type { Terminal } from '@xterm/xterm'
 
+const BACKGROUND_TERMINAL_FLUSH_DELAY_MS = 250
+
 export interface WebSocketConnectionConfig {
   sessionId: string
   serverId?: string
   shouldConnect: boolean
+  isActive?: boolean
   terminal: Terminal | undefined
   cols: number
   rows: number
@@ -40,6 +43,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     sessionId,
     serverId,
     shouldConnect,
+    isActive = true,
     terminal,
     cols,
     rows,
@@ -54,6 +58,11 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
 
   const wsRef = useRef<TerminalWebSocket | null>(null)
   const errorShownRef = useRef(false)
+  const terminalRef = useRef<Terminal | undefined>(terminal)
+  const isActiveRef = useRef(isActive)
+  const outputBufferRef = useRef<string[]>([])
+  const outputFrameRef = useRef<number | null>(null)
+  const outputTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [connectionPhase, setConnectionPhase] = useState<TerminalConnectionPhase>('idle')
   const getTerminal = useTerminalStore(state => state.getTerminal)
   const updateWebSocket = useTerminalStore(state => state.updateWebSocket)
@@ -108,6 +117,97 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   // ==================== 关键修复：检测终端实例是否准备好 ====================
   // 从 Store 获取终端实例状态，作为依赖项信号
   const terminalReady = !!(instance?.terminal || terminal)
+
+  const flushTerminalOutput = useCallback(() => {
+    if (outputFrameRef.current !== null) {
+      window.cancelAnimationFrame(outputFrameRef.current)
+      outputFrameRef.current = null
+    }
+    if (outputTimerRef.current) {
+      clearTimeout(outputTimerRef.current)
+      outputTimerRef.current = null
+    }
+
+    const chunks = outputBufferRef.current
+    if (chunks.length === 0) {
+      return
+    }
+
+    outputBufferRef.current = []
+    const data = chunks.length === 1 ? chunks[0] : chunks.join("")
+    const inst = getTerminal(sessionId)
+    const currentTerminal = inst?.terminal || terminalRef.current
+    currentTerminal?.write(data)
+  }, [getTerminal, sessionId])
+
+  const scheduleTerminalOutputFlush = useCallback(() => {
+    if (outputFrameRef.current !== null || outputTimerRef.current) {
+      return
+    }
+
+    if (isActiveRef.current && typeof window.requestAnimationFrame === "function") {
+      outputFrameRef.current = window.requestAnimationFrame(flushTerminalOutput)
+      return
+    }
+
+    outputTimerRef.current = setTimeout(
+      flushTerminalOutput,
+      BACKGROUND_TERMINAL_FLUSH_DELAY_MS
+    )
+  }, [flushTerminalOutput])
+
+  const queueTerminalOutput = useCallback((data: string) => {
+    if (!data) {
+      return
+    }
+
+    outputBufferRef.current.push(data)
+    scheduleTerminalOutputFlush()
+  }, [scheduleTerminalOutputFlush])
+
+  useEffect(() => {
+    terminalRef.current = terminal
+  }, [terminal])
+
+  useEffect(() => {
+    isActiveRef.current = isActive
+
+    if (!isActive) {
+      if (outputFrameRef.current !== null) {
+        window.cancelAnimationFrame(outputFrameRef.current)
+        outputFrameRef.current = null
+        if (outputBufferRef.current.length > 0) {
+          scheduleTerminalOutputFlush()
+        }
+      }
+      return
+    }
+
+    if (outputBufferRef.current.length === 0) {
+      return
+    }
+
+    if (outputTimerRef.current) {
+      clearTimeout(outputTimerRef.current)
+      outputTimerRef.current = null
+    }
+
+    scheduleTerminalOutputFlush()
+  }, [isActive, scheduleTerminalOutputFlush])
+
+  useEffect(() => {
+    return () => {
+      if (outputFrameRef.current !== null) {
+        window.cancelAnimationFrame(outputFrameRef.current)
+        outputFrameRef.current = null
+      }
+      if (outputTimerRef.current) {
+        clearTimeout(outputTimerRef.current)
+        outputTimerRef.current = null
+      }
+      outputBufferRef.current = []
+    }
+  }, [])
 
   // 创建或更新 WebSocket 连接
   useEffect(() => {
@@ -166,10 +266,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
         cols,
         rows,
         onData: (data) => {
-          // 动态获取终端实例，避免闭包过期
-          const inst = getTerminal(sessionId)
-          const currentTerminal = inst?.terminal || terminal
-          currentTerminal?.write(data)
+          queueTerminalOutput(data)
         },
         onConnected: () => {
           errorShownRef.current = false
@@ -188,6 +285,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
             disconnectedPhase !== 'closed' &&
             !errorShownRef.current
           ) {
+            flushTerminalOutput()
             inst.terminal.writeln('\r\n\x1b[1;31m✗ Connection closed\x1b[0m')
           }
         },
@@ -197,6 +295,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           console.error('[useWebSocketConnection] WebSocket 错误:', error)
           const inst = getTerminal(sessionId)
           if (inst?.terminal) {
+            flushTerminalOutput()
             const message = formatErrorMessageRef.current?.(error) ?? error.message
             inst.terminal.writeln(`\r\n\x1b[1;31m✗ ${message}\x1b[0m`)
           }
@@ -253,7 +352,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     // - shouldConnect: 连接意图变化时需要处理
     // - terminalReady: 终端实例创建完成时触发连接（关键修复！）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, serverId, shouldConnect, terminalReady])
+  }, [sessionId, serverId, shouldConnect, terminalReady, queueTerminalOutput, flushTerminalOutput])
 
   // 动态同步补全拉取开关，避免切换配置时必须重建连接
   useEffect(() => {

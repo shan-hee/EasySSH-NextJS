@@ -44,6 +44,7 @@ interface WebTerminalProps {
   serverName: string
   host: string
   username: string
+  isActive: boolean
   shouldConnect: boolean
   onConnectionPhaseChange?: (phase: TerminalConnectionPhase) => void
   onCommand: (command: string) => void
@@ -75,6 +76,7 @@ export function WebTerminal({
   serverName,
   host,
   username,
+  isActive,
   shouldConnect,
   onConnectionPhaseChange,
   onCommand,
@@ -201,6 +203,7 @@ export function WebTerminal({
     sessionId,
     serverId,
     shouldConnect,
+    isActive,
     terminal,
     cols: terminal?.cols || 80,
     rows: terminal?.rows || 24,
@@ -766,18 +769,29 @@ export function WebTerminal({
 
   // ==================== 容器尺寸变化时重新适配 ====================
   useEffect(() => {
-    if (!terminal || !fitAddon || !containerRef.current || !terminalReady) return
+    if (!isActive || !terminal || !fitAddon || !containerRef.current || !terminalReady) return
 
     let resizeTimeout: NodeJS.Timeout | null = null
     let resizeObserver: ResizeObserver | null = null
     let removeWindowResize: (() => void) | null = null
 
     const applyFit = () => {
-      if (!fitAddon || !terminal) return
+      const containerElement = containerRef.current
+      if (
+        !isActive ||
+        !fitAddon ||
+        !terminal ||
+        !containerElement ||
+        containerElement.clientWidth <= 0 ||
+        containerElement.clientHeight <= 0
+      ) {
+        return
+      }
 
       fitAddon.fit()
       const newCols = terminal.cols
       const newRows = terminal.rows
+      terminal.refresh(0, terminal.rows - 1)
 
       // 通知 WebSocket 调整大小
       resize(newCols, newRows)
@@ -808,6 +822,8 @@ export function WebTerminal({
       removeWindowResize = () => window.removeEventListener("resize", handleResize)
     }
 
+    scheduleFit()
+
     return () => {
       if (resizeTimeout) {
         clearTimeout(resizeTimeout)
@@ -817,7 +833,7 @@ export function WebTerminal({
       removeWindowResize?.()
       removeWindowResize = null
     }
-  }, [terminal, fitAddon, containerRef, terminalReady, resize, onResize])
+  }, [isActive, terminal, fitAddon, containerRef, terminalReady, resize, onResize])
 
   // ==================== 公开方法供父组件调用 ====================
   const writeToTerminal = useCallback((text: string) => {
@@ -1074,6 +1090,11 @@ export function WebTerminal({
         }
         .terminal-container .xterm {
           padding: 16px;
+        }
+        @media (max-width: 767px) {
+          .terminal-container .xterm {
+            padding: 12px;
+          }
         }
         .terminal-container .xterm-screen {
           border-radius: 0;

@@ -27,6 +27,8 @@ export interface MonitorMetrics {
     used: number
     free: number
     usagePercent: number
+    swapUsed: number
+    swapTotal: number
   }
   disk: {
     total: number

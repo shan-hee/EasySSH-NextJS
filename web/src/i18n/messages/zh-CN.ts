@@ -88,6 +88,7 @@ const messages = {
     systemSettings: "系统设置",
     systemOrg: "系统与组织",
     planPro: "专业版",
+    openSidebar: "打开导航菜单",
   },
   settingsManagement: {
     pageTitle: "管理运维",

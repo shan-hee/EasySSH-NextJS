@@ -1,31 +1,47 @@
 package monitor
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	pb "github.com/easyssh/server/internal/proto"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
+	pb "github.com/easyssh/server/internal/proto"
+)
+
+const (
+	dockerStatsInitialDelay    = 3 * time.Second
+	dockerStatsRefreshInterval = 15 * time.Second
+	dockerStatsCommandTimeout  = 1200 * time.Millisecond
 )
 
 // Collector 系统指标采集器
 type Collector struct {
-	client       *sshDomain.Client  // SSH 客户端（直接使用）
-	prevCPU      *CPUStat
-	prevNet      map[string]NetStat
-	prevTime     time.Time
-	sshLatencyMs int64 // SSH 命令延迟（毫秒）
+	client           *sshDomain.Client // SSH 客户端（直接使用）
+	prevCPU          *CPUStat
+	prevNet          map[string]NetStat
+	prevTime         time.Time
+	createdAt        time.Time
+	sshLatencyMs     int64 // SSH 命令延迟（毫秒）
+	staticSystemInfo *pb.SystemInfo
+	dockerMu         sync.RWMutex
+	dockerStats      *pb.DockerStats
+	dockerCheckedAt  time.Time
+	dockerRefreshing bool
 }
 
 // NewCollector 创建采集器（使用 SSH Client）
 func NewCollector(client *sshDomain.Client) *Collector {
+	now := time.Now()
 	return &Collector{
-		client:     client,
-		prevCPU:    nil,
-		prevNet:    make(map[string]NetStat),
-		prevTime:   time.Now(),
+		client:    client,
+		prevCPU:   nil,
+		prevNet:   make(map[string]NetStat),
+		prevTime:  now,
+		createdAt: now,
 	}
 }
 
@@ -78,55 +94,102 @@ func (c *Collector) sshExec(cmd string) (string, error) {
 	return string(output), nil
 }
 
-// Collect 采集所有系统指标
-func (c *Collector) Collect() (*pb.SystemMetrics, error) {
-	// 使用批量采集脚本减少 SSH 往返次数
+// sshExecWithTimeout 执行可能阻塞的辅助命令，超时后主动关闭 session。
+func (c *Collector) sshExecWithTimeout(cmd string, timeout time.Duration) (string, error) {
+	session, err := c.client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create session: %w", err)
+	}
+	defer session.Close()
+
+	var output bytes.Buffer
+	session.Stdout = &output
+	session.Stderr = &output
+
+	if err := session.Start(cmd); err != nil {
+		return "", fmt.Errorf("failed to start command: %w", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- session.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return output.String(), fmt.Errorf("failed to execute command: %w", err)
+		}
+		return output.String(), nil
+	case <-time.After(timeout):
+		_ = session.Close()
+		return output.String(), fmt.Errorf("command timeout after %s", timeout)
+	}
+}
+
+func (c *Collector) buildMetricsScript(includeStaticInfo bool) string {
 	script := `
+LC_ALL=C
+export LC_ALL
+
 echo "=== CPU ==="
-cat /proc/stat | grep '^cpu '
+awk '/^cpu / { print; exit }' /proc/stat
 
 echo "=== MEMORY ==="
-cat /proc/meminfo | grep -E 'MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree'
+awk '/^(MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree):/ { print }' /proc/meminfo
 
 echo "=== NETWORK ==="
-cat /proc/net/dev | tail -n +3
+awk 'NR > 2 { print }' /proc/net/dev
 
 echo "=== DISK ==="
-# 仅统计整机磁盘总量/已用/可用/使用率
-# 使用 --total 聚合, 并排除常见的内存盘和只读镜像文件系统
-df -B1 --total \
-  -x tmpfs -x devtmpfs -x squashfs -x overlay -x aufs 2>/dev/null | tail -n 1
+df_output=""
+if command -v timeout >/dev/null 2>&1; then
+  df_output=$(timeout 1s df -P -B1 -l --total \
+    -x tmpfs -x devtmpfs -x squashfs -x overlay -x aufs 2>/dev/null | tail -n 1)
+else
+  df_output=$(df -P -B1 -l --total \
+    -x tmpfs -x devtmpfs -x squashfs -x overlay -x aufs 2>/dev/null | tail -n 1)
+fi
+if [ -z "$df_output" ] || [ "$(printf '%s\n' "$df_output" | awk '{ print NF }')" -lt 6 ]; then
+  if command -v timeout >/dev/null 2>&1; then
+    df_output=$(timeout 1s sh -c 'df -kP -l 2>/dev/null || df -kP 2>/dev/null' | awk 'NR > 1 && $2 ~ /^[0-9]+$/ { total += $2; used += $3 } END { if (total > 0) printf "total %.0f %.0f %.0f 0%% -", total * 1024, used * 1024, (total - used) * 1024 }')
+  else
+    df_output=$( (df -kP -l 2>/dev/null || df -kP 2>/dev/null) | awk 'NR > 1 && $2 ~ /^[0-9]+$/ { total += $2; used += $3 } END { if (total > 0) printf "total %.0f %.0f %.0f 0%% -", total * 1024, used * 1024, (total - used) * 1024 }')
+  fi
+fi
+printf '%s\n' "$df_output"
 
 echo "=== LOAD ==="
 cat /proc/loadavg
 
 echo "=== UPTIME ==="
-cat /proc/uptime
-
-echo "=== SYSINFO ==="
-cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2
-hostname
-cat /proc/cpuinfo | grep "model name" | head -n1 | cut -d':' -f2
-uname -m
-cat /proc/cpuinfo | grep "^processor" | wc -l
-
-echo "=== DOCKER ==="
-# 快速获取 Docker 容器统计（仅容器数量）
-if command -v docker >/dev/null 2>&1; then
-  echo "installed"
-  docker ps -q 2>/dev/null | wc -l
-  docker ps -aq 2>/dev/null | wc -l
-else
-  echo "not_installed"
-  echo "0"
-  echo "0"
-fi
+cut -d' ' -f1 /proc/uptime
 `
+
+	if includeStaticInfo {
+		script += `
+echo "=== SYSINFO ==="
+awk -F= '/^PRETTY_NAME=/ { gsub(/^"|"$/, "", $2); print $2; found=1; exit } END { if (!found) print "" }' /etc/os-release 2>/dev/null
+hostname 2>/dev/null || cat /proc/sys/kernel/hostname 2>/dev/null
+awk -F: '/model name|Hardware|Processor/ { gsub(/^[ \t]+/, "", $2); if ($2 != "") { print $2; exit } }' /proc/cpuinfo 2>/dev/null
+uname -m
+getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || awk -F: '/^processor/ { n++ } END { print n + 0 }' /proc/cpuinfo 2>/dev/null
+`
+	}
+
+	return script
+}
+
+// Collect 采集所有系统指标
+func (c *Collector) Collect() (*pb.SystemMetrics, error) {
+	// 使用批量采集脚本减少 SSH 往返次数
+	script := c.buildMetricsScript(c.staticSystemInfo == nil)
 
 	output, err := c.sshExec(script)
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect metrics: %w", err)
 	}
+	coreLatencyMs := c.sshLatencyMs
 
 	// 解析输出
 	sections := c.parseSections(output)
@@ -154,19 +217,16 @@ fi
 		metrics.DiskTotalPercent = c.calculateTotalDiskPercent(metrics.Disks)
 	}
 
-	if sysData, ok := sections["SYSINFO"]; ok {
-		loadData := sections["LOAD"]
-		uptimeData := sections["UPTIME"]
-		metrics.SystemInfo = c.parseSystemInfo(sysData, loadData, uptimeData)
+	metrics.SystemInfo = c.parseSystemInfo(sections["SYSINFO"], sections["LOAD"], sections["UPTIME"])
+
+	if metrics.Cpu != nil && metrics.SystemInfo != nil {
+		metrics.Cpu.CoreCount = metrics.SystemInfo.CpuCores
 	}
 
-	// 解析 Docker 统计
-	if dockerData, ok := sections["DOCKER"]; ok {
-		metrics.Docker = c.parseDocker(dockerData)
-	}
+	metrics.Docker = c.getDockerStats()
 
-	// 设置 SSH 延迟
-	metrics.SshLatencyMs = c.sshLatencyMs
+	// 设置核心采集 SSH 延迟。Docker 统计低频单独采集，不计入图表数据链路延迟。
+	metrics.SshLatencyMs = coreLatencyMs
 
 	return metrics, nil
 }
@@ -244,8 +304,8 @@ func (c *Collector) calculateCPUUsage(prev, curr *CPUStat) float64 {
 	prevTotal := prev.Total()
 	currTotal := curr.Total()
 
-	totalDelta := currTotal - prevTotal
-	idleDelta := currIdle - prevIdle
+	totalDelta := subtractUint64(currTotal, prevTotal)
+	idleDelta := subtractUint64(currIdle, prevIdle)
 
 	if totalDelta == 0 {
 		return 0.0
@@ -269,14 +329,22 @@ func (c *Collector) parseMemory(data string) *pb.MemoryMetrics {
 	}
 
 	// 计算实际使用量 (Linux 方式)
-	ramUsed := memData["MemTotal"] - memData["MemFree"] - memData["Buffers"] - memData["Cached"]
-	swapUsed := memData["SwapTotal"] - memData["SwapFree"]
+	ramTotal := memData["MemTotal"]
+	ramUsed := uint64(0)
+	if available, ok := memData["MemAvailable"]; ok {
+		ramUsed = subtractUint64(ramTotal, available)
+	} else {
+		reclaimable := memData["MemFree"] + memData["Buffers"] + memData["Cached"]
+		ramUsed = subtractUint64(ramTotal, reclaimable)
+	}
+	swapTotal := memData["SwapTotal"]
+	swapUsed := subtractUint64(swapTotal, memData["SwapFree"])
 
 	return &pb.MemoryMetrics{
-		RamUsedBytes:  ramUsed,
-		RamTotalBytes: memData["MemTotal"],
-		SwapUsedBytes: swapUsed,
-		SwapTotalBytes: memData["SwapTotal"],
+		RamUsedBytes:   ramUsed,
+		RamTotalBytes:  ramTotal,
+		SwapUsedBytes:  swapUsed,
+		SwapTotalBytes: swapTotal,
 	}
 }
 
@@ -305,25 +373,24 @@ func (c *Collector) parseNetwork(data string) *pb.NetworkMetrics {
 
 	// 计算总速率
 	var totalRx, totalTx uint64
+	now := time.Now()
 
 	if len(c.prevNet) > 0 {
-		now := time.Now()
 		duration := now.Sub(c.prevTime).Seconds()
 
 		for iface, curr := range currStats {
 			if prev, ok := c.prevNet[iface]; ok && duration > 0 {
-				rxDelta := curr.RxBytes - prev.RxBytes
-				txDelta := curr.TxBytes - prev.TxBytes
+				rxDelta := subtractUint64(curr.RxBytes, prev.RxBytes)
+				txDelta := subtractUint64(curr.TxBytes, prev.TxBytes)
 
 				totalRx += uint64(float64(rxDelta) / duration)
 				totalTx += uint64(float64(txDelta) / duration)
 			}
 		}
-
-		c.prevTime = now
 	}
 
 	c.prevNet = currStats
+	c.prevTime = now
 
 	return &pb.NetworkMetrics{
 		BytesRecvPerSec: totalRx,
@@ -370,28 +437,29 @@ func (c *Collector) parseDisk(data string) []*pb.DiskMetrics {
 
 // parseSystemInfo 解析系统信息
 func (c *Collector) parseSystemInfo(sysData, loadData, uptimeData string) *pb.SystemInfo {
-	sysLines := strings.Split(strings.TrimSpace(sysData), "\n")
+	if strings.TrimSpace(sysData) != "" {
+		sysLines := strings.Split(strings.TrimSpace(sysData), "\n")
+		staticInfo := &pb.SystemInfo{}
 
-	os := ""
-	hostname := ""
-	cpuModel := ""
-	arch := ""
-	cpuCores := uint32(0)
+		if len(sysLines) >= 1 {
+			staticInfo.Os = strings.TrimSpace(sysLines[0])
+		}
+		if len(sysLines) >= 2 {
+			staticInfo.Hostname = strings.TrimSpace(sysLines[1])
+		}
+		if len(sysLines) >= 3 {
+			staticInfo.CpuModel = strings.TrimSpace(sysLines[2])
+		}
+		if len(sysLines) >= 4 {
+			staticInfo.Arch = strings.TrimSpace(sysLines[3])
+		}
+		if len(sysLines) >= 5 {
+			staticInfo.CpuCores = uint32(parseUint64(strings.TrimSpace(sysLines[4])))
+		}
 
-	if len(sysLines) >= 1 {
-		os = strings.TrimSpace(sysLines[0])
-	}
-	if len(sysLines) >= 2 {
-		hostname = strings.TrimSpace(sysLines[1])
-	}
-	if len(sysLines) >= 3 {
-		cpuModel = strings.TrimSpace(sysLines[2])
-	}
-	if len(sysLines) >= 4 {
-		arch = strings.TrimSpace(sysLines[3])
-	}
-	if len(sysLines) >= 5 {
-		cpuCores = uint32(parseUint64(sysLines[4]))
+		if staticInfo.Os != "" || staticInfo.Hostname != "" || staticInfo.CpuModel != "" || staticInfo.Arch != "" || staticInfo.CpuCores > 0 {
+			c.staticSystemInfo = staticInfo
+		}
 	}
 
 	// 解析负载
@@ -409,14 +477,19 @@ func (c *Collector) parseSystemInfo(sysData, loadData, uptimeData string) *pb.Sy
 		uptimeSeconds = uint64(uptime)
 	}
 
+	staticInfo := c.staticSystemInfo
+	if staticInfo == nil {
+		staticInfo = &pb.SystemInfo{}
+	}
+
 	return &pb.SystemInfo{
-		Os:            os,
-		Hostname:      hostname,
-		CpuModel:      cpuModel,
-		Arch:          arch,
+		Os:            staticInfo.Os,
+		Hostname:      staticInfo.Hostname,
+		CpuModel:      staticInfo.CpuModel,
+		Arch:          staticInfo.Arch,
 		LoadAvg:       loadAvg,
 		UptimeSeconds: uptimeSeconds,
-		CpuCores:      cpuCores,
+		CpuCores:      staticInfo.CpuCores,
 	}
 }
 
@@ -424,6 +497,13 @@ func (c *Collector) parseSystemInfo(sysData, loadData, uptimeData string) *pb.Sy
 func parseUint64(s string) uint64 {
 	val, _ := strconv.ParseUint(s, 10, 64)
 	return val
+}
+
+func subtractUint64(a, b uint64) uint64 {
+	if b > a {
+		return 0
+	}
+	return a - b
 }
 
 // calculateTotalDiskPercent 计算磁盘总使用率
@@ -445,6 +525,88 @@ func (c *Collector) calculateTotalDiskPercent(disks []*pb.DiskMetrics) float64 {
 	return (float64(totalUsed) / float64(totalSize)) * 100.0
 }
 
+func (c *Collector) getDockerStats() *pb.DockerStats {
+	now := time.Now()
+
+	c.dockerMu.RLock()
+	stats := cloneDockerStats(c.dockerStats)
+	checkedAt := c.dockerCheckedAt
+	c.dockerMu.RUnlock()
+
+	if stats == nil && now.Sub(c.createdAt) < dockerStatsInitialDelay {
+		return nil
+	}
+
+	needsRefresh := checkedAt.IsZero() || now.Sub(checkedAt) >= dockerStatsRefreshInterval
+	if needsRefresh {
+		c.startDockerStatsRefresh()
+	}
+
+	return stats
+}
+
+func (c *Collector) startDockerStatsRefresh() {
+	c.dockerMu.Lock()
+	if c.dockerRefreshing {
+		c.dockerMu.Unlock()
+		return
+	}
+	c.dockerRefreshing = true
+	c.dockerMu.Unlock()
+
+	go func() {
+		stats, err := c.collectDockerStats()
+
+		c.dockerMu.Lock()
+		defer c.dockerMu.Unlock()
+		c.dockerRefreshing = false
+		c.dockerCheckedAt = time.Now()
+		if err != nil {
+			return
+		}
+		c.dockerStats = stats
+	}()
+}
+
+func cloneDockerStats(stats *pb.DockerStats) *pb.DockerStats {
+	if stats == nil {
+		return nil
+	}
+
+	clone := *stats
+	return &clone
+}
+
+func (c *Collector) collectDockerStats() (*pb.DockerStats, error) {
+	script := `
+if ! command -v docker >/dev/null 2>&1; then
+  echo "not_installed"
+  echo "0"
+  echo "0"
+  exit 0
+fi
+
+info=$(docker info --format '{{.ContainersRunning}} {{.Containers}}' 2>/dev/null)
+if [ -n "$info" ]; then
+  set -- $info
+  echo "installed"
+  echo "${1:-0}"
+  echo "${2:-0}"
+else
+  echo "installed"
+  echo "0"
+  echo "0"
+fi
+`
+
+	output, err := c.sshExecWithTimeout(script, dockerStatsCommandTimeout)
+	if err != nil && strings.TrimSpace(output) == "" {
+		return nil, err
+	}
+
+	return c.parseDocker(output), nil
+}
+
 // parseDocker 解析 Docker 统计数据
 func (c *Collector) parseDocker(data string) *pb.DockerStats {
 	lines := strings.Split(strings.TrimSpace(data), "\n")
@@ -457,8 +619,8 @@ func (c *Collector) parseDocker(data string) *pb.DockerStats {
 	total := uint32(parseUint64(strings.TrimSpace(lines[2])))
 
 	return &pb.DockerStats{
-		DockerInstalled:     installed,
-		ContainersRunning:   running,
-		ContainersTotal:     total,
+		DockerInstalled:   installed,
+		ContainersRunning: running,
+		ContainersTotal:   total,
 	}
 }

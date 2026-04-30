@@ -18,6 +18,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import Link from "next/link"
 import {
   TerminalSettingsDialog,
@@ -99,6 +100,7 @@ export function TerminalComponent({
 }: TerminalComponentProps) {
   const { config } = useSystemConfig()
   const tTerminal = useTranslations("terminal")
+  const tNav = useTranslations("nav")
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [loaderStates, setLoaderStates] = useState<Record<string, LoaderState>>({})
@@ -244,9 +246,22 @@ export function TerminalComponent({
     deleteTabState(sessionId)
   }
 
+  const cleanupSessionsWhenIdle = (sessionIds: string[]) => {
+    const runCleanup = () => {
+      sessionIds.forEach(cleanupSession)
+    }
+
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(runCleanup, { timeout: 1000 })
+      return
+    }
+
+    window.setTimeout(runCleanup, 0)
+  }
+
   const cleanupSessionsAfterDelay = (sessionIds: string[], delayMs: number) => {
     window.setTimeout(() => {
-      sessionIds.forEach(cleanupSession)
+      cleanupSessionsWhenIdle(sessionIds)
     }, delayMs)
   }
 
@@ -412,6 +427,11 @@ export function TerminalComponent({
       {!isFullscreen && (
         <header className="flex h-16 shrink-0 items-center gap-2 sticky top-0 z-10 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:duration-200 group-data-[ready=true]/sidebar-wrapper:ease-in-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
           <div className="flex items-center gap-2 px-4">
+            <SidebarTrigger
+              className="-ml-1 md:hidden"
+              aria-label={tNav("openSidebar")}
+              title={tNav("openSidebar")}
+            />
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">

@@ -8,6 +8,7 @@ import { persist } from 'zustand/middleware'
 
 interface TabUIState {
   isMonitorOpen: boolean
+  isMobileMonitorOpen: boolean
   isFileManagerOpen: boolean
   isAiInputOpen: boolean
 }
@@ -31,9 +32,15 @@ interface TabUIStoreState {
 
 const DEFAULT_TAB_STATE: TabUIState = {
   isMonitorOpen: true,
+  isMobileMonitorOpen: false,
   isFileManagerOpen: false,
   isAiInputOpen: false,
 }
+
+const normalizeTabState = (state?: Partial<TabUIState>) => ({
+  ...DEFAULT_TAB_STATE,
+  ...state,
+})
 
 export const useTabUIStore = create<TabUIStoreState>()(
   persist(
@@ -47,7 +54,7 @@ export const useTabUIStore = create<TabUIStoreState>()(
       setTabState: (sessionId: string, state: Partial<TabUIState>) => {
         set((store) => {
           const newStates = new Map(store.tabStates)
-          const currentState = newStates.get(sessionId) || DEFAULT_TAB_STATE
+          const currentState = normalizeTabState(newStates.get(sessionId))
           newStates.set(sessionId, { ...currentState, ...state })
           return { tabStates: newStates }
         })
@@ -72,11 +79,18 @@ export const useTabUIStore = create<TabUIStoreState>()(
           const str = localStorage.getItem(name)
           if (!str) return null
           const parsed = JSON.parse(str)
+          const tabStateEntries: Array<[string, TabUIState]> = Array.isArray(parsed.state?.tabStates)
+            ? parsed.state.tabStates.map((entry: [string, Partial<TabUIState>]) => {
+                const [sessionId, state] = entry
+                return [sessionId, normalizeTabState(state)] as [string, TabUIState]
+              })
+            : []
+
           return {
             ...parsed,
             state: {
               ...parsed.state,
-              tabStates: new Map(parsed.state?.tabStates || []),
+              tabStates: new Map(tabStateEntries),
             },
           }
         },

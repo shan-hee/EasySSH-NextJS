@@ -414,7 +414,6 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		}
 
 		// 创建 SSH 客户端（使用主机密钥验证）
-		var err error
 		client, err = sshDomain.NewClient(
 			srv,
 			h.encryptor,

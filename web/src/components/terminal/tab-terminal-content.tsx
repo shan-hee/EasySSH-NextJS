@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { MonitorWebSocketProvider } from './monitor/contexts/MonitorWebSocketContext'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import { getTerminalTheme, withTerminalBackgroundOpacity } from './terminal-them
 
 // 工具栏固定高度常量 (py-1.5 + h-7 按钮 + border-b)
 const TOOLBAR_HEIGHT = 44 // px
+const DESKTOP_TERMINAL_LAYOUT_QUERY = '(min-width: 768px)'
 
 type ConnectionLoaderMessageKey =
   | "connectionLoaderConnecting"
@@ -85,6 +86,7 @@ interface TabTerminalContentProps {
 
 export function TabTerminalContent({
   session,
+  isActive,
   settings,
   effectiveIsLoading,
   loaderState,
@@ -100,30 +102,74 @@ export function TabTerminalContent({
 }: TabTerminalContentProps) {
   // 浮动面板根容器
   const [floatingPanelRoot, setFloatingPanelRoot] = useState<HTMLDivElement | null>(null)
+  const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return true
+    }
+
+    return window.matchMedia(DESKTOP_TERMINAL_LAYOUT_QUERY).matches
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return
+    }
+
+    const mediaQuery = window.matchMedia(DESKTOP_TERMINAL_LAYOUT_QUERY)
+    const handleChange = () => setIsDesktopLayout(mediaQuery.matches)
+
+    handleChange()
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
 
   // 从 Store 获取当前页签的 UI 状态
   const tabState = useTabUIStore((state) => state.getTabState(session.id))
   const setTabState = useTabUIStore((state) => state.setTabState)
 
-  const isMonitorOpen = tabState.isMonitorOpen
+  const isDesktopMonitorOpen = tabState.isMonitorOpen
+  const isMobileMonitorOpen = tabState.isMobileMonitorOpen ?? false
   const isFileManagerOpen = tabState.isFileManagerOpen
   const isAiInputOpen = tabState.isAiInputOpen
 
-  // SFTP 会话管理
   const isTerminalReady = session.connectionPhase === "ready"
+  const hasReadyServer = session.type !== 'quick' && isTerminalReady && !!session.serverId
+  const canUseHeavyPanels = isActive && hasReadyServer
+  const canUseFileManager = canUseHeavyPanels && isFileManagerOpen
+  const canUseAi = isActive && session.type !== 'quick' && !effectiveIsLoading && isAiInputOpen
+  const shouldReserveInlineMonitor =
+    isDesktopLayout &&
+    hasReadyServer &&
+    isDesktopMonitorOpen &&
+    !!session.serverId
+  const canUseMobileMonitor = canUseHeavyPanels && isMobileMonitorOpen && !isDesktopLayout
+  const shouldKeepMonitorWarm = shouldReserveInlineMonitor || canUseMobileMonitor
+  const toggleMonitor = () => {
+    setTabState(
+      session.id,
+      isDesktopLayout
+        ? { isMonitorOpen: !isDesktopMonitorOpen }
+        : { isMobileMonitorOpen: !isMobileMonitorOpen }
+    )
+  }
+
+  // SFTP 会话管理：只在当前页签且文件管理器打开时加载目录，避免隐藏页签继续触发列表渲染/请求
   const sftpSession = useSftpSession(
-    isFileManagerOpen && session.type !== 'quick' && isTerminalReady && session.serverId
+    canUseFileManager && session.serverId
       ? session.serverId
       : '',
     '/root'
   )
 
-  // 计算监控参数
+  // 计算监控参数：后台页签保持终端连接，但不启用监控图表和 Docker 工具栏订阅
   const connectedServerId =
-    session.type !== 'quick' && isTerminalReady && session.serverId
+    shouldKeepMonitorWarm && session.serverId
       ? session.serverId
       : ''
-  const monitorEnabled = connectedServerId !== ''
+  const monitorEnabled = shouldKeepMonitorWarm
   const tTerminal = useTranslations("terminal")
   const { theme: appTheme, resolvedTheme } = useTheme()
   const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
@@ -210,16 +256,18 @@ export function TabTerminalContent({
                   className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
                   aria-label={tTerminal("ariaMonitor")}
                   title={tTerminal("titleMonitor")}
-                  onClick={() => setTabState(session.id, { isMonitorOpen: !isMonitorOpen })}
+                  onClick={toggleMonitor}
                 >
                   <Activity className="h-3.5 w-3.5" />
                 </Button>
 
-                <DockerPopover
-                  serverId={session.serverId ?? ''}
-                  sessionId={session.id}
-                  isConnected={connectedServerId !== ''}
-                />
+                {isActive && (
+                  <DockerPopover
+                    serverId={session.serverId ?? ''}
+                    sessionId={session.id}
+                    isConnected={connectedServerId !== ''}
+                  />
+                )}
 
                 <Button
                   variant="ghost"
@@ -264,19 +312,19 @@ export function TabTerminalContent({
           {/* 内容区域：监控面板 + 终端 */}
           <div className="flex-1 min-h-0 relative flex">
             {/* 监控面板 - 左侧固定 280px */}
-            {session.type !== 'quick' && (
+            {session.type !== 'quick' && isDesktopLayout && (
               <div
                 className={cn(
                   'transition-all duration-300 ease-out overflow-hidden border-r backdrop-blur-md',
                   'border-zinc-200/70 bg-gradient-to-b from-white/72 via-white/58 to-white/46',
                   'dark:border-zinc-800/40 dark:from-zinc-950/42 dark:via-zinc-950/28 dark:to-zinc-950/18',
-                  isMonitorOpen
+                  shouldReserveInlineMonitor
                     ? 'w-[280px] opacity-100 translate-x-0'
-                    : 'w-0 opacity-0 -translate-x-4'
+                    : 'w-0 opacity-0 -translate-x-4 border-r-0'
                 )}
               >
-                {isMonitorOpen && isTerminalReady && (
-                  <MonitorPanel />
+                {shouldReserveInlineMonitor && (
+                  <MonitorPanel isLive={isActive} />
                 )}
               </div>
             )}
@@ -299,6 +347,7 @@ export function TabTerminalContent({
                   serverName={session.serverName}
                   host={session.host}
                   username={session.username}
+                  isActive={isActive}
                   shouldConnect={session.shouldConnect}
                   onConnectionPhaseChange={onConnectionPhaseChange}
                   onCommand={onCommand}
@@ -323,13 +372,25 @@ export function TabTerminalContent({
                 />
               )}
             </div>
+
+            {canUseMobileMonitor && (
+              <div
+                className={cn(
+                  'absolute inset-0 z-30 overflow-hidden border-t backdrop-blur-md md:hidden',
+                  'border-zinc-200/70 bg-gradient-to-b from-white/92 via-white/86 to-white/78',
+                  'dark:border-zinc-800/40 dark:from-zinc-950/96 dark:via-zinc-950/90 dark:to-black/86'
+                )}
+              >
+                <MonitorPanel className="h-full min-h-0 w-full" isLive={isActive} />
+              </div>
+            )}
           </div>
         </div>
 
         {/* 文件管理器面板 - 渲染到 floatingPanelRootRef */}
-        {session.type !== 'quick' && (
+        {canUseFileManager && (
           <FileManagerPanel
-            isOpen={isFileManagerOpen}
+            isOpen
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
             mountContainer={floatingPanelRoot || undefined}
             anchorTop={TOOLBAR_HEIGHT}
@@ -363,9 +424,9 @@ export function TabTerminalContent({
         )}
 
         {/* AI 助手面板 */}
-        {session.type !== 'quick' && !effectiveIsLoading && (
+        {canUseAi && (
           <AiAssistantPanel
-            isOpen={isAiInputOpen}
+            isOpen
             onClose={() => setTabState(session.id, { isAiInputOpen: false })}
           />
         )}

@@ -7,7 +7,7 @@
 
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { formatBytes } from '@/lib/format-utils';
 import { WSStatus } from './hooks/useMonitorWebSocket';
@@ -21,6 +21,7 @@ import { MonitorSkeleton } from './components/MonitorSkeleton';
 
 interface MonitorPanelProps {
   className?: string;
+  isLive?: boolean;
 }
 
 /**
@@ -48,16 +49,40 @@ interface MonitorPanelProps {
  */
 export const MonitorPanel: React.FC<MonitorPanelProps> = ({
   className,
+  isLive = true,
 }) => {
   // 【性能优化】只订阅监控数据，不订阅延迟数据
   const { metrics, status, getMetricsHistory } = useMonitoringData();
+  const frozenSnapshotRef = useRef<{
+    metrics: typeof metrics;
+    status: typeof status;
+    history: ReturnType<typeof getMetricsHistory>;
+  } | null>(null);
+  const liveHistory = isLive ? getMetricsHistory() : undefined;
+
+  if (!frozenSnapshotRef.current) {
+    frozenSnapshotRef.current = {
+      metrics,
+      status,
+      history: liveHistory ?? [],
+    };
+  }
+
+  if (isLive) {
+    frozenSnapshotRef.current = {
+      metrics,
+      status,
+      history: liveHistory ?? [],
+    };
+  }
+
+  const displayMetrics = isLive ? metrics : frozenSnapshotRef.current.metrics;
+  const displayStatus = isLive ? status : frozenSnapshotRef.current.status;
+  const displayHistory = isLive ? liveHistory ?? [] : frozenSnapshotRef.current.history;
 
   // 转换数据格式以适配现有组件
   const formattedMetrics = useMemo(() => {
-    if (!metrics) return null;
-
-    // 获取历史数据
-    const history = getMetricsHistory();
+    if (!displayMetrics) return null;
 
     // 格式化运行时间
     const formatUptime = (seconds: number): string => {
@@ -69,7 +94,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
 
     // 构建历史数据（用于图表）
     // 使用历史数据队列，而不是单个数据点
-    const cpuHistory = history.map((m) => {
+    const cpuHistory = displayHistory.map((m) => {
       const time = new Date(m.timestamp * 1000);
       return {
         time: time.toTimeString().split(' ')[0],
@@ -78,7 +103,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
       };
     });
 
-    const networkHistory = history.map((m) => {
+    const networkHistory = displayHistory.map((m) => {
       const time = new Date(m.timestamp * 1000);
       return {
         time: time.toTimeString().split(' ')[0],
@@ -90,57 +115,85 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
 
     return {
       systemInfo: {
-        os: metrics.systemInfo.os,
-        hostname: metrics.systemInfo.hostname,
-        cpu: metrics.systemInfo.cpuModel,
-        arch: metrics.systemInfo.arch,
-        load: metrics.systemInfo.loadAvg,
-        uptime: formatUptime(metrics.systemInfo.uptimeSeconds),
+        os: displayMetrics.systemInfo.os,
+        hostname: displayMetrics.systemInfo.hostname,
+        cpu: displayMetrics.systemInfo.cpuModel,
+        arch: displayMetrics.systemInfo.arch,
+        load: displayMetrics.systemInfo.loadAvg,
+        uptime: formatUptime(displayMetrics.systemInfo.uptimeSeconds),
       },
       cpuHistory: cpuHistory,
-      currentCPU: Math.round(metrics.cpu.usagePercent),
+      currentCPU: Math.round(displayMetrics.cpu.usagePercent),
       memory: {
         ram: {
-          ...formatBytes(metrics.memory.ramUsedBytes),
-          total: formatBytes(metrics.memory.ramTotalBytes).value,
-          totalUnit: formatBytes(metrics.memory.ramTotalBytes).unit,
-          percent: Math.round((metrics.memory.ramUsedBytes / metrics.memory.ramTotalBytes) * 100),
+          ...formatBytes(displayMetrics.memory.ramUsedBytes),
+          total: formatBytes(displayMetrics.memory.ramTotalBytes).value,
+          totalUnit: formatBytes(displayMetrics.memory.ramTotalBytes).unit,
+          percent: Math.round((displayMetrics.memory.ramUsedBytes / displayMetrics.memory.ramTotalBytes) * 100),
         },
         swap: {
-          ...formatBytes(metrics.memory.swapUsedBytes),
-          total: formatBytes(metrics.memory.swapTotalBytes).value,
-          totalUnit: formatBytes(metrics.memory.swapTotalBytes).unit,
-          percent: metrics.memory.swapTotalBytes > 0
-            ? Math.round((metrics.memory.swapUsedBytes / metrics.memory.swapTotalBytes) * 100)
+          ...formatBytes(displayMetrics.memory.swapUsedBytes),
+          total: formatBytes(displayMetrics.memory.swapTotalBytes).value,
+          totalUnit: formatBytes(displayMetrics.memory.swapTotalBytes).unit,
+          percent: displayMetrics.memory.swapTotalBytes > 0
+            ? Math.round((displayMetrics.memory.swapUsedBytes / displayMetrics.memory.swapTotalBytes) * 100)
             : 0,
         },
       },
       networkHistory: networkHistory,
       currentNetwork: {
-        download: Math.round(metrics.network.bytesRecvPerSec / 1024),
-        upload: Math.round(metrics.network.bytesSentPerSec / 1024),
+        download: Math.round(displayMetrics.network.bytesRecvPerSec / 1024),
+        upload: Math.round(displayMetrics.network.bytesSentPerSec / 1024),
       },
-      disks: metrics.disks.map(disk => ({
+      disks: displayMetrics.disks.map(disk => ({
         name: disk.mountPoint,
         ...formatBytes(disk.usedBytes),
         total: formatBytes(disk.totalBytes).value,
         totalUnit: formatBytes(disk.totalBytes).unit,
         percent: Math.round((disk.usedBytes / disk.totalBytes) * 100),
       })),
-      diskTotalPercent: Math.round(metrics.diskTotalPercent),
+      diskTotalPercent: Math.round(displayMetrics.diskTotalPercent),
     };
-  }, [metrics, getMetricsHistory]);
+  }, [displayMetrics, displayHistory]);
 
-  // 渲染状态提示
-  const renderStatusHint = () => {
-    // 所有非连接状态都显示骨架屏，简化用户体验
-    // 骨架屏提供一致的加载反馈，避免突兀的错误提示
-    if (status !== WSStatus.CONNECTED) {
+  const panelContent = useMemo(() => {
+    if (!formattedMetrics || displayStatus !== WSStatus.CONNECTED) {
       return <MonitorSkeleton />;
     }
 
-    return null;
-  };
+    return (
+      <>
+        {/* 1. 系统信息 - 148px */}
+        <div className="min-h-[148px]">
+          <SystemInfo data={formattedMetrics.systemInfo} />
+        </div>
+
+        {/* 2. CPU 图表 - 134px */}
+        <div className="min-h-[134px]">
+          <CPUChart data={formattedMetrics.cpuHistory} currentUsage={formattedMetrics.currentCPU} />
+        </div>
+
+        {/* 3. 内存图表 - 134px */}
+        <div className="min-h-[134px]">
+          <MemoryChart data={formattedMetrics.memory} />
+        </div>
+
+        {/* 4. 网络图表 - 134px */}
+        <div className="min-h-[134px]">
+          <NetworkChart
+            data={formattedMetrics.networkHistory}
+            currentDownload={formattedMetrics.currentNetwork.download}
+            currentUpload={formattedMetrics.currentNetwork.upload}
+          />
+        </div>
+
+        {/* 5. 磁盘使用 - 134px */}
+        <div className="min-h-[134px]">
+          <DiskUsage data={formattedMetrics.disks} totalPercent={formattedMetrics.diskTotalPercent} />
+        </div>
+      </>
+    );
+  }, [formattedMetrics, displayStatus]);
 
   return (
     <div
@@ -156,41 +209,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
         className
       )}
     >
-      {/* 显示状态提示或数据 */}
-      {!formattedMetrics || status !== WSStatus.CONNECTED ? (
-        renderStatusHint()
-      ) : (
-        <>
-          {/* 1. 系统信息 - 148px */}
-          <div className="min-h-[148px]">
-            <SystemInfo data={formattedMetrics.systemInfo} />
-          </div>
-
-          {/* 2. CPU 图表 - 134px */}
-          <div className="min-h-[134px]">
-            <CPUChart data={formattedMetrics.cpuHistory} currentUsage={formattedMetrics.currentCPU} />
-          </div>
-
-          {/* 3. 内存图表 - 134px */}
-          <div className="min-h-[134px]">
-            <MemoryChart data={formattedMetrics.memory} />
-          </div>
-
-          {/* 4. 网络图表 - 134px */}
-          <div className="min-h-[134px]">
-            <NetworkChart
-              data={formattedMetrics.networkHistory}
-              currentDownload={formattedMetrics.currentNetwork.download}
-              currentUpload={formattedMetrics.currentNetwork.upload}
-            />
-          </div>
-
-          {/* 5. 磁盘使用 - 134px */}
-          <div className="min-h-[134px]">
-            <DiskUsage data={formattedMetrics.disks} totalPercent={formattedMetrics.diskTotalPercent} />
-          </div>
-        </>
-      )}
+      {panelContent}
     </div>
   );
 };

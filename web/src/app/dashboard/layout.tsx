@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import SidebarProviderServer from "@/components/sidebar-provider-server"
 import { AppSidebar } from "@/components/app-sidebar"
-import { SidebarInset } from "@/components/ui/sidebar"
+import { SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { ClientAuthProvider } from "@/components/client-auth-provider"
 import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
 import { CompletionConfigProvider } from "@/contexts/completion-config-context"
@@ -12,6 +12,26 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { DashboardI18nProvider } from "@/providers/dashboard-i18n-provider"
 import type { User } from "@/lib/api/auth"
 import { cn } from "@/lib/utils"
+
+function MobileSidebarRouteCloser() {
+  const pathname = usePathname()
+  const { isMobile, openMobile, setOpenMobile } = useSidebar()
+  const previousPathRef = useRef(pathname)
+
+  useEffect(() => {
+    if (previousPathRef.current === pathname) {
+      return
+    }
+
+    previousPathRef.current = pathname
+
+    if (isMobile && openMobile) {
+      setOpenMobile(false)
+    }
+  }, [isMobile, openMobile, pathname, setOpenMobile])
+
+  return null
+}
 
 /**
  * Dashboard 布局 - Client Component
@@ -76,6 +96,7 @@ export default function DashboardLayout({
         <CompletionConfigProvider>
           <BreadcrumbProvider>
             <SidebarProviderServer>
+              <MobileSidebarRouteCloser />
               <AppSidebar />
               <SidebarInset>
                 {/* 添加淡入动画，使界面显示更平滑 */}
