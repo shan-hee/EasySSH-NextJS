@@ -8,6 +8,8 @@ import {
   TerminalWebSocket,
   type CompletionDataResponse,
   type CompletionUpdateResponse,
+  type TerminalAuthPrompt,
+  type TerminalAuthPromptResponder,
 } from '@/lib/websocket-terminal'
 import { useTerminalStore } from '@/stores/terminal-store'
 import type { Terminal } from '@xterm/xterm'
@@ -22,6 +24,8 @@ export interface WebSocketConnectionConfig {
   onLoadingChange?: (isLoading: boolean) => void
   onCompletionData?: (data: CompletionDataResponse) => void
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void
+  onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void
+  onConnectionEnd?: () => void
   enableCompletionFetch?: boolean
 }
 
@@ -38,6 +42,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     onLoadingChange,
     onCompletionData,
     onCompletionUpdate,
+    onAuthPrompt,
+    onConnectionEnd,
     enableCompletionFetch,
   } = config
 
@@ -50,6 +56,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const onLoadingChangeRef = useRef(onLoadingChange)
   const onCompletionDataRef = useRef(onCompletionData)
   const onCompletionUpdateRef = useRef(onCompletionUpdate)
+  const onAuthPromptRef = useRef(onAuthPrompt)
+  const onConnectionEndRef = useRef(onConnectionEnd)
 
   // 每次渲染时同步最新的回调到 ref
   useEffect(() => {
@@ -63,6 +71,14 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   useEffect(() => {
     onCompletionUpdateRef.current = onCompletionUpdate
   }, [onCompletionUpdate])
+
+  useEffect(() => {
+    onAuthPromptRef.current = onAuthPrompt
+  }, [onAuthPrompt])
+
+  useEffect(() => {
+    onConnectionEndRef.current = onConnectionEnd
+  }, [onConnectionEnd])
 
   // ==================== 核心修复：从 Store 同步 wsRef ====================
   // 每次渲染时，先从 Store 获取现有连接
@@ -128,12 +144,14 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           // 并规避透明背景 + WebGL 场景下的局部黑底伪影
         },
         onDisconnected: () => {
+          onConnectionEndRef.current?.()
           const inst = getTerminal(sessionId)
           if (inst?.terminal) {
             inst.terminal.writeln('\r\n\x1b[1;31m✗ Connection closed\x1b[0m')
           }
         },
         onError: (error) => {
+          onConnectionEndRef.current?.()
           console.error('[useWebSocketConnection] WebSocket 错误:', error)
           const inst = getTerminal(sessionId)
           if (inst?.terminal) {
@@ -145,6 +163,13 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
         },
         onCompletionUpdate: (data) => {
           onCompletionUpdateRef.current?.(data)
+        },
+        onAuthPrompt: (prompt, respond) => {
+          if (onAuthPromptRef.current) {
+            onAuthPromptRef.current(prompt, respond)
+          } else {
+            respond([], true)
+          }
         },
         onLatency: (data) => {
           updateLatency(sessionId, data)

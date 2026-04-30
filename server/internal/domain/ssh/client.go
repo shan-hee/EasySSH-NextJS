@@ -21,9 +21,30 @@ type Client struct {
 	createdAt time.Time
 }
 
+type clientOptions struct {
+	keyboardInteractive ssh.KeyboardInteractiveChallenge
+}
+
+// ClientOption configures optional SSH client behavior.
+type ClientOption func(*clientOptions)
+
+// WithKeyboardInteractive enables SSH keyboard-interactive authentication.
+func WithKeyboardInteractive(challenge ssh.KeyboardInteractiveChallenge) ClientOption {
+	return func(opts *clientOptions) {
+		opts.keyboardInteractive = challenge
+	}
+}
+
 // NewClient 创建 SSH 客户端
 // hostKeyCallback: 可选的主机密钥验证回调，如果为 nil 则使用不安全的模式（不推荐）
-func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback ssh.HostKeyCallback) (*Client, error) {
+func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback ssh.HostKeyCallback, opts ...ClientOption) (*Client, error) {
+	options := &clientOptions{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(options)
+		}
+	}
+
 	// 解密认证信息
 	var authMethods []ssh.AuthMethod
 
@@ -44,6 +65,10 @@ func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback 
 			return nil, fmt.Errorf("failed to parse private key: %w", err)
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
+	}
+
+	if options.keyboardInteractive != nil {
+		authMethods = append(authMethods, ssh.KeyboardInteractive(options.keyboardInteractive))
 	}
 
 	// 配置 SSH 客户端

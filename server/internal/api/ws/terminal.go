@@ -127,6 +127,8 @@ const (
 	MessageTypeText                 = 1 // 文本消息（JSON）
 	MessageTypeBinary               = 2 // 二进制消息（原始输出）
 	terminalSSHLatencyProbeInterval = 15 * time.Second
+	terminalSSHAuthChallengeTimeout = 2 * time.Minute
+	terminalSSHInitTimeout          = 5 * time.Minute
 )
 
 // InputMessage 输入消息
@@ -144,6 +146,27 @@ type ResizeMessage struct {
 type PingMessage struct {
 	ID string `json:"id,omitempty"`
 	Ts int64  `json:"ts,omitempty"`
+}
+
+// AuthPromptItem SSH keyboard-interactive 单个提示项
+type AuthPromptItem struct {
+	Text string `json:"text"`
+	Echo bool   `json:"echo"`
+}
+
+// AuthPromptMessage SSH keyboard-interactive 验证提示
+type AuthPromptMessage struct {
+	RequestID   string           `json:"request_id"`
+	Name        string           `json:"name,omitempty"`
+	Instruction string           `json:"instruction,omitempty"`
+	Prompts     []AuthPromptItem `json:"prompts"`
+}
+
+// AuthResponseMessage SSH keyboard-interactive 验证响应
+type AuthResponseMessage struct {
+	RequestID string   `json:"request_id"`
+	Answers   []string `json:"answers"`
+	Cancelled bool     `json:"cancelled,omitempty"`
 }
 
 // OutputMessage 输出消息
@@ -183,6 +206,80 @@ type completionBroadcastKey struct {
 type completionSubscriber struct {
 	conn    *websocket.Conn
 	writeMu *sync.Mutex
+}
+
+func newTerminalKeyboardInteractiveChallenge(conn *websocket.Conn, writeJSON func(interface{}) error) ssh.KeyboardInteractiveChallenge {
+	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
+		if len(questions) == 0 {
+			return []string{}, nil
+		}
+
+		requestID := uuid.NewString()
+		prompts := make([]AuthPromptItem, len(questions))
+		for i, question := range questions {
+			echo := false
+			if i < len(echos) {
+				echo = echos[i]
+			}
+			prompts[i] = AuthPromptItem{
+				Text: question,
+				Echo: echo,
+			}
+		}
+
+		payload, _ := json.Marshal(AuthPromptMessage{
+			RequestID:   requestID,
+			Name:        name,
+			Instruction: instruction,
+			Prompts:     prompts,
+		})
+		if err := writeJSON(Message{Type: "auth_prompt", Data: payload}); err != nil {
+			return nil, fmt.Errorf("failed to send authentication prompt: %w", err)
+		}
+
+		defer func() {
+			_ = conn.SetReadDeadline(time.Time{})
+		}()
+
+		for {
+			if err := conn.SetReadDeadline(time.Now().Add(terminalSSHAuthChallengeTimeout)); err != nil {
+				return nil, fmt.Errorf("failed to set authentication response timeout: %w", err)
+			}
+
+			messageType, message, err := conn.ReadMessage()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read authentication response: %w", err)
+			}
+			if messageType != websocket.TextMessage {
+				continue
+			}
+
+			var msg Message
+			if err := json.Unmarshal(message, &msg); err != nil {
+				log.Printf("Error parsing authentication response message: %v", err)
+				continue
+			}
+			if msg.Type != "auth_response" {
+				continue
+			}
+
+			var response AuthResponseMessage
+			if err := json.Unmarshal(msg.Data, &response); err != nil {
+				log.Printf("Error parsing authentication response payload: %v", err)
+				continue
+			}
+			if response.RequestID != requestID {
+				continue
+			}
+			if response.Cancelled {
+				return nil, fmt.Errorf("authentication cancelled by user")
+			}
+
+			answers := make([]string, len(questions))
+			copy(answers, response.Answers)
+			return answers, nil
+		}
+	}
 }
 
 // HandleSSH 处理 SSH WebSocket 连接
@@ -228,11 +325,44 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	}
 	defer wsConn.Close()
 
+	// WebSocket写锁保护（防止并发写入）
+	wsMutex := &sync.Mutex{}
+	safeWriteMessage := func(messageType int, data []byte) error {
+		wsMutex.Lock()
+		defer wsMutex.Unlock()
+		return wsConn.WriteMessage(messageType, data)
+	}
+	safeWriteJSON := func(v interface{}) error {
+		wsMutex.Lock()
+		defer wsMutex.Unlock()
+		return wsConn.WriteJSON(v)
+	}
+	sendError := func(errorCode, message string) {
+		errMsg := ErrorMessage{
+			Error:   errorCode,
+			Message: message,
+		}
+		errData, _ := json.Marshal(errMsg)
+
+		if err := safeWriteJSON(Message{
+			Type: "error",
+			Data: errData,
+		}); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+
+		time.Sleep(100 * time.Millisecond)
+		wsConn.Close()
+	}
+
 	// 立即发送握手完成消息
-	h.sendMessage(wsConn, Message{
+	if err := safeWriteJSON(Message{
 		Type: "handshake_complete",
 		Data: json.RawMessage(`{"status":"connecting"}`),
-	})
+	}); err != nil {
+		log.Printf("Error sending handshake_complete: %v", err)
+		return
+	}
 
 	// 创建通道用于异步初始化结果
 	type initResult struct {
@@ -255,7 +385,12 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		}
 
 		// 创建 SSH 客户端（使用主机密钥验证）
-		client, err := sshDomain.NewClient(srv, h.encryptor, h.hostKeyCallback)
+		client, err := sshDomain.NewClient(
+			srv,
+			h.encryptor,
+			h.hostKeyCallback,
+			sshDomain.WithKeyboardInteractive(newTerminalKeyboardInteractiveChallenge(wsConn, safeWriteJSON)),
+		)
 		if err != nil {
 			resultChan <- initResult{err: fmt.Errorf("client_creation_failed: %w", err)}
 			return
@@ -380,11 +515,11 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	select {
 	case result = <-resultChan:
 		if result.err != nil {
-			h.sendError(wsConn, "initialization_failed", result.err.Error())
+			sendError("initialization_failed", result.err.Error())
 			return
 		}
-	case <-time.After(10 * time.Second):
-		h.sendError(wsConn, "initialization_timeout", "SSH connection timeout")
+	case <-time.After(terminalSSHInitTimeout):
+		sendError("initialization_timeout", "SSH connection timeout")
 		return
 	}
 
@@ -399,10 +534,13 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	defer h.sessionManager.Remove(session.ID)
 
 	// 发送连接成功消息
-	h.sendMessage(wsConn, Message{
+	if err := safeWriteJSON(Message{
 		Type: "connected",
 		Data: json.RawMessage(fmt.Sprintf(`{"session_id":"%s"}`, session.ID)),
-	})
+	}); err != nil {
+		log.Printf("Error sending connected message: %v", err)
+		return
+	}
 
 	// 创建停止通道和关闭保护
 	done := make(chan struct{})
@@ -411,19 +549,6 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		closeOnce.Do(func() {
 			close(done)
 		})
-	}
-
-	// WebSocket写锁保护（防止并发写入）
-	wsMutex := &sync.Mutex{}
-	safeWriteMessage := func(messageType int, data []byte) error {
-		wsMutex.Lock()
-		defer wsMutex.Unlock()
-		return wsConn.WriteMessage(messageType, data)
-	}
-	safeWriteJSON := func(v interface{}) error {
-		wsMutex.Lock()
-		defer wsMutex.Unlock()
-		return wsConn.WriteJSON(v)
 	}
 
 	var sshLatencyMs atomic.Int64

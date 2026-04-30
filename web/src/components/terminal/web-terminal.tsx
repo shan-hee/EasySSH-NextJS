@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useLayoutEffect, useState } from "react
 import { useTheme } from "next-themes"
 import { useTranslations } from "next-intl"
 import { ConnectionLoader } from "./connection-loader"
+import { TerminalAuthChallengeDialog } from "./terminal-auth-challenge-dialog"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from "./terminal-themes"
 import { CompletionPopup } from "./completion-popup"
 import type { Terminal } from "@xterm/xterm"
@@ -28,6 +29,10 @@ import {
 import type { CompletionItem } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
+import type {
+  TerminalAuthPrompt,
+  TerminalAuthPromptResponder,
+} from "@/lib/websocket-terminal"
 
 type CompletionPlacement = "top" | "bottom"
 
@@ -137,6 +142,10 @@ export function WebTerminal({
   const remoteHistoryProviderRef = useRef<RemoteHistoryProvider | null>(null)
   const scriptProviderRef = useRef<ScriptProvider | null>(null)
   const sessionProviderRef = useRef<SessionProvider | null>(null)
+  const [authChallenge, setAuthChallenge] = useState<{
+    prompt: TerminalAuthPrompt
+    respond: TerminalAuthPromptResponder
+  } | null>(null)
 
   // ==================== WebSocket 连接管理 ====================
   const { sendInput, resize, ws } = useWebSocketConnection({
@@ -163,6 +172,12 @@ export function WebTerminal({
     onCompletionUpdate: (data) => {
       remoteHistoryProviderRef.current?.addCommand(data.newCommand)
       completionEngineRef.current?.clearCache()
+    },
+    onAuthPrompt: (prompt, respond) => {
+      setAuthChallenge({ prompt, respond })
+    },
+    onConnectionEnd: () => {
+      setAuthChallenge(null)
     },
   })
 
@@ -773,6 +788,16 @@ export function WebTerminal({
     }
   }, [fitAddon])
 
+  const handleAuthChallengeSubmit = useCallback((answers: string[]) => {
+    authChallenge?.respond(answers, false)
+    setAuthChallenge(null)
+  }, [authChallenge])
+
+  const handleAuthChallengeCancel = useCallback(() => {
+    authChallenge?.respond([], true)
+    setAuthChallenge(null)
+  }, [authChallenge])
+
   // 暴露方法给父组件
   useEffect(() => {
     if (containerRef.current) {
@@ -977,6 +1002,13 @@ export function WebTerminal({
           />
         </TerminalThemeProvider>
       )}
+
+      <TerminalAuthChallengeDialog
+        prompt={authChallenge?.prompt ?? null}
+        serverName={`${username}@${host}`}
+        onSubmit={handleAuthChallengeSubmit}
+        onCancel={handleAuthChallengeCancel}
+      />
 
       <style jsx global>{`
         .terminal-container {

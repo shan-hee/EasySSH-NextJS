@@ -23,8 +23,23 @@ export interface TerminalWebSocketOptions {
   onCompletionData?: (data: CompletionDataResponse) => void // 补全数据回调
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void // 补全增量更新回调
   onLatency?: (data: TerminalLatencyData) => void // 终端链路延迟回调
+  onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void // SSH交互式认证回调
   enableCompletionFetch?: boolean // 是否在连接成功后自动拉取补全数据
 }
+
+export interface TerminalAuthPromptItem {
+  text: string
+  echo: boolean
+}
+
+export interface TerminalAuthPrompt {
+  request_id: string
+  name?: string
+  instruction?: string
+  prompts: TerminalAuthPromptItem[]
+}
+
+export type TerminalAuthPromptResponder = (answers: string[], cancelled?: boolean) => void
 
 export interface TerminalLatencyData {
   terminalWsLatencyMs: number
@@ -79,12 +94,14 @@ export class TerminalWebSocket {
   private onCompletionData?: (data: CompletionDataResponse) => void
   private onCompletionUpdate?: (data: CompletionUpdateResponse) => void
   private onLatency?: (data: TerminalLatencyData) => void
+  private onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void
   private enableCompletionFetch: boolean
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
   private reconnectDelay = 2000
   private isManualClose = false
   private isDestroyed = false // 防止销毁后重连
+  private authCancelled = false
   private pingInterval: NodeJS.Timeout | null = null
   private pingSeq = 0
   private pendingPings = new Map<string, number>()
@@ -110,6 +127,7 @@ export class TerminalWebSocket {
     this.onCompletionData = options.onCompletionData
     this.onCompletionUpdate = options.onCompletionUpdate
     this.onLatency = options.onLatency
+    this.onAuthPrompt = options.onAuthPrompt
     this.enableCompletionFetch = options.enableCompletionFetch ?? true
   }
 
@@ -298,6 +316,36 @@ export class TerminalWebSocket {
   }
 
   /**
+   * 响应 SSH keyboard-interactive 认证提示
+   */
+  sendAuthResponse(requestId: string, answers: string[], cancelled: boolean = false): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn("[TerminalWS] WebSocket 未连接，无法发送认证响应")
+      return
+    }
+
+    try {
+      if (cancelled) {
+        this.isManualClose = true
+        this.authCancelled = true
+      }
+
+      const message = {
+        type: "auth_response",
+        data: {
+          request_id: requestId,
+          answers,
+          cancelled,
+        },
+      }
+      this.ws.send(JSON.stringify(message))
+    } catch (error) {
+      console.error("[TerminalWS] 发送认证响应失败:", error)
+      this.onError?.(error as Error)
+    }
+  }
+
+  /**
    * 动态更新补全拉取开关
    */
   setCompletionFetchEnabled(enabled: boolean): void {
@@ -377,8 +425,38 @@ export class TerminalWebSocket {
           this.onCompletionUpdate(message.data as CompletionUpdateResponse)
         }
         break
+      case "auth_prompt":
+        if (message.data && typeof message.data === "object") {
+          const prompt = message.data as TerminalAuthPrompt
+          const respond: TerminalAuthPromptResponder = (answers, cancelled = false) => {
+            this.sendAuthResponse(prompt.request_id, answers, cancelled)
+          }
+
+          if (this.onAuthPrompt) {
+            this.onAuthPrompt(prompt, respond)
+          } else {
+            respond([], true)
+          }
+        }
+        break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)
+        const errorCode =
+          message.data &&
+          typeof message.data === "object" &&
+          "error" in message.data &&
+          typeof message.data.error === "string"
+            ? message.data.error
+            : ""
+        if (
+          errorCode === "initialization_failed" ||
+          errorCode === "initialization_timeout"
+        ) {
+          this.isManualClose = true
+        }
+        if (this.authCancelled && errorCode === "initialization_failed") {
+          break
+        }
         this.onError?.(
           new Error(
             message.data &&
