@@ -164,10 +164,17 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
       const connection = storeState.connections.get(serverId)
       if (!connection) return storeState
 
+      const metricsWithLatency: MonitorMetrics = {
+        ...metrics,
+        localLatencyMs: connection.localLatencyMs,
+        localLatencySmoothedMs: connection.localLatencySmoothedMs,
+        localLatencyJitter: connection.localLatencyJitter,
+      }
+
       const newConnections = new Map(storeState.connections)
       newConnections.set(serverId, {
         ...connection,
-        metrics,
+        metrics: metricsWithLatency,
         lastUpdateAt: Date.now()
       })
       return { connections: newConnections }
@@ -201,7 +208,12 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
     // 通知订阅者（延迟数据变化也要通知）
     const connection = get().connections.get(serverId)
     if (connection?.metrics) {
-      get().notifySubscribers(serverId, connection.metrics)
+      get().notifySubscribers(serverId, {
+        ...connection.metrics,
+        localLatencyMs: latency.localLatencyMs,
+        localLatencySmoothedMs: latency.localLatencySmoothedMs,
+        localLatencyJitter: latency.localLatencyJitter,
+      })
     }
   },
 
@@ -289,6 +301,10 @@ export const useMonitorStore = create<MonitorStoreState>((set, get) => ({
   },
 
   destroyConnection: (serverId: string) => {
+    if ((get().refCount.get(serverId) || 0) > 0) {
+      return
+    }
+
     const connection = get().connections.get(serverId)
     if (!connection) return
 

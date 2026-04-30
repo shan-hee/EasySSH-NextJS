@@ -187,13 +187,9 @@ export function useMonitorWebSocket({
   useEffect(() => {
     if (!enabled || !serverId) return
 
-    // 从 Store 同步现有连接 - 使用订阅模式
+    // 每个启用监控的 Hook 都订阅同一个 serverId。
+    // subscribe 同时承担引用计数职责，确保首个创建连接的 Hook 也会在关闭面板/页签时释放连接。
     const existingConnection = getConnection(serverId)
-    const shouldUseSubscription = existingConnection?.ws &&
-      (existingConnection.ws.readyState === WebSocket.CONNECTING ||
-       existingConnection.ws.readyState === WebSocket.OPEN)
-
-    if (!shouldUseSubscription) return
 
     // 注册订阅者，接收监控数据更新
     const unsubscribe = subscribe(serverId, (newMetrics) => {
@@ -380,12 +376,6 @@ export function useMonitorWebSocket({
                 dockerInstalled: metricsData.docker.dockerInstalled || false,
               } : undefined,
             };
-
-            // 更新历史数据队列（最多保留 20 个数据点）
-            metricsHistoryRef.current = [...metricsHistoryRef.current, formattedMetrics].slice(-20);
-
-            // 批量更新：单次 setState 避免多次重新渲染
-            setMetrics(formattedMetrics);
 
             // ==================== 核心改动：通过 Store 分发消息给所有订阅者 ====================
             const ramUsagePercent = formattedMetrics.memory.ramTotalBytes > 0

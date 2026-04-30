@@ -7,7 +7,7 @@
 
 'use client';
 
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatBytes } from '@/lib/format-utils';
 import { WSStatus } from './hooks/useMonitorWebSocket';
@@ -53,32 +53,30 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
 }) => {
   // 【性能优化】只订阅监控数据，不订阅延迟数据
   const { metrics, status, getMetricsHistory } = useMonitoringData();
-  const frozenSnapshotRef = useRef<{
+  const [frozenSnapshot, setFrozenSnapshot] = useState<{
     metrics: typeof metrics;
     status: typeof status;
     history: ReturnType<typeof getMetricsHistory>;
-  } | null>(null);
-  const liveHistory = isLive ? getMetricsHistory() : undefined;
+  }>(() => ({
+    metrics: null,
+    status: WSStatus.DISCONNECTED,
+    history: [],
+  }));
+  const liveHistory = isLive ? getMetricsHistory() : [];
 
-  if (!frozenSnapshotRef.current) {
-    frozenSnapshotRef.current = {
+  useEffect(() => {
+    if (!isLive) return;
+
+    setFrozenSnapshot({
       metrics,
       status,
-      history: liveHistory ?? [],
-    };
-  }
+      history: liveHistory,
+    });
+  }, [isLive, metrics, status, liveHistory]);
 
-  if (isLive) {
-    frozenSnapshotRef.current = {
-      metrics,
-      status,
-      history: liveHistory ?? [],
-    };
-  }
-
-  const displayMetrics = isLive ? metrics : frozenSnapshotRef.current.metrics;
-  const displayStatus = isLive ? status : frozenSnapshotRef.current.status;
-  const displayHistory = isLive ? liveHistory ?? [] : frozenSnapshotRef.current.history;
+  const displayMetrics = isLive ? metrics : frozenSnapshot.metrics;
+  const displayStatus = isLive ? status : frozenSnapshot.status;
+  const displayHistory = isLive ? liveHistory : frozenSnapshot.history;
 
   // 转换数据格式以适配现有组件
   const formattedMetrics = useMemo(() => {
@@ -129,7 +127,9 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
           ...formatBytes(displayMetrics.memory.ramUsedBytes),
           total: formatBytes(displayMetrics.memory.ramTotalBytes).value,
           totalUnit: formatBytes(displayMetrics.memory.ramTotalBytes).unit,
-          percent: Math.round((displayMetrics.memory.ramUsedBytes / displayMetrics.memory.ramTotalBytes) * 100),
+          percent: displayMetrics.memory.ramTotalBytes > 0
+            ? Math.round((displayMetrics.memory.ramUsedBytes / displayMetrics.memory.ramTotalBytes) * 100)
+            : 0,
         },
         swap: {
           ...formatBytes(displayMetrics.memory.swapUsedBytes),
@@ -150,7 +150,9 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
         ...formatBytes(disk.usedBytes),
         total: formatBytes(disk.totalBytes).value,
         totalUnit: formatBytes(disk.totalBytes).unit,
-        percent: Math.round((disk.usedBytes / disk.totalBytes) * 100),
+        percent: disk.totalBytes > 0
+          ? Math.round((disk.usedBytes / disk.totalBytes) * 100)
+          : 0,
       })),
       diskTotalPercent: Math.round(displayMetrics.diskTotalPercent),
     };
