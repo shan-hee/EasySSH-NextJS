@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import { QuickServer } from "./quick-connect"
+import type { QuickServer } from "./quick-connect"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
-import { TerminalSession } from "@/components/terminal/types"
+import type {
+  TerminalSession,
+  TerminalConnectionPhase,
+} from "@/components/terminal/types"
 import { cn } from "@/lib/utils"
 import { useTerminalStore } from "@/stores/terminal-store"
 import {
@@ -42,6 +45,7 @@ interface TerminalComponentProps {
   serversLoading?: boolean
   // 外部控制激活的会话 ID
   externalActiveSessionId?: string | null
+  onConnectionPhaseChange?: (sessionId: string, phase: TerminalConnectionPhase) => void
 }
 
 export function TerminalComponent({
@@ -58,6 +62,7 @@ export function TerminalComponent({
   servers,
   serversLoading,
   externalActiveSessionId,
+  onConnectionPhaseChange,
 }: TerminalComponentProps) {
   const { config } = useSystemConfig()
   const tTerminal = useTranslations("terminal")
@@ -435,6 +440,7 @@ export function TerminalComponent({
                     serversLoading={serversLoading}
                     onCommand={(command) => handleCommand(session.id, command)}
                     onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
+                    onConnectionPhaseChange={(phase) => onConnectionPhaseChange?.(session.id, phase)}
                     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
                     onToggleSettings={() => setIsSettingsOpen(true)}
                     onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}

@@ -10,6 +10,17 @@ const TERMINAL_PING_INTERVAL_MS = 5000
 const TERMINAL_PING_TIMEOUT_MS = 60000
 const TERMINAL_MAX_PENDING_PINGS = 20
 
+export type TerminalConnectionPhase =
+  | "idle"
+  | "ticket"
+  | "ws_connecting"
+  | "ssh_connecting"
+  | "authenticating"
+  | "ready"
+  | "reconnecting"
+  | "failed"
+  | "closed"
+
 export interface TerminalWebSocketOptions {
   serverId: string
   cols: number
@@ -24,6 +35,7 @@ export interface TerminalWebSocketOptions {
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void // 补全增量更新回调
   onLatency?: (data: TerminalLatencyData) => void // 终端链路延迟回调
   onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void // SSH交互式认证回调
+  onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   enableCompletionFetch?: boolean // 是否在连接成功后自动拉取补全数据
 }
 
@@ -95,6 +107,7 @@ export class TerminalWebSocket {
   private onCompletionUpdate?: (data: CompletionUpdateResponse) => void
   private onLatency?: (data: TerminalLatencyData) => void
   private onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void
+  private onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   private enableCompletionFetch: boolean
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
@@ -102,6 +115,7 @@ export class TerminalWebSocket {
   private isManualClose = false
   private isDestroyed = false // 防止销毁后重连
   private authCancelled = false
+  private phase: TerminalConnectionPhase = "idle"
   private pingInterval: NodeJS.Timeout | null = null
   private pingSeq = 0
   private pendingPings = new Map<string, number>()
@@ -128,7 +142,17 @@ export class TerminalWebSocket {
     this.onCompletionUpdate = options.onCompletionUpdate
     this.onLatency = options.onLatency
     this.onAuthPrompt = options.onAuthPrompt
+    this.onConnectionPhase = options.onConnectionPhase
     this.enableCompletionFetch = options.enableCompletionFetch ?? true
+  }
+
+  private setPhase(phase: TerminalConnectionPhase): void {
+    if (this.phase === phase) {
+      return
+    }
+
+    this.phase = phase
+    this.onConnectionPhase?.(phase)
   }
 
   /**
@@ -157,6 +181,7 @@ export class TerminalWebSocket {
       // 性能监控：记录连接开始时间
       this.connectStartTime = performance.now()
       performance.mark('ws-terminal-connect-start')
+      this.setPhase("ticket")
 
       // 触发正在连接回调
       this.onConnecting?.()
@@ -168,6 +193,7 @@ export class TerminalWebSocket {
       })
       if (this.isDestroyed) return
 
+      this.setPhase("ws_connecting")
       const params = new URLSearchParams()
       params.set("cols", String(this.cols))
       params.set("rows", String(this.rows))
@@ -179,6 +205,7 @@ export class TerminalWebSocket {
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0
+        this.setPhase("ssh_connecting")
         // 注意：onopen只表示WebSocket握手完成，SSH连接可能还在建立中
         // 真正的连接成功由服务器的"connected"消息通知
       }
@@ -202,6 +229,7 @@ export class TerminalWebSocket {
 
       this.ws.onerror = () => {
         console.error("[TerminalWS] WebSocket 错误")
+        this.setPhase("failed")
         this.onError?.(new Error("WebSocket 连接错误"))
       }
 
@@ -221,13 +249,18 @@ export class TerminalWebSocket {
         if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
           // 自动重连
           this.reconnectAttempts++
+          this.setPhase("reconnecting")
           setTimeout(() => this.connect(), this.reconnectDelay)
         } else {
+          if (this.phase !== "failed") {
+            this.setPhase("closed")
+          }
           this.onDisconnected?.()
         }
       }
     } catch (error) {
       console.error("[TerminalWS] 连接失败:", error)
+      this.setPhase("failed")
       this.onError?.(error as Error)
     }
   }
@@ -359,6 +392,7 @@ export class TerminalWebSocket {
     this.isManualClose = true
     this.isDestroyed = true // 标记为已销毁
     this.stopPing()
+    this.setPhase("closed")
 
     if (this.ws) {
       const readyState = this.ws.readyState
@@ -384,7 +418,15 @@ export class TerminalWebSocket {
    * 检查连接状态
    */
   isConnected(): boolean {
-    return this.ws !== null && this.ws.readyState === WebSocket.OPEN
+    return (
+      this.ws !== null &&
+      this.ws.readyState === WebSocket.OPEN &&
+      this.phase === "ready"
+    )
+  }
+
+  getPhase(): TerminalConnectionPhase {
+    return this.phase
   }
 
   /**
@@ -406,6 +448,7 @@ export class TerminalWebSocket {
         performance.measure('ws-terminal-total', 'ws-terminal-connect-start', 'ws-terminal-connected')
         performance.measure('ws-terminal-ssh-init', 'ws-terminal-handshake-complete', 'ws-terminal-connected')
 
+        this.setPhase("ready")
         this.onConnected?.()
         this.startPing()
 
@@ -427,6 +470,7 @@ export class TerminalWebSocket {
         break
       case "auth_prompt":
         if (message.data && typeof message.data === "object") {
+          this.setPhase("authenticating")
           const prompt = message.data as TerminalAuthPrompt
           const respond: TerminalAuthPromptResponder = (answers, cancelled = false) => {
             this.sendAuthResponse(prompt.request_id, answers, cancelled)
@@ -453,6 +497,7 @@ export class TerminalWebSocket {
           errorCode === "initialization_timeout"
         ) {
           this.isManualClose = true
+          this.setPhase("failed")
         }
         if (this.authCancelled && errorCode === "initialization_failed") {
           break
@@ -470,7 +515,23 @@ export class TerminalWebSocket {
         break
       case "closed":
         // 服务器关闭连接
-        this.disconnect()
+        this.isManualClose = true
+        this.isDestroyed = true
+        this.stopPing()
+        this.setPhase("closed")
+
+        if (this.ws) {
+          const socket = this.ws
+          this.ws = null
+          if (
+            socket.readyState === WebSocket.OPEN ||
+            socket.readyState === WebSocket.CONNECTING
+          ) {
+            socket.close(1000, "服务器关闭连接")
+          }
+        }
+
+        this.onDisconnected?.()
         break
       case "pong":
         this.handlePong(message.data as PongMessageData | undefined)

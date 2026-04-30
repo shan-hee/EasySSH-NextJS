@@ -6,7 +6,7 @@ import { AnimatedList } from "@/components/ui/animated-list"
 import { useTranslations } from "next-intl"
 
 export type QuickServer = {
-  id: number | string  // 支持 UUID 字符串
+  id: string
   name: string
   host: string
   port: number

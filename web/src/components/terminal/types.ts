@@ -1,17 +1,23 @@
 import type { Terminal } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
-import { TerminalWebSocket } from '@/lib/websocket-terminal'
+import type {
+  TerminalWebSocket,
+  TerminalConnectionPhase,
+} from '@/lib/websocket-terminal'
+
+export type { TerminalConnectionPhase } from '@/lib/websocket-terminal'
 
 export type SessionStatus = "connected" | "disconnected" | "reconnecting"
 
 export interface TerminalSession {
   id: string
-  serverId: number | string  // 同时支持数值 ID 和 UUID 字符串
+  serverId?: string
   serverName: string
   host: string
   port?: number
   username: string
-  isConnected: boolean
+  shouldConnect: boolean
+  connectionPhase: TerminalConnectionPhase
   status: SessionStatus
   lastActivity: number // 时间戳（ms）
   group?: string

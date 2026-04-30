@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { TerminalSession } from "@/components/terminal/types"
+import type { TerminalSession } from "@/components/terminal/types"
 import { Plus, Settings, X } from "lucide-react"
 import {
   Breadcrumb,

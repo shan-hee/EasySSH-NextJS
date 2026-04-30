@@ -315,6 +315,8 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	if rowsStr := c.Query("rows"); rowsStr != "" {
 		fmt.Sscanf(rowsStr, "%d", &rows)
 	}
+	clientIP := c.ClientIP()
+	clientPort := 0 // WebSocket无法获取客户端端口，使用0
 
 	// 升级到 WebSocket
 	upgrader := h.getUpgrader()
@@ -373,31 +375,59 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		stderr    io.Reader
 		err       error
 	}
-	resultChan := make(chan initResult, 1)
+	initCtx, cancelInit := context.WithTimeout(c.Request.Context(), terminalSSHInitTimeout)
+	defer cancelInit()
+	resultChan := make(chan initResult)
 
 	// 异步建立SSH连接和初始化
 	go func() {
+		var client *sshDomain.Client
+		var sshSession *ssh.Session
+		var initSucceeded bool
+
+		defer func() {
+			if initSucceeded {
+				return
+			}
+			if sshSession != nil {
+				_ = sshSession.Close()
+			}
+			if client != nil {
+				_ = client.Close()
+			}
+		}()
+
+		sendResult := func(result initResult) bool {
+			select {
+			case resultChan <- result:
+				return true
+			case <-initCtx.Done():
+				return false
+			}
+		}
+
 		// 获取服务器信息
-		srv, err := h.serverService.GetByID(context.Background(), userUUID, serverUUID)
+		srv, err := h.serverService.GetByID(initCtx, userUUID, serverUUID)
 		if err != nil {
-			resultChan <- initResult{err: fmt.Errorf("server_not_found: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("server_not_found: %w", err)})
 			return
 		}
 
 		// 创建 SSH 客户端（使用主机密钥验证）
-		client, err := sshDomain.NewClient(
+		var err error
+		client, err = sshDomain.NewClient(
 			srv,
 			h.encryptor,
 			h.hostKeyCallback,
 			sshDomain.WithKeyboardInteractive(newTerminalKeyboardInteractiveChallenge(wsConn, safeWriteJSON)),
 		)
 		if err != nil {
-			resultChan <- initResult{err: fmt.Errorf("client_creation_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("client_creation_failed: %w", err)})
 			return
 		}
 
 		// 连接到服务器
-		if err := client.Connect(srv.Host, srv.Port); err != nil {
+		if err := client.ConnectContext(initCtx, srv.Host, srv.Port); err != nil {
 			// 异步更新服务器状态为离线
 			go func() {
 				srv.UpdateStatus(server.StatusOffline)
@@ -405,7 +435,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 					log.Printf("Failed to update server status to offline: %v", updateErr)
 				}
 			}()
-			resultChan <- initResult{err: fmt.Errorf("connection_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("connection_failed: %w", err)})
 			return
 		}
 
@@ -418,20 +448,15 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		}()
 
 		// 创建 SSH 会话
-		sshSession, err := client.NewSession()
+		sshSession, err = client.NewSession()
 		if err != nil {
-			client.Close()
-			resultChan <- initResult{err: fmt.Errorf("session_creation_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("session_creation_failed: %w", err)})
 			return
 		}
 
 		// 创建会话记录
 		session := sshDomain.NewSession(userID, serverID, client, cols, rows)
 		session.SSHSession = sshSession
-
-		// 获取客户端IP
-		clientIP := c.ClientIP()
-		clientPort := 0 // WebSocket无法获取客户端端口，使用0
 
 		// 异步创建数据库会话记录
 		var dbSession *sshsession.SSHSession
@@ -463,32 +488,32 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 		// 请求伪终端
 		if err := sshSession.RequestPty("xterm-256color", rows, cols, modes); err != nil {
-			resultChan <- initResult{err: fmt.Errorf("pty_request_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("pty_request_failed: %w", err)})
 			return
 		}
 
 		// 获取输入输出管道
 		stdin, err := sshSession.StdinPipe()
 		if err != nil {
-			resultChan <- initResult{err: fmt.Errorf("stdin_pipe_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("stdin_pipe_failed: %w", err)})
 			return
 		}
 
 		stdout, err := sshSession.StdoutPipe()
 		if err != nil {
-			resultChan <- initResult{err: fmt.Errorf("stdout_pipe_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("stdout_pipe_failed: %w", err)})
 			return
 		}
 
 		stderr, err := sshSession.StderrPipe()
 		if err != nil {
-			resultChan <- initResult{err: fmt.Errorf("stderr_pipe_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("stderr_pipe_failed: %w", err)})
 			return
 		}
 
 		// 启动 shell
 		if err := sshSession.Shell(); err != nil {
-			resultChan <- initResult{err: fmt.Errorf("shell_start_failed: %w", err)}
+			sendResult(initResult{err: fmt.Errorf("shell_start_failed: %w", err)})
 			return
 		}
 
@@ -500,14 +525,14 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			log.Printf("Database session creation timeout, continuing...")
 		}
 
-		resultChan <- initResult{
+		initSucceeded = sendResult(initResult{
 			session:   session,
 			dbSession: dbSession,
 			stdin:     stdin,
 			stdout:    stdout,
 			stderr:    stderr,
 			err:       nil,
-		}
+		})
 	}()
 
 	// 等待初始化完成或超时
@@ -518,10 +543,13 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			sendError("initialization_failed", result.err.Error())
 			return
 		}
-	case <-time.After(terminalSSHInitTimeout):
-		sendError("initialization_timeout", "SSH connection timeout")
+	case <-initCtx.Done():
+		if initCtx.Err() == context.DeadlineExceeded {
+			sendError("initialization_timeout", "SSH connection timeout")
+		}
 		return
 	}
+	cancelInit()
 
 	// 初始化成功，注册会话
 	session := result.session

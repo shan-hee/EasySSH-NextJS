@@ -3,11 +3,12 @@
  * 负责创建、管理和销毁 WebSocket 连接
  */
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   TerminalWebSocket,
   type CompletionDataResponse,
   type CompletionUpdateResponse,
+  type TerminalConnectionPhase,
   type TerminalAuthPrompt,
   type TerminalAuthPromptResponder,
 } from '@/lib/websocket-terminal'
@@ -17,7 +18,7 @@ import type { Terminal } from '@xterm/xterm'
 export interface WebSocketConnectionConfig {
   sessionId: string
   serverId?: string
-  isConnected: boolean
+  shouldConnect: boolean
   terminal: Terminal | undefined
   cols: number
   rows: number
@@ -26,6 +27,7 @@ export interface WebSocketConnectionConfig {
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void
   onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void
   onConnectionEnd?: () => void
+  onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   enableCompletionFetch?: boolean
 }
 
@@ -36,7 +38,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const {
     sessionId,
     serverId,
-    isConnected,
+    shouldConnect,
+    terminal,
     cols,
     rows,
     onLoadingChange,
@@ -44,10 +47,12 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     onCompletionUpdate,
     onAuthPrompt,
     onConnectionEnd,
+    onConnectionPhase,
     enableCompletionFetch,
   } = config
 
   const wsRef = useRef<TerminalWebSocket | null>(null)
+  const [connectionPhase, setConnectionPhase] = useState<TerminalConnectionPhase>('idle')
   const getTerminal = useTerminalStore(state => state.getTerminal)
   const updateWebSocket = useTerminalStore(state => state.updateWebSocket)
   const updateLatency = useTerminalStore(state => state.updateLatency)
@@ -58,6 +63,12 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const onCompletionUpdateRef = useRef(onCompletionUpdate)
   const onAuthPromptRef = useRef(onAuthPrompt)
   const onConnectionEndRef = useRef(onConnectionEnd)
+  const onConnectionPhaseRef = useRef(onConnectionPhase)
+
+  const reportConnectionPhase = useCallback((phase: TerminalConnectionPhase) => {
+    setConnectionPhase(phase)
+    onConnectionPhaseRef.current?.(phase)
+  }, [])
 
   // 每次渲染时同步最新的回调到 ref
   useEffect(() => {
@@ -80,6 +91,10 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     onConnectionEndRef.current = onConnectionEnd
   }, [onConnectionEnd])
 
+  useEffect(() => {
+    onConnectionPhaseRef.current = onConnectionPhase
+  }, [onConnectionPhase])
+
   // ==================== 核心修复：从 Store 同步 wsRef ====================
   // 每次渲染时，先从 Store 获取现有连接
   const instance = getTerminal(sessionId)
@@ -90,37 +105,53 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
 
   // ==================== 关键修复：检测终端实例是否准备好 ====================
   // 从 Store 获取终端实例状态，作为依赖项信号
-  const terminalReady = !!instance?.terminal
+  const terminalReady = !!(instance?.terminal || terminal)
 
   // 创建或更新 WebSocket 连接
   useEffect(() => {
     // 从 Store 动态获取终端实例（避免闭包过期问题）
     const currentInstance = getTerminal(sessionId)
-    const terminalInstance = currentInstance?.terminal
+    const terminalInstance = currentInstance?.terminal || terminal
 
     // 只有满足以下条件才创建连接：
     // 1. 有 serverId
-    // 2. 服务器已连接
+    // 2. 当前页签明确需要连接
     // 3. 终端实例已创建
-    if (!serverId || !isConnected || !terminalInstance) {
+    if (!serverId || !shouldConnect) {
       // 如果连接断开，清理现有连接
       if (wsRef.current) {
         wsRef.current.disconnect()
         wsRef.current = null
         updateWebSocket(sessionId, null)
       }
+      reportConnectionPhase('idle')
+      return
+    }
+
+    if (!terminalInstance) {
       return
     }
 
     // 检查是否已有连接且 serverId 未变化（从 Store 和 ref 双重检查）
     if (wsRef.current && currentInstance?.serverId === serverId) {
+      const currentPhase = wsRef.current.getPhase()
+      reportConnectionPhase(currentPhase)
       return
     }
 
     // 如果 Store 中有连接且 serverId 匹配，同步到 ref
     if (currentInstance?.wsConnection && currentInstance.serverId === serverId) {
       wsRef.current = currentInstance.wsConnection
+      const storedPhase = currentInstance.wsConnection.getPhase()
+      reportConnectionPhase(storedPhase)
       return
+    }
+
+    // 同一页签如果切到另一台服务器，先断开旧连接，避免旧 SSH 会话挂在后台。
+    if (wsRef.current) {
+      wsRef.current.disconnect()
+      wsRef.current = null
+      updateWebSocket(sessionId, null)
     }
 
     // 创建新连接
@@ -134,9 +165,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
         onData: (data) => {
           // 动态获取终端实例，避免闭包过期
           const inst = getTerminal(sessionId)
-          if (inst?.terminal) {
-            inst.terminal.write(data)
-          }
+          const currentTerminal = inst?.terminal || terminal
+          currentTerminal?.write(data)
         },
         onConnected: () => {
           onLoadingChangeRef.current?.(false)
@@ -144,14 +174,19 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           // 并规避透明背景 + WebGL 场景下的局部黑底伪影
         },
         onDisconnected: () => {
+          const disconnectedPhase = wsRef.current?.getPhase()
           onConnectionEndRef.current?.()
+          onLoadingChangeRef.current?.(false)
+          wsRef.current = null
+          updateWebSocket(sessionId, null)
           const inst = getTerminal(sessionId)
-          if (inst?.terminal) {
+          if (inst?.terminal && disconnectedPhase !== 'failed') {
             inst.terminal.writeln('\r\n\x1b[1;31m✗ Connection closed\x1b[0m')
           }
         },
         onError: (error) => {
           onConnectionEndRef.current?.()
+          onLoadingChangeRef.current?.(false)
           console.error('[useWebSocketConnection] WebSocket 错误:', error)
           const inst = getTerminal(sessionId)
           if (inst?.terminal) {
@@ -173,6 +208,9 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
         },
         onLatency: (data) => {
           updateLatency(sessionId, data)
+        },
+        onConnectionPhase: (phase) => {
+          reportConnectionPhase(phase)
         },
         enableCompletionFetch: !!enableCompletionFetch,
       })
@@ -205,10 +243,10 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     // 依赖项说明：
     // - sessionId: 会话变化时需要重新连接
     // - serverId: 服务器变化时需要重新连接
-    // - isConnected: 连接状态变化时需要处理
+    // - shouldConnect: 连接意图变化时需要处理
     // - terminalReady: 终端实例创建完成时触发连接（关键修复！）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, serverId, isConnected, terminalReady])
+  }, [sessionId, serverId, shouldConnect, terminalReady])
 
   // 动态同步补全拉取开关，避免切换配置时必须重建连接
   useEffect(() => {
@@ -225,18 +263,23 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     }
   }, [enableCompletionFetch, sessionId, serverId])
 
+  const sendInput = useCallback((data: string) => {
+    if (wsRef.current && wsRef.current.isConnected()) {
+      wsRef.current.sendInput(data)
+    }
+  }, [])
+
+  const resize = useCallback((newCols: number, newRows: number) => {
+    if (wsRef.current && wsRef.current.isConnected()) {
+      wsRef.current.resize(newCols, newRows)
+    }
+  }, [])
+
   // 返回当前连接引用
   return {
     ws: wsRef.current,
-    sendInput: (data: string) => {
-      if (wsRef.current && wsRef.current.isConnected()) {
-        wsRef.current.sendInput(data)
-      }
-    },
-    resize: (newCols: number, newRows: number) => {
-      if (wsRef.current && wsRef.current.isConnected()) {
-        wsRef.current.resize(newCols, newRows)
-      }
-    }
+    connectionPhase,
+    sendInput,
+    resize,
   }
 }

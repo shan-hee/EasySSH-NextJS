@@ -14,7 +14,7 @@ import { Maximize2, Minimize2, Settings, FolderOpen, Activity, Bot } from 'lucid
 import { NetworkLatencyPopover } from './network-latency-popover'
 import { MonitorPanel } from './monitor/MonitorPanel'
 import { WebTerminal } from './web-terminal'
-import { QuickConnect, QuickServer } from './quick-connect'
+import { QuickConnect, type QuickServer } from './quick-connect'
 import { ConnectionLoader } from './connection-loader'
 import { FileManagerPanel } from './file-manager-panel'
 import { AiAssistantPanel } from './ai-assistant-panel'
@@ -22,7 +22,7 @@ import { DockerPopover } from './docker'
 import { useSftpSession } from '@/hooks/useSftpSession'
 import { cn } from '@/lib/utils'
 import { useTabUIStore } from '@/stores/tab-ui-store'
-import type { TerminalSession } from './types'
+import type { TerminalConnectionPhase, TerminalSession } from './types'
 import type { TerminalSettings } from './terminal-settings-dialog'
 import { useTranslations } from "next-intl"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from './terminal-themes'
@@ -42,6 +42,7 @@ interface TabTerminalContentProps {
   serversLoading?: boolean
   onCommand: (command: string) => void
   onLoadingChange: (isLoading: boolean) => void
+  onConnectionPhaseChange: (phase: TerminalConnectionPhase) => void
   onToggleFullscreen: () => void
   onToggleSettings: () => void
   onStartConnectionFromQuick: (server: QuickServer) => void
@@ -58,6 +59,7 @@ export function TabTerminalContent({
   serversLoading,
   onCommand,
   onLoadingChange,
+  onConnectionPhaseChange,
   onToggleFullscreen,
   onToggleSettings,
   onStartConnectionFromQuick,
@@ -74,16 +76,20 @@ export function TabTerminalContent({
   const isAiInputOpen = tabState.isAiInputOpen
 
   // SFTP 会话管理
+  const isTerminalReady = session.connectionPhase === "ready"
   const sftpSession = useSftpSession(
-    isFileManagerOpen && session.type !== 'quick' ? String(session.serverId) : '',
+    isFileManagerOpen && session.type !== 'quick' && isTerminalReady && session.serverId
+      ? session.serverId
+      : '',
     '/root'
   )
 
   // 计算监控参数
-  const serverId = session.type !== 'quick' && session.isConnected
-    ? String(session.serverId)
-    : ''
-  const monitorEnabled = !!(session.type !== 'quick' && session.isConnected)
+  const connectedServerId =
+    session.type !== 'quick' && isTerminalReady && session.serverId
+      ? session.serverId
+      : ''
+  const monitorEnabled = connectedServerId !== ''
   const tTerminal = useTranslations("terminal")
   const { theme: appTheme, resolvedTheme } = useTheme()
   const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
@@ -103,7 +109,7 @@ export function TabTerminalContent({
 
   return (
     <MonitorWebSocketProvider
-      serverId={serverId}
+      serverId={connectedServerId}
       enabled={monitorEnabled}
       interval={settings.monitorInterval || 2}
       latencyIntervalMs={5000}
@@ -175,9 +181,9 @@ export function TabTerminalContent({
                 </Button>
 
                 <DockerPopover
-                  serverId={String(session.serverId)}
+                  serverId={session.serverId ?? ''}
                   sessionId={session.id}
-                  isConnected={session.isConnected || false}
+                  isConnected={connectedServerId !== ''}
                 />
 
                 <Button
@@ -234,7 +240,7 @@ export function TabTerminalContent({
                     : 'w-0 opacity-0 -translate-x-4'
                 )}
               >
-                {isMonitorOpen && session.isConnected && (
+                {isMonitorOpen && isTerminalReady && (
                   <MonitorPanel />
                 )}
               </div>
@@ -254,11 +260,12 @@ export function TabTerminalContent({
               ) : (
                 <WebTerminal
                   sessionId={session.id}
-                  serverId={typeof session.serverId === 'string' ? session.serverId : undefined}
+                  serverId={session.serverId}
                   serverName={session.serverName}
                   host={session.host}
                   username={session.username}
-                  isConnected={session.isConnected}
+                  shouldConnect={session.shouldConnect}
+                  onConnectionPhaseChange={onConnectionPhaseChange}
                   onCommand={onCommand}
                   onLoadingChange={onLoadingChange}
                   theme={settings.theme}
@@ -292,11 +299,11 @@ export function TabTerminalContent({
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
             mountContainer={floatingPanelRoot || undefined}
             anchorTop={TOOLBAR_HEIGHT}
-            serverId={String(session.serverId)}
+            serverId={session.serverId ?? ''}
             serverName={session.serverName || ''}
             host={session.host || ''}
             username={session.username || ''}
-            isConnected={session.isConnected || false}
+            isConnected={isTerminalReady}
             sessionId={session.id}
             sessionLabel={session.serverName || 'Session'}
             currentPath={sftpSession.currentPath}

@@ -30,6 +30,7 @@ import type { CompletionItem } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
 import type {
+  TerminalConnectionPhase,
   TerminalAuthPrompt,
   TerminalAuthPromptResponder,
 } from "@/lib/websocket-terminal"
@@ -42,7 +43,8 @@ interface WebTerminalProps {
   serverName: string
   host: string
   username: string
-  isConnected: boolean
+  shouldConnect: boolean
+  onConnectionPhaseChange?: (phase: TerminalConnectionPhase) => void
   onCommand: (command: string) => void
   onResize?: (cols: number, rows: number) => void
   onLoadingChange?: (isLoading: boolean) => void
@@ -73,7 +75,8 @@ export function WebTerminal({
   serverName,
   host,
   username,
-  isConnected,
+  shouldConnect,
+  onConnectionPhaseChange,
   onCommand,
   onResize,
   onLoadingChange,
@@ -148,10 +151,10 @@ export function WebTerminal({
   } | null>(null)
 
   // ==================== WebSocket 连接管理 ====================
-  const { sendInput, resize, ws } = useWebSocketConnection({
+  const { sendInput, resize, ws, connectionPhase } = useWebSocketConnection({
     sessionId,
     serverId,
-    isConnected,
+    shouldConnect,
     terminal,
     cols: terminal?.cols || 80,
     rows: terminal?.rows || 24,
@@ -179,12 +182,14 @@ export function WebTerminal({
     onConnectionEnd: () => {
       setAuthChallenge(null)
     },
+    onConnectionPhase: onConnectionPhaseChange,
   })
+  const isTerminalReady = connectionPhase === "ready"
 
   // ==================== 补全数据同步生命周期管理 ====================
   useEffect(() => {
     // 连接断开时清空所有provider缓存
-    if (!ws || !isConnected || !serverId) {
+    if (!ws || !isTerminalReady || !serverId) {
       remoteHistoryProviderRef.current?.clear()
       scriptProviderRef.current?.clear()
       sessionProviderRef.current?.clear()
@@ -192,7 +197,7 @@ export function WebTerminal({
       // 同步清空补全引擎缓存
       completionEngineRef.current?.clearCache()
     }
-  }, [ws, isConnected, serverId])
+  }, [ws, isTerminalReady, serverId])
 
   // ==================== 监听应用主题/终端主题变化 ====================
   useLayoutEffect(() => {
@@ -524,7 +529,7 @@ export function WebTerminal({
     if (!terminal || !terminalReady) return
 
     const disposable = terminal.onData((data: string) => {
-      if (!isConnected) return
+      if (!isTerminalReady) return
 
       // 检测 Tab 键 - 手动触发补全
       if (isTabKey(data)) {
@@ -700,7 +705,7 @@ export function WebTerminal({
   }, [
     terminal,
     terminalReady,
-    isConnected,
+    isTerminalReady,
     completionTrigger,
     effectiveCompletionEnabled,
     sendInput,

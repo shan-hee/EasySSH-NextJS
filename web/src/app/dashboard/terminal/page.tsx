@@ -4,7 +4,10 @@ import { useEffect, useRef, useState, useCallback, Suspense, startTransition } f
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
-import { TerminalSession } from "@/components/terminal/types"
+import type {
+  TerminalSession,
+  TerminalConnectionPhase,
+} from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"
 import { useRouter } from "next/navigation"
 import { serversApi, type Server } from "@/lib/api"
@@ -15,6 +18,12 @@ import { useTranslations } from "next-intl"
 
 // 性能优化：将 lastActivity 从 sessions 状态中分离，避免每次命令触发整个组件树重渲染
 const lastActivityMap = new Map<string, number>()
+
+const statusFromConnectionPhase = (phase: TerminalConnectionPhase) => {
+ if (phase === "ready") return "connected" as const
+ if (phase === "failed" || phase === "closed" || phase === "idle") return "disconnected" as const
+ return "reconnecting" as const
+}
 
 function TerminalPageContent() {
  const router = useRouter()
@@ -57,7 +66,8 @@ function TerminalPageContent() {
  host: "",
  port: undefined,
  username: "",
- isConnected: false,
+ shouldConnect: false,
+ connectionPhase: "idle",
  status: "reconnecting", // 黄色状态指示器
  lastActivity: now,
  type: "terminal",
@@ -70,12 +80,12 @@ function TerminalPageContent() {
  return [
  {
  id: "quick-initial",
- serverId: 0,
  serverName: quickConnectName,
  host: "",
  port: undefined,
  username: "",
- isConnected: false,
+ shouldConnect: false,
+ connectionPhase: "idle",
  status: "disconnected",
  lastActivity: now,
  type: "quick",
@@ -97,8 +107,8 @@ function TerminalPageContent() {
 
  // 查找是否有待连接的会话（通过 auto- 前缀识别）
  const pendingSession = sessions.find(s => s.id.startsWith("auto-"))
- if (pendingSession) {
-   const serverId = pendingSession.serverId.toString()
+ if (pendingSession?.serverId) {
+   const serverId = pendingSession.serverId
    // 查找服务器信息
    const server = servers.find(s => s.id.toString() === serverId)
 
@@ -115,8 +125,9 @@ function TerminalPageContent() {
              host: server.host,
              port: server.port,
              username: server.username,
-             isConnected: true,
-             status: "connected" as const,
+             shouldConnect: true,
+             connectionPhase: "idle" as const,
+             status: "reconnecting" as const,
              group: server.group,
              tags: server.tags,
            }
@@ -135,12 +146,12 @@ function TerminalPageContent() {
      const timer = setTimeout(() => {
        setSessions([{
          id: "quick-initial",
-         serverId: 0,
          serverName: quickConnectName,
          host: "",
          port: undefined,
          username: "",
-         isConnected: false,
+         shouldConnect: false,
+         connectionPhase: "idle",
          status: "disconnected",
          lastActivity: now,
          type: "quick",
@@ -171,7 +182,7 @@ function TerminalPageContent() {
 
  // 将Server类型转换为QuickServer类型，保留 UUID
  const quickServers: QuickServer[] = servers.map((server: Server) => ({
- id: server.id, // 保留 UUID 字符串
+ id: String(server.id), // 保留 UUID 字符串
  name: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  port: server.port,
@@ -234,11 +245,11 @@ function TerminalPageContent() {
  const id = `quick-${now}`
  const newTab: TerminalSession = {
  id,
- serverId: 0,
  serverName: quickConnectName,
  host: "",
  username: "",
- isConnected: false,
+ shouldConnect: false,
+ connectionPhase: "idle",
  status: "disconnected",
  lastActivity: now,
  type: "quick",
@@ -277,14 +288,15 @@ function TerminalPageContent() {
  // 批量更新会话列表和激活状态
  setSessions(prev => prev.map(s => s.id === sessionId ? {
  id: newSessionId, // 使用新的 auto- 格式 ID
- serverId: server.id,
+ serverId: String(server.id),
  serverName: server.name || `${server.username}@${server.host}:${server.port}`,
  host: server.host,
  port: server.port,
  username: server.username,
  // server.status 只是“上次连接结果”，不应阻止本次连接尝试
- isConnected: true,
- status: server.status === "online" ? "connected" : "reconnecting",
+ shouldConnect: true,
+ connectionPhase: "idle",
+ status: "reconnecting",
  lastActivity: now,
  group: server.group,
  tags: server.tags,
@@ -343,7 +355,14 @@ function TerminalPageContent() {
   return
   }
  const now = Date.now()
- const dup: TerminalSession = { ...src, id: `session-${now}`, lastActivity: now, pinned: false }
+ const dup: TerminalSession = {
+ ...src,
+ id: `session-${now}`,
+ lastActivity: now,
+ pinned: false,
+ connectionPhase: src.type === "terminal" ? "idle" : src.connectionPhase,
+ status: src.type === "terminal" ? "reconnecting" : src.status,
+ }
  setSessions(prev => [...prev, dup])
  }
 
@@ -363,6 +382,18 @@ function TerminalPageContent() {
  const handleTogglePin = (sessionId: string) => {
  setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, pinned: !s.pinned } : s))
  }
+
+ const handleConnectionPhaseChange = useCallback((sessionId: string, phase: TerminalConnectionPhase) => {
+ setSessions(prev => prev.map(s => {
+ if (s.id !== sessionId) return s
+
+ return {
+ ...s,
+ connectionPhase: phase,
+ status: statusFromConnectionPhase(phase),
+ }
+ }))
+ }, [])
 
  const handleReorder = (newOrderIds: string[]) => {
  const map = new Map(sessions.map(s => [s.id, s]))
@@ -432,6 +463,7 @@ function TerminalPageContent() {
  servers={servers}
  serversLoading={loading}
  externalActiveSessionId={activeSessionId}
+ onConnectionPhaseChange={handleConnectionPhaseChange}
  />
  </div>
  )
