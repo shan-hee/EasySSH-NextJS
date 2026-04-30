@@ -760,6 +760,7 @@ const messages = {
     latencyStatusExcellent: "Excellent",
     latencyStatusGood: "Good",
     latencyStatusSlow: "Slow",
+    latencyStatusUnknown: "Measuring",
     ariaCloseTab: "Close tab",
     ariaNewSession: "New session",
     ariaSettings: "Terminal settings",

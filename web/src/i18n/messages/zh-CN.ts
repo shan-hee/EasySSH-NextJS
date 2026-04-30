@@ -710,6 +710,7 @@ const messages = {
     latencyStatusExcellent: "优秀",
     latencyStatusGood: "良好",
     latencyStatusSlow: "较慢",
+    latencyStatusUnknown: "测量中",
     ariaCloseTab: "关闭标签页",
     ariaNewSession: "新建会话",
     ariaSettings: "终端设置",

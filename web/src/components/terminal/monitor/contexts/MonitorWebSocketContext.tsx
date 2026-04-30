@@ -88,7 +88,6 @@ interface MonitorWebSocketProviderProps {
  *
  * @example
  * <MonitorWebSocketProvider serverId="xxx" enabled={isConnected}>
- *   <NetworkLatencyPopover />
  *   <MonitorPanel />
  * </MonitorWebSocketProvider>
  */
@@ -187,7 +186,6 @@ export const useMonitorWebSocketContext = (): MonitorWebSocketContextValue => {
  * 在监控数据更新时不必要的重新渲染
  *
  * @example
- * // NetworkLatencyPopover 只需要延迟数据
  * const latency = useLatencyData();
  */
 export const useLatencyData = (): LatencyData => {

@@ -33,4 +33,15 @@ export interface TerminalInstanceState {
   container: HTMLDivElement | null
   createdAt: number
   serverId?: string  // 记录关联的服务器 ID，用于连接复用判断
+  latency?: {
+    terminalWsLatencyMs?: number
+    terminalWsLatencySmoothedMs?: number
+    terminalWsLatencyJitterMs?: number
+    terminalWsLatencyUpMs?: number
+    terminalWsLatencyDownMs?: number
+    terminalWsClockOffsetMs?: number
+    terminalSshLatencyMs?: number
+    terminalSshLatencyMeasuredAt?: number
+    updatedAt?: number
+  }
 }

@@ -6,6 +6,10 @@
 import { getWsUrl } from './config'
 import { createAuthTicket } from "@/lib/auth-ticket"
 
+const TERMINAL_PING_INTERVAL_MS = 5000
+const TERMINAL_PING_TIMEOUT_MS = 60000
+const TERMINAL_MAX_PENDING_PINGS = 20
+
 export interface TerminalWebSocketOptions {
   serverId: string
   cols: number
@@ -18,7 +22,28 @@ export interface TerminalWebSocketOptions {
   onConnecting?: () => void // 正在连接回调
   onCompletionData?: (data: CompletionDataResponse) => void // 补全数据回调
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void // 补全增量更新回调
+  onLatency?: (data: TerminalLatencyData) => void // 终端链路延迟回调
   enableCompletionFetch?: boolean // 是否在连接成功后自动拉取补全数据
+}
+
+export interface TerminalLatencyData {
+  terminalWsLatencyMs: number
+  terminalWsLatencySmoothedMs: number
+  terminalWsLatencyJitterMs: number
+  terminalWsLatencyUpMs?: number
+  terminalWsLatencyDownMs?: number
+  terminalWsClockOffsetMs?: number
+  terminalSshLatencyMs?: number
+  terminalSshLatencyMeasuredAt?: number
+}
+
+interface PongMessageData {
+  id?: string
+  ts?: number
+  serverRecvTs?: number
+  serverSendTs?: number
+  sshLatencyMs?: number
+  sshLatencyMeasuredAt?: number
 }
 
 // 补全数据响应接口
@@ -53,6 +78,7 @@ export class TerminalWebSocket {
   private onConnecting?: () => void
   private onCompletionData?: (data: CompletionDataResponse) => void
   private onCompletionUpdate?: (data: CompletionUpdateResponse) => void
+  private onLatency?: (data: TerminalLatencyData) => void
   private enableCompletionFetch: boolean
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
@@ -60,6 +86,10 @@ export class TerminalWebSocket {
   private isManualClose = false
   private isDestroyed = false // 防止销毁后重连
   private pingInterval: NodeJS.Timeout | null = null
+  private pingSeq = 0
+  private pendingPings = new Map<string, number>()
+  private latencySmoothedMs = 0
+  private latencyDevMs = 0
   // 复用 TextDecoder/TextEncoder 实例以提升性能
   private decoder = new TextDecoder("utf-8")
   private encoder = new TextEncoder()
@@ -79,6 +109,7 @@ export class TerminalWebSocket {
     this.onConnecting = options.onConnecting
     this.onCompletionData = options.onCompletionData
     this.onCompletionUpdate = options.onCompletionUpdate
+    this.onLatency = options.onLatency
     this.enableCompletionFetch = options.enableCompletionFetch ?? true
   }
 
@@ -364,7 +395,7 @@ export class TerminalWebSocket {
         this.disconnect()
         break
       case "pong":
-        // 心跳响应
+        this.handlePong(message.data as PongMessageData | undefined)
         break
       default:
         console.warn("[TerminalWS] 未知消息类型:", message.type)
@@ -375,16 +406,10 @@ export class TerminalWebSocket {
    * 启动心跳
    */
   private startPing(): void {
+    this.sendPing()
     this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        try {
-          const message = { type: "ping" }
-          this.ws.send(JSON.stringify(message))
-        } catch (error) {
-          console.error("[TerminalWS] 发送心跳失败:", error)
-        }
-      }
-    }, 30000) // 每30秒发送一次心跳
+      this.sendPing()
+    }, TERMINAL_PING_INTERVAL_MS)
   }
 
   /**
@@ -395,5 +420,112 @@ export class TerminalWebSocket {
       clearInterval(this.pingInterval)
       this.pingInterval = null
     }
+    this.pendingPings.clear()
+  }
+
+  private sendPing(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return
+    }
+
+    try {
+      const startedAt = performance.now()
+      this.prunePendingPings(startedAt)
+      const id = `${Date.now()}-${++this.pingSeq}`
+      this.pendingPings.set(id, startedAt)
+      const message = {
+        type: "ping",
+        data: {
+          id,
+          ts: Date.now(),
+        },
+      }
+      this.ws.send(JSON.stringify(message))
+    } catch (error) {
+      console.error("[TerminalWS] 发送心跳失败:", error)
+    }
+  }
+
+  private prunePendingPings(now: number = performance.now()): void {
+    for (const [id, startedAt] of this.pendingPings) {
+      if (now - startedAt > TERMINAL_PING_TIMEOUT_MS) {
+        this.pendingPings.delete(id)
+      }
+    }
+
+    while (this.pendingPings.size >= TERMINAL_MAX_PENDING_PINGS) {
+      const oldestId = this.pendingPings.keys().next().value as string | undefined
+      if (!oldestId) {
+        break
+      }
+      this.pendingPings.delete(oldestId)
+    }
+  }
+
+  private handlePong(data?: PongMessageData): void {
+    if (!data) {
+      return
+    }
+
+    let rtt: number | null = null
+    if (data.id && this.pendingPings.has(data.id)) {
+      const startedAt = this.pendingPings.get(data.id)!
+      this.pendingPings.delete(data.id)
+      rtt = Math.max(0, Math.round(performance.now() - startedAt))
+    } else if (typeof data.ts === "number") {
+      rtt = Math.max(0, Math.round(Date.now() - data.ts))
+    }
+
+    if (rtt === null) {
+      return
+    }
+
+    const ALPHA = 1 / 8
+    const BETA = 1 / 4
+
+    if (!this.latencySmoothedMs || this.latencySmoothedMs <= 0) {
+      this.latencySmoothedMs = rtt
+      this.latencyDevMs = 0
+    } else {
+      const smoothed = this.latencySmoothedMs + ALPHA * (rtt - this.latencySmoothedMs)
+      this.latencySmoothedMs = Math.max(0, Math.round(smoothed))
+      this.latencyDevMs = Math.max(
+        0,
+        Math.round(this.latencyDevMs + BETA * (Math.abs(rtt - smoothed) - this.latencyDevMs))
+      )
+    }
+
+    const latency: TerminalLatencyData = {
+      terminalWsLatencyMs: rtt,
+      terminalWsLatencySmoothedMs: this.latencySmoothedMs,
+      terminalWsLatencyJitterMs: this.latencyDevMs,
+    }
+
+    if (
+      typeof data.serverRecvTs === "number" &&
+      typeof data.serverSendTs === "number" &&
+      typeof data.ts === "number"
+    ) {
+      const t0 = data.ts
+      const t3 = Date.now()
+      const t1 = data.serverRecvTs
+      const t2 = data.serverSendTs
+      const offset = ((t1 - t0) + (t2 - t3)) / 2
+      const up = t1 - (t0 + offset)
+      const down = t3 - (t2 + offset)
+
+      latency.terminalWsClockOffsetMs = Math.round(offset)
+      latency.terminalWsLatencyUpMs = Math.max(0, Math.round(up))
+      latency.terminalWsLatencyDownMs = Math.max(0, Math.round(down))
+    }
+
+    if (typeof data.sshLatencyMs === "number" && data.sshLatencyMs >= 0) {
+      latency.terminalSshLatencyMs = Math.round(data.sshLatencyMs)
+    }
+    if (typeof data.sshLatencyMeasuredAt === "number" && data.sshLatencyMeasuredAt > 0) {
+      latency.terminalSshLatencyMeasuredAt = data.sshLatencyMeasuredAt
+    }
+
+    this.onLatency?.(latency)
   }
 }

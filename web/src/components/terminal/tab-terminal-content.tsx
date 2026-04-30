@@ -161,7 +161,7 @@ export function TabTerminalContent({
                   <FolderOpen className="h-3.5 w-3.5" />
                 </Button>
 
-                <NetworkLatencyPopover />
+                <NetworkLatencyPopover sessionId={session.id} />
 
                 <Button
                   variant="ghost"

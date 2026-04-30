@@ -44,6 +44,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const wsRef = useRef<TerminalWebSocket | null>(null)
   const getTerminal = useTerminalStore(state => state.getTerminal)
   const updateWebSocket = useTerminalStore(state => state.updateWebSocket)
+  const updateLatency = useTerminalStore(state => state.updateLatency)
 
   // ==================== 方案C：使用 ref 存储最新的回调 ====================
   const onLoadingChangeRef = useRef(onLoadingChange)
@@ -144,6 +145,9 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
         },
         onCompletionUpdate: (data) => {
           onCompletionUpdateRef.current?.(data)
+        },
+        onLatency: (data) => {
+          updateLatency(sessionId, data)
         },
         enableCompletionFetch: !!enableCompletionFetch,
       })

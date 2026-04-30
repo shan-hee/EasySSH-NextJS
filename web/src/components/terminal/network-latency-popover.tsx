@@ -8,36 +8,46 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { useLatencyData } from "./monitor/contexts/MonitorWebSocketContext"
 import { useTranslations } from "next-intl"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { useTerminalStore } from "@/stores/terminal-store"
 
 interface NetworkNode {
   name: string
-  latency: number
+  latency: number | null
   icon?: "monitor" | "wifi" | "server"
+}
+
+interface NetworkLatencyPopoverProps {
+  sessionId: string
 }
 
 /**
  * 网络延迟展示组件
  *
- * 从 MonitorWebSocketContext 获取延迟数据
- * 必须在 MonitorWebSocketProvider 内部使用
- *
- * 性能优化：使用 useLatencyData() 只订阅延迟数据
- * 避免在监控数据更新时不必要的重新渲染
+ * 从当前终端 WebSocket 获取链路延迟数据。
+ * 这里不再使用监控采集耗时，避免把远端命令执行时间误判为网络 RTT。
  */
-export function NetworkLatencyPopover() {
-  // 【性能优化】只订阅延迟数据，不订阅监控数据
-  const latencyData = useLatencyData()
+export function NetworkLatencyPopover({ sessionId }: NetworkLatencyPopoverProps) {
   const t = useTranslations("terminal")
   const { config } = useSystemConfig()
+  const latencyData = useTerminalStore((state) => state.terminals.get(sessionId)?.latency)
 
   // 计算综合网络延迟和节点拓扑
-  const { currentLatency, nodes } = useMemo(() => {
-    const localLatency = latencyData.localLatencySmoothedMs || latencyData.localLatencyMs || 0
-    const sshLatency = latencyData.sshLatencyMs || 0
-    const total = localLatency + sshLatency
+  const { currentLatency, currentLatencyLowerBound, nodes } = useMemo(() => {
+    const localLatency =
+      latencyData?.terminalWsLatencySmoothedMs ??
+      latencyData?.terminalWsLatencyMs ??
+      null
+    const sshLatency = latencyData?.terminalSshLatencyMs ?? null
+    const total =
+      localLatency !== null && sshLatency !== null
+        ? localLatency + sshLatency
+        : null
+    const lowerBound = [localLatency, sshLatency].reduce<number | null>(
+      (sum, latency) => latency === null ? sum : (sum ?? 0) + latency,
+      null
+    )
 
     const networkNodes: NetworkNode[] = [
       { name: t("latencyNodeLocal"), latency: 0, icon: "monitor" },
@@ -51,13 +61,14 @@ export function NetworkLatencyPopover() {
 
     return {
       currentLatency: total,
+      currentLatencyLowerBound: total === null ? lowerBound : null,
       nodes: networkNodes,
     }
     // t 和 config 只影响展示文案，不影响数值
   }, [
-    latencyData.localLatencyMs,
-    latencyData.localLatencySmoothedMs,
-    latencyData.sshLatencyMs,
+    latencyData?.terminalWsLatencyMs,
+    latencyData?.terminalWsLatencySmoothedMs,
+    latencyData?.terminalSshLatencyMs,
     t,
     config?.system_name,
   ])
@@ -76,7 +87,12 @@ export function NetworkLatencyPopover() {
     }
   }
   // 根据延迟判断状态和颜色
-  const getLatencyStatus = (latency: number) => {
+  const getLatencyStatus = (latency: number | null) => {
+    if (latency === null) return {
+      textColor: "text-muted-foreground",
+      bgColor: "bg-muted-foreground",
+      label: t("latencyStatusUnknown"),
+    }
     if (latency < 50) return {
       textColor: "text-status-connected",
       bgColor: "bg-status-connected",
@@ -94,7 +110,18 @@ export function NetworkLatencyPopover() {
     }
   }
 
-  const status = getLatencyStatus(currentLatency)
+  const status = getLatencyStatus(currentLatency ?? currentLatencyLowerBound)
+  const formatLatency = (latency: number | null) =>
+    latency === null ? t("latencyStatusUnknown") : `${latency} ms`
+  const formatTotalLatency = () => {
+    if (currentLatency !== null) {
+      return formatLatency(currentLatency)
+    }
+    if (currentLatencyLowerBound !== null) {
+      return `≥ ${currentLatencyLowerBound} ms`
+    }
+    return t("latencyStatusUnknown")
+  }
 
   return (
     <Popover>
@@ -111,7 +138,7 @@ export function NetworkLatencyPopover() {
               RTT
             </span>
             <span className={`text-xs tabular-nums font-medium ${status.textColor}`}>
-              {currentLatency} ms
+              {formatTotalLatency()}
             </span>
           </div>
         </Button>
@@ -127,7 +154,7 @@ export function NetworkLatencyPopover() {
             <h4 className="text-sm font-medium text-foreground">
               {t("latencyTitle")}:{" "}
               <span className={`${status.textColor} inline-block min-w-[4.5rem] text-center tabular-nums`}>
-                {currentLatency} ms
+                {formatTotalLatency()}
               </span>
             </h4>
           </div>
@@ -139,7 +166,10 @@ export function NetworkLatencyPopover() {
               {nodes.map((node, index) => {
                 const isLast = index === nodes.length - 1
                 const nextNode = nodes[index + 1]
-                const segmentLatency = nextNode ? nextNode.latency - node.latency : 0
+                const segmentLatency =
+                  nextNode && node.latency !== null && nextNode.latency !== null
+                    ? nextNode.latency - node.latency
+                    : null
 
                 return (
                   <div key={node.name} className="flex items-start">
@@ -164,7 +194,7 @@ export function NetworkLatencyPopover() {
 
                         {/* 延迟信息 - 固定宽度，居中对齐 */}
                         <span className={`text-xs font-mono tabular-nums text-center ${getLatencyStatus(segmentLatency).textColor}`}>
-                          ~ {segmentLatency} ms
+                          ~ {formatLatency(segmentLatency)}
                         </span>
                       </div>
                     )}

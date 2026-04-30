@@ -13,6 +13,25 @@ type DisposableAddon = {
 }
 
 /**
+ * 终端链路延迟数据
+ */
+export interface TerminalLatencyData {
+  // 浏览器到 EasySSH 后端的当前终端 WebSocket RTT
+  terminalWsLatencyMs?: number
+  terminalWsLatencySmoothedMs?: number
+  terminalWsLatencyJitterMs?: number
+  terminalWsLatencyUpMs?: number
+  terminalWsLatencyDownMs?: number
+  terminalWsClockOffsetMs?: number
+
+  // EasySSH 后端到远端 SSH 服务的轻量 transport RTT
+  terminalSshLatencyMs?: number
+  terminalSshLatencyMeasuredAt?: number
+
+  updatedAt?: number
+}
+
+/**
  * 终端实例状态
  */
 export interface TerminalInstanceState {
@@ -24,6 +43,7 @@ export interface TerminalInstanceState {
   container: HTMLDivElement | null
   createdAt: number
   serverId?: string  // 记录关联的服务器 ID
+  latency?: TerminalLatencyData
 }
 
 /**
@@ -44,6 +64,9 @@ interface TerminalStoreState {
 
   // 更新 WebSocket 连接
   updateWebSocket: (sessionId: string, ws: TerminalWebSocket | null) => void
+
+  // 更新终端链路延迟
+  updateLatency: (sessionId: string, latency: Partial<TerminalLatencyData>) => void
 
   // 销毁终端实例（页签关闭时调用）
   destroySession: (sessionId: string) => void
@@ -93,7 +116,26 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
       const newTerminals = new Map(state.terminals)
       newTerminals.set(sessionId, {
         ...instance,
-        wsConnection: ws
+        wsConnection: ws,
+        latency: ws ? instance.latency : undefined
+      })
+      return { terminals: newTerminals }
+    })
+  },
+
+  updateLatency: (sessionId: string, latency: Partial<TerminalLatencyData>) => {
+    set((state) => {
+      const instance = state.terminals.get(sessionId)
+      if (!instance) return state
+
+      const newTerminals = new Map(state.terminals)
+      newTerminals.set(sessionId, {
+        ...instance,
+        latency: {
+          ...instance.latency,
+          ...latency,
+          updatedAt: Date.now()
+        }
       })
       return { terminals: newTerminals }
     })

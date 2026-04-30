@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/easyssh/server/internal/domain/completion"
@@ -123,8 +124,9 @@ type Message struct {
 
 // MessageType 定义消息类型常量
 const (
-	MessageTypeText   = 1 // 文本消息（JSON）
-	MessageTypeBinary = 2 // 二进制消息（原始输出）
+	MessageTypeText                 = 1 // 文本消息（JSON）
+	MessageTypeBinary               = 2 // 二进制消息（原始输出）
+	terminalSSHLatencyProbeInterval = 15 * time.Second
 )
 
 // InputMessage 输入消息
@@ -136,6 +138,12 @@ type InputMessage struct {
 type ResizeMessage struct {
 	Cols int `json:"cols"`
 	Rows int `json:"rows"`
+}
+
+// PingMessage 心跳/延迟探测消息
+type PingMessage struct {
+	ID string `json:"id,omitempty"`
+	Ts int64  `json:"ts,omitempty"`
 }
 
 // OutputMessage 输出消息
@@ -418,6 +426,37 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		return wsConn.WriteJSON(v)
 	}
 
+	var sshLatencyMs atomic.Int64
+	var sshLatencyMeasuredAt atomic.Int64
+	var sshLatencyProbeInFlight atomic.Bool
+	sshLatencyMs.Store(-1)
+
+	refreshSSHLatency := func() {
+		if measuredAt := sshLatencyMeasuredAt.Load(); measuredAt > 0 {
+			if time.Since(time.UnixMilli(measuredAt)) < terminalSSHLatencyProbeInterval {
+				return
+			}
+		}
+
+		if !sshLatencyProbeInFlight.CompareAndSwap(false, true) {
+			return
+		}
+
+		go func() {
+			defer sshLatencyProbeInFlight.Store(false)
+
+			latency, err := session.Client.MeasureTransportLatency()
+			if err != nil {
+				log.Printf("Failed to measure SSH transport latency: %v", err)
+				return
+			}
+
+			sshLatencyMs.Store(latency.Milliseconds())
+			sshLatencyMeasuredAt.Store(time.Now().UnixMilli())
+		}()
+	}
+	refreshSSHLatency()
+
 	// 注册补全增量广播订阅（同用户 + 同服务器）
 	completionKey := completionBroadcastKey{
 		userID:   userUUID,
@@ -521,10 +560,31 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 					}
 
 				case "ping":
-					// 使用安全写入
-					if err := safeWriteJSON(Message{Type: "pong"}); err != nil {
+					var ping PingMessage
+					if len(msg.Data) > 0 {
+						if err := json.Unmarshal(msg.Data, &ping); err != nil {
+							log.Printf("Error parsing ping: %v", err)
+						}
+					}
+
+					now := time.Now().UnixMilli()
+					resp := map[string]any{
+						"id":           ping.ID,
+						"ts":           ping.Ts,
+						"serverRecvTs": now,
+					}
+					if latency := sshLatencyMs.Load(); latency >= 0 {
+						resp["sshLatencyMs"] = latency
+						resp["sshLatencyMeasuredAt"] = sshLatencyMeasuredAt.Load()
+					}
+
+					// 使用安全写入。这里不等待 SSH 探测完成，避免污染 WebSocket RTT。
+					resp["serverSendTs"] = time.Now().UnixMilli()
+					respData, _ := json.Marshal(resp)
+					if err := safeWriteJSON(Message{Type: "pong", Data: json.RawMessage(respData)}); err != nil {
 						log.Printf("Error sending pong: %v", err)
 					}
+					refreshSSHLatency()
 
 				case "fetch_completion_data":
 					// 处理补全数据请求

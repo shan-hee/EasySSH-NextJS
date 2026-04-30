@@ -132,6 +132,23 @@ func (c *Client) NewSession() (*ssh.Session, error) {
 	return session, nil
 }
 
+// MeasureTransportLatency measures the SSH transport round trip without
+// starting a remote shell command. Unsupported keepalive requests still
+// require a server reply, so they are useful as a low-overhead RTT probe.
+func (c *Client) MeasureTransportLatency() (time.Duration, error) {
+	if !c.connected || c.conn == nil {
+		return 0, fmt.Errorf("client not connected")
+	}
+
+	start := time.Now()
+	_, _, err := c.conn.SendRequest("keepalive@openssh.com", true, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to measure ssh latency: %w", err)
+	}
+
+	return time.Since(start), nil
+}
+
 // Close 关闭连接
 func (c *Client) Close() error {
 	if c.conn != nil {
