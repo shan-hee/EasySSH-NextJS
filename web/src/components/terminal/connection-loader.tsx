@@ -8,6 +8,7 @@ type LoaderState = "entering" | "loading" | "exiting"
 interface ConnectionLoaderProps {
   serverName?: string
   message?: string
+  exitMessage?: string
   state?: LoaderState
   onAnimationComplete?: () => void
 }
@@ -15,6 +16,7 @@ interface ConnectionLoaderProps {
 export function ConnectionLoader({
   serverName,
   message,
+  exitMessage,
   state = "loading",
   onAnimationComplete
 }: ConnectionLoaderProps) {
@@ -132,7 +134,7 @@ export function ConnectionLoader({
       <div className="text-wrapper">
         <h1 className={"text-sm font-semibold uppercase tracking-wider text-zinc-900 dark:text-white"}>
           {animationState === "exiting"
-            ? t("connectionLoaderSuccess")
+            ? exitMessage ?? t("connectionLoaderSuccess")
             : message ?? t("connectionLoaderConnecting")}
         </h1>
         <p className={"text-xs font-mono text-zinc-600 dark:text-zinc-500"}>

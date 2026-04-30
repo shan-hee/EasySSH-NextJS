@@ -28,6 +28,39 @@ import { useTabUIStore } from "@/stores/tab-ui-store"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { useTranslations } from "next-intl"
 
+type LoaderState = "entering" | "loading" | "exiting"
+
+const PAGE_NAVIGATION_CLEANUP_DELAY_MS = 750
+const TAB_SWITCH_CLEANUP_DELAY_MS = 120
+
+const CONNECTION_LOADER_PHASES = new Set<TerminalConnectionPhase>([
+  "idle",
+  "ticket",
+  "ws_connecting",
+  "ssh_connecting",
+  "authenticating",
+  "reconnecting",
+])
+
+const shouldShowConnectionLoader = (session?: TerminalSession) => {
+  return !!(
+    session &&
+    session.type !== "quick" &&
+    session.shouldConnect &&
+    CONNECTION_LOADER_PHASES.has(session.connectionPhase)
+  )
+}
+
+const getAdjacentSessionId = (sessions: TerminalSession[], sessionId: string) => {
+  const currentIndex = sessions.findIndex((session) => session.id === sessionId)
+  if (currentIndex === -1) {
+    return sessions[0]?.id
+  }
+
+  const nextIndex = currentIndex < sessions.length - 1 ? currentIndex + 1 : currentIndex - 1
+  return sessions[nextIndex]?.id
+}
+
 interface TerminalComponentProps {
   sessions: TerminalSession[]
   // 返回新建会话的 id，便于自动激活
@@ -68,10 +101,7 @@ export function TerminalComponent({
   const tTerminal = useTranslations("terminal")
   const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
   const [isFullscreen, setIsFullscreen] = useState(false)
-  // ==================== 方案A：多页签并发加载状态管理 ====================
-  const [loadingSessionIds, setLoadingSessionIds] = useState<Set<string>>(new Set())
-  const [initializedSessionIds, setInitializedSessionIds] = useState<Set<string>>(new Set())
-  const [loaderStates, setLoaderStates] = useState<Record<string, "entering" | "loading" | "exiting">>({})
+  const [loaderStates, setLoaderStates] = useState<Record<string, LoaderState>>({})
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // ==================== 从 Store 获取销毁方法 ====================
@@ -209,10 +239,41 @@ export function TerminalComponent({
     if (id) setActiveSession(String(id))
   }
 
-  // ==================== 页签关闭处理：先销毁终端实例，依赖引用计数自动管理监控连接 ====================
-  const handleCloseSession = (sessionId: string) => {
-    // 1. 从 Store 中销毁终端实例和 WebSocket
+  const cleanupSession = (sessionId: string) => {
     destroySession(sessionId)
+    deleteTabState(sessionId)
+  }
+
+  const cleanupSessionsAfterDelay = (sessionIds: string[], delayMs: number) => {
+    window.setTimeout(() => {
+      sessionIds.forEach(cleanupSession)
+    }, delayMs)
+  }
+
+  const cleanupSessionsAfterNavigation = (sessionIds: string[]) => {
+    cleanupSessionsAfterDelay(sessionIds, PAGE_NAVIGATION_CLEANUP_DELAY_MS)
+  }
+
+  const cleanupSessionsAfterTabSwitch = (sessionIds: string[]) => {
+    cleanupSessionsAfterDelay(sessionIds, TAB_SWITCH_CLEANUP_DELAY_MS)
+  }
+
+  // ==================== 页签关闭处理：先切换/导航，再清理终端资源，避免可见终端先被清空 ====================
+  const handleCloseSession = (sessionId: string) => {
+    const willCloseTerminalPage = sessions.length <= 1
+
+    if (willCloseTerminalPage) {
+      onCloseSession(sessionId)
+      cleanupSessionsAfterNavigation([sessionId])
+      return
+    }
+
+    if (activeSession === sessionId) {
+      const nextActiveSessionId = getAdjacentSessionId(sessions, sessionId)
+      if (nextActiveSessionId) {
+        setActiveSession(nextActiveSessionId)
+      }
+    }
 
     // ==================== P0 修复：删除直接销毁调用，依赖 useMonitorWebSocket 的引用计数自动管理 ====================
     // 注释说明：
@@ -226,112 +287,120 @@ export function TerminalComponent({
     //   destroyMonitorConnection(String(session.serverId))
     // }
 
-    // 2. 清理页签 UI 状态
-    deleteTabState(sessionId)
-
-    // 3. 通知父组件更新会话列表
+    // 1. 通知父组件更新会话列表，让 UI 先切走
     onCloseSession(sessionId)
+    // 2. 稍后再销毁终端实例和 WebSocket，避免可见页签先被清空
+    cleanupSessionsAfterTabSwitch([sessionId])
   }
 
   const handleCloseOthers = (sessionId: string) => {
-    // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
-    // 销毁所有其他会话的终端实例，监控连接由引用计数自动管理
-    sessions.forEach((session) => {
-      if (session.id !== sessionId) {
-        destroySession(session.id)
-        // ❌ 旧代码（导致BUG）：
-        // if (session.serverId) {
-        //   destroyMonitorConnection(String(session.serverId))
-        // }
-        deleteTabState(session.id)
+    const remainingSessions = sessions.filter((session) => session.id === sessionId || session.pinned)
+    const removedSessionIds = sessions
+      .filter((session) => session.id !== sessionId && !session.pinned)
+      .map((session) => session.id)
+
+    if (!remainingSessions.some((session) => session.id === activeSession)) {
+      const nextActiveSessionId = remainingSessions.find((session) => session.id === sessionId)?.id ?? remainingSessions[0]?.id
+      if (nextActiveSessionId) {
+        setActiveSession(nextActiveSessionId)
       }
-    })
+    }
+
+    // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
+    // 监控连接由引用计数自动管理
+    // ❌ 旧代码（导致BUG）：
+    // if (session.serverId) {
+    //   destroyMonitorConnection(String(session.serverId))
+    // }
     onCloseOthers(sessionId)
+    cleanupSessionsAfterTabSwitch(removedSessionIds)
   }
 
   const handleCloseAll = () => {
-    // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
-    // 销毁所有会话的终端实例，监控连接由引用计数自动管理
-    sessions.forEach((session) => {
-      destroySession(session.id)
-      // ❌ 旧代码（导致BUG）：
-      // if (session.serverId) {
-      //   destroyMonitorConnection(String(session.serverId))
-      // }
-      deleteTabState(session.id)
-    })
-    onCloseAll()
-  }
+    const pinnedSessions = sessions.filter((session) => session.pinned)
+    const willCloseTerminalPage = pinnedSessions.length === 0
 
-  const handleLoadingChange = (sessionId: string, isLoading: boolean) => {
-    if (isLoading) {
-      // 添加到加载中的页签集合
-      setLoadingSessionIds(prev => new Set(prev).add(sessionId))
-      // 设置该页签的状态为 entering
-      setLoaderStates(prev => ({ ...prev, [sessionId]: "entering" }))
-    } else {
-      // 连接成功，触发该页签的退出动画
-      if (loadingSessionIds.has(sessionId)) {
-        setLoaderStates(prev => ({ ...prev, [sessionId]: "exiting" }))
-      }
+    if (willCloseTerminalPage) {
+      onCloseAll()
+      cleanupSessionsAfterNavigation(sessions.map((session) => session.id))
+      return
     }
+
+    if (!pinnedSessions.some((session) => session.id === activeSession)) {
+      setActiveSession(pinnedSessions[0].id)
+    }
+
+    const removedSessionIds = sessions
+      .filter((session) => !session.pinned)
+      .map((session) => session.id)
+
+    // ==================== P0 修复：同样删除直接销毁监控连接的调用 ====================
+    // 监控连接由引用计数自动管理
+    // ❌ 旧代码（导致BUG）：
+    // if (session.serverId) {
+    //   destroyMonitorConnection(String(session.serverId))
+    // }
+    onCloseAll()
+    cleanupSessionsAfterTabSwitch(removedSessionIds)
   }
 
   const handleAnimationComplete = (sessionId: string) => {
-    // 退出动画完成后，标记该会话已初始化并清除加载状态
-    setInitializedSessionIds((prev) => new Set(prev).add(sessionId))
-    // 从加载集合中移除
-    setLoadingSessionIds(prev => {
-      const next = new Set(prev)
-      next.delete(sessionId)
-      return next
-    })
-    // 清除该页签的状态
     setLoaderStates(prev => {
+      if (!prev[sessionId]) {
+        return prev
+      }
+
       const next = { ...prev }
       delete next[sessionId]
       return next
     })
   }
 
-  const isActiveSessionLoading = loadingSessionIds.has(activeSession)
-  const shouldForceLoading = !!(
+  const activeLoaderState = active ? loaderStates[active.id] : undefined
+  const effectiveIsLoading = !!(
     active &&
-    active.type !== 'quick' &&
-    !initializedSessionIds.has(active.id)
+    (shouldShowConnectionLoader(active) || activeLoaderState)
   )
-  const effectiveIsLoading = !!(active && active.type !== 'quick' && (isActiveSessionLoading || shouldForceLoading))
 
-  // 当从"快速连接"升级为"终端"或首次连接新会话时，立刻设置为加载中
+  // Loader 只跟随连接 phase，不再依赖额外的 onLoadingChange 回调。
   useEffect(() => {
-    if (shouldForceLoading && active) {
-      // 若还未设置当前加载会话，则添加到加载集合
-      if (!loadingSessionIds.has(active.id)) {
-        const timer = setTimeout(() => {
-          setLoadingSessionIds(prev => new Set(prev).add(active.id))
-          setLoaderStates(prev => ({ ...prev, [active.id]: "entering" }))
-        }, 0)
+    setLoaderStates(prev => {
+      let changed = false
+      const next = { ...prev }
+      const sessionIds = new Set(sessions.map((session) => session.id))
 
-        return () => clearTimeout(timer)
+      Object.keys(next).forEach((sessionId) => {
+        if (!sessionIds.has(sessionId)) {
+          delete next[sessionId]
+          changed = true
+        }
+      })
+
+      sessions.forEach((session) => {
+        const shouldShow = shouldShowConnectionLoader(session)
+        const currentState = next[session.id]
+
+        if (shouldShow) {
+          if (!currentState || currentState === "exiting") {
+            next[session.id] = "entering"
+            changed = true
+          }
+          return
+        }
+
+        if (currentState && currentState !== "exiting") {
+          next[session.id] = "exiting"
+          changed = true
+        }
+      })
+
+      if (!changed) {
+        return prev
       }
-    } else if (!shouldForceLoading && active && loadingSessionIds.has(active.id)) {
-      // 如果切换到已初始化的会话，清除加载状态
-      const timer = setTimeout(() => {
-        setLoadingSessionIds(prev => {
-          const next = new Set(prev)
-          next.delete(active.id)
-          return next
-        })
-        setLoaderStates(prev => {
-          const next = { ...prev }
-          delete next[active.id]
-          return next
-        })
-      }, 0)
 
-      return () => clearTimeout(timer)
-    }
-  }, [shouldForceLoading, active, loadingSessionIds])
+      return next
+    })
+  }, [sessions])
 
   // 键盘快捷键支持
   // AI 助手快捷键（Ctrl+K）已移至 TabTerminalContent 组件内部
@@ -439,7 +508,6 @@ export function TerminalComponent({
                     servers={servers}
                     serversLoading={serversLoading}
                     onCommand={(command) => handleCommand(session.id, command)}
-                    onLoadingChange={(isLoading) => handleLoadingChange(session.id, isLoading)}
                     onConnectionPhaseChange={(phase) => onConnectionPhaseChange?.(session.id, phase)}
                     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
                     onToggleSettings={() => setIsSettingsOpen(true)}

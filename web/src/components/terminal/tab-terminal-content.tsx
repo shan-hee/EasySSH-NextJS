@@ -30,6 +30,42 @@ import { getTerminalTheme, withTerminalBackgroundOpacity } from './terminal-them
 // 工具栏固定高度常量 (py-1.5 + h-7 按钮 + border-b)
 const TOOLBAR_HEIGHT = 44 // px
 
+type ConnectionLoaderMessageKey =
+  | "connectionLoaderConnecting"
+  | "connectionLoaderAuthenticating"
+  | "connectionLoaderReconnecting"
+  | "connectionLoaderSuccess"
+  | "connectionLoaderFailed"
+  | "connectionLoaderClosed"
+
+const getConnectionLoaderMessageKey = (
+  phase: TerminalConnectionPhase
+): ConnectionLoaderMessageKey => {
+  if (phase === "authenticating") {
+    return "connectionLoaderAuthenticating"
+  }
+
+  if (phase === "reconnecting") {
+    return "connectionLoaderReconnecting"
+  }
+
+  return "connectionLoaderConnecting"
+}
+
+const getConnectionLoaderExitMessageKey = (
+  phase: TerminalConnectionPhase
+): ConnectionLoaderMessageKey => {
+  if (phase === "failed") {
+    return "connectionLoaderFailed"
+  }
+
+  if (phase === "closed" || phase === "idle") {
+    return "connectionLoaderClosed"
+  }
+
+  return "connectionLoaderSuccess"
+}
+
 interface TabTerminalContentProps {
   session: TerminalSession
   isActive: boolean
@@ -41,7 +77,6 @@ interface TabTerminalContentProps {
   servers: QuickServer[]
   serversLoading?: boolean
   onCommand: (command: string) => void
-  onLoadingChange: (isLoading: boolean) => void
   onConnectionPhaseChange: (phase: TerminalConnectionPhase) => void
   onToggleFullscreen: () => void
   onToggleSettings: () => void
@@ -58,7 +93,6 @@ export function TabTerminalContent({
   servers,
   serversLoading,
   onCommand,
-  onLoadingChange,
   onConnectionPhaseChange,
   onToggleFullscreen,
   onToggleSettings,
@@ -137,7 +171,8 @@ export function TabTerminalContent({
           <div className="absolute inset-0 z-[60]">
             <ConnectionLoader
               serverName={`${session.username}@${session.host}`}
-              message={tTerminal("connectionLoaderConnecting")}
+              message={tTerminal(getConnectionLoaderMessageKey(session.connectionPhase))}
+              exitMessage={tTerminal(getConnectionLoaderExitMessageKey(session.connectionPhase))}
               state={loaderState}
               onAnimationComplete={onAnimationComplete}
             />
@@ -267,7 +302,6 @@ export function TabTerminalContent({
                   shouldConnect={session.shouldConnect}
                   onConnectionPhaseChange={onConnectionPhaseChange}
                   onCommand={onCommand}
-                  onLoadingChange={onLoadingChange}
                   theme={settings.theme}
                   fontSize={settings.fontSize}
                   fontFamily={settings.fontFamily}

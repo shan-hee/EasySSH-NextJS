@@ -21,6 +21,12 @@ export type TerminalConnectionPhase =
   | "failed"
   | "closed"
 
+export interface TerminalConnectionError extends Error {
+  code?: string
+  rawMessage?: string
+  retryable?: boolean
+}
+
 export interface TerminalWebSocketOptions {
   serverId: string
   cols: number
@@ -28,7 +34,7 @@ export interface TerminalWebSocketOptions {
   onData: (data: string) => void
   onConnected?: () => void
   onDisconnected?: () => void
-  onError?: (error: Error) => void
+  onError?: (error: TerminalConnectionError) => void
   onHandshakeComplete?: () => void // 握手完成回调
   onConnecting?: () => void // 正在连接回调
   onCompletionData?: (data: CompletionDataResponse) => void // 补全数据回调
@@ -73,6 +79,33 @@ interface PongMessageData {
   sshLatencyMeasuredAt?: number
 }
 
+function createTerminalConnectionError(
+  message: string,
+  code?: string,
+  retryable: boolean = false
+): TerminalConnectionError {
+  const error = new Error(message) as TerminalConnectionError
+  error.code = code
+  error.rawMessage = message
+  error.retryable = retryable
+  return error
+}
+
+function getErrorPayload(data: unknown): { code?: string; message: string } {
+  if (!data || typeof data !== "object") {
+    return { message: "服务器错误" }
+  }
+
+  const payload = data as Record<string, unknown>
+  const code = typeof payload.error === "string" ? payload.error : undefined
+  const message =
+    typeof payload.message === "string" && payload.message.trim()
+      ? payload.message
+      : "服务器错误"
+
+  return { code, message }
+}
+
 // 补全数据响应接口
 export interface CompletionDataResponse {
   history: string[]
@@ -100,7 +133,7 @@ export class TerminalWebSocket {
   private onData: (data: string) => void
   private onConnected?: () => void
   private onDisconnected?: () => void
-  private onError?: (error: Error) => void
+  private onError?: (error: TerminalConnectionError) => void
   private onHandshakeComplete?: () => void
   private onConnecting?: () => void
   private onCompletionData?: (data: CompletionDataResponse) => void
@@ -116,6 +149,8 @@ export class TerminalWebSocket {
   private isDestroyed = false // 防止销毁后重连
   private authCancelled = false
   private phase: TerminalConnectionPhase = "idle"
+  private lastError: TerminalConnectionError | null = null
+  private errorNotified = false
   private pingInterval: NodeJS.Timeout | null = null
   private pingSeq = 0
   private pendingPings = new Map<string, number>()
@@ -153,6 +188,30 @@ export class TerminalWebSocket {
 
     this.phase = phase
     this.onConnectionPhase?.(phase)
+  }
+
+  private notifyError(error: TerminalConnectionError): void {
+    this.lastError = error
+    this.errorNotified = true
+    this.onError?.(error)
+  }
+
+  private shouldReconnect(event: CloseEvent): boolean {
+    if (
+      this.isManualClose ||
+      this.isDestroyed ||
+      this.authCancelled ||
+      this.reconnectAttempts >= this.maxReconnectAttempts
+    ) {
+      return false
+    }
+
+    // 正常关闭通常来自用户主动退出 shell 或服务端优雅关闭，不应自动重连。
+    if (event.code === 1000 || event.code === 1001) {
+      return false
+    }
+
+    return this.phase !== "failed"
   }
 
   /**
@@ -205,6 +264,8 @@ export class TerminalWebSocket {
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0
+        this.lastError = null
+        this.errorNotified = false
         this.setPhase("ssh_connecting")
         // 注意：onopen只表示WebSocket握手完成，SSH连接可能还在建立中
         // 真正的连接成功由服务器的"connected"消息通知
@@ -229,11 +290,14 @@ export class TerminalWebSocket {
 
       this.ws.onerror = () => {
         console.error("[TerminalWS] WebSocket 错误")
-        this.setPhase("failed")
-        this.onError?.(new Error("WebSocket 连接错误"))
+        this.lastError = createTerminalConnectionError(
+          "WebSocket 连接错误",
+          "websocket_error",
+          true
+        )
       }
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
         this.stopPing()
 
         const remaining = this.decoder.decode()
@@ -246,13 +310,16 @@ export class TerminalWebSocket {
           return
         }
 
-        if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
+        if (this.shouldReconnect(event)) {
           // 自动重连
           this.reconnectAttempts++
           this.setPhase("reconnecting")
           setTimeout(() => this.connect(), this.reconnectDelay)
         } else {
-          if (this.phase !== "failed") {
+          if (this.lastError && !this.errorNotified) {
+            this.setPhase("failed")
+            this.notifyError(this.lastError)
+          } else if (this.phase !== "failed") {
             this.setPhase("closed")
           }
           this.onDisconnected?.()
@@ -260,8 +327,14 @@ export class TerminalWebSocket {
       }
     } catch (error) {
       console.error("[TerminalWS] 连接失败:", error)
+      const terminalError = createTerminalConnectionError(
+        error instanceof Error ? error.message : "连接失败",
+        "connection_failed",
+        true
+      )
       this.setPhase("failed")
-      this.onError?.(error as Error)
+      this.notifyError(terminalError)
+      this.onDisconnected?.()
     }
   }
 
@@ -280,7 +353,13 @@ export class TerminalWebSocket {
       this.ws.send(binaryData.buffer)
     } catch (error) {
       console.error("[TerminalWS] 发送数据失败:", error)
-      this.onError?.(error as Error)
+      this.notifyError(
+        createTerminalConnectionError(
+          error instanceof Error ? error.message : "发送数据失败",
+          "send_failed",
+          false
+        )
+      )
     }
   }
 
@@ -361,6 +440,7 @@ export class TerminalWebSocket {
       if (cancelled) {
         this.isManualClose = true
         this.authCancelled = true
+        this.setPhase("closed")
       }
 
       const message = {
@@ -374,7 +454,13 @@ export class TerminalWebSocket {
       this.ws.send(JSON.stringify(message))
     } catch (error) {
       console.error("[TerminalWS] 发送认证响应失败:", error)
-      this.onError?.(error as Error)
+      this.notifyError(
+        createTerminalConnectionError(
+          error instanceof Error ? error.message : "发送认证响应失败",
+          "auth_response_failed",
+          false
+        )
+      )
     }
   }
 
@@ -449,6 +535,9 @@ export class TerminalWebSocket {
         performance.measure('ws-terminal-ssh-init', 'ws-terminal-handshake-complete', 'ws-terminal-connected')
 
         this.setPhase("ready")
+        this.lastError = null
+        this.errorNotified = false
+        this.authCancelled = false
         this.onConnected?.()
         this.startPing()
 
@@ -485,13 +574,7 @@ export class TerminalWebSocket {
         break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)
-        const errorCode =
-          message.data &&
-          typeof message.data === "object" &&
-          "error" in message.data &&
-          typeof message.data.error === "string"
-            ? message.data.error
-            : ""
+        const { code: errorCode, message: errorMessage } = getErrorPayload(message.data)
         if (
           errorCode === "initialization_failed" ||
           errorCode === "initialization_timeout"
@@ -502,15 +585,8 @@ export class TerminalWebSocket {
         if (this.authCancelled && errorCode === "initialization_failed") {
           break
         }
-        this.onError?.(
-          new Error(
-            message.data &&
-              typeof message.data === "object" &&
-              "message" in message.data &&
-              typeof message.data.message === "string"
-              ? message.data.message
-              : "服务器错误"
-          )
+        this.notifyError(
+          createTerminalConnectionError(errorMessage, errorCode, false)
         )
         break
       case "closed":

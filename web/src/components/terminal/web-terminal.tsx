@@ -31,6 +31,7 @@ import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
 import type {
   TerminalConnectionPhase,
+  TerminalConnectionError,
   TerminalAuthPrompt,
   TerminalAuthPromptResponder,
 } from "@/lib/websocket-terminal"
@@ -47,7 +48,6 @@ interface WebTerminalProps {
   onConnectionPhaseChange?: (phase: TerminalConnectionPhase) => void
   onCommand: (command: string) => void
   onResize?: (cols: number, rows: number) => void
-  onLoadingChange?: (isLoading: boolean) => void
   theme?: 'default' | 'dark' | 'light' | 'solarized' | 'dracula'
   fontSize?: number
   fontFamily?: string
@@ -79,7 +79,6 @@ export function WebTerminal({
   onConnectionPhaseChange,
   onCommand,
   onResize,
-  onLoadingChange,
   theme = 'default',
   fontSize = 14,
   fontFamily = 'JetBrains Mono',
@@ -150,6 +149,53 @@ export function WebTerminal({
     respond: TerminalAuthPromptResponder
   } | null>(null)
 
+  const formatTerminalErrorMessage = useCallback((error: TerminalConnectionError) => {
+    const rawMessage = (error.rawMessage || error.message || "").toLowerCase()
+
+    if (error.code === "initialization_timeout" || rawMessage.includes("timeout")) {
+      return tTerminal("terminalErrorTimeout")
+    }
+
+    if (rawMessage.includes("authentication cancelled")) {
+      return tTerminal("terminalErrorAuthCancelled")
+    }
+
+    if (
+      rawMessage.includes("unable to authenticate") ||
+      rawMessage.includes("permission denied") ||
+      rawMessage.includes("authentication failed")
+    ) {
+      return tTerminal("terminalErrorAuthFailed")
+    }
+
+    if (
+      error.code === "server_not_found" ||
+      rawMessage.includes("server_not_found")
+    ) {
+      return tTerminal("terminalErrorServerNotFound")
+    }
+
+    if (
+      error.code === "websocket_error" ||
+      rawMessage.includes("websocket")
+    ) {
+      return tTerminal("terminalErrorWebSocket")
+    }
+
+    if (
+      error.code === "connection_failed" ||
+      rawMessage.includes("connection_failed") ||
+      rawMessage.includes("connection refused") ||
+      rawMessage.includes("no route to host") ||
+      rawMessage.includes("network is unreachable") ||
+      rawMessage.includes("i/o timeout")
+    ) {
+      return tTerminal("terminalErrorHostUnreachable")
+    }
+
+    return tTerminal("terminalErrorGeneric")
+  }, [tTerminal])
+
   // ==================== WebSocket 连接管理 ====================
   const { sendInput, resize, ws, connectionPhase } = useWebSocketConnection({
     sessionId,
@@ -158,7 +204,6 @@ export function WebTerminal({
     terminal,
     cols: terminal?.cols || 80,
     rows: terminal?.rows || 24,
-    onLoadingChange,
     enableCompletionFetch:
       effectiveCompletionEnabled &&
       (globalConfig.providers.remote_history || globalConfig.providers.script),
@@ -183,6 +228,7 @@ export function WebTerminal({
       setAuthChallenge(null)
     },
     onConnectionPhase: onConnectionPhaseChange,
+    formatErrorMessage: formatTerminalErrorMessage,
   })
   const isTerminalReady = connectionPhase === "ready"
 

@@ -9,6 +9,7 @@ import {
   type CompletionDataResponse,
   type CompletionUpdateResponse,
   type TerminalConnectionPhase,
+  type TerminalConnectionError,
   type TerminalAuthPrompt,
   type TerminalAuthPromptResponder,
 } from '@/lib/websocket-terminal'
@@ -22,12 +23,12 @@ export interface WebSocketConnectionConfig {
   terminal: Terminal | undefined
   cols: number
   rows: number
-  onLoadingChange?: (isLoading: boolean) => void
   onCompletionData?: (data: CompletionDataResponse) => void
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void
   onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void
   onConnectionEnd?: () => void
   onConnectionPhase?: (phase: TerminalConnectionPhase) => void
+  formatErrorMessage?: (error: TerminalConnectionError) => string
   enableCompletionFetch?: boolean
 }
 
@@ -42,28 +43,29 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     terminal,
     cols,
     rows,
-    onLoadingChange,
     onCompletionData,
     onCompletionUpdate,
     onAuthPrompt,
     onConnectionEnd,
     onConnectionPhase,
+    formatErrorMessage,
     enableCompletionFetch,
   } = config
 
   const wsRef = useRef<TerminalWebSocket | null>(null)
+  const errorShownRef = useRef(false)
   const [connectionPhase, setConnectionPhase] = useState<TerminalConnectionPhase>('idle')
   const getTerminal = useTerminalStore(state => state.getTerminal)
   const updateWebSocket = useTerminalStore(state => state.updateWebSocket)
   const updateLatency = useTerminalStore(state => state.updateLatency)
 
   // ==================== 方案C：使用 ref 存储最新的回调 ====================
-  const onLoadingChangeRef = useRef(onLoadingChange)
   const onCompletionDataRef = useRef(onCompletionData)
   const onCompletionUpdateRef = useRef(onCompletionUpdate)
   const onAuthPromptRef = useRef(onAuthPrompt)
   const onConnectionEndRef = useRef(onConnectionEnd)
   const onConnectionPhaseRef = useRef(onConnectionPhase)
+  const formatErrorMessageRef = useRef(formatErrorMessage)
 
   const reportConnectionPhase = useCallback((phase: TerminalConnectionPhase) => {
     setConnectionPhase(phase)
@@ -71,10 +73,6 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   }, [])
 
   // 每次渲染时同步最新的回调到 ref
-  useEffect(() => {
-    onLoadingChangeRef.current = onLoadingChange
-  }, [onLoadingChange])
-
   useEffect(() => {
     onCompletionDataRef.current = onCompletionData
   }, [onCompletionData])
@@ -94,6 +92,10 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   useEffect(() => {
     onConnectionPhaseRef.current = onConnectionPhase
   }, [onConnectionPhase])
+
+  useEffect(() => {
+    formatErrorMessageRef.current = formatErrorMessage
+  }, [formatErrorMessage])
 
   // ==================== 核心修复：从 Store 同步 wsRef ====================
   // 每次渲染时，先从 Store 获取现有连接
@@ -124,6 +126,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
         wsRef.current = null
         updateWebSocket(sessionId, null)
       }
+      errorShownRef.current = false
       reportConnectionPhase('idle')
       return
     }
@@ -156,7 +159,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
 
     // 创建新连接
     try {
-      onLoadingChangeRef.current?.(true)
+      errorShownRef.current = false
 
       const ws = new TerminalWebSocket({
         serverId,
@@ -169,28 +172,33 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           currentTerminal?.write(data)
         },
         onConnected: () => {
-          onLoadingChangeRef.current?.(false)
+          errorShownRef.current = false
           // 连接成功后不再向终端注入额外提示，避免污染 SSH 输出
           // 并规避透明背景 + WebGL 场景下的局部黑底伪影
         },
         onDisconnected: () => {
           const disconnectedPhase = wsRef.current?.getPhase()
           onConnectionEndRef.current?.()
-          onLoadingChangeRef.current?.(false)
           wsRef.current = null
           updateWebSocket(sessionId, null)
           const inst = getTerminal(sessionId)
-          if (inst?.terminal && disconnectedPhase !== 'failed') {
+          if (
+            inst?.terminal &&
+            disconnectedPhase !== 'failed' &&
+            disconnectedPhase !== 'closed' &&
+            !errorShownRef.current
+          ) {
             inst.terminal.writeln('\r\n\x1b[1;31m✗ Connection closed\x1b[0m')
           }
         },
         onError: (error) => {
           onConnectionEndRef.current?.()
-          onLoadingChangeRef.current?.(false)
+          errorShownRef.current = true
           console.error('[useWebSocketConnection] WebSocket 错误:', error)
           const inst = getTerminal(sessionId)
           if (inst?.terminal) {
-            inst.terminal.writeln(`\r\n\x1b[1;31m✗ Error: ${error.message}\x1b[0m`)
+            const message = formatErrorMessageRef.current?.(error) ?? error.message
+            inst.terminal.writeln(`\r\n\x1b[1;31m✗ ${message}\x1b[0m`)
           }
         },
         onCompletionData: (data) => {
@@ -232,7 +240,6 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
       }
     } catch (error) {
       console.error('[useWebSocketConnection] 创建 WebSocket 失败:', error)
-      onLoadingChangeRef.current?.(false)
     }
 
     // 清理函数：组件卸载时不断开连接，保持 WebSocket 活跃
