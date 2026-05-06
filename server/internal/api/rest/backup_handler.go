@@ -34,8 +34,10 @@ type BackupHandler struct {
 
 // NewBackupHandler 创建备份处理器
 func NewBackupHandler(db *gorm.DB, dbHost, dbPort, dbName, dbUser, dbPassword string) *BackupHandler {
-	backupDir := "./backups"
-	os.MkdirAll(backupDir, 0755)
+	backupDir := strings.TrimSpace(os.Getenv("BACKUP_DIR"))
+	if backupDir == "" {
+		backupDir = "./backups"
+	}
 
 	h := &BackupHandler{
 		db:         db,
@@ -47,10 +49,43 @@ func NewBackupHandler(db *gorm.DB, dbHost, dbPort, dbName, dbUser, dbPassword st
 		dbPassword: dbPassword,
 	}
 
+	if err := h.ensureBackupDir(); err != nil {
+		fallbackDir := filepath.Join(os.TempDir(), "easyssh-backups")
+		fmt.Printf("Backup directory %q is unavailable: %v. Falling back to %q\n", h.backupDir, err, fallbackDir)
+		h.backupDir = fallbackDir
+		if fallbackErr := h.ensureBackupDir(); fallbackErr != nil {
+			fmt.Printf("Backup fallback directory %q is unavailable: %v\n", h.backupDir, fallbackErr)
+		}
+	}
+
 	// 启动时清理旧的临时文件
 	h.cleanupOldTempFiles()
 
 	return h
+}
+
+// ensureBackupDir 确认备份临时目录存在且当前进程可写。
+func (h *BackupHandler) ensureBackupDir() error {
+	if err := os.MkdirAll(h.backupDir, 0750); err != nil {
+		return err
+	}
+
+	testFile := filepath.Join(h.backupDir, ".write-test")
+	file, err := os.OpenFile(testFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+
+	if err := file.Close(); err != nil {
+		_ = os.Remove(testFile)
+		return err
+	}
+
+	if err := os.Remove(testFile); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	return nil
 }
 
 // cleanupOldTempFiles 清理旧的临时文件
@@ -62,8 +97,8 @@ func (h *BackupHandler) cleanupOldTempFiles() {
 
 	now := time.Now()
 	for _, file := range files {
-		// 只清理临时文件（以 import_ 或 temp_ 开头）
-		if !strings.HasPrefix(file.Name(), "import_") && !strings.HasPrefix(file.Name(), "temp_") {
+		// 只清理备份恢复流程产生的临时文件
+		if !isBackupTempFile(file.Name()) {
 			continue
 		}
 
@@ -80,6 +115,14 @@ func (h *BackupHandler) cleanupOldTempFiles() {
 			}
 		}
 	}
+}
+
+func isBackupTempFile(name string) bool {
+	return name == ".write-test" ||
+		strings.HasPrefix(name, "import_") ||
+		strings.HasPrefix(name, "temp_") ||
+		strings.HasPrefix(name, "database_") ||
+		strings.HasPrefix(name, "extracted_")
 }
 
 // scheduleFileCleanup 计划删除文件
@@ -182,6 +225,14 @@ func (h *BackupHandler) ImportConfig(c *gin.Context) {
 // @Success 200 {file} binary
 // @Router /api/v1/backup/export-database [get]
 func (h *BackupHandler) ExportDatabase(c *gin.Context) {
+	if err := h.ensureBackupDir(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  "Failed to prepare backup directory",
+			"detail": err.Error(),
+		})
+		return
+	}
+
 	timestamp := time.Now().Format("20060102_150405")
 	filename := fmt.Sprintf("database_%s.sql", timestamp)
 	filepath := filepath.Join(h.backupDir, filename)
@@ -195,21 +246,23 @@ func (h *BackupHandler) ExportDatabase(c *gin.Context) {
 		"-f", filepath,
 		"--no-owner",
 		"--no-acl",
+		"--clean",
+		"--if-exists",
 	)
 
 	// 设置密码环境变量
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", h.dbPassword))
 
-	output, err := cmd.CombinedOutput()
+	output, dumpErr := cmd.CombinedOutput()
 
 	// 如果 pg_dump 失败（版本不匹配或不存在），使用纯 Go 实现
-	if err != nil {
+	if dumpErr != nil {
 		// 使用纯 Go 实现导出
 		sqlContent, nativeErr := h.ExportDatabaseNative()
 		if nativeErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":         "Failed to export database",
-				"pg_dump_error": string(output),
+				"pg_dump_error": strings.TrimSpace(fmt.Sprintf("%v\n%s", dumpErr, output)),
 				"native_error":  nativeErr.Error(),
 			})
 			return
@@ -218,8 +271,9 @@ func (h *BackupHandler) ExportDatabase(c *gin.Context) {
 		// 写入文件
 		if err := os.WriteFile(filepath, []byte(sqlContent), 0644); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":  "Failed to write backup file",
-				"detail": err.Error(),
+				"error":         "Failed to write backup file",
+				"detail":        err.Error(),
+				"pg_dump_error": strings.TrimSpace(fmt.Sprintf("%v\n%s", dumpErr, output)),
 			})
 			return
 		}
@@ -240,6 +294,14 @@ func (h *BackupHandler) ExportDatabase(c *gin.Context) {
 // @Success 200 {object} map[string]string
 // @Router /api/v1/backup/import-database [post]
 func (h *BackupHandler) ImportDatabase(c *gin.Context) {
+	if err := h.ensureBackupDir(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  "Failed to prepare backup directory",
+			"detail": err.Error(),
+		})
+		return
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
@@ -248,7 +310,7 @@ func (h *BackupHandler) ImportDatabase(c *gin.Context) {
 
 	// 保存上传的文件
 	timestamp := time.Now().Format("20060102_150405")
-	tempFile := filepath.Join(h.backupDir, fmt.Sprintf("import_%s_%s", timestamp, file.Filename))
+	tempFile := filepath.Join(h.backupDir, fmt.Sprintf("import_%s_%s", timestamp, filepath.Base(file.Filename)))
 
 	if err := c.SaveUploadedFile(file, tempFile); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save uploaded file"})
@@ -271,6 +333,8 @@ func (h *BackupHandler) ImportDatabase(c *gin.Context) {
 
 	// 尝试使用 psql 导入数据库
 	cmd := exec.Command("psql",
+		"-v", "ON_ERROR_STOP=1",
+		"--single-transaction",
 		"-h", h.dbHost,
 		"-p", h.dbPort,
 		"-U", h.dbUser,
@@ -415,12 +479,12 @@ func (h *BackupHandler) decompressZip(zipPath string) (string, error) {
 
 // AllConfigs 所有配置的集合
 type AllConfigs struct {
-	Version            string                                `json:"version"`             // 配置文件版本
-	ExportTime         string                                `json:"export_time"`         // 导出时间
-	SystemConfig       *systemconfig.SystemConfig           `json:"system_config"`       // 系统配置
-	SecurityConfig     *security.SecurityConfig             `json:"security_config"`     // 安全配置
+	Version            string                                 `json:"version"`             // 配置文件版本
+	ExportTime         string                                 `json:"export_time"`         // 导出时间
+	SystemConfig       *systemconfig.SystemConfig             `json:"system_config"`       // 系统配置
+	SecurityConfig     *security.SecurityConfig               `json:"security_config"`     // 安全配置
 	NotificationConfig *notificationconfig.NotificationConfig `json:"notification_config"` // 通知配置
-	AIConfig           *aiconfig.AIConfig                   `json:"ai_config"`           // AI配置
+	AIConfig           *aiconfig.AIConfig                     `json:"ai_config"`           // AI配置
 }
 
 // exportAllConfigs 导出所有配置
