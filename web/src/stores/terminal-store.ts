@@ -7,10 +7,15 @@ import { create } from 'zustand'
 import type { Terminal } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
 import { TerminalWebSocket } from '@/lib/websocket-terminal'
+import type { TerminalSession } from '@/components/terminal/types'
 
 type DisposableAddon = {
   dispose: () => void
 }
+
+type SessionUpdater =
+  | TerminalSession[]
+  | ((sessions: TerminalSession[]) => TerminalSession[])
 
 /**
  * 终端链路延迟数据
@@ -53,8 +58,26 @@ interface TerminalStoreState {
   // 终端实例映射 sessionId -> TerminalInstanceState
   terminals: Map<string, TerminalInstanceState>
 
+  // 终端页签状态。保持在内存中，用于路由切换后恢复当前浏览器页签内的终端。
+  sessions: TerminalSession[]
+  activeSessionId: string | null
+  lastActivityBySession: Map<string, number>
+
   // 获取终端实例
   getTerminal: (sessionId: string) => TerminalInstanceState | undefined
+
+  // 设置终端页签列表
+  setSessions: (updater: SessionUpdater) => void
+
+  // 设置当前激活页签
+  setActiveSessionId: (sessionId: string | null) => void
+
+  // 更新/读取会话最后活动时间
+  updateSessionActivity: (sessionId: string, timestamp?: number) => void
+  getSessionLastActivity: (sessionId: string) => number | undefined
+
+  // 清理终端页签元数据
+  clearTerminalSessionState: () => void
 
   // 设置终端实例
   setTerminal: (sessionId: string, instance: TerminalInstanceState) => void
@@ -73,6 +96,9 @@ interface TerminalStoreState {
 
   // 清理所有实例（应用关闭时调用）
   destroyAll: () => void
+
+  // 退出登录等显式场景：断开连接、销毁实例并清空页签状态
+  resetAll: () => void
 }
 
 /**
@@ -80,9 +106,45 @@ interface TerminalStoreState {
  */
 export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
   terminals: new Map<string, TerminalInstanceState>(),
+  sessions: [],
+  activeSessionId: null,
+  lastActivityBySession: new Map<string, number>(),
 
   getTerminal: (sessionId: string) => {
     return get().terminals.get(sessionId)
+  },
+
+  setSessions: (updater: SessionUpdater) => {
+    set((state) => ({
+      sessions:
+        typeof updater === 'function'
+          ? updater(state.sessions)
+          : updater,
+    }))
+  },
+
+  setActiveSessionId: (sessionId: string | null) => {
+    set({ activeSessionId: sessionId })
+  },
+
+  updateSessionActivity: (sessionId: string, timestamp: number = Date.now()) => {
+    set((state) => {
+      const next = new Map(state.lastActivityBySession)
+      next.set(sessionId, timestamp)
+      return { lastActivityBySession: next }
+    })
+  },
+
+  getSessionLastActivity: (sessionId: string) => {
+    return get().lastActivityBySession.get(sessionId)
+  },
+
+  clearTerminalSessionState: () => {
+    set({
+      sessions: [],
+      activeSessionId: null,
+      lastActivityBySession: new Map<string, number>(),
+    })
   },
 
   setTerminal: (sessionId: string, instance: TerminalInstanceState) => {
@@ -165,7 +227,9 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
     set((state) => {
       const newTerminals = new Map(state.terminals)
       newTerminals.delete(sessionId)
-      return { terminals: newTerminals }
+      const newActivity = new Map(state.lastActivityBySession)
+      newActivity.delete(sessionId)
+      return { terminals: newTerminals, lastActivityBySession: newActivity }
     })
   },
 
@@ -188,7 +252,34 @@ export const useTerminalStore = create<TerminalStoreState>((set, get) => ({
     // - 调用 wsConnection.disconnect() 可以优雅地通知服务端关闭会话
     // - 终端实例和 DOM 很快会随页面卸载一起被浏览器回收
     // - 避免在刷新前一瞬间调用 dispose() 导致终端 UI 立即被清空，看起来“闪一下”
-  }
+  },
+
+  resetAll: () => {
+    const terminals = get().terminals
+
+    terminals.forEach((instance, sessionId) => {
+      try {
+        if (instance.wsConnection) {
+          instance.wsConnection.disconnect()
+        }
+      } catch (error) {
+        console.error(`[TerminalStore] 断开会话 ${sessionId} 失败:`, error)
+      }
+
+      try {
+        instance.terminal.dispose()
+      } catch (error) {
+        console.error(`[TerminalStore] 销毁会话 ${sessionId} 失败:`, error)
+      }
+    })
+
+    set({
+      terminals: new Map<string, TerminalInstanceState>(),
+      sessions: [],
+      activeSessionId: null,
+      lastActivityBySession: new Map<string, number>(),
+    })
+  },
 }))
 
 /**

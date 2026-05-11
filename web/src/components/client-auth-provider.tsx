@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { authApi, type User, type LoginRequest } from "@/lib/api/auth"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { useAuthStore } from "@/stores/auth-store"
+import { useTerminalStore } from "@/stores/terminal-store"
 import { isApiError } from "@/lib/api-client"
 
 interface ClientAuthContextType {
@@ -35,6 +36,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
   const router = useRouter()
   const { refreshConfig } = useSystemConfig()
   const clearToken = useAuthStore((state) => state.clearToken)
+  const resetTerminals = useTerminalStore((state) => state.resetAll)
 
   // 同步 initialUser 的变化（用于乐观渲染场景）
   useEffect(() => {
@@ -119,6 +121,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
     }
     setUser(null)
     clearToken()
+    resetTerminals()
     // 刷新全局认证状态,确保 SessionRefreshProvider 等及时停止工作
     try {
       await refreshConfig()
@@ -126,7 +129,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
       console.error("Failed to refresh system config after logout:", error)
     }
     router.replace("/login")
-  }, [clearToken, refreshConfig, router])
+  }, [clearToken, refreshConfig, resetTerminals, router])
 
   return (
     <ClientAuthContext.Provider

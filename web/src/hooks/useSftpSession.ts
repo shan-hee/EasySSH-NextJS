@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from "next-intl";
 import { sftpApi, type FileInfo, type DirectoryListResponse } from '@/lib/api/sftp';
 import { useFileTransfer } from './useFileTransfer';
@@ -365,6 +365,9 @@ export async function performBatchDelete<T extends { name: string }>({
 export function useSftpSession(serverId: string, initialPath: string = '/') {
   const tSftp = useTranslations("sftp");
   const [currentPath, setCurrentPath] = useState(initialPath);
+  const currentPathRef = useRef(initialPath);
+  const [pathBackStack, setPathBackStack] = useState<string[]>([]);
+  const [pathForwardStack, setPathForwardStack] = useState<string[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -400,11 +403,14 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
       const fileItems = response.files.map(convertFileInfo);
       setFiles(fileItems);
       setCurrentPath(response.path);
+      currentPathRef.current = response.path;
+      return response.path;
     } catch (err: unknown) {
       console.error('[useSftpSession] 加载目录失败:', err);
       const errorMessage = err instanceof Error ? err.message : '加载目录失败';
       setError(errorMessage);
       setFiles([]);
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -414,11 +420,51 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
    * 导航到指定路径
    */
   const navigate = useCallback(
-    (path: string) => {
-      loadDirectory(path);
+    async (path: string) => {
+      const previousPath = currentPathRef.current;
+      const loadedPath = await loadDirectory(path);
+
+      if (loadedPath && loadedPath !== previousPath) {
+        setPathBackStack((prev) => [...prev, previousPath].slice(-50));
+        setPathForwardStack([]);
+      }
     },
     [loadDirectory]
   );
+
+  /**
+   * 回到本会话内上一次访问的目录
+   */
+  const goBack = useCallback(async () => {
+    const previousPath = pathBackStack[pathBackStack.length - 1];
+    if (!previousPath) return;
+
+    const currentBeforeBack = currentPathRef.current;
+    const loadedPath = await loadDirectory(previousPath);
+    if (!loadedPath) return;
+
+    setPathBackStack((prev) => prev.slice(0, -1));
+    if (loadedPath !== currentBeforeBack) {
+      setPathForwardStack((prev) => [...prev, currentBeforeBack].slice(-50));
+    }
+  }, [loadDirectory, pathBackStack]);
+
+  /**
+   * 前进到本会话内下一次访问的目录，暂未暴露 UI，但保留状态能力。
+   */
+  const goForward = useCallback(async () => {
+    const nextPath = pathForwardStack[pathForwardStack.length - 1];
+    if (!nextPath) return;
+
+    const currentBeforeForward = currentPathRef.current;
+    const loadedPath = await loadDirectory(nextPath);
+    if (!loadedPath) return;
+
+    setPathForwardStack((prev) => prev.slice(0, -1));
+    if (loadedPath !== currentBeforeForward) {
+      setPathBackStack((prev) => [...prev, currentBeforeForward].slice(-50));
+    }
+  }, [loadDirectory, pathForwardStack]);
 
   /**
    * 刷新当前目录
@@ -631,6 +677,14 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     }
   }, [serverId, initialPath, loadDirectory]);
 
+  // 切换服务器时清空路径访问历史，避免不同连接之间串历史。
+  useEffect(() => {
+    currentPathRef.current = initialPath;
+    setCurrentPath(initialPath);
+    setPathBackStack([]);
+    setPathForwardStack([]);
+  }, [serverId, initialPath]);
+
   // 页面卸载/切换 serverId 时，主动关闭连接以加速资源回收
   useEffect(() => {
     if (!serverId) return;
@@ -648,9 +702,13 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     isLoading,
     error,
     transferTasks: fileTransfer.tasks,
+    canGoBack: pathBackStack.length > 0,
+    canGoForward: pathForwardStack.length > 0,
 
     // 操作
     navigate,
+    goBack,
+    goForward,
     refresh,
     uploadFiles,
     downloadFile,

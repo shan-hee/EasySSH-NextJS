@@ -104,6 +104,11 @@ interface SftpManagerProps {
   pageContext?: 'sftp' | 'terminal' // 页面上下文
   isLoading?: boolean // 是否正在加载文件列表
   onNavigate: (path: string) => void
+  onNavigateBack?: () => void | Promise<void>
+  canNavigateBack?: boolean
+  onInternalBackHandlerChange?: (
+    handler: { handle: () => boolean | Promise<boolean> } | null
+  ) => void
   onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
@@ -145,6 +150,9 @@ export function SftpManager(props: SftpManagerProps) {
     pageContext = 'sftp',
     isLoading = false,
     onNavigate,
+    onNavigateBack,
+    canNavigateBack,
+    onInternalBackHandlerChange,
     onUpload,
     onDownload,
     onDelete,
@@ -851,14 +859,42 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 关闭文件编辑器
-  const handleCloseEditor = () => {
+  const handleCloseEditor = useCallback(() => {
     setEditorState({
       isOpen: false,
       fileName: "",
       filePath: "",
       content: "",
     })
-  }
+  }, [])
+
+  const handleInternalBack = useCallback(async () => {
+    if (editorState.isOpen) {
+      handleCloseEditor()
+      return true
+    }
+
+    if (canNavigateBack && onNavigateBack) {
+      await onNavigateBack()
+      return true
+    }
+
+    return false
+  }, [canNavigateBack, editorState.isOpen, handleCloseEditor, onNavigateBack])
+
+  useEffect(() => {
+    const hasInternalBack = editorState.isOpen || !!canNavigateBack
+    onInternalBackHandlerChange?.(hasInternalBack ? { handle: handleInternalBack } : null)
+
+    return () => {
+      onInternalBackHandlerChange?.(null)
+    }
+  }, [
+    canNavigateBack,
+    editorState.isOpen,
+    handleInternalBack,
+    onInternalBackHandlerChange,
+  ])
 
   // 保存文件
   const handleSaveFile = async (content: string) => {
@@ -1150,12 +1186,12 @@ export function SftpManager(props: SftpManagerProps) {
   const displayPath = editorState.isOpen ? editorState.filePath : currentPath
   const pathSegments = useMemo(() => displayPath.split("/").filter(Boolean), [displayPath])
 
-  // 同步路径输入框的值
+  // 同步路径输入框的值。编辑器打开时 displayPath 是完整文件路径，不能退回目录路径。
   useEffect(() => {
     if (!isEditingPath) {
-      setPathInputValue(currentPath)
+      setPathInputValue(displayPath)
     }
-  }, [currentPath, isEditingPath])
+  }, [displayPath, isEditingPath])
 
   // 当进入编辑/创建状态时,自动聚焦并选中输入框
   useLayoutEffect(() => {
@@ -1356,12 +1392,12 @@ export function SftpManager(props: SftpManagerProps) {
                       if (e.key === "Enter") {
                         e.currentTarget.blur()
                         const newPath = e.currentTarget.value.trim()
-                        if (newPath && newPath !== currentPath) {
+                        if (newPath && newPath !== displayPath) {
                           onNavigate(newPath)
                         }
                         setIsEditingPath(false)
                       } else if (e.key === "Escape") {
-                        setPathInputValue(currentPath)
+                        setPathInputValue(displayPath)
                         setIsEditingPath(false)
                         e.currentTarget.blur()
                       }
@@ -1369,10 +1405,10 @@ export function SftpManager(props: SftpManagerProps) {
                     onBlur={(e) => {
                       setIsEditingPath(false)
                       const newPath = e.target.value.trim()
-                      if (newPath && newPath !== currentPath) {
+                      if (newPath && newPath !== displayPath) {
                         onNavigate(newPath)
                       } else {
-                        setPathInputValue(currentPath)
+                        setPathInputValue(displayPath)
                       }
                     }}
                     autoFocus
@@ -1386,7 +1422,10 @@ export function SftpManager(props: SftpManagerProps) {
               ) : (
                 /* 路径面包屑 - 显示模式 */
                 <div
-                  onClick={() => setIsEditingPath(true)}
+                  onClick={() => {
+                    setPathInputValue(displayPath)
+                    setIsEditingPath(true)
+                  }}
                   className={cn(
                     "h-7 flex items-center gap-1 pl-8 pr-3 py-1 border-0 bg-zinc-100 dark:bg-zinc-900/50",
                     "text-xs font-mono cursor-text rounded-md overflow-x-auto scrollbar-custom",
@@ -1621,8 +1660,8 @@ export function SftpManager(props: SftpManagerProps) {
         <>
           {/* 搜索栏 */}
           <div className="px-3 py-2 border-b flex items-center gap-2">
-            {/* 返回上级目录按钮 */}
-            {pathSegments.length > 0 && (
+            {/* 返回按钮：优先回到访问历史的上一步；无历史时退回父目录 */}
+            {(canNavigateBack || pathSegments.length > 0) && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -1630,6 +1669,13 @@ export function SftpManager(props: SftpManagerProps) {
                   "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
                 )}
                 onClick={() => {
+                  if (canNavigateBack && onNavigateBack) {
+                    startTransition(() => {
+                      onNavigateBack()
+                    })
+                    return
+                  }
+
                   const parentPath = pathSegments.slice(0, -1).join("/")
                   // 使用 startTransition 避免阻塞 UI
                   startTransition(() => {

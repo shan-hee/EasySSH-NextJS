@@ -9,471 +9,469 @@ import type {
   TerminalConnectionPhase,
 } from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"
-import { useRouter } from "next/navigation"
 import { serversApi, type Server } from "@/lib/api"
 import { useTerminalStore } from "@/stores/terminal-store"
-import { useTabUIStore } from "@/stores/tab-ui-store"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 
-// 性能优化：将 lastActivity 从 sessions 状态中分离，避免每次命令触发整个组件树重渲染
-const lastActivityMap = new Map<string, number>()
-
 const statusFromConnectionPhase = (phase: TerminalConnectionPhase) => {
- if (phase === "ready") return "connected" as const
- if (phase === "failed" || phase === "closed" || phase === "idle") return "disconnected" as const
- return "reconnecting" as const
+  if (phase === "ready") return "connected" as const
+  if (phase === "failed" || phase === "closed" || phase === "idle") return "disconnected" as const
+  return "reconnecting" as const
+}
+
+const createQuickSession = (
+  quickConnectName: string,
+  id: string = "quick-initial"
+): TerminalSession => {
+  const now = Date.now()
+
+  return {
+    id,
+    serverName: quickConnectName,
+    host: "",
+    port: undefined,
+    username: "",
+    shouldConnect: false,
+    connectionPhase: "idle",
+    status: "disconnected",
+    lastActivity: now,
+    type: "quick",
+    pinned: false,
+  }
 }
 
 function TerminalPageContent() {
- const router = useRouter()
- const { ready } = useAuthReady()
- const t = useTranslations("terminal")
- const quickConnectName = t("quickConnectTabName")
- const [servers, setServers] = useState<QuickServer[]>([])
- const [loading, setLoading] = useState(true)
+  const { ready } = useAuthReady()
+  const t = useTranslations("terminal")
+  const quickConnectName = t("quickConnectTabName")
+  const [servers, setServers] = useState<QuickServer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [maxTabs, setMaxTabs] = useState(50)
+  const [inactiveMinutes, setInactiveMinutes] = useState(60)
+  const inactivityNotifiedRef = useRef<Set<string>>(new Set())
+  const initializedRef = useRef(false)
+  const missingServerToastRef = useRef<Set<string>>(new Set())
 
- // 根据 sessionStorage 决定初始会话类型
- const [sessions, setSessions] = useState<TerminalSession[]>(() => {
- const now = Date.now()
+  const sessions = useTerminalStore((state) => state.sessions)
+  const activeSessionId = useTerminalStore((state) => state.activeSessionId)
+  const setSessions = useTerminalStore((state) => state.setSessions)
+  const setActiveSessionId = useTerminalStore((state) => state.setActiveSessionId)
+  const updateSessionActivity = useTerminalStore((state) => state.updateSessionActivity)
+  const getSessionLastActivity = useTerminalStore((state) => state.getSessionLastActivity)
 
- // 从 sessionStorage 读取待连接的服务器信息
- let serverId: string | null = null
- let serverName = ""
+  const resetToQuickSession = useCallback(() => {
+    const quickSession = createQuickSession(quickConnectName, `quick-${Date.now()}`)
+    setSessions([quickSession])
+    setActiveSessionId(quickSession.id)
+    updateSessionActivity(quickSession.id, quickSession.lastActivity)
+  }, [quickConnectName, setActiveSessionId, setSessions, updateSessionActivity])
 
- if (typeof window !== 'undefined') {
-   const pendingConnection = sessionStorage.getItem("pendingConnection")
-   if (pendingConnection) {
-     try {
-       const data = JSON.parse(pendingConnection)
-       serverId = data.server
-       serverName = data.name || ""
-       // 读取后立即清除，避免重复使用
-       sessionStorage.removeItem("pendingConnection")
-     } catch (e) {
-       console.error("Failed to parse pending connection:", e)
-     }
-   }
- }
+  // 初始化终端页签元数据。切换到其他菜单再回来时，如果 store 里已有页签，不重建快速连接。
+  useEffect(() => {
+    if (!ready || initializedRef.current) return
+    initializedRef.current = true
 
- // 如果有 server 参数，创建终端会话（等待服务器信息加载）
- if (serverId) {
- return [
- {
- id: `auto-${serverId}-${now}`,
- serverId: serverId, // 暂时使用字符串，稍后 useEffect 会填充完整信息
- serverName: serverName, // 使用传递的服务器名称
- host: "",
- port: undefined,
- username: "",
- shouldConnect: false,
- connectionPhase: "idle",
- status: "reconnecting", // 黄色状态指示器
- lastActivity: now,
- type: "terminal",
- pinned: false,
- },
- ]
- }
+    let pendingServerId: string | null = null
+    let pendingServerName = ""
 
- // 否则创建快速连接会话
- return [
- {
- id: "quick-initial",
- serverName: quickConnectName,
- host: "",
- port: undefined,
- username: "",
- shouldConnect: false,
- connectionPhase: "idle",
- status: "disconnected",
- lastActivity: now,
- type: "quick",
- pinned: false,
- },
- ]
- })
+    if (typeof window !== "undefined") {
+      const pendingConnection = sessionStorage.getItem("pendingConnection")
+      if (pendingConnection) {
+        try {
+          const data = JSON.parse(pendingConnection)
+          pendingServerId = data.server
+          pendingServerName = data.name || ""
+          sessionStorage.removeItem("pendingConnection")
+        } catch (error) {
+          console.error("Failed to parse pending connection:", error)
+        }
+      }
+    }
 
- const [maxTabs, setMaxTabs] = useState(50)
- const [inactiveMinutes, setInactiveMinutes] = useState(60)
- const inactivityNotifiedRef = useRef<Set<string>>(new Set())
- const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
- const initializedRef = useRef(false)
+    if (pendingServerId) {
+      const now = Date.now()
+      const sessionId = `auto-${pendingServerId}-${now}`
+      const pendingSession: TerminalSession = {
+        id: sessionId,
+        serverId: pendingServerId,
+        serverName: pendingServerName,
+        host: "",
+        port: undefined,
+        username: "",
+        shouldConnect: false,
+        connectionPhase: "idle",
+        status: "reconnecting",
+        lastActivity: now,
+        type: "terminal",
+        pinned: false,
+      }
 
- // 处理待连接的服务器（在 servers 加载完成后）
- useEffect(() => {
- if (!initializedRef.current && !loading && servers.length > 0) {
- initializedRef.current = true
+      setSessions((prev) => [...prev, pendingSession])
+      setActiveSessionId(sessionId)
+      updateSessionActivity(sessionId, now)
+      return
+    }
 
- // 查找是否有待连接的会话（通过 auto- 前缀识别）
- const pendingSession = sessions.find(s => s.id.startsWith("auto-"))
- if (pendingSession?.serverId) {
-   const serverId = pendingSession.serverId
-   // 查找服务器信息
-   const server = servers.find(s => s.id.toString() === serverId)
+    if (sessions.length === 0) {
+      const quickSession = createQuickSession(quickConnectName)
+      setSessions([quickSession])
+      setActiveSessionId(quickSession.id)
+      updateSessionActivity(quickSession.id, quickSession.lastActivity)
+      return
+    }
 
-   if (server) {
-     // 服务器存在，更新会话信息（不限制在线/离线状态）
-     const timer = setTimeout(() => {
-       setSessions(prev => prev.map(s => {
-         // 只更新我们初始创建的 auto- 会话
-         if (s.id === pendingSession.id) {
-           return {
-             ...s,
-             serverId: server.id,
-             serverName: server.name || `${server.username}@${server.host}:${server.port}`,
-             host: server.host,
-             port: server.port,
-             username: server.username,
-             shouldConnect: true,
-             connectionPhase: "idle" as const,
-             status: "reconnecting" as const,
-             group: server.group,
-             tags: server.tags,
-           }
-         }
-         return s
-       }))
-       setActiveSessionId(pendingSession.id)
-     }, 0)
+    if (!activeSessionId || !sessions.some((session) => session.id === activeSessionId)) {
+      setActiveSessionId(sessions[0]?.id ?? null)
+    }
+  }, [
+    activeSessionId,
+    quickConnectName,
+    ready,
+    sessions,
+    setActiveSessionId,
+    setSessions,
+    updateSessionActivity,
+  ])
 
-     return () => clearTimeout(timer)
-   } else {
-     // 服务器不存在，回退到快速连接
-     toast.error(t("errorServerNotFound"))
+  // 加载服务器列表
+  const loadServers = useCallback(async () => {
+    try {
+      setLoading(true)
 
-     const now = Date.now()
-     const timer = setTimeout(() => {
-       setSessions([{
-         id: "quick-initial",
-         serverName: quickConnectName,
-         host: "",
-         port: undefined,
-         username: "",
-         shouldConnect: false,
-         connectionPhase: "idle",
-         status: "disconnected",
-         lastActivity: now,
-         type: "quick",
-         pinned: false,
-       }])
-     }, 0)
+      const response = await serversApi.list({
+        page: 1,
+        limit: 100,
+      })
 
-     return () => clearTimeout(timer)
-   }
- }
- }
- }, [loading, servers, sessions, t, quickConnectName])
+      const serverList = Array.isArray(response)
+        ? response
+        : (response?.data || [])
 
- // 加载服务器列表 - 优化版本
- const loadServers = useCallback(async () => {
-  try {
-  setLoading(true)
+      const quickServers: QuickServer[] = serverList.map((server: Server) => ({
+        id: String(server.id),
+        name: server.name || `${server.username}@${server.host}:${server.port}`,
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        status: server.status === "online" ? "online" : "offline",
+        group: server.group,
+        tags: server.tags,
+        last_connected: server.last_connected,
+      }))
 
-  const response = await serversApi.list({
-  page: 1,
-  limit: 100, // 加载所有服务器
- })
-
- // 防御性检查：处理apiFetch自动解包导致的数据结构不一致
- const servers = Array.isArray(response)
- ? response
- : (response?.data || [])
-
- // 将Server类型转换为QuickServer类型，保留 UUID
- const quickServers: QuickServer[] = servers.map((server: Server) => ({
- id: String(server.id), // 保留 UUID 字符串
- name: server.name || `${server.username}@${server.host}:${server.port}`,
- host: server.host,
- port: server.port,
- username: server.username,
- status: server.status === "online" ? "online" : "offline",
- group: server.group,
- tags: server.tags,
- last_connected: server.last_connected, // 传递最后连接时间
- }))
-
- // 使用 startTransition 批量更新状态，避免中间态闪烁
- startTransition(() => {
- setServers(quickServers)
- setLoading(false)
- })
- } catch (error: unknown) {
- console.error("Failed to load servers:", error)
- toast.error(getErrorMessage(error, t("errorLoadServers")))
- setLoading(false)
- }
- }, [t])
-
- useEffect(() => {
-   if (!ready) return
-   const timer = setTimeout(() => {
-     void loadServers()
-   }, 0)
-
-   return () => clearTimeout(timer)
- }, [loadServers, ready])
-
- // 读取通用设置（仅使用本地存储集成）- 异步化避免阻塞初始渲染
- useEffect(() => {
- // 延迟到空闲时读取 localStorage
- const loadSettings = () => {
- try {
- const mt = Number(localStorage.getItem("tab.maxTabs") || "50")
- if (!isNaN(mt)) setMaxTabs(mt)
- const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
- if (!isNaN(im)) setInactiveMinutes(im)
- } catch {}
- }
-
- if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
- requestIdleCallback(loadSettings)
- } else {
- setTimeout(loadSettings, 0)
- }
- }, [])
-
- // 创建"快速连接"页签
-  const handleNewSession = (): string | void => {
-  // 最大页签数限制
-  if (sessions.length >= maxTabs) {
-  toast.error(t("errorMaxTabsReached", { max: maxTabs }))
-  return
-  }
-
- const now = Date.now()
- const id = `quick-${now}`
- const newTab: TerminalSession = {
- id,
- serverName: quickConnectName,
- host: "",
- username: "",
- shouldConnect: false,
- connectionPhase: "idle",
- status: "disconnected",
- lastActivity: now,
- type: "quick",
- pinned: false,
- }
- setSessions(prev => [...prev, newTab])
- return id
- }
-
- // 从"快速连接"页签内选择服务器，升级为终端会话 - 优化版本
- const handleStartConnectionFromQuick = (sessionId: string, server: QuickServer) => {
- const now = Date.now()
- const newSessionId = `auto-${server.id}-${now}`
-
- // 获取 Store 实例
- const terminalStore = useTerminalStore.getState()
- const tabUIStore = useTabUIStore.getState()
-
- // 使用 startTransition 包裹非紧急的状态更新，降低优先级
- startTransition(() => {
- // 迁移终端实例（如果存在）
- const terminalInstance = terminalStore.getTerminal(sessionId)
- if (terminalInstance) {
- terminalStore.setTerminal(newSessionId, {
- ...terminalInstance,
- serverId: String(server.id)
- })
- terminalStore.destroySession(sessionId)
- }
-
- // 迁移 UI 状态
- const tabState = tabUIStore.getTabState(sessionId)
- tabUIStore.setTabState(newSessionId, tabState)
- tabUIStore.deleteTabState(sessionId)
-
- // 批量更新会话列表和激活状态
- setSessions(prev => prev.map(s => s.id === sessionId ? {
- id: newSessionId, // 使用新的 auto- 格式 ID
- serverId: String(server.id),
- serverName: server.name || `${server.username}@${server.host}:${server.port}`,
- host: server.host,
- port: server.port,
- username: server.username,
- // server.status 只是“上次连接结果”，不应阻止本次连接尝试
- shouldConnect: true,
- connectionPhase: "idle",
- status: "reconnecting",
- lastActivity: now,
- group: server.group,
- tags: server.tags,
- pinned: false,
- type: "terminal",
- } : s))
-
- // 更新激活状态
- if (activeSessionId === sessionId) {
- setActiveSessionId(newSessionId)
- }
-
- // 初始化 lastActivityMap
- lastActivityMap.set(newSessionId, now)
-
- // 连接建立后，稍后重新加载服务器列表以获取更新的 last_connected
- // 使用 startTransition 标记为低优先级更新
- setTimeout(() => {
- startTransition(() => {
- loadServers()
- })
- }, 1000)
- })
- }
-
- // 关闭会话
- const handleCloseSession = useCallback((sessionId: string) => {
- // 若这次关闭会导致页签为空，则立刻跳转上一级，避免出现"无页签"中间态
- if (sessions.length <= 1) {
- router.replace("/dashboard")
- return
- }
-
- // 如果关闭的是当前激活的标签，需要先切换到其他标签再关闭
- const currentIndex = sessions.findIndex(s => s.id === sessionId)
- const isClosingActive = activeSessionId === sessionId
-
- // 如果关闭的是当前激活的标签，先切换到相邻的标签
- if (isClosingActive && currentIndex !== -1) {
- // 优先选择右边的标签，如果没有则选择左边的
- const nextIndex = currentIndex < sessions.length - 1 ? currentIndex + 1 : currentIndex - 1
- if (nextIndex >= 0 && sessions[nextIndex]) {
- setActiveSessionId(sessions[nextIndex].id)
- }
- }
-
- // 然后过滤掉要关闭的会话
- setSessions(prev => prev.filter(s => s.id !== sessionId))
- }, [sessions, activeSessionId, router])
-
-  const handleDuplicateSession = (sessionId: string) => {
- const src = sessions.find(s => s.id === sessionId)
-  if (!src) return
-  if (sessions.length >= maxTabs) {
-  toast.error(t("errorMaxTabsReached", { max: maxTabs }))
-  return
-  }
- const now = Date.now()
- const dup: TerminalSession = {
- ...src,
- id: `session-${now}`,
- lastActivity: now,
- pinned: false,
- connectionPhase: src.type === "terminal" ? "idle" : src.connectionPhase,
- status: src.type === "terminal" ? "reconnecting" : src.status,
- }
- setSessions(prev => [...prev, dup])
- }
-
- const handleCloseOthers = (sessionId: string) => {
- setSessions(prev => prev.filter(s => s.id === sessionId || s.pinned))
- }
-
- const handleCloseAll = () => {
- const next = sessions.filter(s => s.pinned)
- if (next.length === 0) {
- router.replace("/dashboard")
- return
- }
- setSessions(next)
- }
-
- const handleTogglePin = (sessionId: string) => {
- setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, pinned: !s.pinned } : s))
- }
-
- const handleConnectionPhaseChange = useCallback((sessionId: string, phase: TerminalConnectionPhase) => {
- setSessions(prev => prev.map(s => {
- if (s.id !== sessionId) return s
-
- return {
- ...s,
- connectionPhase: phase,
- status: statusFromConnectionPhase(phase),
- }
- }))
- }, [])
-
- const handleReorder = (newOrderIds: string[]) => {
- const map = new Map(sessions.map(s => [s.id, s]))
- const newList = newOrderIds.map(id => map.get(id)!).filter(Boolean)
- if (newList.length === sessions.length) setSessions(newList)
- }
-
- // 发送命令
- const handleSendCommand = (sessionId: string, command: string) => {
- // 移除频繁的日志输出，只在开发模式下且命令非空时输出
- if (process.env.NODE_ENV === 'development' && command.trim()) {
- // console.log(`Session ${sessionId}: ${command}`)
- }
- // 这里应该处理实际的命令发送逻辑
-
- // 性能优化：将 lastActivity 更新到 Map 中，避免触发 sessions 状态更新
- const now = Date.now()
- lastActivityMap.set(sessionId, now)
-
- // 清除已提醒标记
- inactivityNotifiedRef.current.delete(sessionId)
- }
-
- // 未活动断开提醒 - 优化版本
- const sessionsRef = useRef(sessions)
- useEffect(() => {
- sessionsRef.current = sessions
- }, [sessions])
+      startTransition(() => {
+        setServers(quickServers)
+        setLoading(false)
+      })
+    } catch (error: unknown) {
+      console.error("Failed to load servers:", error)
+      toast.error(getErrorMessage(error, t("errorLoadServers")))
+      setLoading(false)
+    }
+  }, [t])
 
   useEffect(() => {
-  const timer = setInterval(() => {
-  const now = Date.now()
-  const threshold = inactiveMinutes * 60 * 1000
-  sessionsRef.current.forEach(s => {
-  if (!s) return
-  // 从 lastActivityMap 获取最后活动时间，如果不存在则使用 session 的初始值
-  const lastActivity = lastActivityMap.get(s.id) ?? s.lastActivity
-  if (now - lastActivity >= threshold && !inactivityNotifiedRef.current.has(s.id)) {
-  inactivityNotifiedRef.current.add(s.id)
-  toast(t("inactiveToastTitle", { name: s.serverName }), {
-  description: t("inactiveToastDescription", { minutes: inactiveMinutes }),
-  action: { label: t("inactiveToastActionLabel"), onClick: () => handleCloseSession(s.id) },
-  })
+    if (!ready) return
+    const timer = setTimeout(() => {
+      void loadServers()
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [loadServers, ready])
+
+  // 待连接会话先以 serverId 占位创建，服务器列表加载后补齐连接信息。
+  useEffect(() => {
+    if (loading || servers.length === 0) return
+
+    setSessions((prev) => {
+      let changed = false
+
+      const next = prev.map((session) => {
+        if (
+          session.type !== "terminal" ||
+          !session.serverId ||
+          session.host ||
+          !session.id.startsWith("auto-")
+        ) {
+          return session
+        }
+
+        const server = servers.find((item) => item.id === String(session.serverId))
+        if (!server) {
+          if (!missingServerToastRef.current.has(session.id)) {
+            missingServerToastRef.current.add(session.id)
+            toast.error(t("errorServerNotFound"))
+          }
+
+          changed = true
+          return {
+            ...createQuickSession(quickConnectName),
+            id: session.id,
+            lastActivity: session.lastActivity,
+          }
+        }
+
+        changed = true
+        return {
+          ...session,
+          serverId: server.id,
+          serverName: server.name || `${server.username}@${server.host}:${server.port}`,
+          host: server.host,
+          port: server.port,
+          username: server.username,
+          shouldConnect: true,
+          connectionPhase: "idle" as const,
+          status: "reconnecting" as const,
+          group: server.group,
+          tags: server.tags,
+        }
+      })
+
+      return changed ? next : prev
+    })
+  }, [loading, quickConnectName, servers, setSessions, t])
+
+  // 读取通用设置（仅使用本地存储集成）
+  useEffect(() => {
+    const loadSettings = () => {
+      try {
+        const mt = Number(localStorage.getItem("tab.maxTabs") || "50")
+        if (!isNaN(mt)) setMaxTabs(mt)
+        const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
+        if (!isNaN(im)) setInactiveMinutes(im)
+      } catch {}
+    }
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      requestIdleCallback(loadSettings)
+    } else {
+      setTimeout(loadSettings, 0)
+    }
+  }, [])
+
+  const handleNewSession = (): string | void => {
+    if (sessions.length >= maxTabs) {
+      toast.error(t("errorMaxTabsReached", { max: maxTabs }))
+      return
+    }
+
+    const now = Date.now()
+    const id = `quick-${now}`
+    const newTab: TerminalSession = {
+      id,
+      serverName: quickConnectName,
+      host: "",
+      username: "",
+      shouldConnect: false,
+      connectionPhase: "idle",
+      status: "disconnected",
+      lastActivity: now,
+      type: "quick",
+      pinned: false,
+    }
+
+    setSessions((prev) => [...prev, newTab])
+    setActiveSessionId(id)
+    updateSessionActivity(id, now)
+    return id
   }
-  })
-  }, 60 * 1000)
-  return () => clearInterval(timer)
-  }, [inactiveMinutes, handleCloseSession, t]) // 移除 sessions 依赖，避免频繁重建定时器
 
- // 会话初始化中（等待 sessions 被设置）
- // 现在始终有初始会话，不需要这个检查了
- // if (sessions.length === 0) { ... }
+  const handleStartConnectionFromQuick = (sessionId: string, server: QuickServer) => {
+    const now = Date.now()
+    const terminalStore = useTerminalStore.getState()
 
- return (
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0 min-w-0 overflow-hidden">
- <TerminalComponent
- sessions={sessions}
- onNewSession={handleNewSession}
- onCloseSession={handleCloseSession}
- onSendCommand={handleSendCommand}
- onDuplicateSession={handleDuplicateSession}
- onCloseOthers={handleCloseOthers}
- onCloseAll={handleCloseAll}
- onTogglePin={handleTogglePin}
- onReorderSessions={handleReorder}
- onStartConnectionFromQuick={handleStartConnectionFromQuick}
- servers={servers}
- serversLoading={loading}
- externalActiveSessionId={activeSessionId}
- onConnectionPhaseChange={handleConnectionPhaseChange}
- />
- </div>
- )
+    startTransition(() => {
+      const terminalInstance = terminalStore.getTerminal(sessionId)
+      if (terminalInstance) {
+        terminalStore.setTerminal(sessionId, {
+          ...terminalInstance,
+          serverId: String(server.id),
+        })
+      }
+
+      setSessions((prev) => prev.map((session) => session.id === sessionId ? {
+        id: sessionId,
+        serverId: String(server.id),
+        serverName: server.name || `${server.username}@${server.host}:${server.port}`,
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        shouldConnect: true,
+        connectionPhase: "idle",
+        status: "reconnecting",
+        lastActivity: now,
+        group: server.group,
+        tags: server.tags,
+        pinned: false,
+        type: "terminal",
+      } : session))
+
+      setActiveSessionId(sessionId)
+      updateSessionActivity(sessionId, now)
+
+      setTimeout(() => {
+        startTransition(() => {
+          void loadServers()
+        })
+      }, 1000)
+    })
+  }
+
+  const handleCloseSession = useCallback((sessionId: string) => {
+    if (sessions.length <= 1) {
+      resetToQuickSession()
+      return
+    }
+
+    const currentIndex = sessions.findIndex((session) => session.id === sessionId)
+    const isClosingActive = activeSessionId === sessionId
+
+    if (isClosingActive && currentIndex !== -1) {
+      const nextIndex = currentIndex < sessions.length - 1 ? currentIndex + 1 : currentIndex - 1
+      setActiveSessionId(sessions[nextIndex]?.id ?? null)
+    }
+
+    setSessions((prev) => prev.filter((session) => session.id !== sessionId))
+  }, [
+    activeSessionId,
+    resetToQuickSession,
+    sessions,
+    setActiveSessionId,
+    setSessions,
+  ])
+
+  const handleDuplicateSession = (sessionId: string) => {
+    const src = sessions.find((session) => session.id === sessionId)
+    if (!src) return
+    if (sessions.length >= maxTabs) {
+      toast.error(t("errorMaxTabsReached", { max: maxTabs }))
+      return
+    }
+
+    const now = Date.now()
+    const dup: TerminalSession = {
+      ...src,
+      id: `session-${now}`,
+      lastActivity: now,
+      pinned: false,
+      connectionPhase: src.type === "terminal" ? "idle" : src.connectionPhase,
+      status: src.type === "terminal" ? "reconnecting" : src.status,
+    }
+
+    setSessions((prev) => [...prev, dup])
+    setActiveSessionId(dup.id)
+    updateSessionActivity(dup.id, now)
+  }
+
+  const handleCloseOthers = (sessionId: string) => {
+    setSessions((prev) => prev.filter((session) => session.id === sessionId || session.pinned))
+    setActiveSessionId(sessionId)
+  }
+
+  const handleCloseAll = () => {
+    const next = sessions.filter((session) => session.pinned)
+    if (next.length === 0) {
+      resetToQuickSession()
+      return
+    }
+
+    setSessions(next)
+    setActiveSessionId(next[0].id)
+  }
+
+  const handleTogglePin = (sessionId: string) => {
+    setSessions((prev) => prev.map((session) => (
+      session.id === sessionId
+        ? { ...session, pinned: !session.pinned }
+        : session
+    )))
+  }
+
+  const handleConnectionPhaseChange = useCallback((sessionId: string, phase: TerminalConnectionPhase) => {
+    setSessions((prev) => prev.map((session) => {
+      if (session.id !== sessionId) return session
+
+      return {
+        ...session,
+        connectionPhase: phase,
+        status: statusFromConnectionPhase(phase),
+      }
+    }))
+
+    if (phase === "ready") {
+      updateSessionActivity(sessionId)
+    }
+  }, [setSessions, updateSessionActivity])
+
+  const handleReorder = (newOrderIds: string[]) => {
+    const map = new Map(sessions.map((session) => [session.id, session]))
+    const newList = newOrderIds.map((id) => map.get(id)!).filter(Boolean)
+    if (newList.length === sessions.length) setSessions(newList)
+  }
+
+  const handleSendCommand = (sessionId: string, command: string) => {
+    if (process.env.NODE_ENV === "development" && command.trim()) {
+      // console.log(`Session ${sessionId}: ${command}`)
+    }
+
+    updateSessionActivity(sessionId)
+    inactivityNotifiedRef.current.delete(sessionId)
+  }
+
+  const sessionsRef = useRef(sessions)
+  useEffect(() => {
+    sessionsRef.current = sessions
+  }, [sessions])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now()
+      const threshold = inactiveMinutes * 60 * 1000
+
+      sessionsRef.current.forEach((session) => {
+        const lastActivity = getSessionLastActivity(session.id) ?? session.lastActivity
+        if (now - lastActivity >= threshold && !inactivityNotifiedRef.current.has(session.id)) {
+          inactivityNotifiedRef.current.add(session.id)
+          toast(t("inactiveToastTitle", { name: session.serverName }), {
+            description: t("inactiveToastDescription", { minutes: inactiveMinutes }),
+            action: { label: t("inactiveToastActionLabel"), onClick: () => handleCloseSession(session.id) },
+          })
+        }
+      })
+    }, 60 * 1000)
+
+    return () => clearInterval(timer)
+  }, [getSessionLastActivity, handleCloseSession, inactiveMinutes, t])
+
+  return (
+    <div className="flex flex-1 flex-col gap-4 p-4 pt-0 min-w-0 overflow-hidden">
+      <TerminalComponent
+        sessions={sessions}
+        onNewSession={handleNewSession}
+        onCloseSession={handleCloseSession}
+        onSendCommand={handleSendCommand}
+        onDuplicateSession={handleDuplicateSession}
+        onCloseOthers={handleCloseOthers}
+        onCloseAll={handleCloseAll}
+        onTogglePin={handleTogglePin}
+        onReorderSessions={handleReorder}
+        onStartConnectionFromQuick={handleStartConnectionFromQuick}
+        servers={servers}
+        serversLoading={loading}
+        externalActiveSessionId={activeSessionId}
+        onActiveSessionChange={setActiveSessionId}
+        onConnectionPhaseChange={handleConnectionPhaseChange}
+      />
+    </div>
+  )
 }
 
 export default function TerminalPage() {
- const tCommon = useTranslations("common")
- return (
- <Suspense fallback={<div className="flex flex-1 items-center justify-center">{tCommon("loading")}</div>}>
- <TerminalPageContent />
- </Suspense>
- )
+  const tCommon = useTranslations("common")
+  return (
+    <Suspense fallback={<div className="flex flex-1 items-center justify-center">{tCommon("loading")}</div>}>
+      <TerminalPageContent />
+    </Suspense>
+  )
 }

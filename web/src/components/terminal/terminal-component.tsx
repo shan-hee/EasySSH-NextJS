@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import type { QuickServer } from "./quick-connect"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
@@ -52,6 +52,10 @@ const shouldShowConnectionLoader = (session?: TerminalSession) => {
   )
 }
 
+type InternalBackHandler = {
+  handle: () => boolean | Promise<boolean>
+}
+
 const getAdjacentSessionId = (sessions: TerminalSession[], sessionId: string) => {
   const currentIndex = sessions.findIndex((session) => session.id === sessionId)
   if (currentIndex === -1) {
@@ -79,6 +83,7 @@ interface TerminalComponentProps {
   serversLoading?: boolean
   // 外部控制激活的会话 ID
   externalActiveSessionId?: string | null
+  onActiveSessionChange?: (sessionId: string) => void
   onConnectionPhaseChange?: (sessionId: string, phase: TerminalConnectionPhase) => void
 }
 
@@ -96,15 +101,27 @@ export function TerminalComponent({
   servers,
   serversLoading,
   externalActiveSessionId,
+  onActiveSessionChange,
   onConnectionPhaseChange,
 }: TerminalComponentProps) {
   const { config } = useSystemConfig()
   const tTerminal = useTranslations("terminal")
   const tNav = useTranslations("nav")
-  const [activeSession, setActiveSession] = useState<string>(sessions[0]?.id || "")
+  const [activeSession, setActiveSession] = useState<string>(
+    externalActiveSessionId || sessions[0]?.id || ""
+  )
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [loaderStates, setLoaderStates] = useState<Record<string, LoaderState>>({})
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [internalBackVersion, setInternalBackVersion] = useState(0)
+  const [activeSessionHistoryVersion, setActiveSessionHistoryVersion] = useState(0)
+  const activeSessionRef = useRef(activeSession)
+  const activeSessionHistoryRef = useRef<string[]>([])
+  const lastNotifiedActiveSessionRef = useRef(activeSession)
+  const internalBackHandlersRef = useRef(new Map<string, InternalBackHandler>())
+  const internalBackAvailabilityRef = useRef(new Map<string, boolean>())
+  const internalBackSentinelArmedRef = useRef(false)
+  const internalBackSentinelDisarmingRef = useRef(false)
 
   // ==================== 从 Store 获取销毁方法 ====================
   const destroySession = useTerminalStore(state => state.destroySession)
@@ -113,16 +130,203 @@ export function TerminalComponent({
   // ==================== 获取活跃会话 ====================
   const active = sessions.find((s) => s.id === activeSession)
 
+  const setActiveSessionFromUser = useCallback((nextSessionId: string) => {
+    setActiveSession((previousSessionId) => {
+      if (!nextSessionId || previousSessionId === nextSessionId) {
+        return previousSessionId
+      }
+
+      const sessionIds = new Set(sessions.map((session) => session.id))
+      if (previousSessionId && sessionIds.has(previousSessionId)) {
+        activeSessionHistoryRef.current = [
+          ...activeSessionHistoryRef.current.filter((id) => id !== previousSessionId),
+          previousSessionId,
+        ].slice(-20)
+        setActiveSessionHistoryVersion((version) => version + 1)
+      }
+
+      return nextSessionId
+    })
+  }, [sessions])
+
+  const setActiveSessionWithoutHistory = useCallback((nextSessionId: string) => {
+    setActiveSession(nextSessionId)
+  }, [])
+
   // 当外部传入 activeSessionId 时，切换激活的会话
   useEffect(() => {
-    if (externalActiveSessionId) {
-      const timer = setTimeout(() => {
-        setActiveSession(externalActiveSessionId)
-      }, 0)
-
-      return () => clearTimeout(timer)
+    if (
+      externalActiveSessionId &&
+      sessions.some((session) => session.id === externalActiveSessionId)
+    ) {
+      setActiveSessionWithoutHistory(externalActiveSessionId)
     }
-  }, [externalActiveSessionId])
+  }, [externalActiveSessionId, sessions, setActiveSessionWithoutHistory])
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession
+    if (
+      activeSession &&
+      activeSession !== lastNotifiedActiveSessionRef.current
+    ) {
+      lastNotifiedActiveSessionRef.current = activeSession
+      onActiveSessionChange?.(activeSession)
+    }
+  }, [activeSession, onActiveSessionChange])
+
+  useEffect(() => {
+    const sessionIds = new Set(sessions.map((session) => session.id))
+    const filteredHistory = activeSessionHistoryRef.current.filter((id) => sessionIds.has(id))
+
+    if (filteredHistory.length !== activeSessionHistoryRef.current.length) {
+      activeSessionHistoryRef.current = filteredHistory
+      setActiveSessionHistoryVersion((version) => version + 1)
+    }
+  }, [sessions])
+
+  const handleInternalBackHandlerChange = useCallback((
+    sessionId: string,
+    handler: InternalBackHandler | null
+  ) => {
+    if (handler) {
+      internalBackHandlersRef.current.set(sessionId, handler)
+      return
+    }
+
+    internalBackHandlersRef.current.delete(sessionId)
+  }, [])
+
+  const handleInternalBackAvailabilityChange = useCallback((
+    sessionId: string,
+    available: boolean
+  ) => {
+    const previous = internalBackAvailabilityRef.current.get(sessionId) ?? false
+
+    if (available) {
+      internalBackAvailabilityRef.current.set(sessionId, true)
+    } else {
+      internalBackAvailabilityRef.current.delete(sessionId)
+    }
+
+    if (previous !== available) {
+      setInternalBackVersion((version) => version + 1)
+    }
+  }, [])
+
+  const armInternalBackSentinel = useCallback(() => {
+    if (typeof window === "undefined" || internalBackSentinelArmedRef.current) {
+      return
+    }
+
+    window.history.pushState(
+      {
+        ...(window.history.state ?? {}),
+        __easysshTerminalInternalBack: true,
+      },
+      "",
+      window.location.href
+    )
+    internalBackSentinelArmedRef.current = true
+  }, [])
+
+  const disarmInternalBackSentinel = useCallback(() => {
+    if (
+      typeof window === "undefined" ||
+      !internalBackSentinelArmedRef.current ||
+      internalBackSentinelDisarmingRef.current
+    ) {
+      return
+    }
+
+    internalBackSentinelDisarmingRef.current = true
+    window.history.back()
+  }, [])
+
+  useEffect(() => {
+    if (!activeSession) return
+
+    if (
+      internalBackAvailabilityRef.current.get(activeSession) ||
+      activeSessionHistoryRef.current.length > 0
+    ) {
+      armInternalBackSentinel()
+      return
+    }
+
+    disarmInternalBackSentinel()
+  }, [
+    activeSession,
+    activeSessionHistoryVersion,
+    armInternalBackSentinel,
+    disarmInternalBackSentinel,
+    internalBackVersion,
+  ])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (internalBackSentinelDisarmingRef.current) {
+        internalBackSentinelDisarmingRef.current = false
+        internalBackSentinelArmedRef.current = false
+        return
+      }
+
+      if (!internalBackSentinelArmedRef.current) {
+        return
+      }
+
+      internalBackSentinelArmedRef.current = false
+
+      void (async () => {
+        const sessionId = activeSessionRef.current
+        const handler = sessionId
+          ? internalBackHandlersRef.current.get(sessionId)
+          : undefined
+
+        let handled = false
+
+        if (handler) {
+          handled = await handler.handle()
+        }
+
+        if (!handled) {
+          while (activeSessionHistoryRef.current.length > 0) {
+            const previousSessionId = activeSessionHistoryRef.current[
+              activeSessionHistoryRef.current.length - 1
+            ]
+            activeSessionHistoryRef.current = activeSessionHistoryRef.current.slice(0, -1)
+            setActiveSessionHistoryVersion((version) => version + 1)
+
+            if (sessions.some((session) => session.id === previousSessionId)) {
+              setActiveSessionWithoutHistory(previousSessionId)
+              handled = true
+              break
+            }
+          }
+        }
+
+        if (!handled) {
+          window.history.back()
+          return
+        }
+
+        window.setTimeout(() => {
+          const currentSessionId = activeSessionRef.current
+          if (
+            currentSessionId &&
+            (
+              internalBackAvailabilityRef.current.get(currentSessionId) ||
+              activeSessionHistoryRef.current.length > 0
+            )
+          ) {
+            armInternalBackSentinel()
+          }
+        }, 50)
+      })()
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [armInternalBackSentinel, sessions, setActiveSessionWithoutHistory])
 
   // 主题样式全部改为静态类 + dark: 前缀，避免 SSR/CSR 水合不一致
 
@@ -194,12 +398,12 @@ export function TerminalComponent({
       }
 
       const timer = setTimeout(() => {
-        setActiveSession(sessions[targetIndex].id)
+        setActiveSessionWithoutHistory(sessions[targetIndex].id)
       }, 0)
 
       return () => clearTimeout(timer)
     }
-  }, [active, sessions, activeSession])
+  }, [active, sessions, activeSession, setActiveSessionWithoutHistory])
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -238,7 +442,7 @@ export function TerminalComponent({
 
   const handleNewSessionClick = () => {
     const id = onNewSession()
-    if (id) setActiveSession(String(id))
+    if (id) setActiveSessionFromUser(String(id))
   }
 
   const cleanupSession = (sessionId: string) => {
@@ -286,7 +490,7 @@ export function TerminalComponent({
     if (activeSession === sessionId) {
       const nextActiveSessionId = getAdjacentSessionId(sessions, sessionId)
       if (nextActiveSessionId) {
-        setActiveSession(nextActiveSessionId)
+        setActiveSessionWithoutHistory(nextActiveSessionId)
       }
     }
 
@@ -317,7 +521,7 @@ export function TerminalComponent({
     if (!remainingSessions.some((session) => session.id === activeSession)) {
       const nextActiveSessionId = remainingSessions.find((session) => session.id === sessionId)?.id ?? remainingSessions[0]?.id
       if (nextActiveSessionId) {
-        setActiveSession(nextActiveSessionId)
+        setActiveSessionWithoutHistory(nextActiveSessionId)
       }
     }
 
@@ -342,7 +546,7 @@ export function TerminalComponent({
     }
 
     if (!pinnedSessions.some((session) => session.id === activeSession)) {
-      setActiveSession(pinnedSessions[0].id)
+      setActiveSessionWithoutHistory(pinnedSessions[0].id)
     }
 
     const removedSessionIds = sessions
@@ -479,7 +683,7 @@ export function TerminalComponent({
         <SessionTabBar
           sessions={sessions}
           activeId={activeSession}
-          onChangeActive={setActiveSession}
+          onChangeActive={setActiveSessionFromUser}
           onNewSession={handleNewSessionClick}
           onCloseSession={handleCloseSession}
           onDuplicateSession={onDuplicateSession}
@@ -532,6 +736,8 @@ export function TerminalComponent({
                     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
                     onToggleSettings={() => setIsSettingsOpen(true)}
                     onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}
+                    onInternalBackHandlerChange={handleInternalBackHandlerChange}
+                    onInternalBackAvailabilityChange={handleInternalBackAvailabilityChange}
                   />
                 </TabsContent>
               )

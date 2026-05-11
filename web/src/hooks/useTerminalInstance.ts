@@ -34,6 +34,26 @@ export function useTerminalInstance(
   const setTerminal = useTerminalStore(state => state.setTerminal)
   const updateMountState = useTerminalStore(state => state.updateMountState)
 
+  const attachTerminalToContainer = (
+    instance: TerminalInstanceState,
+    container: HTMLDivElement
+  ) => {
+    const terminalElement = instance.terminal.element
+
+    if (terminalElement) {
+      if (terminalElement.parentElement !== container) {
+        container.replaceChildren(terminalElement)
+      }
+    } else {
+      instance.terminal.open(container)
+    }
+
+    requestAnimationFrame(() => {
+      instance.fitAddon.fit()
+      instance.terminal.refresh(0, instance.terminal.rows - 1)
+    })
+  }
+
   const setWebglAddon = (addon: { dispose: () => void } | null) => {
     const instance = getTerminal(sessionId)
     if (!instance) return
@@ -106,9 +126,7 @@ export function useTerminalInstance(
       // 检查是否已经挂载到当前容器
       if (!existingInstance.isMounted || existingInstance.container !== containerRef.current) {
         try {
-          existingInstance.terminal.open(containerRef.current)
-          existingInstance.fitAddon.fit()
-          existingInstance.terminal.refresh(0, existingInstance.terminal.rows - 1)
+          attachTerminalToContainer(existingInstance, containerRef.current)
           updateMountState(sessionId, true, containerRef.current)
           setTerminalReady(true)
         } catch (error) {

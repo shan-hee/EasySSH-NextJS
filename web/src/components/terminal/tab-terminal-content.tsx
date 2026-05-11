@@ -37,6 +37,10 @@ type ConnectionLoaderMessageKey =
   | "connectionLoaderFailed"
   | "connectionLoaderClosed"
 
+type InternalBackHandler = {
+  handle: () => boolean | Promise<boolean>
+}
+
 const getConnectionLoaderMessageKey = (
   phase: TerminalConnectionPhase
 ): ConnectionLoaderMessageKey => {
@@ -80,6 +84,11 @@ interface TabTerminalContentProps {
   onToggleFullscreen: () => void
   onToggleSettings: () => void
   onStartConnectionFromQuick: (server: QuickServer) => void
+  onInternalBackHandlerChange?: (
+    sessionId: string,
+    handler: InternalBackHandler | null
+  ) => void
+  onInternalBackAvailabilityChange?: (sessionId: string, available: boolean) => void
 }
 
 export function TabTerminalContent({
@@ -97,9 +106,13 @@ export function TabTerminalContent({
   onToggleFullscreen,
   onToggleSettings,
   onStartConnectionFromQuick,
+  onInternalBackHandlerChange,
+  onInternalBackAvailabilityChange,
 }: TabTerminalContentProps) {
   // 浮动面板根容器
   const [floatingPanelRoot, setFloatingPanelRoot] = useState<HTMLDivElement | null>(null)
+  const [sftpInternalBackHandler, setSftpInternalBackHandler] =
+    useState<InternalBackHandler | null>(null)
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return true
@@ -183,6 +196,81 @@ export function TabTerminalContent({
       : pageTheme.background
   const hasBackgroundImage = settings.backgroundImage.trim().length > 0
   const enableTerminalWebgl = true
+
+  const canHandleInternalBack = isActive && (
+    isFullscreen ||
+    canUseFileManager ||
+    canUseAi ||
+    canUseMobileMonitor
+  )
+  const handleInternalBack = React.useCallback(async () => {
+    if (!isActive) {
+      return false
+    }
+
+    if (isFullscreen) {
+      onToggleFullscreen()
+      return true
+    }
+
+    if (canUseFileManager) {
+      if (sftpInternalBackHandler) {
+        const handled = await sftpInternalBackHandler.handle()
+        if (handled) {
+          return true
+        }
+      }
+
+      setTabState(session.id, { isFileManagerOpen: false })
+      return true
+    }
+
+    if (canUseAi) {
+      setTabState(session.id, { isAiInputOpen: false })
+      return true
+    }
+
+    if (canUseMobileMonitor) {
+      setTabState(session.id, { isMobileMonitorOpen: false })
+      return true
+    }
+
+    return false
+  }, [
+    canUseAi,
+    canUseFileManager,
+    canUseMobileMonitor,
+    isActive,
+    isFullscreen,
+    onToggleFullscreen,
+    session.id,
+    setTabState,
+    sftpInternalBackHandler,
+  ])
+
+  useEffect(() => {
+    onInternalBackHandlerChange?.(
+      session.id,
+      canHandleInternalBack ? { handle: handleInternalBack } : null
+    )
+
+    return () => {
+      onInternalBackHandlerChange?.(session.id, null)
+    }
+  }, [
+    canHandleInternalBack,
+    handleInternalBack,
+    onInternalBackHandlerChange,
+    session.id,
+  ])
+
+  useEffect(() => {
+    onInternalBackAvailabilityChange?.(session.id, canHandleInternalBack)
+
+    return () => {
+      onInternalBackAvailabilityChange?.(session.id, false)
+    }
+  }, [canHandleInternalBack, onInternalBackAvailabilityChange, session.id])
 
   return (
     <MonitorWebSocketProvider
@@ -401,6 +489,9 @@ export function TabTerminalContent({
             files={sftpSession.files}
             isLoading={sftpSession.isLoading}
             onNavigate={sftpSession.navigate}
+            onNavigateBack={sftpSession.goBack}
+            canNavigateBack={sftpSession.canGoBack}
+            onInternalBackHandlerChange={setSftpInternalBackHandler}
             onRefresh={sftpSession.refresh}
             onUpload={sftpSession.uploadFiles}
             onDownload={sftpSession.downloadFile}

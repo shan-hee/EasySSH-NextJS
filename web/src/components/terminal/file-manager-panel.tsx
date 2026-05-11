@@ -24,6 +24,11 @@ interface FileManagerPanelProps {
   sessionLabel: string
   isLoading?: boolean // 是否正在加载文件列表
   onNavigate: (path: string) => void
+  onNavigateBack?: () => void | Promise<void>
+  canNavigateBack?: boolean
+  onInternalBackHandlerChange?: (
+    handler: { handle: () => boolean | Promise<boolean> } | null
+  ) => void
   onUpload: (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
