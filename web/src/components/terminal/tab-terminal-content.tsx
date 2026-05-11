@@ -27,8 +27,6 @@ import type { TerminalSettings } from './terminal-settings-dialog'
 import { useTranslations } from "next-intl"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from './terminal-themes'
 
-// 工具栏固定高度常量 (py-1.5 + h-7 按钮 + border-b)
-const TOOLBAR_HEIGHT = 44 // px
 const DESKTOP_TERMINAL_LAYOUT_QUERY = '(min-width: 768px)'
 
 type ConnectionLoaderMessageKey =
@@ -392,7 +390,6 @@ export function TabTerminalContent({
             isOpen
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
             mountContainer={floatingPanelRoot || undefined}
-            anchorTop={TOOLBAR_HEIGHT}
             serverId={session.serverId ?? ''}
             serverName={session.serverName || ''}
             host={session.host || ''}
