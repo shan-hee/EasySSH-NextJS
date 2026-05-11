@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useLayoutEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import { useTranslations } from "next-intl"
+import { toast } from "@/components/ui/sonner"
 import { ConnectionLoader } from "./connection-loader"
 import { TerminalAuthChallengeDialog } from "./terminal-auth-challenge-dialog"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from "./terminal-themes"
@@ -30,11 +31,13 @@ import type { CompletionItem } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
 import type {
+  TerminalAuthMethod,
   TerminalConnectionPhase,
   TerminalConnectionError,
   TerminalAuthPrompt,
   TerminalAuthPromptResponder,
 } from "@/lib/websocket-terminal"
+import { serversApi } from "@/lib/api"
 
 type CompletionPlacement = "top" | "bottom"
 
@@ -47,6 +50,7 @@ interface WebTerminalProps {
   isActive: boolean
   shouldConnect: boolean
   onConnectionPhaseChange?: (phase: TerminalConnectionPhase) => void
+  onAuthCancelled?: () => void
   onCommand: (command: string) => void
   onResize?: (cols: number, rows: number) => void
   theme?: 'default' | 'dark' | 'light' | 'solarized' | 'dracula'
@@ -79,6 +83,7 @@ export function WebTerminal({
   isActive,
   shouldConnect,
   onConnectionPhaseChange,
+  onAuthCancelled,
   onCommand,
   onResize,
   theme = 'default',
@@ -149,6 +154,10 @@ export function WebTerminal({
   const [authChallenge, setAuthChallenge] = useState<{
     prompt: TerminalAuthPrompt
     respond: TerminalAuthPromptResponder
+  } | null>(null)
+  const successfulCredentialRef = useRef<{
+    authMethod: TerminalAuthMethod
+    secret: string
   } | null>(null)
 
   const formatTerminalErrorMessage = useCallback((error: TerminalConnectionError) => {
@@ -229,6 +238,7 @@ export function WebTerminal({
     },
     onConnectionEnd: () => {
       setAuthChallenge(null)
+      successfulCredentialRef.current = null
     },
     onConnectionPhase: onConnectionPhaseChange,
     formatErrorMessage: formatTerminalErrorMessage,
@@ -855,15 +865,64 @@ export function WebTerminal({
     }
   }, [fitAddon])
 
-  const handleAuthChallengeSubmit = useCallback((answers: string[]) => {
-    authChallenge?.respond(answers, false)
+  const handleAuthChallengeSubmit = useCallback((answers: string[], authMethod?: TerminalAuthMethod) => {
+    if (
+      authChallenge?.prompt.kind === "credential_retry" &&
+      authMethod &&
+      answers[0]
+    ) {
+      successfulCredentialRef.current = {
+        authMethod,
+        secret: answers[0],
+      }
+    }
+
+    authChallenge?.respond(answers, false, authMethod)
     setAuthChallenge(null)
   }, [authChallenge])
 
   const handleAuthChallengeCancel = useCallback(() => {
     authChallenge?.respond([], true)
     setAuthChallenge(null)
-  }, [authChallenge])
+    onAuthCancelled?.()
+  }, [authChallenge, onAuthCancelled])
+
+  useEffect(() => {
+    if (connectionPhase !== "ready" || !serverId || !successfulCredentialRef.current) {
+      return
+    }
+
+    const credential = successfulCredentialRef.current
+    successfulCredentialRef.current = null
+
+    toast(tTerminal("authRetrySavePrompt"), {
+      description: tTerminal("authRetrySaveDescription", { server: serverName }),
+      action: {
+        label: tTerminal("authRetrySaveAction"),
+        onClick: () => {
+          const payload =
+            credential.authMethod === "key"
+              ? {
+                  auth_method: "key" as const,
+                  private_key: credential.secret,
+                  verified_connection_credential: true,
+                }
+              : {
+                  auth_method: "password" as const,
+                  password: credential.secret,
+                  verified_connection_credential: true,
+                }
+
+          void serversApi.update(serverId, payload).then(() => {
+            toast.success(tTerminal("authRetrySaveSuccess"))
+          }).catch((error) => {
+            console.error("[WebTerminal] 保存补充凭据失败:", error)
+            toast.error(tTerminal("authRetrySaveFailed"))
+          })
+        },
+      },
+    })
+  }, [connectionPhase, serverId, serverName, tTerminal])
 
   // 暴露方法给父组件
   useEffect(() => {

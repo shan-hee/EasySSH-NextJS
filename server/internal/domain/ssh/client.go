@@ -23,6 +23,9 @@ type Client struct {
 
 type clientOptions struct {
 	keyboardInteractive ssh.KeyboardInteractiveChallenge
+	authMethod          *server.AuthMethod
+	password            string
+	privateKey          string
 }
 
 // ClientOption configures optional SSH client behavior.
@@ -32,6 +35,24 @@ type ClientOption func(*clientOptions)
 func WithKeyboardInteractive(challenge ssh.KeyboardInteractiveChallenge) ClientOption {
 	return func(opts *clientOptions) {
 		opts.keyboardInteractive = challenge
+	}
+}
+
+// WithPasswordAuth uses a plaintext password for this SSH connection only.
+func WithPasswordAuth(password string) ClientOption {
+	return func(opts *clientOptions) {
+		method := server.AuthMethodPassword
+		opts.authMethod = &method
+		opts.password = password
+	}
+}
+
+// WithPrivateKeyAuth uses a plaintext private key for this SSH connection only.
+func WithPrivateKeyAuth(privateKey string) ClientOption {
+	return func(opts *clientOptions) {
+		method := server.AuthMethodKey
+		opts.authMethod = &method
+		opts.privateKey = privateKey
 	}
 }
 
@@ -48,16 +69,29 @@ func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback 
 	// 解密认证信息
 	var authMethods []ssh.AuthMethod
 
-	if srv.AuthMethod == server.AuthMethodPassword {
-		password, err := encryptor.Decrypt(srv.Password)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt password: %w", err)
+	authMethod := srv.AuthMethod
+	if options.authMethod != nil {
+		authMethod = *options.authMethod
+	}
+
+	if authMethod == server.AuthMethodPassword {
+		password := options.password
+		if password == "" {
+			var err error
+			password, err = encryptor.Decrypt(srv.Password)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt password: %w", err)
+			}
 		}
 		authMethods = append(authMethods, ssh.Password(password))
 	} else {
-		privateKey, err := encryptor.Decrypt(srv.PrivateKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt private key: %w", err)
+		privateKey := options.privateKey
+		if privateKey == "" {
+			var err error
+			privateKey, err = encryptor.Decrypt(srv.PrivateKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt private key: %w", err)
+			}
 		}
 
 		signer, err := ssh.ParsePrivateKey([]byte(privateKey))

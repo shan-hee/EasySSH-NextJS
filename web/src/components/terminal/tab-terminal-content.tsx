@@ -81,6 +81,7 @@ interface TabTerminalContentProps {
   serversLoading?: boolean
   onCommand: (command: string) => void
   onConnectionPhaseChange: (phase: TerminalConnectionPhase) => void
+  onAuthCancelled: () => void
   onToggleFullscreen: () => void
   onToggleSettings: () => void
   onStartConnectionFromQuick: (server: QuickServer) => void
@@ -103,6 +104,7 @@ export function TabTerminalContent({
   serversLoading,
   onCommand,
   onConnectionPhaseChange,
+  onAuthCancelled,
   onToggleFullscreen,
   onToggleSettings,
   onStartConnectionFromQuick,
@@ -435,6 +437,7 @@ export function TabTerminalContent({
                   isActive={isActive}
                   shouldConnect={session.shouldConnect}
                   onConnectionPhaseChange={onConnectionPhaseChange}
+                  onAuthCancelled={onAuthCancelled}
                   onCommand={onCommand}
                   theme={settings.theme}
                   fontSize={settings.fontSize}

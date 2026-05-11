@@ -58,16 +58,17 @@ type CreateServerRequest struct {
 
 // UpdateServerRequest 更新服务器请求
 type UpdateServerRequest struct {
-	Name        *string     `json:"name"`
-	Host        *string     `json:"host"`
-	Port        *int        `json:"port"`
-	Username    *string     `json:"username"`
-	AuthMethod  *AuthMethod `json:"auth_method"`
-	Password    *string     `json:"password"`
-	PrivateKey  *string     `json:"private_key"`
-	Group       *string     `json:"group"`
-	Tags        *[]string   `json:"tags"`
-	Description *string     `json:"description"`
+	Name                         *string     `json:"name"`
+	Host                         *string     `json:"host"`
+	Port                         *int        `json:"port"`
+	Username                     *string     `json:"username"`
+	AuthMethod                   *AuthMethod `json:"auth_method"`
+	Password                     *string     `json:"password"`
+	PrivateKey                   *string     `json:"private_key"`
+	Group                        *string     `json:"group"`
+	Tags                         *[]string   `json:"tags"`
+	Description                  *string     `json:"description"`
+	VerifiedConnectionCredential bool        `json:"verified_connection_credential"`
 }
 
 // ServerStatistics 服务器统计
@@ -171,6 +172,15 @@ func (s *serverService) Update(ctx context.Context, userID, serverID uuid.UUID, 
 		return nil, err
 	}
 
+	endpointConfigChanged :=
+		(req.Host != nil && *req.Host != server.Host) ||
+			(req.Port != nil && *req.Port != server.Port) ||
+			(req.Username != nil && *req.Username != server.Username)
+	authConfigChanged :=
+		(req.AuthMethod != nil && *req.AuthMethod != server.AuthMethod) ||
+			req.Password != nil ||
+			req.PrivateKey != nil
+
 	// 更新字段
 	if req.Name != nil {
 		server.Name = *req.Name
@@ -225,6 +235,10 @@ func (s *serverService) Update(ctx context.Context, userID, serverID uuid.UUID, 
 
 	// 每次编辑提交时都更新地理位置
 	s.updateServerLocation(ctx, server)
+
+	if endpointConfigChanged || (authConfigChanged && !req.VerifiedConnectionCredential) {
+		server.Status = StatusOffline
+	}
 
 	// 保存更新
 	if err := s.repo.Update(ctx, server); err != nil {

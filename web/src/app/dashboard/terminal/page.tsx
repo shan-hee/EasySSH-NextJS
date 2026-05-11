@@ -404,6 +404,22 @@ function TerminalPageContent() {
     }
   }, [setSessions, updateSessionActivity])
 
+  const handleAuthCancelled = useCallback((sessionId: string) => {
+    const terminalStore = useTerminalStore.getState()
+    terminalStore.destroySession(sessionId)
+
+    const now = Date.now()
+    setSessions((prev) => prev.map((session) => {
+      if (session.id !== sessionId) return session
+
+      return {
+        ...createQuickSession(quickConnectName, sessionId),
+        lastActivity: now,
+      }
+    }))
+    updateSessionActivity(sessionId, now)
+  }, [quickConnectName, setSessions, updateSessionActivity])
+
   const handleReorder = (newOrderIds: string[]) => {
     const map = new Map(sessions.map((session) => [session.id, session]))
     const newList = newOrderIds.map((id) => map.get(id)!).filter(Boolean)
@@ -457,6 +473,7 @@ function TerminalPageContent() {
         onTogglePin={handleTogglePin}
         onReorderSessions={handleReorder}
         onStartConnectionFromQuick={handleStartConnectionFromQuick}
+        onAuthCancelled={handleAuthCancelled}
         servers={servers}
         serversLoading={loading}
         externalActiveSessionId={activeSessionId}

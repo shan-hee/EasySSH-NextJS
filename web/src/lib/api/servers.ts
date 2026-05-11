@@ -70,6 +70,7 @@ export interface UpdateServerRequest {
   group?: string
   tags?: string[]
   description?: string
+  verified_connection_credential?: boolean
 }
 
 /**

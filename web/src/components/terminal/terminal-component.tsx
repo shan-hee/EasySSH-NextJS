@@ -79,6 +79,7 @@ interface TerminalComponentProps {
   onReorderSessions: (newOrderIds: string[]) => void
   // 快速连接：在当前页签中选择服务器以开始终端
   onStartConnectionFromQuick: (sessionId: string, server: QuickServer) => void
+  onAuthCancelled?: (sessionId: string) => void
   servers: QuickServer[]
   serversLoading?: boolean
   // 外部控制激活的会话 ID
@@ -98,6 +99,7 @@ export function TerminalComponent({
   onTogglePin,
   onReorderSessions,
   onStartConnectionFromQuick,
+  onAuthCancelled,
   servers,
   serversLoading,
   externalActiveSessionId,
@@ -733,6 +735,7 @@ export function TerminalComponent({
                     serversLoading={serversLoading}
                     onCommand={(command) => handleCommand(session.id, command)}
                     onConnectionPhaseChange={(phase) => onConnectionPhaseChange?.(session.id, phase)}
+                    onAuthCancelled={() => onAuthCancelled?.(session.id)}
                     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
                     onToggleSettings={() => setIsSettingsOpen(true)}
                     onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}

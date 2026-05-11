@@ -129,6 +129,7 @@ const (
 	terminalSSHLatencyProbeInterval = 15 * time.Second
 	terminalSSHAuthChallengeTimeout = 2 * time.Minute
 	terminalSSHInitTimeout          = 5 * time.Minute
+	terminalSSHAuthRetryMaxAttempts = 3
 )
 
 // InputMessage 输入消息
@@ -156,17 +157,23 @@ type AuthPromptItem struct {
 
 // AuthPromptMessage SSH keyboard-interactive 验证提示
 type AuthPromptMessage struct {
-	RequestID   string           `json:"request_id"`
-	Name        string           `json:"name,omitempty"`
-	Instruction string           `json:"instruction,omitempty"`
-	Prompts     []AuthPromptItem `json:"prompts"`
+	RequestID         string            `json:"request_id"`
+	Kind              string            `json:"kind,omitempty"`
+	Name              string            `json:"name,omitempty"`
+	Instruction       string            `json:"instruction,omitempty"`
+	Prompts           []AuthPromptItem  `json:"prompts"`
+	AuthMethod        server.AuthMethod `json:"auth_method,omitempty"`
+	Attempt           int               `json:"attempt,omitempty"`
+	MaxAttempts       int               `json:"max_attempts,omitempty"`
+	AttemptsRemaining int               `json:"attempts_remaining,omitempty"`
 }
 
 // AuthResponseMessage SSH keyboard-interactive 验证响应
 type AuthResponseMessage struct {
-	RequestID string   `json:"request_id"`
-	Answers   []string `json:"answers"`
-	Cancelled bool     `json:"cancelled,omitempty"`
+	RequestID  string            `json:"request_id"`
+	Answers    []string          `json:"answers"`
+	Cancelled  bool              `json:"cancelled,omitempty"`
+	AuthMethod server.AuthMethod `json:"auth_method,omitempty"`
 }
 
 // OutputMessage 输出消息
@@ -196,6 +203,11 @@ type CompletionDataResponse struct {
 // CompletionUpdateMessage 补全更新消息（增量更新）
 type CompletionUpdateMessage struct {
 	NewCommand string `json:"newCommand"`
+}
+
+type terminalCredentialRetry struct {
+	AuthMethod server.AuthMethod
+	Secret     string
 }
 
 type completionBroadcastKey struct {
@@ -229,6 +241,7 @@ func newTerminalKeyboardInteractiveChallenge(conn *websocket.Conn, writeJSON fun
 
 		payload, _ := json.Marshal(AuthPromptMessage{
 			RequestID:   requestID,
+			Kind:        "keyboard_interactive",
 			Name:        name,
 			Instruction: instruction,
 			Prompts:     prompts,
@@ -280,6 +293,117 @@ func newTerminalKeyboardInteractiveChallenge(conn *websocket.Conn, writeJSON fun
 			return answers, nil
 		}
 	}
+}
+
+func isTerminalSSHAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	message := strings.ToLower(err.Error())
+	authMarkers := []string{
+		"unable to authenticate",
+		"permission denied",
+		"authentication failed",
+		"no supported methods remain",
+		"attempted methods",
+		"failed to decrypt password",
+		"failed to decrypt private key",
+		"failed to parse private key",
+	}
+	for _, marker := range authMarkers {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func readTerminalAuthResponse(conn *websocket.Conn, requestID string) (AuthResponseMessage, error) {
+	defer func() {
+		_ = conn.SetReadDeadline(time.Time{})
+	}()
+
+	for {
+		if err := conn.SetReadDeadline(time.Now().Add(terminalSSHAuthChallengeTimeout)); err != nil {
+			return AuthResponseMessage{}, fmt.Errorf("failed to set authentication response timeout: %w", err)
+		}
+
+		messageType, message, err := conn.ReadMessage()
+		if err != nil {
+			return AuthResponseMessage{}, fmt.Errorf("failed to read authentication response: %w", err)
+		}
+		if messageType != websocket.TextMessage {
+			continue
+		}
+
+		var msg Message
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("Error parsing authentication response message: %v", err)
+			continue
+		}
+		if msg.Type != "auth_response" {
+			continue
+		}
+
+		var response AuthResponseMessage
+		if err := json.Unmarshal(msg.Data, &response); err != nil {
+			log.Printf("Error parsing authentication response payload: %v", err)
+			continue
+		}
+		if response.RequestID != requestID {
+			continue
+		}
+
+		return response, nil
+	}
+}
+
+func newTerminalCredentialRetryPrompt(conn *websocket.Conn, writeJSON func(interface{}) error, srv *server.Server, attempt, maxAttempts int) (*terminalCredentialRetry, error) {
+	requestID := uuid.NewString()
+	authMethod := srv.AuthMethod
+	promptText := "Password"
+	if authMethod == server.AuthMethodKey {
+		promptText = "Private key"
+	}
+
+	payload, _ := json.Marshal(AuthPromptMessage{
+		RequestID:         requestID,
+		Kind:              "credential_retry",
+		Prompts:           []AuthPromptItem{{Text: promptText, Echo: false}},
+		AuthMethod:        authMethod,
+		Attempt:           attempt,
+		MaxAttempts:       maxAttempts,
+		AttemptsRemaining: maxAttempts - attempt,
+	})
+	if err := writeJSON(Message{Type: "auth_prompt", Data: payload}); err != nil {
+		return nil, fmt.Errorf("failed to send credential retry prompt: %w", err)
+	}
+
+	response, err := readTerminalAuthResponse(conn, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if response.Cancelled {
+		return nil, fmt.Errorf("authentication cancelled by user")
+	}
+
+	authMethod = response.AuthMethod
+	if authMethod == "" {
+		authMethod = srv.AuthMethod
+	}
+	if authMethod != server.AuthMethodPassword && authMethod != server.AuthMethodKey {
+		return nil, fmt.Errorf("unsupported authentication method: %s", authMethod)
+	}
+	if len(response.Answers) == 0 || response.Answers[0] == "" {
+		return nil, fmt.Errorf("authentication credential is required")
+	}
+
+	return &terminalCredentialRetry{
+		AuthMethod: authMethod,
+		Secret:     response.Answers[0],
+	}, nil
 }
 
 // HandleSSH 处理 SSH WebSocket 连接
@@ -413,20 +537,62 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			return
 		}
 
-		// 创建 SSH 客户端（使用主机密钥验证）
-		client, err = sshDomain.NewClient(
-			srv,
-			h.encryptor,
-			h.hostKeyCallback,
-			sshDomain.WithKeyboardInteractive(newTerminalKeyboardInteractiveChallenge(wsConn, safeWriteJSON)),
-		)
-		if err != nil {
-			sendResult(initResult{err: fmt.Errorf("client_creation_failed: %w", err)})
-			return
+		keyboardInteractive := newTerminalKeyboardInteractiveChallenge(wsConn, safeWriteJSON)
+		connectWithCredential := func(credential *terminalCredentialRetry) (*sshDomain.Client, error) {
+			opts := []sshDomain.ClientOption{
+				sshDomain.WithKeyboardInteractive(keyboardInteractive),
+			}
+			if credential != nil {
+				if credential.AuthMethod == server.AuthMethodKey {
+					opts = append(opts, sshDomain.WithPrivateKeyAuth(credential.Secret))
+				} else {
+					opts = append(opts, sshDomain.WithPasswordAuth(credential.Secret))
+				}
+			}
+
+			nextClient, createErr := sshDomain.NewClient(
+				srv,
+				h.encryptor,
+				h.hostKeyCallback,
+				opts...,
+			)
+			if createErr != nil {
+				return nil, fmt.Errorf("client_creation_failed: %w", createErr)
+			}
+
+			if connectErr := nextClient.ConnectContext(initCtx, srv.Host, srv.Port); connectErr != nil {
+				_ = nextClient.Close()
+				return nil, fmt.Errorf("connection_failed: %w", connectErr)
+			}
+
+			return nextClient, nil
 		}
 
-		// 连接到服务器
-		if err := client.ConnectContext(initCtx, srv.Host, srv.Port); err != nil {
+		client, err = connectWithCredential(nil)
+		if err != nil && isTerminalSSHAuthError(err) {
+			for attempt := 1; attempt <= terminalSSHAuthRetryMaxAttempts; attempt++ {
+				credential, promptErr := newTerminalCredentialRetryPrompt(
+					wsConn,
+					safeWriteJSON,
+					srv,
+					attempt,
+					terminalSSHAuthRetryMaxAttempts,
+				)
+				if promptErr != nil {
+					sendResult(initResult{err: fmt.Errorf("connection_failed: %w", promptErr)})
+					return
+				}
+
+				client, err = connectWithCredential(credential)
+				if err == nil {
+					break
+				}
+				if !isTerminalSSHAuthError(err) {
+					break
+				}
+			}
+		}
+		if err != nil {
 			// 异步更新服务器状态为离线
 			go func() {
 				srv.UpdateStatus(server.StatusOffline)
@@ -434,7 +600,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 					log.Printf("Failed to update server status to offline: %v", updateErr)
 				}
 			}()
-			sendResult(initResult{err: fmt.Errorf("connection_failed: %w", err)})
+			sendResult(initResult{err: err})
 			return
 		}
 

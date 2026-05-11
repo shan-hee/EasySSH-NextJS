@@ -50,14 +50,25 @@ export interface TerminalAuthPromptItem {
   echo: boolean
 }
 
+export type TerminalAuthMethod = "password" | "key"
+
 export interface TerminalAuthPrompt {
   request_id: string
+  kind?: "keyboard_interactive" | "credential_retry" | string
   name?: string
   instruction?: string
   prompts: TerminalAuthPromptItem[]
+  auth_method?: TerminalAuthMethod
+  attempt?: number
+  max_attempts?: number
+  attempts_remaining?: number
 }
 
-export type TerminalAuthPromptResponder = (answers: string[], cancelled?: boolean) => void
+export type TerminalAuthPromptResponder = (
+  answers: string[],
+  cancelled?: boolean,
+  authMethod?: TerminalAuthMethod
+) => void
 
 export interface TerminalLatencyData {
   terminalWsLatencyMs: number
@@ -430,7 +441,12 @@ export class TerminalWebSocket {
   /**
    * 响应 SSH keyboard-interactive 认证提示
    */
-  sendAuthResponse(requestId: string, answers: string[], cancelled: boolean = false): void {
+  sendAuthResponse(
+    requestId: string,
+    answers: string[],
+    cancelled: boolean = false,
+    authMethod?: TerminalAuthMethod
+  ): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn("[TerminalWS] WebSocket 未连接，无法发送认证响应")
       return
@@ -449,6 +465,7 @@ export class TerminalWebSocket {
           request_id: requestId,
           answers,
           cancelled,
+          auth_method: authMethod,
         },
       }
       this.ws.send(JSON.stringify(message))
@@ -561,8 +578,8 @@ export class TerminalWebSocket {
         if (message.data && typeof message.data === "object") {
           this.setPhase("authenticating")
           const prompt = message.data as TerminalAuthPrompt
-          const respond: TerminalAuthPromptResponder = (answers, cancelled = false) => {
-            this.sendAuthResponse(prompt.request_id, answers, cancelled)
+          const respond: TerminalAuthPromptResponder = (answers, cancelled = false, authMethod) => {
+            this.sendAuthResponse(prompt.request_id, answers, cancelled, authMethod)
           }
 
           if (this.onAuthPrompt) {

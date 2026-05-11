@@ -9,12 +9,13 @@ import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { TerminalAuthPrompt } from "@/lib/websocket-terminal"
+import { Textarea } from "@/components/ui/textarea"
+import type { TerminalAuthMethod, TerminalAuthPrompt } from "@/lib/websocket-terminal"
 
 interface TerminalAuthChallengeDialogProps {
   prompt: TerminalAuthPrompt | null
   serverName: string
-  onSubmit: (answers: string[]) => void
+  onSubmit: (answers: string[], authMethod?: TerminalAuthMethod) => void
   onCancel: () => void
 }
 
@@ -45,20 +46,30 @@ export function TerminalAuthChallengeDialog({
 }: TerminalAuthChallengeDialogProps) {
   const tTerminal = useTranslations("terminal")
   const [answers, setAnswers] = useState<string[]>([])
+  const [authMethod, setAuthMethod] = useState<TerminalAuthMethod>("password")
   const firstInputRef = useRef<HTMLInputElement | null>(null)
+  const firstTextAreaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const prompts = useMemo(() => prompt?.prompts ?? [], [prompt])
+  const isCredentialRetry = prompt?.kind === "credential_retry"
 
   useEffect(() => {
     if (!prompt) {
       setAnswers([])
+      setAuthMethod("password")
       return
     }
 
     setAnswers(new Array(prompt.prompts.length).fill(""))
+    setAuthMethod(prompt.auth_method === "key" ? "key" : "password")
     const timer = window.setTimeout(() => {
-      firstInputRef.current?.focus()
-      firstInputRef.current?.select()
+      if (prompt.auth_method === "key") {
+        firstTextAreaRef.current?.focus()
+        firstTextAreaRef.current?.select()
+      } else {
+        firstInputRef.current?.focus()
+        firstInputRef.current?.select()
+      }
     }, 0)
 
     return () => window.clearTimeout(timer)
@@ -84,7 +95,7 @@ export function TerminalAuthChallengeDialog({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    onSubmit(answers)
+    onSubmit(answers, isCredentialRetry ? authMethod : undefined)
   }
 
   const updateAnswer = (index: number, value: string) => {
@@ -93,6 +104,23 @@ export function TerminalAuthChallengeDialog({
       next[index] = value
       return next
     })
+  }
+
+  const switchAuthMethod = (nextAuthMethod: TerminalAuthMethod) => {
+    setAuthMethod(nextAuthMethod)
+    setAnswers((prev) => {
+      const next = [...prev]
+      next[0] = ""
+      return next
+    })
+
+    window.setTimeout(() => {
+      if (nextAuthMethod === "key") {
+        firstTextAreaRef.current?.focus()
+      } else {
+        firstInputRef.current?.focus()
+      }
+    }, 0)
   }
 
   return createPortal(
@@ -107,10 +135,14 @@ export function TerminalAuthChallengeDialog({
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
-              {tTerminal("authChallengeTitle")}
+              {isCredentialRetry
+                ? tTerminal("authRetryTitle")
+                : tTerminal("authChallengeTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              {tTerminal("authChallengeServer", { server: serverName })}
+              {isCredentialRetry
+                ? tTerminal("authRetryServer", { server: serverName })
+                : tTerminal("authChallengeServer", { server: serverName })}
             </p>
           </div>
         </div>
@@ -126,8 +158,68 @@ export function TerminalAuthChallengeDialog({
           </div>
         )}
 
+        {isCredentialRetry && (
+          <div className="mt-4 grid grid-cols-2 rounded-md border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-900">
+            <Button
+              type="button"
+              variant={authMethod === "password" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8"
+              onClick={() => switchAuthMethod("password")}
+            >
+              {tTerminal("authRetryPassword")}
+            </Button>
+            <Button
+              type="button"
+              variant={authMethod === "key" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8"
+              onClick={() => switchAuthMethod("key")}
+            >
+              {tTerminal("authRetryPrivateKey")}
+            </Button>
+          </div>
+        )}
+
         <div className="mt-4 space-y-3">
-          {prompts.map((item, index) => {
+          {isCredentialRetry ? (
+            <div className="space-y-2">
+              <Label
+                htmlFor={`terminal-auth-${prompt.request_id}-credential`}
+                className="text-zinc-800 dark:text-zinc-200"
+              >
+                {authMethod === "key"
+                  ? tTerminal("authRetryPrivateKeyLabel")
+                  : tTerminal("authRetryPasswordLabel")}
+              </Label>
+              {authMethod === "key" ? (
+                <Textarea
+                  ref={firstTextAreaRef}
+                  id={`terminal-auth-${prompt.request_id}-credential`}
+                  value={answers[0] ?? ""}
+                  onChange={(event) => updateAnswer(0, event.target.value)}
+                  placeholder={tTerminal("authRetryPrivateKeyPlaceholder")}
+                  rows={8}
+                  required
+                  className="font-mono text-sm"
+                />
+              ) : (
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <Input
+                    ref={firstInputRef}
+                    id={`terminal-auth-${prompt.request_id}-credential`}
+                    type="password"
+                    value={answers[0] ?? ""}
+                    onChange={(event) => updateAnswer(0, event.target.value)}
+                    autoComplete="current-password"
+                    required
+                    className="pl-10"
+                  />
+                </div>
+              )}
+            </div>
+          ) : prompts.map((item, index) => {
             const inputId = `terminal-auth-${prompt.request_id}-${index}`
 
             return (
@@ -157,7 +249,9 @@ export function TerminalAuthChallengeDialog({
             {tTerminal("authChallengeCancel")}
           </Button>
           <Button type="submit">
-            {tTerminal("authChallengeSubmit")}
+            {isCredentialRetry
+              ? tTerminal("authRetrySubmit")
+              : tTerminal("authChallengeSubmit")}
           </Button>
         </div>
       </form>
