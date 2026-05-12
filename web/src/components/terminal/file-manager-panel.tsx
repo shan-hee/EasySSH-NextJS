@@ -9,6 +9,8 @@ import type { TransferTask } from "@/hooks/useFileTransfer"
 import type { SftpFileItem } from "@/lib/sftp-file-utils"
 import type { BatchDeleteResult } from "@/hooks/useSftpSession"
 
+const PANEL_ANIMATION_MS = 300
+
 interface FileManagerPanelProps {
   isOpen: boolean
   onClose: () => void
@@ -58,7 +60,7 @@ export function FileManagerPanel({
   anchorTop,
   transferTasks,
   onClearCompletedTransfers,
-   onCancelTransfer,
+  onCancelTransfer,
   ...sftpProps
 }: FileManagerPanelProps) {
   const [width, setWidth] = useState(() => {
@@ -73,6 +75,19 @@ export function FileManagerPanel({
   const resizeStartWidth = useRef(0)
   const internalContainer = mountContainer || null
   const topOffset = anchorTop ?? 0
+  const [isPanelVisible, setIsPanelVisible] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      const frame = window.requestAnimationFrame(() => {
+        setIsPanelVisible(true)
+      })
+
+      return () => window.cancelAnimationFrame(frame)
+    }
+
+    setIsPanelVisible(false)
+  }, [isOpen])
 
   // 保存宽度到 localStorage
   useEffect(() => {
@@ -153,68 +168,76 @@ export function FileManagerPanel({
         className={cn(
           // 如果挂载到内部容器，则使用 absolute 并且位于工具栏下方
           internalContainer
-            ? "absolute right-0 z-[200] flex transition-transform duration-300 ease-out pointer-events-auto"
-            : "fixed top-0 right-0 h-full z-[999] flex transition-transform duration-300 ease-out",
-          isOpen ? "translate-x-0" : "translate-x-full",
+            ? "absolute right-0 z-[200] flex overflow-hidden transition-all duration-300 ease-out"
+            : "fixed top-0 right-0 h-full z-[999] flex overflow-hidden transition-all duration-300 ease-out",
         )}
         style={{
-          width: `${width}px`,
+          width: isPanelVisible ? `${width}px` : 0,
           top: internalContainer ? `${topOffset}px` : 0,
           height: internalContainer ? `calc(100% - ${topOffset}px)` : '100%',
+          opacity: isPanelVisible ? 1 : 0,
+          transform: isPanelVisible ? 'translateX(0)' : 'translateX(1rem)',
+          pointerEvents: isPanelVisible ? 'auto' : 'none',
+          willChange: isOpen ? 'width, opacity, transform' : 'auto',
         }}
       >
-        {/* 调整大小手柄 - 仅桌面端，左侧圆角 */}
-        {(!isMobile || internalContainer) && (
-          <div
-            className={cn(
-              "w-1 cursor-col-resize group hover:bg-blue-500/50 transition-colors relative flex items-center justify-center bg-transparent rounded-l-xl",
-              isResizing && "bg-blue-500/50"
-            )}
-            onMouseDown={handleResizeStart}
-          >
+        <div
+          className="flex h-full flex-shrink-0"
+          style={{ width: `${width}px` }}
+        >
+          {/* 调整大小手柄 - 仅桌面端，左侧圆角 */}
+          {(!isMobile || internalContainer) && (
             <div
               className={cn(
-                "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-300 dark:bg-zinc-700 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity",
-                isResizing && "opacity-100"
+                "w-1 cursor-col-resize group hover:bg-blue-500/50 transition-colors relative flex items-center justify-center bg-transparent rounded-l-xl",
+                isResizing && "bg-blue-500/50"
               )}
+              onMouseDown={handleResizeStart}
             >
-              <GripVertical className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
-            </div>
-          </div>
-        )}
-
-        {/* 主面板内容 */}
-        <div className={cn(
-          "flex-1 flex flex-col bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl",
-          !isMobile && "rounded-l-xl" // 桌面端添加左侧圆角
-        )}>
-          {/* SFTP 管理器内容 - 直接显示，无顶部工具栏 */}
-          <div className="flex-1 overflow-hidden">
-            {sftpProps.isConnected ? (
-              <SftpManager
-                {...sftpProps}
-                isFullscreen={false}
-                pageContext="terminal"
-                onDisconnect={onClose}
-                transferTasks={transferTasks}
-                onClearCompletedTransfers={onClearCompletedTransfers}
-                onCancelTransfer={onCancelTransfer}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="h-16 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-4">
-                    <X className="h-8 w-8 text-zinc-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2 text-zinc-800 dark:text-zinc-200">
-                    未连接
-                  </h3>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                    等待连接到服务器...
-                  </p>
-                </div>
+              <div
+                className={cn(
+                  "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-300 dark:bg-zinc-700 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity",
+                  isResizing && "opacity-100"
+                )}
+              >
+                <GripVertical className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
               </div>
-            )}
+            </div>
+          )}
+
+          {/* 主面板内容 */}
+          <div className={cn(
+            "flex-1 flex flex-col bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl",
+            !isMobile && "rounded-l-xl" // 桌面端添加左侧圆角
+          )}>
+            {/* SFTP 管理器内容 - 直接显示，无顶部工具栏 */}
+            <div className="flex-1 overflow-hidden">
+              {sftpProps.isConnected ? (
+                <SftpManager
+                  {...sftpProps}
+                  isFullscreen={false}
+                  pageContext="terminal"
+                  onDisconnect={onClose}
+                  transferTasks={transferTasks}
+                  onClearCompletedTransfers={onClearCompletedTransfers}
+                  onCancelTransfer={onCancelTransfer}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="h-16 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-4">
+                      <X className="h-8 w-8 text-zinc-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2 text-zinc-800 dark:text-zinc-200">
+                      未连接
+                    </h3>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      等待连接到服务器...
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -227,3 +250,5 @@ export function FileManagerPanel({
   }
   return createPortal(panelContent, internalContainer)
 }
+
+export { PANEL_ANIMATION_MS as FILE_MANAGER_PANEL_ANIMATION_MS }

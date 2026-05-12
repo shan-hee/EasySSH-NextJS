@@ -16,7 +16,10 @@ import { MonitorPanel } from './monitor/MonitorPanel'
 import { WebTerminal } from './web-terminal'
 import { QuickConnect, type QuickServer } from './quick-connect'
 import { ConnectionLoader } from './connection-loader'
-import { FileManagerPanel } from './file-manager-panel'
+import {
+  FileManagerPanel,
+  FILE_MANAGER_PANEL_ANIMATION_MS,
+} from './file-manager-panel'
 import { AiAssistantPanel } from './ai-assistant-panel'
 import { DockerPopover } from './docker'
 import { useSftpSession } from '@/hooks/useSftpSession'
@@ -115,6 +118,7 @@ export function TabTerminalContent({
   const [floatingPanelRoot, setFloatingPanelRoot] = useState<HTMLDivElement | null>(null)
   const [sftpInternalBackHandler, setSftpInternalBackHandler] =
     useState<InternalBackHandler | null>(null)
+  const [shouldRenderFileManager, setShouldRenderFileManager] = useState(false)
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return true
@@ -152,6 +156,7 @@ export function TabTerminalContent({
   const hasReadyServer = session.type !== 'quick' && isTerminalReady && !!session.serverId
   const canUseHeavyPanels = isActive && hasReadyServer
   const canUseFileManager = canUseHeavyPanels && isFileManagerOpen
+  const shouldKeepFileManagerMounted = canUseHeavyPanels && shouldRenderFileManager
   const canUseAi = isActive && session.type !== 'quick' && !effectiveIsLoading && isAiInputOpen
   const shouldReserveInlineMonitor =
     isDesktopLayout &&
@@ -170,7 +175,7 @@ export function TabTerminalContent({
 
   // SFTP 会话管理：只在当前页签且文件管理器打开时加载目录，避免隐藏页签继续触发列表渲染/请求
   const sftpSession = useSftpSession(
-    canUseFileManager && session.serverId
+    shouldKeepFileManagerMounted && session.serverId
       ? session.serverId
       : '',
     '/root'
@@ -198,6 +203,19 @@ export function TabTerminalContent({
       : pageTheme.background
   const hasBackgroundImage = settings.backgroundImage.trim().length > 0
   const enableTerminalWebgl = true
+
+  useEffect(() => {
+    if (canUseFileManager) {
+      setShouldRenderFileManager(true)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setShouldRenderFileManager(false)
+    }, FILE_MANAGER_PANEL_ANIMATION_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [canUseFileManager])
 
   const canHandleInternalBack = isActive && (
     isFullscreen ||
@@ -476,9 +494,9 @@ export function TabTerminalContent({
         </div>
 
         {/* 文件管理器面板 - 渲染到 floatingPanelRootRef */}
-        {canUseFileManager && (
+        {shouldKeepFileManagerMounted && (
           <FileManagerPanel
-            isOpen
+            isOpen={canUseFileManager}
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
             mountContainer={floatingPanelRoot || undefined}
             serverId={session.serverId ?? ''}
