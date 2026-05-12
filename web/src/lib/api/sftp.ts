@@ -167,6 +167,32 @@ export interface TrashSettingsUpdate {
   auto_clean_enabled: boolean
 }
 
+export type UploadProgressStage = "http" | "sftp" | "stream"
+
+export interface UploadTaskStatus {
+  id: string
+  file_name: string
+  file_size: number
+  server_id?: string
+  remote_path?: string
+  status: "pending" | "uploading" | "completed" | "failed" | "cancelled"
+  stage?: UploadProgressStage
+  progress: number
+  loaded: number
+  total: number
+  speed_bps: number
+  message?: string
+  error?: string
+  created_at: string
+  started_at?: string
+  updated_at: string
+  ended_at?: string
+}
+
+export interface UploadTaskListResponse {
+  tasks: UploadTaskStatus[]
+}
+
 /**
  * SFTP API 服务
  */
@@ -177,6 +203,31 @@ export const sftpApi = {
   async createUploadTask(): Promise<{ task_id: string }> {
     return apiFetch<{ task_id: string }>(`/sftp/upload/task`, {
       method: "POST",
+    })
+  },
+
+  /**
+   * 获取上传任务列表（后端内存运行态）
+   */
+  async listUploadTasks(): Promise<UploadTaskListResponse> {
+    return apiFetch<UploadTaskListResponse>(`/sftp/upload/tasks`)
+  },
+
+  /**
+   * 获取上传任务详情（后端内存运行态）
+   */
+  async getUploadTask(taskId: string): Promise<UploadTaskStatus> {
+    return apiFetch<UploadTaskStatus>(`/sftp/upload/tasks/${encodeURIComponent(taskId)}`)
+  },
+
+  /**
+   * 取消上传任务
+   */
+  async cancelUploadTask(taskId: string): Promise<void> {
+    return apiFetch<void>(`/sftp/upload/tasks/${encodeURIComponent(taskId)}/cancel`, {
+      method: "POST",
+      retry: false,
+      timeout: 10000,
     })
   },
 
@@ -338,9 +389,9 @@ export const sftpApi = {
   },
 
   /**
-   * 上传文件
+   * 上传文件（新方案：浏览器 multipart 流直接转写到远端 SFTP）
    * @param onProgress 进度回调函数 (loaded: 已上传字节数, total: 总字节数)
-   * @param wsTaskId 可选的 WebSocket 任务 ID，用于接收 SFTP 阶段的进度
+   * @param wsTaskId 服务端上传任务 ID，用于接收流式上传进度和支持取消
    */
   async uploadFile(
     serverId: string,
@@ -420,17 +471,103 @@ export const sftpApi = {
       // 准备表单数据
       const formData = new FormData()
       formData.append("file", file)
-      formData.append("path", path)
 
-      // 构建 URL，如果提供了 wsTaskId 则添加查询参数
-      let url = `${apiUrl}/sftp/${serverId}/upload`
+      // 新上传链路要求先创建服务端任务，以 task_id 作为取消和进度订阅中心
+      let url = `${apiUrl}/sftp/${serverId}/upload/stream?path=${encodeURIComponent(path)}&size=${encodeURIComponent(file.size.toString())}`
       if (wsTaskId) {
-        url += `?ws_task_id=${encodeURIComponent(wsTaskId)}`
+        url += `&task_id=${encodeURIComponent(wsTaskId)}`
       }
 
       // 发送请求
       xhr.open("POST", url)
       // 附带 Bearer Token（与其他 API 一致）
+      const token = getCurrentAccessToken()
+      if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+      }
+      xhr.send(formData)
+    })
+  },
+
+  /**
+   * 旧版上传文件（保留兼容，不再由前端上传入口默认接入）
+   */
+  async uploadFileLegacy(
+    serverId: string,
+    path: string,
+    file: File,
+    onProgress?: (loaded: number, total: number) => void,
+    wsTaskId?: string,
+    onXhr?: (xhr: XMLHttpRequest) => void
+  ): Promise<FileInfo | null> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      const apiUrl = getApiUrl()
+
+      if (onXhr) {
+        onXhr(xhr)
+      }
+
+      if (onProgress) {
+        xhr.upload.onprogress = (event: ProgressEvent) => {
+          if (event.lengthComputable) {
+            onProgress(event.loaded, event.total)
+          }
+        }
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const raw = xhr.responseText
+            if (!raw) {
+              resolve(null)
+              return
+            }
+            const parsed: unknown = JSON.parse(raw)
+            if (parsed && typeof parsed === "object" && "data" in parsed) {
+              const { data } = parsed as { data?: FileInfo | null }
+              resolve(data ?? null)
+            } else {
+              resolve(null)
+            }
+          } catch {
+            resolve(null)
+          }
+        } else {
+          try {
+            const error: unknown = JSON.parse(xhr.responseText)
+            const message =
+              error && typeof error === "object" && "message" in error && typeof error.message === "string"
+                ? error.message
+                : "Upload failed"
+            reject(new Error(message))
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`))
+          }
+        }
+      }
+
+      xhr.onerror = () => {
+        reject(new Error("Network error during upload"))
+      }
+      xhr.onabort = () => {
+        reject(new Error("Upload aborted"))
+      }
+      xhr.ontimeout = () => {
+        reject(new Error("Upload timeout"))
+      }
+
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("path", path)
+
+      let url = `${apiUrl}/sftp/${serverId}/upload`
+      if (wsTaskId) {
+        url += `?ws_task_id=${encodeURIComponent(wsTaskId)}`
+      }
+
+      xhr.open("POST", url)
       const token = getCurrentAccessToken()
       if (token) {
         xhr.setRequestHeader("Authorization", `Bearer ${token}`)
@@ -550,14 +687,20 @@ export const sftpApi = {
         })
         const url = `${apiUrl}/sftp/${serverId}/download?ticket=${encodeURIComponent(ticket)}`
 
-        // 使用 <a> 标签触发下载，避免页面跳转
-        const a = document.createElement("a")
-        a.href = url
-        a.download = fileName || path.split("/").pop() || "download"
-        a.style.display = "none"
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
+        // 使用隐藏 iframe 触发下载，避免顶层页面导航导致终端/SFTP 面板卸载
+        const iframeName = `easyssh-download-single-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        const iframe = document.createElement("iframe")
+        iframe.name = iframeName
+        iframe.style.display = "none"
+        document.body.appendChild(iframe)
+        iframe.src = url
+
+        // 延迟清理，给浏览器留出完成下载握手的时间
+        window.setTimeout(() => {
+          if (iframe.parentNode) {
+            iframe.parentNode.removeChild(iframe)
+          }
+        }, 30_000)
       } catch (err) {
         console.error("[sftpApi.downloadFile] Failed to create download ticket:", err)
       }

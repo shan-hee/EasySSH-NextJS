@@ -1,6 +1,6 @@
 /**
  * SFTP 上传进度 WebSocket Hook
- * 用于实时跟踪 SFTP 上传的完整进度（HTTP + SFTP 阶段）
+ * 用于实时跟踪 SFTP 上传进度（新版为 stream 阶段，旧版兼容 HTTP + SFTP 阶段）
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -9,11 +9,11 @@ import { createAuthTicket } from '@/lib/auth-ticket';
 
 // 上传进度消息接口
 export interface UploadProgressMessage {
-  type: 'progress' | 'complete' | 'error';
+  type: 'started' | 'progress' | 'complete' | 'cancelled' | 'error';
   task_id: string;
   loaded?: number;
   total?: number;
-  stage?: 'http' | 'sftp';
+  stage?: 'http' | 'sftp' | 'stream';
   speed_bps?: number;
   message?: string;
 }
@@ -22,7 +22,7 @@ export interface UploadProgressMessage {
 interface UseSftpUploadWebSocketOptions {
   taskId: string;
   enabled?: boolean;
-  onProgress?: (loaded: number, total: number, stage: 'http' | 'sftp', speedBps: number) => void;
+  onProgress?: (loaded: number, total: number, stage: 'http' | 'sftp' | 'stream', speedBps: number) => void;
   onComplete?: () => void;
   onError?: (error: string) => void;
 }
@@ -124,6 +124,7 @@ export function useSftpUploadWebSocket({
           }
 
           switch (msg.type) {
+            case 'started':
             case 'progress':
               if (msg.loaded !== undefined && msg.total !== undefined && msg.stage && msg.speed_bps !== undefined) {
                 onProgress?.(msg.loaded, msg.total, msg.stage, msg.speed_bps);
@@ -133,6 +134,11 @@ export function useSftpUploadWebSocket({
             case 'complete':
               onComplete?.();
               // 上传完成后自动断开
+              disconnect();
+              break;
+
+            case 'cancelled':
+              onError?.(msg.message || 'Upload cancelled');
               disconnect();
               break;
 

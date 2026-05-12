@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { formatSpeed, formatRemainingTime, formatBytesString } from '@/lib/format-utils';
-import { sftpApi, type FileInfo, type TransferProgressMessage } from '@/lib/api/sftp';
+import { sftpApi, type FileInfo, type TransferProgressMessage, type UploadTaskStatus } from '@/lib/api/sftp';
 import { getWsUrl } from '@/lib/config';
 import { createAuthTicket } from '@/lib/auth-ticket';
+import { useAuthStore } from '@/stores/auth-store';
 
 /**
  * 传输任务接口
@@ -20,22 +21,92 @@ export interface TransferTask {
   error?: string;
   startTime?: number;
   bytesTransferred?: number;
-  stage?: 'http' | 'sftp'; // 当前传输阶段
+  stage?: 'http' | 'sftp' | 'stream'; // 当前传输阶段
   // 跨服务器传输专用字段
   sourceServer?: string;
   targetServer?: string;
   transferMethod?: 'rsync' | 'scp' | 'sftp'; // 直连传输方式
 }
 
+const mapUploadTaskStatus = (task: UploadTaskStatus): TransferTask => {
+  const stage = task.stage === 'http' || task.stage === 'sftp' || task.stage === 'stream'
+    ? task.stage
+    : undefined;
+  const startedAt = Date.parse(task.started_at || task.created_at || '');
+  const fileSizeBytes = task.total || task.file_size || 0;
+  const bytesTransferred = task.loaded || 0;
+  const speed = task.speed_bps > 0 ? formatSpeed(task.speed_bps) : undefined;
+  const timeRemaining =
+    task.status === 'uploading' && task.speed_bps > 0 && fileSizeBytes > bytesTransferred
+      ? formatRemainingTime((fileSizeBytes - bytesTransferred) / task.speed_bps)
+      : undefined;
+
+  return {
+    id: task.id,
+    fileName: task.file_name || task.remote_path?.split('/').pop() || 'upload',
+    fileSize: fileSizeBytes > 0 ? formatBytesString(fileSizeBytes) : '-',
+    fileSizeBytes,
+    progress: Math.round(task.progress || 0),
+    status: task.status,
+    type: 'upload',
+    speed,
+    timeRemaining,
+    error: task.error || task.message,
+    startTime: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    bytesTransferred,
+    stage,
+  };
+};
+
 /**
  * 文件传输Hook
  * 管理文件上传下载任务和进度
  */
 export function useFileTransfer() {
+  const accessToken = useAuthStore((state) => state.accessToken);
   const [tasks, setTasks] = useState<TransferTask[]>([]);
   const xhrRefs = useRef<Map<string, XMLHttpRequest>>(new Map());
   const wsRefs = useRef<Map<string, WebSocket>>(new Map());
   const cancelledBeforeStartRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void sftpApi.listUploadTasks()
+      .then((response) => {
+        if (cancelled) return;
+
+        const uploadTasks = response.tasks
+          .filter((task) => task.status === 'pending' || task.status === 'uploading')
+          .map(mapUploadTaskStatus);
+        if (uploadTasks.length === 0) return;
+
+        setTasks((prev) => {
+          const existingIds = new Set(prev.map((task) => task.id));
+          const merged = [...prev];
+
+          for (const task of uploadTasks) {
+            if (existingIds.has(task.id)) {
+              continue;
+            }
+            merged.push(task);
+          }
+
+          return merged;
+        });
+      })
+      .catch((err) => {
+        console.warn('[useFileTransfer] Failed to load upload tasks:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
 
   // 客户端侧并发限制：避免一次性发起过多上传压垮本地/服务端
   const MAX_CONCURRENT_UPLOADS = 3;
@@ -91,7 +162,7 @@ export function useFileTransfer() {
             const speed = updatedTask.bytesTransferred / elapsedSeconds;
             updatedTask.speed = formatSpeed(speed);
 
-            const remainingBytes = updatedTask.fileSizeBytes - updatedTask.bytesTransferred;
+            const remainingBytes = Math.max(0, updatedTask.fileSizeBytes - updatedTask.bytesTransferred);
             if (speed > 0) {
               const remainingSeconds = remainingBytes / speed;
               updatedTask.timeRemaining = formatRemainingTime(remainingSeconds);
@@ -115,12 +186,9 @@ export function useFileTransfer() {
       onProgress?: (loaded: number, total: number) => void,
       enableWebSocket?: boolean // 是否启用 WebSocket 进度跟踪
     ): Promise<FileInfo | null> => {
-      // 服务端生成 task_id（避免客户端自带 task_id 造成撞库/窃听）
-      let taskId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      if (enableWebSocket) {
-        const created = await sftpApi.createUploadTask()
-        taskId = created.task_id
-      }
+      // 新上传链路始终由服务端生成 task_id，作为进度订阅、取消、任务恢复的统一中心。
+      const created = await sftpApi.createUploadTask()
+      const taskId = created.task_id
 
       const task: TransferTask = {
         id: taskId,
@@ -180,30 +248,38 @@ export function useFileTransfer() {
               try {
                 const msg = JSON.parse(event.data);
 
-                if (msg.type === 'progress' && msg.stage === 'sftp') {
-                  // SFTP 阶段进度更新
-                  const progress = Math.round((msg.loaded / msg.total) * 100);
+                if (msg.type === 'started') {
+                  updateTaskProgress(task.id, {
+                    progress: 0,
+                    bytesTransferred: msg.loaded ?? 0,
+                    status: 'uploading',
+                    stage: msg.stage === 'stream' ? 'stream' : 'sftp',
+                  });
+                } else if (msg.type === 'progress' && (msg.stage === 'stream' || msg.stage === 'sftp')) {
+                  // 流式上传进度更新。旧链路仍可能推送 sftp 阶段，保留兼容。
+                  const total = msg.total > 0 ? msg.total : file.size;
+                  const progress = total > 0 ? Math.round((msg.loaded / total) * 100) : 0;
                   updateTaskProgress(task.id, {
                     progress,
                     bytesTransferred: msg.loaded,
                     status: 'uploading',
-                    stage: 'sftp',
+                    stage: msg.stage === 'stream' ? 'stream' : 'sftp',
                     speed: msg.speed_bps ? formatSpeed(msg.speed_bps) : undefined,
                   });
-                  onProgress?.(msg.loaded, msg.total);
+                  onProgress?.(msg.loaded, total);
                 } else if (msg.type === 'complete') {
-                  // SFTP 传输完成
+                  // 传输完成
                   updateTaskProgress(task.id, {
                     progress: 100,
                     status: 'completed',
                     bytesTransferred: file.size,
-                    stage: 'sftp',
+                    stage: msg.stage === 'stream' ? 'stream' : 'sftp',
                   });
                 } else if (msg.type === 'cancelled') {
                   // 服务器端 SFTP 阶段已取消
                   updateTaskProgress(task.id, {
                     status: 'cancelled',
-                    stage: 'sftp',
+                    stage: msg.stage === 'stream' ? 'stream' : 'sftp',
                     error: '已取消',
                   });
                 } else if (msg.type === 'error') {
@@ -236,14 +312,15 @@ export function useFileTransfer() {
           });
         }
 
-        // HTTP 阶段进度回调
+        // 浏览器到后端这一段仍由 XHR 提供客户端侧发送进度；后端 WebSocket 提供远端写入确认进度。
         const httpProgressCallback = (loaded: number, total: number) => {
           const progress = Math.round((loaded / total) * 100);
+          const displayLoaded = Math.min(loaded, file.size);
           updateTaskProgress(task.id, {
             progress,
-            bytesTransferred: loaded,
+            bytesTransferred: displayLoaded,
             status: 'uploading',
-            stage: 'http',
+            stage: 'stream',
           });
           onProgress?.(loaded, total);
         };
@@ -254,21 +331,19 @@ export function useFileTransfer() {
           remotePath,
           file,
           httpProgressCallback,
-          enableWebSocket && wsConnected ? task.id : undefined,
+          task.id,
           (xhr) => {
             xhrRefs.current.set(task.id, xhr);
           }
         );
 
-        // HTTP 上传完成，如果没有 WebSocket，直接标记完成
-        if (!enableWebSocket || !wsConnected) {
-          updateTaskProgress(task.id, {
-            progress: 100,
-            status: 'completed',
-            bytesTransferred: file.size,
-          });
-        }
-        // 如果有 WebSocket，等待 SFTP 完成消息（由 WebSocket onmessage 处理）
+        // HTTP 请求返回即代表后端已经完成远端写入；即便 WebSocket 丢了也能收敛到完成态。
+        updateTaskProgress(task.id, {
+          progress: 100,
+          status: 'completed',
+          bytesTransferred: file.size,
+          stage: 'stream',
+        });
         return fileInfo ?? null
 
       } catch (error: unknown) {
@@ -307,6 +382,7 @@ export function useFileTransfer() {
    * 取消任务
    */
   const cancelTask = useCallback((taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId);
     cancelledBeforeStartRef.current.add(taskId);
     // 先通知后端取消 SFTP 阶段（通过 WebSocket 控制消息）
     const ws = wsRefs.current.get(taskId);
@@ -323,7 +399,21 @@ export function useFileTransfer() {
     if (xhr) {
       xhr.abort();
       xhrRefs.current.delete(taskId);
+      if (!task || task.type === 'upload') {
+        void sftpApi.cancelUploadTask(taskId).catch((err) => {
+          console.error('[useFileTransfer] Failed to cancel upload via API:', err);
+        });
+      }
     } else {
+      if (!task || task.type === 'upload') {
+        void sftpApi.cancelUploadTask(taskId).catch((err) => {
+          console.error('[useFileTransfer] Failed to cancel upload via API:', err);
+        });
+      } else if (task.type === 'transfer') {
+        void sftpApi.cancelTransfer(taskId).catch((err) => {
+          console.error('[useFileTransfer] Failed to cancel transfer via API:', err);
+        });
+      }
       // 没有 xhr（例如纯 SFTP 阶段或已完成），仅更新状态
       setTasks(prev =>
         prev.map(task =>
@@ -333,7 +423,7 @@ export function useFileTransfer() {
         )
       );
     }
-  }, []);
+  }, [tasks]);
 
   /**
    * 删除任务

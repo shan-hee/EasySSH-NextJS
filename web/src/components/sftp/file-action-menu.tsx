@@ -7,18 +7,12 @@ import {
   Eye,
   Edit,
   FileText,
-  Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 
 interface FileItem {
   name: string
@@ -31,8 +25,6 @@ interface FileItem {
 export type FileAction =
   | "open"
   | "download"
-  | "download-fast"
-  | "download-compatible"
   | "rename"
   | "chmod"
   | "delete"
@@ -86,35 +78,6 @@ function KeyboardShortcut({ children }: { children: string }) {
   )
 }
 
-function RecommendedBadge({ children }: { children: string }) {
-  return (
-    <span className={cn(
-      "text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary",
-    )}>
-      {children}
-    </span>
-  )
-}
-
-function DownloadTooltip({
-  children,
-  content,
-}: {
-  children: React.ReactNode
-  content: string
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {children}
-      </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={8} className="max-w-[280px]">
-        {content}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
 /**
  * 统一的文件操作菜单组件
  * 支持两种渲染模式：dropdown（行操作列）和 context（右键菜单）
@@ -126,7 +89,6 @@ export function FileActionMenu({
   onAction,
 }: FileActionMenuProps) {
   const t = useTranslations("sftp")
-  const recommendedLabel = t("actionRecommended")
   const isMultiSelect = selectedFilesCount > 1
   const isSingleSelect = selectedFilesCount === 1
 
@@ -158,9 +120,8 @@ export function FileActionMenu({
         <KeyboardShortcut>⏎</KeyboardShortcut>
       </FileActionMenuItem>
 
-      {/* 下载 */}
-      {file.type === "file" ? (
-        /* 单文件下载 */
+      {/* 下载：文件管理器只保留推荐下载路径，兼容模式移动到传输记录页 */}
+      {file.type === "file" || file.type === "directory" ? (
         <FileActionMenuItem
           mode={mode}
           className={itemClassName}
@@ -171,36 +132,7 @@ export function FileActionMenu({
           <KeyboardShortcut>⌘D</KeyboardShortcut>
         </FileActionMenuItem>
       ) : (
-        /* 文件夹下载 - 双选项 */
-        <>
-          {/* 快速下载 */}
-          <DownloadTooltip content={t("actionDownloadFastTooltip")}>
-            <FileActionMenuItem
-              mode={mode}
-              className={itemClassName}
-              onClick={() => onAction("download-fast")}
-            >
-              <Zap className="h-4 w-4 mr-2 text-yellow-500" />
-              <span className="flex-1">{t("actionDownloadFast")}</span>
-              <RecommendedBadge>{recommendedLabel}</RecommendedBadge>
-            </FileActionMenuItem>
-          </DownloadTooltip>
-
-          {/* 兼容下载 */}
-          <DownloadTooltip content={t("actionDownloadCompatibleTooltip")}>
-            <FileActionMenuItem
-              mode={mode}
-              className={itemClassName}
-              onClick={() => onAction("download-compatible")}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              <span className="flex-1">
-                {t("actionDownloadCompatible")}
-              </span>
-              <KeyboardShortcut>⌘D</KeyboardShortcut>
-            </FileActionMenuItem>
-          </DownloadTooltip>
-        </>
+        null
       )}
 
       <FileActionMenuSeparator mode={mode} className={separatorClassName} />

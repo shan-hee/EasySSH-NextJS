@@ -7,7 +7,7 @@ import "@/components/Folder.css"
 import "@/components/File.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useDownloadExcludePatterns, useDefaultDownloadMode } from "@/hooks/use-system-config"
+import { useDownloadExcludePatterns } from "@/hooks/use-system-config"
 import {
   Table,
   TableBody,
@@ -272,11 +272,6 @@ export function SftpManager(props: SftpManagerProps) {
 
   // 从系统配置获取排除规则
   const excludePatterns = useDownloadExcludePatterns()
-  // 从系统配置获取默认下载模式（fast / compatible）
-  const defaultDownloadModeConfig = useDefaultDownloadMode()
-  const defaultDownloadMode: "fast" | "compatible" =
-    defaultDownloadModeConfig === "compatible" ? "compatible" : "fast"
-
   const enhancedFiles = useMemo<EnhancedFileItem[]>(() => {
     return files.map((file) => ({
       ...file,
@@ -914,8 +909,10 @@ export function SftpManager(props: SftpManagerProps) {
   }
 
   // 批量下载
-  const handleBatchDownload = useCallback(async (mode: "fast" | "compatible" = defaultDownloadMode) => {
-    const paths = selectedFiles.length > 0
+  const handleBatchDownload = useCallback(async (fileNames?: string[]) => {
+    const paths = fileNames && fileNames.length > 0
+      ? fileNames
+      : selectedFiles.length > 0
       ? selectedFiles
       : contextMenu?.fileName
       ? [contextMenu.fileName]
@@ -925,7 +922,7 @@ export function SftpManager(props: SftpManagerProps) {
 
     if (onBatchDownload) {
       try {
-        await onBatchDownload(paths, mode, excludePatterns)
+        await onBatchDownload(paths, "fast", excludePatterns)
         setSelectedFiles([])
       } catch (error: unknown) {
         console.error('[SftpManager] 批量下载失败:', error)
@@ -936,7 +933,7 @@ export function SftpManager(props: SftpManagerProps) {
       paths.forEach(path => onDownload(path))
       setSelectedFiles([])
     }
-  }, [selectedFiles, contextMenu, onDownload, onBatchDownload, excludePatterns, defaultDownloadMode, tSftp])
+  }, [selectedFiles, contextMenu, onDownload, onBatchDownload, excludePatterns, tSftp])
 
   // 批量删除
   const handleBatchDelete = useCallback(async () => {
@@ -2287,15 +2284,12 @@ export function SftpManager(props: SftpManagerProps) {
                                         }
                                         break
                                       case "download":
-                                        onDownload(file.name)
-                                        break
-                                      case "download-fast":
                                         setSelectedFiles([file.name])
-                                        handleBatchDownload("fast")
-                                        break
-                                      case "download-compatible":
-                                        setSelectedFiles([file.name])
-                                        handleBatchDownload("compatible")
+                                        if (file.type === "directory") {
+                                          handleBatchDownload([file.name])
+                                        } else {
+                                          onDownload(file.name)
+                                        }
                                         break
                                       case "rename":
                                         setTimeout(() => {
@@ -2445,15 +2439,12 @@ export function SftpManager(props: SftpManagerProps) {
                                       }
                                       break
                                     case "download":
-                                      onDownload(file.name)
-                                      break
-                                    case "download-fast":
                                       setSelectedFiles([file.name])
-                                      handleBatchDownload("fast")
-                                      break
-                                    case "download-compatible":
-                                      setSelectedFiles([file.name])
-                                      handleBatchDownload("compatible")
+                                      if (file.type === "directory") {
+                                        handleBatchDownload([file.name])
+                                      } else {
+                                        onDownload(file.name)
+                                      }
                                       break
                                     case "rename":
                                       setTimeout(() => {
@@ -2687,14 +2678,12 @@ export function SftpManager(props: SftpManagerProps) {
                         break
                       case "download":
                         if (contextMenu.fileName) {
-                          onDownload(contextMenu.fileName)
+                          if (contextMenu.fileType === "directory") {
+                            handleBatchDownload([contextMenu.fileName])
+                          } else {
+                            onDownload(contextMenu.fileName)
+                          }
                         }
-                        break
-                      case "download-fast":
-                        handleBatchDownload("fast")
-                        break
-                      case "download-compatible":
-                        handleBatchDownload("compatible")
                         break
                       case "rename":
                         if (contextMenu.fileName) {

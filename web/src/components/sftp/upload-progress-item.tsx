@@ -29,6 +29,7 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
   const tCommon = useTranslations("common")
 
   // 判断当前阶段
+  const isStreamStage = task.stage === 'stream'
   const isHttpStage = task.stage === 'http' || (!task.stage && task.status === 'uploading')
   const isSftpStage = task.stage === 'sftp'
   const isCompleted = task.status === 'completed'
@@ -94,7 +95,41 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
       </div>
 
       {/* 两阶段进度指示器 - 仅在上传进行中或已完成时显示 */}
-      {task.type === 'upload' && (isActive || isCompleted || isFailed || isCancelled) && (
+      {task.type === 'upload' && isStreamStage && (isActive || isCompleted || isFailed || isCancelled) && (
+        <div className="mb-2">
+          <div className="flex items-center gap-1 mb-1.5">
+            <div className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
+              isActive && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+              isCompleted && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+              isFailed && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+              isCancelled && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+            )}>
+              {isFailed || isCancelled ? (
+                <XCircle className="h-3.5 w-3.5 text-red-500" />
+              ) : isCompleted ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+              )}
+              <Upload className="h-3 w-3" />
+              <span>{tSftp("uploadStageStream")}</span>
+            </div>
+          </div>
+
+          <div className="h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full transition-all duration-300 ease-out",
+                isCompleted ? "bg-green-500" : "bg-blue-500"
+              )}
+              style={{ width: `${task.progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {task.type === 'upload' && !isStreamStage && (isActive || isCompleted || isFailed || isCancelled) && (
         <div className="mb-2">
           {/* 阶段步骤指示器 */}
           <div className="flex items-center gap-1 mb-1.5">
@@ -239,9 +274,17 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
               {task.stage && (
                 <span className={cn(
                   "font-medium",
-                  task.stage === 'http' ? "text-blue-600 dark:text-blue-400" : "text-purple-600 dark:text-purple-400"
+                  task.stage === 'stream'
+                    ? "text-blue-600 dark:text-blue-400"
+                    : task.stage === 'http'
+                    ? "text-blue-600 dark:text-blue-400"
+                    : "text-purple-600 dark:text-purple-400"
                 )}>
-                  {task.stage === 'http' ? tSftp("uploadStageHttpShort") : tSftp("uploadStageSftpShort")}
+                  {task.stage === 'stream'
+                    ? tSftp("uploadStageStreamShort")
+                    : task.stage === 'http'
+                    ? tSftp("uploadStageHttpShort")
+                    : tSftp("uploadStageSftpShort")}
                 </span>
               )}
               {task.speed && (
@@ -292,7 +335,12 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
 
         <div className="flex items-center gap-2">
           {/* 总进度百分比 */}
-          {isActive && task.type === 'upload' && (
+          {isActive && task.type === 'upload' && isStreamStage && (
+            <span className="font-mono text-[10px]">
+              {Math.round(task.progress)}%
+            </span>
+          )}
+          {isActive && task.type === 'upload' && !isStreamStage && (
             <span className="font-mono text-[10px]">
               {Math.round((httpProgress + sftpProgress) / 2)}%
             </span>

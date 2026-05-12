@@ -124,6 +124,79 @@ func (h *SFTPHandler) CreateUploadTask(c *gin.Context) {
 	RespondSuccess(c, gin.H{"task_id": taskID})
 }
 
+// ListUploadTasks 列出当前用户的上传任务运行态。
+// GET /api/v1/sftp/upload/tasks
+func (h *SFTPHandler) ListUploadTasks(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Missing user")
+		return
+	}
+	if h.uploadWSHandler == nil {
+		RespondError(c, http.StatusServiceUnavailable, "ws_not_available", "Upload WebSocket not available")
+		return
+	}
+
+	RespondSuccess(c, gin.H{
+		"tasks": h.uploadWSHandler.ListTasksForUser(userIDStr.(string)),
+	})
+}
+
+// GetUploadTask 获取当前用户的单个上传任务运行态。
+// GET /api/v1/sftp/upload/tasks/:task_id
+func (h *SFTPHandler) GetUploadTask(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Missing user")
+		return
+	}
+	if h.uploadWSHandler == nil {
+		RespondError(c, http.StatusServiceUnavailable, "ws_not_available", "Upload WebSocket not available")
+		return
+	}
+
+	taskID := strings.TrimSpace(c.Param("task_id"))
+	if taskID == "" {
+		RespondError(c, http.StatusBadRequest, "missing_task_id", "task_id is required")
+		return
+	}
+
+	task, ok := h.uploadWSHandler.GetTaskForUser(userIDStr.(string), taskID)
+	if !ok {
+		RespondError(c, http.StatusNotFound, "task_not_found", "Upload task not found")
+		return
+	}
+
+	RespondSuccess(c, task)
+}
+
+// CancelUploadTask 取消当前用户的上传任务。
+// POST /api/v1/sftp/upload/tasks/:task_id/cancel
+func (h *SFTPHandler) CancelUploadTask(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Missing user")
+		return
+	}
+	if h.uploadWSHandler == nil {
+		RespondError(c, http.StatusServiceUnavailable, "ws_not_available", "Upload WebSocket not available")
+		return
+	}
+
+	taskID := strings.TrimSpace(c.Param("task_id"))
+	if taskID == "" {
+		RespondError(c, http.StatusBadRequest, "missing_task_id", "task_id is required")
+		return
+	}
+
+	if ok := h.uploadWSHandler.CancelTaskForUser(userIDStr.(string), taskID); !ok {
+		RespondError(c, http.StatusNotFound, "task_not_found", "Upload task not found")
+		return
+	}
+
+	RespondSuccess(c, gin.H{"success": true})
+}
+
 // getPooledClient 从连接池获取 SFTP 客户端
 // 调用者需要在操作完成后调用 client.Release() 释放连接
 func (h *SFTPHandler) getPooledClient(c *gin.Context, serverID uuid.UUID) (*sftp.PooledClient, error) {
@@ -384,6 +457,221 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 	}
 
 	RespondSuccess(c, fileInfo)
+}
+
+// UploadFileStream 流式上传文件。
+// 浏览器上传的 multipart 文件 part 会被直接转写到远端 SFTP，不经过服务端临时文件落盘。
+// POST /api/v1/sftp/:server_id/upload/stream?task_id=xxx&path=/target/dir&size=123
+func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
+	serverID, err := uuid.Parse(c.Param("server_id"))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
+		return
+	}
+
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Missing user")
+		return
+	}
+	if h.uploadWSHandler == nil {
+		RespondError(c, http.StatusServiceUnavailable, "ws_not_available", "Upload WebSocket not available")
+		return
+	}
+
+	taskID := strings.TrimSpace(c.Query("task_id"))
+	if taskID == "" {
+		taskID = strings.TrimSpace(c.Query("ws_task_id"))
+	}
+	if taskID == "" {
+		RespondError(c, http.StatusBadRequest, "missing_task_id", "task_id is required")
+		return
+	}
+	if !h.uploadWSHandler.ValidateTaskOwnership(userIDStr.(string), taskID) {
+		RespondError(c, http.StatusForbidden, "forbidden", "Invalid upload task")
+		return
+	}
+
+	targetDir := strings.TrimSpace(c.Query("path"))
+	if targetDir == "" {
+		targetDir = "/"
+	}
+	targetDir = path.Clean(targetDir)
+	if containsDotDotSegment(targetDir) {
+		RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
+		return
+	}
+
+	expectedSize, _ := strconv.ParseInt(strings.TrimSpace(c.Query("size")), 10, 64)
+	if expectedSize < 0 {
+		expectedSize = 0
+	}
+
+	multipartReader, err := c.Request.MultipartReader()
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_multipart", "Request must be multipart/form-data")
+		return
+	}
+
+	for {
+		part, err := multipartReader.NextPart()
+		if errors.Is(err, io.EOF) {
+			RespondError(c, http.StatusBadRequest, "missing_file", "file part is required")
+			return
+		}
+		if err != nil {
+			RespondError(c, http.StatusBadRequest, "invalid_multipart", err.Error())
+			return
+		}
+
+		if part.FormName() != "file" {
+			_ = part.Close()
+			continue
+		}
+		defer part.Close()
+
+		fileName := sanitizeUploadFileName(part.FileName())
+		if fileName == "" {
+			RespondError(c, http.StatusBadRequest, "invalid_file", "Invalid file name")
+			return
+		}
+
+		remotePath := path.Join(targetDir, fileName)
+		if containsDotDotSegment(remotePath) {
+			RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
+			return
+		}
+
+		if ok := h.uploadWSHandler.PrepareTask(userIDStr.(string), taskID, serverID.String(), remotePath, fileName, expectedSize); !ok {
+			RespondError(c, http.StatusForbidden, "forbidden", "Invalid upload task")
+			return
+		}
+		if h.uploadWSHandler.IsTaskCancelled(userIDStr.(string), taskID) {
+			RespondError(c, http.StatusRequestTimeout, "upload_cancelled", "upload cancelled by client")
+			return
+		}
+
+		ctx, cancel := context.WithCancel(c.Request.Context())
+		defer cancel()
+		h.uploadWSHandler.RegisterCancelFunc(taskID, cancel)
+		defer h.uploadWSHandler.UnregisterCancelFunc(taskID)
+
+		sftpClient, err := h.getPooledClient(c, serverID)
+		if err != nil {
+			_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
+				Type:    "error",
+				TaskID:  taskID,
+				Stage:   "stream",
+				Total:   expectedSize,
+				Message: err.Error(),
+			})
+			RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
+			return
+		}
+		defer sftpClient.Release()
+
+		startTime := time.Now()
+		lastProgressTime := startTime
+		_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
+			Type:    "started",
+			TaskID:  taskID,
+			Loaded:  0,
+			Total:   expectedSize,
+			Stage:   "stream",
+			Message: "Upload started",
+		})
+
+		err = sftpClient.UploadFileWithProgressWithContext(ctx, part, remotePath, func(loaded int64) {
+			now := time.Now()
+			if now.Sub(lastProgressTime) < 500*time.Millisecond && (expectedSize <= 0 || loaded < expectedSize) {
+				return
+			}
+
+			elapsed := now.Sub(startTime).Seconds()
+			var speedBps int64
+			if elapsed > 0 {
+				speedBps = int64(float64(loaded) / elapsed)
+			}
+
+			_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
+				Type:     "progress",
+				TaskID:   taskID,
+				Loaded:   loaded,
+				Total:    expectedSize,
+				Stage:    "stream",
+				SpeedBps: speedBps,
+			})
+			lastProgressTime = now
+		})
+
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
+					Type:    "cancelled",
+					TaskID:  taskID,
+					Stage:   "stream",
+					Total:   expectedSize,
+					Message: "upload cancelled",
+				})
+				RespondError(c, http.StatusRequestTimeout, "upload_cancelled", "upload cancelled by client")
+				return
+			}
+
+			_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
+				Type:    "error",
+				TaskID:  taskID,
+				Stage:   "stream",
+				Total:   expectedSize,
+				Message: err.Error(),
+			})
+			RespondError(c, http.StatusInternalServerError, "upload_failed", err.Error())
+			return
+		}
+
+		fileInfo, err := sftpClient.GetFileInfo(remotePath)
+		if err != nil {
+			_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
+				Type:    "error",
+				TaskID:  taskID,
+				Stage:   "stream",
+				Total:   expectedSize,
+				Message: err.Error(),
+			})
+			RespondError(c, http.StatusInternalServerError, "stat_failed", err.Error())
+			return
+		}
+
+		totalSize := expectedSize
+		if totalSize <= 0 {
+			totalSize = fileInfo.Size
+		}
+		_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
+			Type:    "complete",
+			TaskID:  taskID,
+			Loaded:  totalSize,
+			Total:   totalSize,
+			Stage:   "stream",
+			Message: "Upload completed successfully",
+		})
+
+		RespondSuccess(c, fileInfo)
+		return
+	}
+}
+
+func sanitizeUploadFileName(name string) string {
+	name = strings.TrimSpace(filepath.ToSlash(name))
+	if name == "" {
+		return ""
+	}
+	name = path.Base(name)
+	if name == "." || name == "/" || name == ".." {
+		return ""
+	}
+	if containsDotDotSegment(name) {
+		return ""
+	}
+	return name
 }
 
 // DownloadFile 下载文件
@@ -2238,12 +2526,12 @@ func (h *SFTPHandler) ListTrashItems(c *gin.Context) {
 		"limit":  limit,
 		"offset": offset,
 		"statistics": gin.H{
-			"total_items":   stats.TotalItems,
-			"total_size":    stats.TotalSize,
-			"file_count":    stats.FileCount,
-			"folder_count":  stats.FolderCount,
-			"active_items":  stats.ActiveItems,
-			"active_size":   stats.ActiveSize,
+			"total_items":  stats.TotalItems,
+			"total_size":   stats.TotalSize,
+			"file_count":   stats.FileCount,
+			"folder_count": stats.FolderCount,
+			"active_items": stats.ActiveItems,
+			"active_size":  stats.ActiveSize,
 		},
 	})
 }

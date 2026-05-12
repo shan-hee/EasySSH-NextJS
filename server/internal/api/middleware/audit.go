@@ -192,7 +192,7 @@ func determineAction(method, path string) auditlog.ActionType {
 	}
 
 	// SFTP 操作
-	if method == "POST" && path == "/api/v1/sftp/:server_id/upload" {
+	if method == "POST" && (path == "/api/v1/sftp/:server_id/upload" || path == "/api/v1/sftp/:server_id/upload/stream") {
 		return auditlog.ActionSFTPUpload
 	}
 	if method == "GET" && path == "/api/v1/sftp/:server_id/download" {

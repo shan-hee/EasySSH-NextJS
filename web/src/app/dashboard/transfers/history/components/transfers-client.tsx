@@ -1,10 +1,29 @@
 "use client"
 
-import React, { useState, useCallback, useTransition, useOptimistic, useMemo } from "react"
+import React, { useState, useCallback, useTransition, useOptimistic, useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown, Plus, Loader2 } from "lucide-react"
 import { SkeletonStatsCard } from "@/components/ui/loading"
 import { fileTransfersApi, type FileTransfer, type FileTransferStatistics } from "@/lib/api/file-transfers"
+import { serversApi, sftpApi, type Server } from "@/lib/api"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { DataTable } from "@/components/ui/data-table"
@@ -36,6 +55,20 @@ interface TransfersClientProps {
   initialData?: FileTransfersPageData
 }
 
+type TransferTaskMode = "legacy-upload" | "compatible-download" | "fast-download"
+
+const getFileNameFromPath = (value: string): string => {
+  const trimmed = value.trim()
+  if (!trimmed) return "transfer"
+  const normalized = trimmed.replace(/\/+$/, "")
+  return normalized.split("/").pop() || "transfer"
+}
+
+const getRemoteUploadPath = (remoteDir: string, fileName: string): string => {
+  const dir = remoteDir.trim() || "/"
+  return `${dir.replace(/\/+$/, "")}/${fileName}`.replace(/\/+/g, "/")
+}
+
 /**
  * 传输记录客户端组件
  * 纯 CSR 模式：在客户端加载数据
@@ -58,6 +91,15 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
   const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
   const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
   const [totalCount, setTotalCount] = useState(initialData?.totalCount || 0)
+  const [servers, setServers] = useState<Server[]>([])
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+  const [taskMode, setTaskMode] = useState<TransferTaskMode>("legacy-upload")
+  const [selectedServerId, setSelectedServerId] = useState("")
+  const [remotePath, setRemotePath] = useState("/root")
+  const [downloadPaths, setDownloadPaths] = useState("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [creatingTask, setCreatingTask] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const t = useTranslations("transfers")
 
   // 乐观更新：立即从 UI 中移除删除的项目
@@ -94,12 +136,26 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     [t]
   )
 
+  const loadServers = useCallback(async () => {
+    try {
+      const response = await serversApi.list({ page: 1, limit: 1000 })
+      setServers(Array.isArray(response) ? response : response.data || [])
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, t("loadServersFailed")))
+    }
+  }, [t])
+
   // 初始加载数据（纯 CSR 模式，仅在已认证且全局状态就绪时触发）
   React.useEffect(() => {
     if (initialData) return
     if (!ready) return
     loadData(page, pageSize)
   }, [ready, initialData, loadData, page, pageSize])
+
+  React.useEffect(() => {
+    if (!ready) return
+    loadServers()
+  }, [ready, loadServers])
 
   // 刷新数据
   const handleRefresh = async () => {
@@ -148,6 +204,140 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     })
   }, [loadData, page, pageSize, setOptimisticTransfers, startTransition, t])
 
+  const resetTaskForm = useCallback(() => {
+    setTaskMode("legacy-upload")
+    setSelectedServerId("")
+    setRemotePath("/root")
+    setDownloadPaths("")
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }, [])
+
+  const handleTaskDialogChange = useCallback((open: boolean) => {
+    setTaskDialogOpen(open)
+    if (!open) {
+      resetTaskForm()
+    }
+  }, [resetTaskForm])
+
+  const handleCreateTask = useCallback(async () => {
+    const serverId = selectedServerId.trim()
+    if (!serverId) {
+      toast.error(t("taskServerRequired"))
+      return
+    }
+
+    setCreatingTask(true)
+
+    try {
+      if (taskMode === "legacy-upload") {
+        if (!selectedFile) {
+          toast.error(t("taskFileRequired"))
+          return
+        }
+
+        const targetPath = getRemoteUploadPath(remotePath, selectedFile.name)
+        const size = Math.max(selectedFile.size, 1)
+        const record = await fileTransfersApi.create({
+          server_id: serverId,
+          transfer_type: "upload",
+          source_path: selectedFile.name,
+          dest_path: targetPath,
+          file_name: selectedFile.name,
+          file_size: size,
+        })
+
+        try {
+          await sftpApi.uploadFileLegacy(
+            serverId,
+            remotePath,
+            selectedFile,
+            async (loaded, total) => {
+              const progress = total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0
+              await fileTransfersApi.update(record.id, {
+                progress,
+                bytes_transferred: Math.min(loaded, size),
+              }).catch(() => undefined)
+            },
+          )
+          await fileTransfersApi.update(record.id, {
+            status: "completed",
+            progress: 100,
+            bytes_transferred: size,
+          })
+          toast.success(t("taskStarted"))
+        } catch (error: unknown) {
+          await fileTransfersApi.update(record.id, {
+            status: "failed",
+            error_message: getErrorMessage(error, t("taskFailed")),
+          }).catch(() => undefined)
+          throw error
+        }
+      } else {
+        const paths = downloadPaths
+          .split(/\r?\n/)
+          .map((path) => path.trim())
+          .filter(Boolean)
+
+        if (paths.length === 0) {
+          toast.error(t("taskPathsRequired"))
+          return
+        }
+
+        const mode = taskMode === "fast-download" ? "fast" : "compatible"
+        const fileName = paths.length === 1
+          ? getFileNameFromPath(paths[0])
+          : `batch-download-${paths.length}`
+        const recordSize = 1
+        const record = await fileTransfersApi.create({
+          server_id: serverId,
+          transfer_type: "download",
+          source_path: paths.join("\n"),
+          dest_path: "browser-download",
+          file_name: fileName,
+          file_size: recordSize,
+        })
+
+        try {
+          await sftpApi.batchDownload(serverId, paths, mode)
+          await fileTransfersApi.update(record.id, {
+            status: "completed",
+            progress: 100,
+            bytes_transferred: recordSize,
+          })
+          toast.success(t("taskStarted"))
+        } catch (error: unknown) {
+          await fileTransfersApi.update(record.id, {
+            status: "failed",
+            error_message: getErrorMessage(error, t("taskFailed")),
+          }).catch(() => undefined)
+          throw error
+        }
+      }
+
+      setTaskDialogOpen(false)
+      resetTaskForm()
+      await loadData(1, pageSize)
+      setPage(1)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, t("taskFailed")))
+    } finally {
+      setCreatingTask(false)
+    }
+  }, [
+    downloadPaths,
+    loadData,
+    pageSize,
+    remotePath,
+    resetTaskForm,
+    selectedFile,
+    selectedServerId,
+    t,
+    taskMode,
+  ])
+
   // 创建列定义（依赖 t 和删除回调）
   const columns = useMemo(
     () =>
@@ -181,6 +371,18 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
+      <div className="flex items-center justify-end shrink-0">
+        <Button
+          type="button"
+          size="sm"
+          className="gap-2"
+          onClick={() => setTaskDialogOpen(true)}
+        >
+          <Plus className="h-4 w-4" />
+          {t("newTask")}
+        </Button>
+      </div>
+
       {/* 统计卡片 - 加载时显示骨架屏 */}
       {refreshing && !initialData ? (
         <div className="grid gap-4 md:grid-cols-4 shrink-0">
@@ -273,6 +475,111 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
           />
         )}
       />
+
+      <Dialog open={taskDialogOpen} onOpenChange={handleTaskDialogChange}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>{t("newTask")}</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="transfer-task-mode">{t("taskMode")}</Label>
+              <Select
+                value={taskMode}
+                onValueChange={(value) => setTaskMode(value as TransferTaskMode)}
+              >
+                <SelectTrigger id="transfer-task-mode" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="legacy-upload">
+                    {t("taskModeLegacyUpload")}
+                  </SelectItem>
+                  <SelectItem value="compatible-download">
+                    {t("taskModeCompatibleDownload")}
+                  </SelectItem>
+                  <SelectItem value="fast-download">
+                    {t("taskModeFastDownload")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="transfer-task-server">{t("taskServer")}</Label>
+              <Select value={selectedServerId} onValueChange={setSelectedServerId}>
+                <SelectTrigger id="transfer-task-server" className="w-full">
+                  <SelectValue placeholder={t("taskServerPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {servers.map((server) => (
+                    <SelectItem key={server.id} value={server.id}>
+                      {server.name || server.host}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {taskMode === "legacy-upload" ? (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="transfer-task-file">{t("taskLocalFile")}</Label>
+                  <Input
+                    id="transfer-task-file"
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={(event) => {
+                      setSelectedFile(event.target.files?.[0] || null)
+                    }}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="transfer-task-remote-dir">{t("taskRemoteDir")}</Label>
+                  <Input
+                    id="transfer-task-remote-dir"
+                    value={remotePath}
+                    onChange={(event) => setRemotePath(event.target.value)}
+                    placeholder="/root"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="grid gap-2">
+                <Label htmlFor="transfer-task-paths">{t("taskRemotePaths")}</Label>
+                <Textarea
+                  id="transfer-task-paths"
+                  value={downloadPaths}
+                  onChange={(event) => setDownloadPaths(event.target.value)}
+                  placeholder={"/root/file.log\n/root/archive"}
+                  className="min-h-28"
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleTaskDialogChange(false)}
+              disabled={creatingTask}
+            >
+              {t("taskCancel")}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreateTask}
+              disabled={creatingTask}
+              className="gap-2"
+            >
+              {creatingTask && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t("taskCreate")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
