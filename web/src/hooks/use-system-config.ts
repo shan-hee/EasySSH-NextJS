@@ -51,11 +51,3 @@ export function useDownloadExcludePatterns() {
     .map((p: string) => p.trim())
     .filter((p: string) => p.length > 0)
 }
-
-/**
- * 获取默认下载模式的 Hook
- */
-export function useDefaultDownloadMode() {
-  const { data: config } = useSystemConfig()
-  return config?.default_download_mode || "fast"
-}

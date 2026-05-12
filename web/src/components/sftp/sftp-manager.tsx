@@ -113,7 +113,7 @@ interface SftpManagerProps {
   onDownload: (fileName: string) => void
   onDelete: (fileName: string) => void
   onBatchDelete?: (fileNames: string[]) => Promise<BatchDeleteResult>
-  onBatchDownload?: (fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) => Promise<void>
+  onBatchDownload?: (fileNames: string[], excludePatterns?: string[]) => Promise<void>
   onCreateFolder: (name: string) => void
   onCreateFile?: (name: string) => void
   onRename: (oldName: string, newName: string) => void
@@ -922,7 +922,7 @@ export function SftpManager(props: SftpManagerProps) {
 
     if (onBatchDownload) {
       try {
-        await onBatchDownload(paths, "fast", excludePatterns)
+        await onBatchDownload(paths, excludePatterns)
         setSelectedFiles([])
       } catch (error: unknown) {
         console.error('[SftpManager] 批量下载失败:', error)

@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl"
 import { SettingsSection } from "@/components/settings/settings-section"
-import { FormTextarea, FormSelect, FormSwitch, FormInput } from "@/components/settings/form-field"
+import { FormTextarea, FormSwitch, FormInput } from "@/components/settings/form-field"
 import { Download, Upload, Filter, Save, Loader2, RotateCcw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
@@ -20,7 +20,7 @@ export function FileTransferTab() {
     loadFn: async () => {
       const data = await settingsApi.getSystemConfig()
       return {
-        default_download_mode: data.default_download_mode,
+        default_download_mode: "fast" as const,
         download_exclude_patterns: data.download_exclude_patterns,
         skip_excluded_on_upload: data.skip_excluded_on_upload,
         max_file_upload_size: data.max_file_upload_size,
@@ -28,7 +28,10 @@ export function FileTransferTab() {
     },
     saveFn: async (data) => {
       // 只提交文件传输配置
-      await settingsApi.saveFileTransferConfig(data)
+      await settingsApi.saveFileTransferConfig({
+        ...data,
+        default_download_mode: "fast",
+      })
     },
   })
 
@@ -51,18 +54,6 @@ export function FileTransferTab() {
             description={t("sectionDownloadDescription")}
             icon={<Download className="h-5 w-5" />}
           >
-            <FormSelect
-              form={form}
-              name="default_download_mode"
-              label={t("fieldDefaultDownloadMode")}
-              description={t("fieldDefaultDownloadModeDesc")}
-              options={[
-                { label: t("optionDownloadModeFast"), value: "fast" },
-                { label: t("optionDownloadModeCompatible"), value: "compatible" },
-              ]}
-              required
-            />
-
             <div className="space-y-2">
               <FormTextarea
                 form={form}
@@ -139,14 +130,6 @@ export function FileTransferTab() {
               <div className="space-y-2">
                 <p className="font-medium">{t("performanceHintTitle")}</p>
                 <ul className="list-disc list-inside text-muted-foreground space-y-1">
-                  <li>
-                    <strong>快速下载模式：</strong>
-                    {t("performanceHintFastMode")}
-                  </li>
-                  <li>
-                    <strong>兼容下载模式：</strong>
-                    {t("performanceHintCompatibleMode")}
-                  </li>
                   <li>
                     <strong>排除规则：</strong>
                     {t("performanceHintExcludeRules")}

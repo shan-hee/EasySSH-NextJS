@@ -256,7 +256,7 @@ export function useFileTransfer() {
                     stage: msg.stage === 'stream' ? 'stream' : 'sftp',
                   });
                 } else if (msg.type === 'progress' && (msg.stage === 'stream' || msg.stage === 'sftp')) {
-                  // 流式上传进度更新。旧链路仍可能推送 sftp 阶段，保留兼容。
+                  // 统一归一为上传进度展示；阶段差异不暴露给终端/文件管理器入口。
                   const total = msg.total > 0 ? msg.total : file.size;
                   const progress = total > 0 ? Math.round((msg.loaded / total) * 100) : 0;
                   updateTaskProgress(task.id, {

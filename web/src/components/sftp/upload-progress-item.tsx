@@ -20,42 +20,20 @@ interface UploadProgressItemProps {
 }
 
 /**
- * 两阶段上传进度组件
- * 阶段一：本地 → 服务器 (HTTP)
- * 阶段二：服务器 → 远端 (SFTP)
+ * 传输进度组件
+ * 上传入口统一展示为流式上传，旧链路的阶段细节只保留在专属传输任务页。
  */
 export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) {
   const tSftp = useTranslations("sftp")
   const tCommon = useTranslations("common")
 
   // 判断当前阶段
-  const isStreamStage = task.stage === 'stream'
-  const isHttpStage = task.stage === 'http' || (!task.stage && task.status === 'uploading')
-  const isSftpStage = task.stage === 'sftp'
   const isCompleted = task.status === 'completed'
   const isFailed = task.status === 'failed'
   const isCancelled = task.status === 'cancelled'
   const isPending = task.status === 'pending'
   const isActive = task.status === 'uploading' || task.status === 'downloading'
-
-  // 计算各阶段的进度
-  // HTTP 阶段完成���，进度条显示 SFTP 阶段的进度
-  const httpProgress = isHttpStage ? task.progress : (isSftpStage || isCompleted ? 100 : 0)
-  const sftpProgress = isSftpStage ? task.progress : (isCompleted ? 100 : 0)
-
-  // 状态图标
-  const getStageIcon = (stage: 'http' | 'sftp', isCurrentStage: boolean, isStageCompleted: boolean) => {
-    if (isFailed || isCancelled) {
-      return <XCircle className="h-3.5 w-3.5 text-red-500" />
-    }
-    if (isStageCompleted) {
-      return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-    }
-    if (isCurrentStage) {
-      return <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
-    }
-    return <Clock className="h-3.5 w-3.5 text-zinc-400" />
-  }
+  const uploadProgress = Math.min(100, Math.max(0, Math.round(task.progress || 0)))
 
   // 主状态图标
   const getMainStatusIcon = () => {
@@ -94,8 +72,8 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
         </Badge>
       </div>
 
-      {/* 两阶段进度指示器 - 仅在上传进行中或已完成时显示 */}
-      {task.type === 'upload' && isStreamStage && (isActive || isCompleted || isFailed || isCancelled) && (
+      {/* 上传进度指示器 */}
+      {task.type === 'upload' && (isActive || isCompleted || isFailed || isCancelled) && (
         <div className="mb-2">
           <div className="flex items-center gap-1 mb-1.5">
             <div className={cn(
@@ -123,69 +101,8 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
                 "h-full transition-all duration-300 ease-out",
                 isCompleted ? "bg-green-500" : "bg-blue-500"
               )}
-              style={{ width: `${task.progress}%` }}
+              style={{ width: `${uploadProgress}%` }}
             />
-          </div>
-        </div>
-      )}
-
-      {task.type === 'upload' && !isStreamStage && (isActive || isCompleted || isFailed || isCancelled) && (
-        <div className="mb-2">
-          {/* 阶段步骤指示器 */}
-          <div className="flex items-center gap-1 mb-1.5">
-            {/* 阶段一：HTTP */}
-            <div className={cn(
-              "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
-              isHttpStage && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-              httpProgress === 100 && !isHttpStage && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-              !isHttpStage && httpProgress < 100 && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
-            )}>
-              {getStageIcon('http', isHttpStage, httpProgress === 100 && !isHttpStage)}
-              <Upload className="h-3 w-3" />
-              <span>{tSftp("uploadStageHttp")}</span>
-            </div>
-
-            {/* 箭头 */}
-            <ArrowRight className={cn(
-              "h-3 w-3 transition-colors",
-              isSftpStage || isCompleted ? "text-blue-500" : "text-zinc-300 dark:text-zinc-600"
-            )} />
-
-            {/* 阶段二：SFTP */}
-            <div className={cn(
-              "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
-              isSftpStage && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-              isCompleted && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-              !isSftpStage && !isCompleted && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
-            )}>
-              {getStageIcon('sftp', isSftpStage, isCompleted)}
-              <Server className="h-3 w-3" />
-              <span>{tSftp("uploadStageSftp")}</span>
-            </div>
-          </div>
-
-          {/* 组合进度条 */}
-          <div className="flex gap-0.5">
-            {/* HTTP 阶段进度 */}
-            <div className="flex-1 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-l-full overflow-hidden">
-              <div
-                className={cn(
-                  "h-full transition-all duration-300 ease-out",
-                  httpProgress === 100 ? "bg-green-500" : "bg-blue-500"
-                )}
-                style={{ width: `${httpProgress}%` }}
-              />
-            </div>
-            {/* SFTP 阶段进度 */}
-            <div className="flex-1 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-r-full overflow-hidden">
-              <div
-                className={cn(
-                  "h-full transition-all duration-300 ease-out",
-                  isCompleted ? "bg-green-500" : "bg-blue-500"
-                )}
-                style={{ width: `${sftpProgress}%` }}
-              />
-            </div>
           </div>
         </div>
       )}
@@ -271,20 +188,12 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
         <div className="flex items-center gap-2">
           {isActive ? (
             <>
-              {task.stage && (
+              {task.type === 'upload' && (
                 <span className={cn(
                   "font-medium",
-                  task.stage === 'stream'
-                    ? "text-blue-600 dark:text-blue-400"
-                    : task.stage === 'http'
-                    ? "text-blue-600 dark:text-blue-400"
-                    : "text-purple-600 dark:text-purple-400"
+                  "text-blue-600 dark:text-blue-400"
                 )}>
-                  {task.stage === 'stream'
-                    ? tSftp("uploadStageStreamShort")
-                    : task.stage === 'http'
-                    ? tSftp("uploadStageHttpShort")
-                    : tSftp("uploadStageSftpShort")}
+                  {tSftp("uploadStageStreamShort")}
                 </span>
               )}
               {task.speed && (
@@ -335,14 +244,9 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
 
         <div className="flex items-center gap-2">
           {/* 总进度百分比 */}
-          {isActive && task.type === 'upload' && isStreamStage && (
+          {isActive && task.type === 'upload' && (
             <span className="font-mono text-[10px]">
-              {Math.round(task.progress)}%
-            </span>
-          )}
-          {isActive && task.type === 'upload' && !isStreamStage && (
-            <span className="font-mono text-[10px]">
-              {Math.round((httpProgress + sftpProgress) / 2)}%
+              {uploadProgress}%
             </span>
           )}
           {isActive && task.type !== 'upload' && (

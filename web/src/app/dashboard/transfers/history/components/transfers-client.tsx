@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useTransition, useOptimistic, useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Upload as UploadIcon, Download as DownloadIcon, XCircle, ArrowUpDown, Plus, Loader2 } from "lucide-react"
 import { SkeletonStatsCard } from "@/components/ui/loading"
 import { fileTransfersApi, type FileTransfer, type FileTransferStatistics } from "@/lib/api/file-transfers"
@@ -57,6 +59,13 @@ interface TransfersClientProps {
 
 type TransferTaskMode = "legacy-upload" | "compatible-download" | "fast-download"
 
+type TransferPlanOption = {
+  value: TransferTaskMode
+  title: string
+  description: string
+  note: string
+}
+
 const getFileNameFromPath = (value: string): string => {
   const trimmed = value.trim()
   if (!trimmed) return "transfer"
@@ -70,7 +79,7 @@ const getRemoteUploadPath = (remoteDir: string, fileName: string): string => {
 }
 
 /**
- * 传输记录客户端组件
+ * 传输任务客户端组件
  * 纯 CSR 模式：在客户端加载数据
  */
 export function TransfersClient({ initialData }: TransfersClientProps) {
@@ -101,6 +110,26 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
   const [creatingTask, setCreatingTask] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const t = useTranslations("transfers")
+  const transferPlanOptions = useMemo<TransferPlanOption[]>(() => [
+    {
+      value: "legacy-upload",
+      title: t("planLegacyUploadTitle"),
+      description: t("planLegacyUploadDescription"),
+      note: t("planLegacyUploadNote"),
+    },
+    {
+      value: "compatible-download",
+      title: t("planCompatibleDownloadTitle"),
+      description: t("planCompatibleDownloadDescription"),
+      note: t("planCompatibleDownloadNote"),
+    },
+    {
+      value: "fast-download",
+      title: t("planFastDownloadTitle"),
+      description: t("planFastDownloadDescription"),
+      note: t("planFastDownloadNote"),
+    },
+  ], [t])
 
   // 乐观更新：立即从 UI 中移除删除的项目
   const [optimisticTransfers, setOptimisticTransfers] = useOptimistic(
@@ -181,7 +210,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
     [loadData]
   )
 
-  // 删除传输记录（使用 API + 乐观更新）
+  // 删除传输任务（使用 API + 乐观更新）
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm(t("confirmDelete"))) {
       return
@@ -484,26 +513,41 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="transfer-task-mode">{t("taskMode")}</Label>
-              <Select
+              <Label>{t("transferPlan")}</Label>
+              <RadioGroup
                 value={taskMode}
                 onValueChange={(value) => setTaskMode(value as TransferTaskMode)}
+                className="grid gap-2"
               >
-                <SelectTrigger id="transfer-task-mode" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="legacy-upload">
-                    {t("taskModeLegacyUpload")}
-                  </SelectItem>
-                  <SelectItem value="compatible-download">
-                    {t("taskModeCompatibleDownload")}
-                  </SelectItem>
-                  <SelectItem value="fast-download">
-                    {t("taskModeFastDownload")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                {transferPlanOptions.map((option) => {
+                  const inputId = `transfer-plan-${option.value}`
+                  const selected = taskMode === option.value
+
+                  return (
+                    <Label
+                      key={option.value}
+                      htmlFor={inputId}
+                      className={cn(
+                        "cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50",
+                      )}
+                    >
+                      <RadioGroupItem id={inputId} value={option.value} className="mt-0.5" />
+                      <span className="grid gap-1">
+                        <span className="text-sm font-medium">{option.title}</span>
+                        <span className="text-xs leading-5 text-muted-foreground">
+                          {option.description}
+                        </span>
+                        <span className="text-xs leading-5 text-muted-foreground">
+                          {option.note}
+                        </span>
+                      </span>
+                    </Label>
+                  )
+                })}
+              </RadioGroup>
             </div>
 
             <div className="grid gap-2">

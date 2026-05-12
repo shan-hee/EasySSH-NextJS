@@ -74,7 +74,7 @@ const messages = {
     executions: "执行记录",
     file: "文件管理",
     fileManager: "文件管理器",
-    transferHistory: "传输记录",
+    transferHistory: "传输任务",
     trash: "回收站",
     monitoring: "监控告警",
     monitoringResources: "资源监控",
@@ -472,12 +472,8 @@ const messages = {
     transferStatusCancelled: "已取消",
     transferStatusTransferring: "传输中...",
     transferPanelEmpty: "暂无传输任务",
-    // 两阶段上传进度
-    uploadStageHttp: "上传中",
-    uploadStageSftp: "写入远端",
+    // 上传进度
     uploadStageStream: "流式上传",
-    uploadStageHttpShort: "上传",
-    uploadStageSftpShort: "写入",
     uploadStageStreamShort: "上传",
     // 跨服务器传输两阶段进度
     transferStageRead: "读取源",
@@ -527,13 +523,6 @@ const messages = {
     contextOpen: "打开",
     contextEdit: "编辑",
     actionDownload: "下载",
-    actionDownloadFast: "快速下载",
-    actionDownloadFastTooltip:
-      "远程 tar/zip 压缩，智能排除常见大目录，速度快 10-50 倍（需服务器支持 tar）。",
-    actionDownloadCompatible: "兼容下载",
-    actionDownloadCompatibleTooltip:
-      "SFTP 逐文件传输，兼容所有服务器，自动跳过排除目录。",
-    actionRecommended: "推荐",
     actionRename: "重命名",
     actionChangePermissions: "修改权限",
     actionDeleteSingle: "删除",
@@ -591,7 +580,7 @@ const messages = {
     deleteConfirmButton: "删除",
   },
   transfers: {
-    pageTitle: "传输记录",
+    pageTitle: "传输任务",
     statsTotal: "总传输",
     statsTotalDesc: "成功 {completed} 次",
     statsUpload: "上传",
@@ -613,18 +602,24 @@ const messages = {
     statusFailed: "失败",
     statusPending: "等待中",
     actions: "操作",
-    empty: "暂无传输记录",
+    empty: "暂无传输任务",
     searchPlaceholder: "搜索文件名或路径...",
-    confirmDelete: "确定要删除这条传输记录吗？",
-    deleteSuccess: "传输记录已删除",
+    confirmDelete: "确定要删除这条传输任务吗？",
+    deleteSuccess: "传输任务已删除",
     deleteFailed: "删除失败",
-    loadFailed: "无法加载传输记录",
+    loadFailed: "无法加载传输任务",
     loadServersFailed: "无法加载服务器列表",
     newTask: "新建传输任务",
-    taskMode: "任务模式",
-    taskModeLegacyUpload: "旧版上传",
-    taskModeCompatibleDownload: "兼容下载",
-    taskModeFastDownload: "快速下载",
+    transferPlan: "传输方案",
+    planLegacyUploadTitle: "旧版上传",
+    planLegacyUploadDescription: "浏览器先上传到 EasySSH 后端，再由后端写入远端 SFTP；保留用于排查或兼容旧链路。",
+    planLegacyUploadNote: "适合验证旧环境问题；普通文件管理请优先使用终端/文件管理器里的流式上传。",
+    planCompatibleDownloadTitle: "兼容下载",
+    planCompatibleDownloadDescription: "通过 SFTP 逐个读取并在后端打包为 ZIP，不依赖远端 tar 等系统工具。",
+    planCompatibleDownloadNote: "适合远端工具缺失或权限受限的服务器；大目录会比快速下载慢。",
+    planFastDownloadTitle: "快速下载",
+    planFastDownloadDescription: "在远端执行 tar 压缩并流式返回，适合目录或多文件批量下载。",
+    planFastDownloadNote: "需要远端可用 tar 命令；这是批量下载的推荐方案。",
     taskServer: "服务器",
     taskServerPlaceholder: "选择服务器",
     taskLocalFile: "本地文件",
@@ -2138,13 +2133,7 @@ const messages = {
   },
   settingsSystemFileTransfer: {
     sectionDownloadTitle: "下载设置",
-    sectionDownloadDescription: "配置文件下载的默认行为和排除规则",
-    fieldDefaultDownloadMode: "默认下载模式",
-    fieldDefaultDownloadModeDesc: "右键下载文件夹时的默认模式",
-    optionDownloadModeFast:
-      "⚡ 快速下载（推荐）- 使用远程 tar 压缩",
-    optionDownloadModeCompatible:
-      "🔧 兼容下载 - 使用 SFTP 逐文件传输",
+    sectionDownloadDescription: "配置文件下载的排除规则",
     fieldExcludePatternsLabel: "排除规则（{count} 个）",
     fieldExcludePatternsDesc:
       "下载文件夹时自动跳过的目录/文件，每行一个",
@@ -2164,10 +2153,6 @@ const messages = {
     fieldSkipExcludedOnUploadDesc:
       "上传文件夹时，自动跳过上述排除规则中的文件和目录",
     performanceHintTitle: "性能提示：",
-    performanceHintFastMode:
-      "快速下载模式：速度提升 10-50 倍，但需要服务器安装 tar 工具",
-    performanceHintCompatibleMode:
-      "兼容下载模式：兼容所有服务器，但速度较慢",
     performanceHintExcludeRules:
       "排除规则：可大幅减少下载时间和文件大小（如 node_modules 通常占用数百 MB）",
   },

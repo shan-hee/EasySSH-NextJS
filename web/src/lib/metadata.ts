@@ -31,8 +31,8 @@ export const pageMetadata = {
     description: "SFTP 文件传输 - 上传下载服务器文件",
   },
   transfersHistory: {
-    title: "传输记录",
-    description: "查看文件传输历史记录和传输状态",
+    title: "传输任务",
+    description: "创建和查看文件传输任务状态",
   },
   logs: {
     title: "操作日志",

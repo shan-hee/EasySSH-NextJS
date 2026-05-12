@@ -297,7 +297,7 @@ interface SftpSessionContentProps {
   onDownloadSession: (sessionId: string, fileName: string) => void
   onDeleteSession: (sessionId: string, fileName: string) => void
   onBatchDeleteSession: (sessionId: string, fileNames: string[]) => Promise<BatchDeleteResult>
-  onBatchDownloadSession: (sessionId: string, fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) => Promise<void>
+  onBatchDownloadSession: (sessionId: string, fileNames: string[], excludePatterns?: string[]) => Promise<void>
   onCreateFolderSession: (sessionId: string, name: string) => void
   onCreateFileSession: (sessionId: string, name: string) => void
   onRenameSessionFile: (sessionId: string, oldName: string, newName: string) => void
@@ -347,8 +347,8 @@ const SftpSessionContent = React.memo(function SftpSessionContent({
   const onDelete = React.useCallback((fileName: string) => onDeleteSession(session.id, fileName), [onDeleteSession, session.id])
   const onBatchDelete = React.useCallback((fileNames: string[]) => onBatchDeleteSession(session.id, fileNames), [onBatchDeleteSession, session.id])
   const onBatchDownload = React.useCallback(
-    (fileNames: string[], mode?: "fast" | "compatible", excludePatterns?: string[]) =>
-      onBatchDownloadSession(session.id, fileNames, mode, excludePatterns),
+    (fileNames: string[], excludePatterns?: string[]) =>
+      onBatchDownloadSession(session.id, fileNames, excludePatterns),
     [onBatchDownloadSession, session.id],
   )
   const onCreateFolder = React.useCallback((name: string) => onCreateFolderSession(session.id, name), [onCreateFolderSession, session.id])
@@ -994,11 +994,10 @@ export default function SftpPage() {
    [tSftp, createSessionFilesUpdater]
  )
 
- // 批量下载文件（使用浏览器原生下载机制）
+ // 批量下载文件（文件管理器固定使用推荐的快速下载方案）
  const handleBatchDownload = useCallback(async (
    sessionId: string,
    fileNames: string[],
-   mode: "fast" | "compatible" = "fast",
    excludePatterns?: string[]
  ) => {
    const session = sessionsRef.current.find(s => s.id === sessionId)
@@ -1012,7 +1011,7 @@ export default function SftpPage() {
    )
 
   try {
-    await sftpApi.batchDownload(session.serverId, filePaths, mode, excludePatterns)
+    await sftpApi.batchDownload(session.serverId, filePaths, "fast", excludePatterns)
     toast.success(tSftp("toastBatchDownloadStart", { count: fileNames.length }))
   } catch (error: unknown) {
     console.error("Failed to batch download:", error)

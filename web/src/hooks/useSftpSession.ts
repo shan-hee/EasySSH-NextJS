@@ -644,10 +644,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
   );
 
   /**
-   * 批量下载文件(打包为 ZIP 或 tar.gz，使用浏览器原生下载)
+   * 批量下载文件（终端/文件管理器固定使用推荐的快速下载方案）
    */
   const batchDownloadFiles = useCallback(
-    async (fileNames: string[], mode: "fast" | "compatible" = "fast", excludePatterns?: string[]) => {
+    async (fileNames: string[], excludePatterns?: string[]) => {
       try {
         // 构建完整路径
         const fullPaths = fileNames.map((fileName) =>
@@ -657,7 +657,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         );
 
         // 直接调用 API 的批量下载，内部使用浏览器下载机制
-        await sftpApi.batchDownload(serverId, fullPaths, mode, excludePatterns);
+        await sftpApi.batchDownload(serverId, fullPaths, "fast", excludePatterns);
         toast.success(
           tSftp("toastBatchDownloadStart", { count: fileNames.length })
         );

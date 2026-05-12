@@ -5,7 +5,7 @@ import { TransfersClient } from "./components/transfers-client"
 import { useTranslations } from "next-intl"
 
 /**
- * 传输记录页面（纯 CSR 模式）
+ * 传输任务页面（纯 CSR 模式）
  * 数据在客户端获取
  */
 export default function TransfersHistoryPage() {

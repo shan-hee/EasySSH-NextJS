@@ -83,7 +83,7 @@ const messages = {
     executions: "Execution History",
     file: "File Management",
     fileManager: "File Manager",
-    transferHistory: "Transfer History",
+    transferHistory: "Transfer Tasks",
     trash: "Trash",
     monitoring: "Monitoring & Alerts",
     monitoringResources: "Resource Monitoring",
@@ -521,12 +521,8 @@ const messages = {
     transferStatusCancelled: "Cancelled",
     transferStatusTransferring: "Transferring...",
     transferPanelEmpty: "No transfer tasks",
-    // Two-stage upload progress
-    uploadStageHttp: "Uploading",
-    uploadStageSftp: "Writing to remote",
+    // Upload progress
     uploadStageStream: "Streaming upload",
-    uploadStageHttpShort: "Upload",
-    uploadStageSftpShort: "Write",
     uploadStageStreamShort: "Upload",
     // Cross-server transfer two-stage progress
     transferStageRead: "Read source",
@@ -576,13 +572,6 @@ const messages = {
     contextOpen: "Open",
     contextEdit: "Edit",
     actionDownload: "Download",
-    actionDownloadFast: "Fast download",
-    actionDownloadFastTooltip:
-      "Remote tar/zip compression with smart exclusion of common large directories, 10–50x faster (requires tar on server).",
-    actionDownloadCompatible: "Compatible download",
-    actionDownloadCompatibleTooltip:
-      "SFTP file-by-file transfer, compatible with all servers, automatically skips excluded directories.",
-    actionRecommended: "Recommended",
     actionRename: "Rename",
     actionChangePermissions: "Change permissions",
     actionDeleteSingle: "Delete",
@@ -640,7 +629,7 @@ const messages = {
     deleteConfirmButton: "Delete",
   },
   transfers: {
-    pageTitle: "Transfer history",
+    pageTitle: "Transfer tasks",
     statsTotal: "Total transfers",
     statsTotalDesc: "Succeeded {completed} times",
     statsUpload: "Uploads",
@@ -662,18 +651,24 @@ const messages = {
     statusFailed: "Failed",
     statusPending: "Pending",
     actions: "Actions",
-    empty: "No transfer records",
+    empty: "No transfer tasks",
     searchPlaceholder: "Search by file name or path...",
-    confirmDelete: "Are you sure you want to delete this transfer record?",
-    deleteSuccess: "Transfer record deleted",
+    confirmDelete: "Are you sure you want to delete this transfer task?",
+    deleteSuccess: "Transfer task deleted",
     deleteFailed: "Delete failed",
-    loadFailed: "Failed to load transfer records",
+    loadFailed: "Failed to load transfer tasks",
     loadServersFailed: "Failed to load servers",
     newTask: "New transfer task",
-    taskMode: "Task mode",
-    taskModeLegacyUpload: "Legacy upload",
-    taskModeCompatibleDownload: "Compatible download",
-    taskModeFastDownload: "Fast download",
+    transferPlan: "Transfer plan",
+    planLegacyUploadTitle: "Legacy upload",
+    planLegacyUploadDescription: "Upload from the browser to the EasySSH backend first, then write to the remote server over SFTP. Kept for troubleshooting and old-flow compatibility.",
+    planLegacyUploadNote: "Use this to compare older environments. For normal file management, prefer the streaming upload in Terminal/File Manager.",
+    planCompatibleDownloadTitle: "Compatible download",
+    planCompatibleDownloadDescription: "Read files one by one over SFTP and package them as a ZIP on the backend. Does not require remote tar or shell tools.",
+    planCompatibleDownloadNote: "Good for restricted servers or missing tools. Large folders will be slower than fast download.",
+    planFastDownloadTitle: "Fast download",
+    planFastDownloadDescription: "Run tar on the remote server and stream the archive back. Best for folders or multi-file downloads.",
+    planFastDownloadNote: "Requires tar on the remote server. This is the recommended batch download plan.",
     taskServer: "Server",
     taskServerPlaceholder: "Select server",
     taskLocalFile: "Local file",
@@ -2216,14 +2211,7 @@ const messages = {
   settingsSystemFileTransfer: {
     sectionDownloadTitle: "Download settings",
     sectionDownloadDescription:
-      "Configure default behavior and exclude rules for downloads",
-    fieldDefaultDownloadMode: "Default download mode",
-    fieldDefaultDownloadModeDesc:
-      "Default mode when downloading folders via context menu",
-    optionDownloadModeFast:
-      "⚡ Fast download (recommended) - use remote tar compression",
-    optionDownloadModeCompatible:
-      "🔧 Compatible download - use SFTP to transfer files one by one",
+      "Configure exclude rules for downloads",
     fieldExcludePatternsLabel: "Exclude rules ({count} items)",
     fieldExcludePatternsDesc:
       "Folders/files to skip when downloading directories, one per line",
@@ -2244,10 +2232,6 @@ const messages = {
     fieldSkipExcludedOnUploadDesc:
       "When uploading folders, automatically skip files and directories matching the exclude rules above",
     performanceHintTitle: "Performance tips:",
-    performanceHintFastMode:
-      "Fast download mode: 10-50x faster but requires tar on server",
-    performanceHintCompatibleMode:
-      "Compatible download mode: works on all servers but slower",
     performanceHintExcludeRules:
       "Exclude rules: can significantly reduce download time and size (e.g. node_modules often takes hundreds of MB).",
   },

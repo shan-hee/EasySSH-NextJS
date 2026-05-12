@@ -120,7 +120,7 @@ export function FileActionMenu({
         <KeyboardShortcut>⏎</KeyboardShortcut>
       </FileActionMenuItem>
 
-      {/* 下载：文件管理器只保留推荐下载路径，兼容模式移动到传输记录页 */}
+      {/* 下载：文件管理器只保留推荐下载路径，其他方案移动到传输任务页 */}
       {file.type === "file" || file.type === "directory" ? (
         <FileActionMenuItem
           mode={mode}
