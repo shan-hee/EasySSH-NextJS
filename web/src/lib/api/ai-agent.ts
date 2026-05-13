@@ -72,6 +72,7 @@ export interface SessionListItem {
   permission_mode: PermissionMode
   status: AgentSessionStatus
   title: string
+  custom_title: boolean
   message_count: number
   task_count: number
   created_at: string
@@ -122,6 +123,8 @@ export interface ListSessionsResponse {
 export interface SendSessionMessageInput {
   content: string
   context?: string
+  model?: string
+  permission_mode?: PermissionMode
 }
 
 export interface ConfirmTaskInput {
@@ -330,6 +333,8 @@ export async function connectAISessionWebSocket(
               type: "user.message",
               content: input.content,
               context: input.context,
+              model: input.model,
+              permission_mode: input.permission_mode,
             })
           )
         },

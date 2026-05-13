@@ -36,8 +36,10 @@ type ListAISessionsResponse struct {
 }
 
 type AISessionMessageRequest struct {
-	Content string `json:"content" binding:"required"`
-	Context string `json:"context,omitempty"`
+	Content        string `json:"content" binding:"required"`
+	Context        string `json:"context,omitempty"`
+	Model          string `json:"model,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty" binding:"omitempty,oneof=readonly balanced privileged"`
 }
 
 type ConfirmAISessionTaskRequest struct {
@@ -162,11 +164,15 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	if err := h.manager.SendUserMessage(
+	if err := h.manager.SendUserMessageWithOptions(
 		c.Request.Context(),
 		userID,
 		sessionID,
-		buildAISessionMessageContent(req.Content, req.Context),
+		runtime.SendUserMessageInput{
+			Content:        buildAISessionMessageContent(req.Content, req.Context),
+			Model:          req.Model,
+			PermissionMode: req.PermissionMode,
+		},
 	); err != nil {
 		h.respondRuntimeError(c, err)
 		return

@@ -140,3 +140,9 @@ type CreateSessionInput struct {
 	Model          string
 	PermissionMode string
 }
+
+type SendUserMessageInput struct {
+	Content        string
+	Model          string
+	PermissionMode string
+}

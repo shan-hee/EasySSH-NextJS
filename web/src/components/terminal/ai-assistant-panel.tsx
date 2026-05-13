@@ -250,7 +250,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       })
     }
 
-    const sent = await sendMessage(userInput)
+    const sent = await sendMessage(userInput, undefined, activeModel, "balanced")
     if (sent) {
       setInput("")
     }

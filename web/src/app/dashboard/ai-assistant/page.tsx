@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import Link from "next/link"
-import { Check, History, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Send, Server as ServerIcon, Shield, Square, SquarePen, Trash2, X } from "lucide-react"
+import { Check, History, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, RefreshCw, Search, Send, Server as ServerIcon, Shield, Square, SquarePen, Trash2, X } from "lucide-react"
 
 import { DashboardAgentTimeline } from "@/components/ai-agent/dashboard-agent-timeline"
 import {
@@ -33,14 +33,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -68,10 +60,27 @@ import { useAgentSession } from "@/hooks/use-agent-session"
 import { useAIConfig } from "@/hooks/use-ai-config"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { serversApi, type Server as ManagedServer } from "@/lib/api"
-import { deleteAISession, listAISessions, renameAISession, type PermissionMode, type SessionListItem } from "@/lib/api/ai-agent"
+import { deleteAISession, listAISessions, renameAISession, type CreateSessionResponse, type PermissionMode, type SessionListItem } from "@/lib/api/ai-agent"
 import { getServerDisplayName } from "@/lib/server-utils"
 import { cn } from "@/lib/utils"
 import { useTranslations } from "next-intl"
+
+const SESSION_SIDEBAR_COLLAPSED_STORAGE_KEY = "easyssh:ai-assistant:session-sidebar-collapsed"
+
+function createSessionListItem(response: CreateSessionResponse): SessionListItem {
+  return {
+    id: response.session_id,
+    model: response.session.model,
+    permission_mode: response.session.permission_mode,
+    status: response.session.status,
+    title: "新会话",
+    custom_title: false,
+    message_count: response.session.messages.length,
+    task_count: response.session.tasks.length,
+    created_at: response.session.created_at,
+    updated_at: response.session.updated_at,
+  }
+}
 
 export default function AIAssistantPage() {
   const t = useTranslations("aiAssistant")
@@ -88,14 +97,17 @@ export default function AIAssistantPage() {
   const [selectedServerIds, setSelectedServerIds] = useState<string[]>([])
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
-  const [sessionSheetOpen, setSessionSheetOpen] = useState(false)
   const [sessionList, setSessionList] = useState<SessionListItem[]>([])
   const [sessionListLoading, setSessionListLoading] = useState(false)
   const [sessionSearch, setSessionSearch] = useState("")
+  const [sessionSidebarCollapsed, setSessionSidebarCollapsed] = useState(true)
+  const [sessionCreating, setSessionCreating] = useState(false)
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState("")
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const sessionSidebarStorageReadyRef = useRef(false)
+  const sessionCreatingRef = useRef(false)
 
   useEffect(() => {
     if (!selectedModel && models.length > 0) {
@@ -125,6 +137,34 @@ export default function AIAssistantPage() {
   }, [loadServers])
 
   useEffect(() => {
+    try {
+      const storedValue = window.localStorage.getItem(SESSION_SIDEBAR_COLLAPSED_STORAGE_KEY)
+      if (storedValue !== null) {
+        setSessionSidebarCollapsed(storedValue === "true")
+      }
+    } catch {
+      // ignore unavailable storage
+    } finally {
+      sessionSidebarStorageReadyRef.current = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!sessionSidebarStorageReadyRef.current) {
+      return
+    }
+
+    try {
+      window.localStorage.setItem(
+        SESSION_SIDEBAR_COLLAPSED_STORAGE_KEY,
+        String(sessionSidebarCollapsed)
+      )
+    } catch {
+      // ignore unavailable storage
+    }
+  }, [sessionSidebarCollapsed])
+
+  useEffect(() => {
     if (!ready || isLoading || !isConfigured || session || agentSession.transport !== "idle") {
       return
     }
@@ -135,11 +175,6 @@ export default function AIAssistantPage() {
   const permissionOptions = useMemo(
     () =>
       [
-        {
-          value: "readonly" as const,
-          label: t("permissionModeReadonly"),
-          description: t("permissionModeReadonlyDesc"),
-        },
         {
           value: "balanced" as const,
           label: t("permissionModeBalanced"),
@@ -170,12 +205,20 @@ export default function AIAssistantPage() {
 
   const hasTimeline = visibleTimeline.length > 0
   const isSessionRunning = session?.status === "running"
+  const isCurrentSessionBlank = Boolean(
+    session &&
+    session.status !== "closed" &&
+    visibleTimeline.length === 0 &&
+    agentSession.tasks.length === 0
+  )
+  const createSessionDisabled = !ready || isLoading || !isConfigured || sessionCreating
   const canSubmit =
     Boolean(draft.trim()) &&
     ready &&
     !isLoading &&
     !attachmentsLoading &&
     isConfigured &&
+    !sessionCreating &&
     (!session || session.status === "idle" || session.status === "closed")
 
   const buildMessageContext = useCallback(
@@ -183,9 +226,20 @@ export default function AIAssistantPage() {
     [attachments, selectedServers, t]
   )
 
+  const prependSessionListItem = useCallback((response: CreateSessionResponse) => {
+    if (sessionSearch.trim()) {
+      return
+    }
+
+    setSessionList((current) => [
+      createSessionListItem(response),
+      ...current.filter((item) => item.id !== response.session_id),
+    ].slice(0, 30))
+  }, [sessionSearch])
+
   const submit = async () => {
     const normalizedDraft = draft.trim()
-    if (!normalizedDraft || !ready || isLoading || !isConfigured || attachmentsLoading) {
+    if (!normalizedDraft || !ready || isLoading || !isConfigured || attachmentsLoading || sessionCreatingRef.current) {
       return
     }
 
@@ -194,14 +248,28 @@ export default function AIAssistantPage() {
     }
 
     if (!sessionId || session?.status === "closed") {
-      await startNewSession({
-        model: selectedModel || undefined,
-        permissionMode,
-      })
+      sessionCreatingRef.current = true
+      setSessionCreating(true)
+
+      let response: CreateSessionResponse | null = null
+      try {
+        response = await startNewSession({
+          model: selectedModel || undefined,
+          permissionMode,
+        })
+      } finally {
+        sessionCreatingRef.current = false
+        setSessionCreating(false)
+      }
+
+      if (!response) {
+        return
+      }
+      prependSessionListItem(response)
     }
 
     const contextText = buildMessageContext()
-    const sent = await sendMessage(normalizedDraft, contextText)
+    const sent = await sendMessage(normalizedDraft, contextText, selectedModel || undefined, permissionMode)
     if (sent) {
       setDraft("")
       setAttachments([])
@@ -218,11 +286,35 @@ export default function AIAssistantPage() {
   const handleCreateNewSession = async () => {
     setDraft("")
     setAttachments([])
-    setSessionSheetOpen(false)
-    await startNewSession({
-      model: selectedModel || undefined,
-      permissionMode,
-    })
+
+    if (sessionCreatingRef.current) {
+      return
+    }
+
+    if (isCurrentSessionBlank) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+      })
+      return
+    }
+
+    sessionCreatingRef.current = true
+    setSessionCreating(true)
+
+    try {
+      const response = await startNewSession({
+        model: selectedModel || undefined,
+        permissionMode,
+      })
+
+      if (response) {
+        prependSessionListItem(response)
+      }
+    } finally {
+      sessionCreatingRef.current = false
+      setSessionCreating(false)
+    }
+
     requestAnimationFrame(() => {
       inputRef.current?.focus()
     })
@@ -245,10 +337,8 @@ export default function AIAssistantPage() {
   }, [isConfigured, isLoading, ready, sessionSearch])
 
   useEffect(() => {
-    if (sessionSheetOpen) {
-      void loadSessionList()
-    }
-  }, [loadSessionList, sessionSheetOpen])
+    void loadSessionList()
+  }, [loadSessionList])
 
   const handleRestoreSession = async (targetSessionId: string) => {
     if (renamingSessionId) {
@@ -257,7 +347,6 @@ export default function AIAssistantPage() {
 
     const restored = await restoreSession(targetSessionId)
     if (restored) {
-      setSessionSheetOpen(false)
       requestAnimationFrame(() => {
         inputRef.current?.focus()
       })
@@ -284,7 +373,11 @@ export default function AIAssistantPage() {
     try {
       await renameAISession(targetSessionId, title)
       cancelRenameSession()
-      await loadSessionList()
+      setSessionList((current) => current.map((item) => (
+        item.id === targetSessionId
+          ? { ...item, title, custom_title: true, updated_at: new Date().toISOString() }
+          : item
+      )))
       toast.success("会话已重命名")
     } catch {
       toast.error("重命名会话失败")
@@ -302,9 +395,6 @@ export default function AIAssistantPage() {
       setSessionList((current) => current.filter((item) => item.id !== targetSessionId))
       if (targetSessionId === sessionId) {
         await closeSession()
-        setSessionSheetOpen(false)
-      } else {
-        await loadSessionList()
       }
       toast.success("会话已删除")
     } catch {
@@ -370,214 +460,267 @@ export default function AIAssistantPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <PageHeader title={t("pageTitle")}>
-        <Sheet open={sessionSheetOpen} onOpenChange={setSessionSheetOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 text-muted-foreground hover:text-foreground"
-              disabled={!ready || isLoading || !isConfigured}
-              onClick={() => void loadSessionList()}
-              aria-label="会话列表"
-              title="会话列表"
-            >
-              <History className="size-4" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-[360px] p-0 sm:max-w-md">
-            <SheetHeader className="border-b border-border/60 px-4 py-4">
-              <SheetTitle>会话列表</SheetTitle>
-              <SheetDescription>搜索、恢复或管理最近的 AI 助手会话</SheetDescription>
-            </SheetHeader>
-            <div className="border-b border-border/60 p-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={sessionSearch}
-                  onChange={(event) => setSessionSearch(event.target.value)}
-                  placeholder="搜索会话标题或消息"
-                  className="pl-9 pr-9"
-                />
-                {sessionSearch && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setSessionSearch("")}
-                    aria-label="清空搜索"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-3 py-3">
+      <PageHeader title={t("pageTitle")} />
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        <aside
+          className={cn(
+            "relative order-2 flex shrink-0 flex-col text-foreground transition-[width] duration-200 md:max-h-none",
+            sessionSidebarCollapsed ? "max-h-[280px] w-full md:w-14" : "max-h-[280px] w-full md:w-[320px]"
+          )}
+        >
+          {sessionSidebarCollapsed ? (
+            <div className="flex min-h-0 flex-1 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:flex-col md:overflow-x-visible md:overflow-y-auto md:px-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 shrink-0 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
+                onClick={() => setSessionSidebarCollapsed(false)}
+                aria-label="展开会话列表"
+                title="展开会话列表"
+              >
+                <PanelRightOpen className="size-4" />
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 shrink-0 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-accent/50"
+                disabled={createSessionDisabled}
+                onClick={() => void handleCreateNewSession()}
+                aria-label={t("newSession")}
+                title={t("newSession")}
+              >
+                <SquarePen className="size-4" />
+              </Button>
+
               {sessionListLoading ? (
-                <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  加载中
-                </div>
-              ) : sessionList.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-                  暂无会话
+                <div className="flex size-9 shrink-0 items-center justify-center text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {sessionList.map((item) => {
-                    const isActive = item.id === sessionId
-                    return (
-                      <div
-                        key={item.id}
-                        role="button"
-                        tabIndex={0}
-                        className={cn(
-                          "w-full rounded-xl border px-3 py-3 text-left transition-colors",
-                          isActive
-                            ? "border-primary/30 bg-primary/10"
-                            : "border-border/60 bg-card/60 hover:bg-accent/40"
-                        )}
-                        onClick={() => void handleRestoreSession(item.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault()
-                            void handleRestoreSession(item.id)
-                          }
-                        }}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            {renamingSessionId === item.id ? (
-                              <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                                <Input
-                                  autoFocus
-                                  value={renameDraft}
-                                  onChange={(event) => setRenameDraft(event.target.value)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      event.preventDefault()
-                                      void submitRenameSession(item.id)
-                                    }
-                                    if (event.key === "Escape") {
-                                      event.preventDefault()
-                                      cancelRenameSession()
-                                    }
-                                  }}
-                                  className="h-8"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 shrink-0"
-                                  onClick={() => void submitRenameSession(item.id)}
-                                  aria-label="保存会话名称"
-                                >
-                                  <Check className="size-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 shrink-0"
-                                  onClick={cancelRenameSession}
-                                  aria-label="取消重命名"
-                                >
-                                  <X className="size-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="truncate text-sm font-medium">{item.title}</div>
-                            )}
-                            <div className="mt-1 truncate text-xs text-muted-foreground">
-                              {item.model || "默认模型"} · {item.message_count} 条消息 · {item.task_count} 个任务
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1">
-                            <Badge variant="outline" className="text-[10px]">
-                              {item.status}
-                            </Badge>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-7 text-muted-foreground hover:text-foreground"
-                                  onClick={(event) => event.stopPropagation()}
-                                  aria-label="会话操作"
-                                >
-                                  <MoreHorizontal className="size-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    beginRenameSession(item)
-                                  }}
-                                >
-                                  <Pencil className="size-4" />
-                                  重命名
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    void handleDeleteSession(item.id)
-                                  }}
-                                >
-                                  <Trash2 className="size-4" />
-                                  删除
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </div>
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          {new Date(item.updated_at).toLocaleString()}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+                sessionList.slice(0, 12).map((item) => {
+                  const isActive = item.id === sessionId
+
+                  return (
+                    <Button
+                      key={item.id}
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "size-9 shrink-0 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50",
+                        isActive && "bg-accent text-foreground dark:bg-accent/50"
+                      )}
+                      onClick={() => void handleRestoreSession(item.id)}
+                      aria-label={`恢复会话：${item.title}`}
+                      title={item.title}
+                    >
+                      <History className="size-4" />
+                    </Button>
+                  )
+                })
               )}
             </div>
-          </SheetContent>
-        </Sheet>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 text-muted-foreground hover:text-foreground"
-          disabled={!ready || isLoading || !isConfigured}
-          onClick={() => void handleCreateNewSession()}
-          aria-label={t("newSession")}
-          title={t("newSession")}
-        >
-          <SquarePen className="size-4" />
-        </Button>
-      </PageHeader>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute left-3 top-3 z-10 size-9 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
+                onClick={() => setSessionSidebarCollapsed(true)}
+                aria-label="折叠会话列表"
+                title="折叠会话列表"
+              >
+                <PanelRightClose className="size-4" />
+              </Button>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 md:px-6 md:pb-6 lg:overflow-hidden">
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {hasTimeline ? (
-              <Conversation className="mx-auto h-full w-full max-w-5xl">
-                <ConversationContent
-                  className="mx-auto w-full max-w-4xl space-y-4 px-0 py-6"
-                  scrollClassName="h-full w-full overflow-y-auto px-1 scrollbar-custom"
+              <div className="space-y-2 px-3 pb-3 pt-16">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 w-full justify-start gap-2 rounded-md px-2 text-sm font-medium text-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-accent/50"
+                  disabled={createSessionDisabled}
+                  onClick={() => void handleCreateNewSession()}
                 >
-                  <DashboardAgentTimeline entries={visibleTimeline} tText={t} />
-                </ConversationContent>
-                <ConversationScrollButton />
-              </Conversation>
-            ) : (
-              <PromptTemplateGrid onUseTemplate={handleUseTemplate} t={t} />
-            )}
-          </div>
+                  <SquarePen className="size-4" />
+                  {t("newSession")}
+                </Button>
 
-          <div className="shrink-0 pt-4">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={sessionSearch}
+                    onChange={(event) => setSessionSearch(event.target.value)}
+                    placeholder="搜索会话标题或消息"
+                    className="h-8 border-transparent bg-transparent pl-9 pr-9 text-sm text-foreground shadow-none placeholder:text-muted-foreground dark:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                  {sessionSearch && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
+                      onClick={() => setSessionSearch("")}
+                      aria-label="清空搜索"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 scrollbar-custom">
+                {sessionListLoading ? (
+                  <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    加载中
+                  </div>
+                ) : sessionList.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    暂无会话
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {sessionList.map((item) => {
+                      const isActive = item.id === sessionId
+                      return (
+                        <div
+                          key={item.id}
+                          role="button"
+                          tabIndex={0}
+                          className={cn(
+                            "w-full rounded-md px-2 py-2 text-left transition-colors",
+                            isActive
+                              ? "bg-accent text-foreground dark:bg-accent/50"
+                              : "text-foreground hover:bg-accent dark:hover:bg-accent/50"
+                          )}
+                          onClick={() => void handleRestoreSession(item.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault()
+                              void handleRestoreSession(item.id)
+                            }
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              {renamingSessionId === item.id ? (
+                                <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                                  <Input
+                                    autoFocus
+                                    value={renameDraft}
+                                    onChange={(event) => setRenameDraft(event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault()
+                                        void submitRenameSession(item.id)
+                                      }
+                                      if (event.key === "Escape") {
+                                        event.preventDefault()
+                                        cancelRenameSession()
+                                      }
+                                    }}
+                                    className="h-8"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8 shrink-0"
+                                    onClick={() => void submitRenameSession(item.id)}
+                                    aria-label="保存会话名称"
+                                  >
+                                    <Check className="size-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8 shrink-0"
+                                    onClick={cancelRenameSession}
+                                    aria-label="取消重命名"
+                                  >
+                                    <X className="size-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="truncate text-sm font-medium">{item.title}</div>
+                              )}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Badge variant="outline" className="border-0 bg-transparent px-1 text-[10px] text-muted-foreground shadow-none">
+                                {item.status}
+                              </Badge>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-7 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
+                                    onClick={(event) => event.stopPropagation()}
+                                    aria-label="会话操作"
+                                  >
+                                    <MoreHorizontal className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      beginRenameSession(item)
+                                    }}
+                                  >
+                                    <Pencil className="size-4" />
+                                    重命名
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      void handleDeleteSession(item.id)
+                                    }}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    删除
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </aside>
+
+        <div className="order-1 min-w-0 flex-1 overflow-y-auto px-4 pb-4 md:px-6 md:pb-6 lg:overflow-hidden">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {hasTimeline ? (
+                <Conversation className="mx-auto h-full w-full max-w-5xl">
+                  <ConversationContent
+                    className="mx-auto w-full max-w-4xl space-y-4 px-0 py-6"
+                    scrollClassName="h-full w-full overflow-y-auto px-1 scrollbar-custom"
+                  >
+                    <DashboardAgentTimeline entries={visibleTimeline} tText={t} />
+                  </ConversationContent>
+                  <ConversationScrollButton />
+                </Conversation>
+              ) : (
+                <PromptTemplateGrid onUseTemplate={handleUseTemplate} t={t} />
+              )}
+            </div>
+
+            <div className="shrink-0 pt-4">
             {ready && isConfigured && pendingConfirmationTasks.length > 0 && (
               <div className="mx-auto mb-3 w-full max-w-4xl rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 shadow-sm">
                 <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
@@ -648,7 +791,7 @@ export default function AIAssistantPage() {
                     className="px-4 pt-4"
                   />
 
-                <PromptInputToolbar className="flex-wrap gap-3 border-t border-border/60 px-2 py-2">
+                <PromptInputToolbar className="flex-wrap gap-3 px-2 py-2">
                   <PromptInputTools className="flex flex-wrap items-center gap-2">
                     <PromptInputModelSelect
                         value={selectedModel}
@@ -849,6 +992,7 @@ export default function AIAssistantPage() {
                   {t("safetyNotice")}
                 </div>
               </div>
+            </div>
           </div>
         </div>
       </div>

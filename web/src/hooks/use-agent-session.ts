@@ -9,6 +9,7 @@ import {
   getLatestAISession,
   openAISessionEventStream,
   sendAISessionMessage,
+  type CreateSessionResponse,
   type PermissionMode,
   type SessionView,
   type SessionWebSocketConnection,
@@ -161,9 +162,27 @@ export function useAgentSession() {
     }
   }, [])
 
+  const detachCurrentSession = useCallback(async () => {
+    const sessionId = currentSessionIdRef.current
+    const shouldCancelRunningSession = stateRef.current.session?.status === "running"
+
+    if (sessionId && shouldCancelRunningSession) {
+      try {
+        await cancelAISession(sessionId)
+      } catch {
+        // ignore
+      }
+    }
+
+    currentSessionIdRef.current = null
+    closingSessionIdRef.current = sessionId
+    cleanupTransport()
+    closingSessionIdRef.current = null
+  }, [cleanupTransport])
+
 
   const applyRestoredSession = useCallback(
-    async (response: { session_id: string; session: SessionView; default_transport: SessionView["default_transport"] }) => {
+    async (response: CreateSessionResponse) => {
       cleanupTransport()
       currentSessionIdRef.current = response.session_id
       closingSessionIdRef.current = null
@@ -230,11 +249,8 @@ export function useAgentSession() {
 
   const startNewSession = useCallback(
     async (input: { model?: string; permissionMode?: PermissionMode }) => {
-      await closeCurrentRemoteSession()
-      cleanupTransport()
+      await detachCurrentSession()
 
-      currentSessionIdRef.current = null
-      closingSessionIdRef.current = null
       latestRestoreAttemptedRef.current = true
       dispatch({ type: "reset" })
       dispatch({ type: "transport", transport: "connecting_ws" })
@@ -258,16 +274,18 @@ export function useAgentSession() {
         })
 
         await connectTransport(response.session_id, response.default_transport)
+        return response
       } catch (error) {
         dispatch({ type: "transport", transport: "idle" })
         pushLocalError(error instanceof Error ? error.message : String(error), "create_session_failed")
+        return null
       }
     },
-    [cleanupTransport, closeCurrentRemoteSession, connectTransport, pushLocalError]
+    [connectTransport, detachCurrentSession, pushLocalError]
   )
 
   const sendMessage = useCallback(
-    async (content: string, contextText?: string) => {
+    async (content: string, contextText?: string, model?: string, permissionMode?: PermissionMode) => {
       const sessionId = currentSessionIdRef.current
       if (!sessionId) {
         return false
@@ -294,6 +312,8 @@ export function useAgentSession() {
           wsConnectionRef.current.sendUserMessage({
             content: normalizedContent,
             context: contextText,
+            model,
+            permission_mode: permissionMode,
           })
           return true
         }
@@ -301,6 +321,8 @@ export function useAgentSession() {
         await sendAISessionMessage(sessionId, {
           content: normalizedContent,
           context: contextText,
+          model,
+          permission_mode: permissionMode,
         })
         return true
       } catch (error) {

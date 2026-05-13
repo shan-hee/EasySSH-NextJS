@@ -29,11 +29,13 @@ func NewAISessionHandler(manager *runtime.Manager, securityService security.Serv
 }
 
 type aiSessionWSCommand struct {
-	Type     string `json:"type"`
-	Content  string `json:"content,omitempty"`
-	Context  string `json:"context,omitempty"`
-	TaskID   string `json:"task_id,omitempty"`
-	Decision string `json:"decision,omitempty"`
+	Type           string `json:"type"`
+	Content        string `json:"content,omitempty"`
+	Context        string `json:"context,omitempty"`
+	Model          string `json:"model,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
+	Decision       string `json:"decision,omitempty"`
 }
 
 func (h *AISessionHandler) getUpgrader() *websocket.Upgrader {
@@ -160,11 +162,15 @@ func (h *AISessionHandler) HandleSession(c *gin.Context) {
 
 		switch strings.TrimSpace(cmd.Type) {
 		case "user.message":
-			err = h.manager.SendUserMessage(
+			err = h.manager.SendUserMessageWithOptions(
 				c.Request.Context(),
 				userID,
 				sessionID,
-				buildAISessionWSMessageContent(cmd.Content, cmd.Context),
+				runtime.SendUserMessageInput{
+					Content:        buildAISessionWSMessageContent(cmd.Content, cmd.Context),
+					Model:          cmd.Model,
+					PermissionMode: cmd.PermissionMode,
+				},
 			)
 			if err != nil {
 				select {

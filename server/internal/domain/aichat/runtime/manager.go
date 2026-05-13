@@ -323,10 +323,16 @@ func (m *Manager) Subscribe(userID uuid.UUID, sessionID string) (<-chan Event, f
 }
 
 func (m *Manager) SendUserMessage(ctx context.Context, userID uuid.UUID, sessionID string, content string) error {
-	content = strings.TrimSpace(content)
+	return m.SendUserMessageWithOptions(ctx, userID, sessionID, SendUserMessageInput{Content: content})
+}
+
+func (m *Manager) SendUserMessageWithOptions(ctx context.Context, userID uuid.UUID, sessionID string, input SendUserMessageInput) error {
+	content := strings.TrimSpace(input.Content)
 	if content == "" {
 		return ErrEmptyMessageContent
 	}
+	model := strings.TrimSpace(input.Model)
+	permissionMode := strings.TrimSpace(input.PermissionMode)
 
 	s, err := m.getOrRestoreSession(ctx, userID, sessionID)
 	if err != nil {
@@ -348,6 +354,12 @@ func (m *Manager) SendUserMessage(ctx context.Context, userID uuid.UUID, session
 	}
 
 	now := time.Now()
+	if model != "" {
+		s.model = model
+	}
+	if permissionMode != "" {
+		s.permissionMode = normalizePermissionMode(permissionMode)
+	}
 	s.messages = append(s.messages, provider.Message{
 		Role:    "user",
 		Content: content,
@@ -757,7 +769,7 @@ func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([
 			Summary:              summarizeTask(tc.Name, args),
 			Status:               TaskStatusQueued,
 			Dangerous:            spec.Dangerous,
-			RequiresConfirmation: spec.ConfirmStrategy == registry.ConfirmUser,
+			RequiresConfirmation: requiresUserConfirmation(s.permissionMode, spec),
 			Arguments:            args,
 			CreatedAt:            now,
 			UpdatedAt:            now,
@@ -804,7 +816,7 @@ func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([
 		m.saveSnapshot(context.Background(), snapshot)
 		m.emitTaskEvent(s, EventTaskCreated, view)
 
-		if spec.ConfirmStrategy == registry.ConfirmUser {
+		if requiresUserConfirmation(s.permissionMode, spec) {
 			m.mu.Lock()
 			task := s.tasks[taskID]
 			task.view.Status = TaskStatusWaitingConfirm
@@ -1245,6 +1257,10 @@ func normalizePermissionMode(raw string) string {
 	}
 }
 
+func requiresUserConfirmation(permissionMode string, spec registry.ToolSpec) bool {
+	return normalizePermissionMode(permissionMode) != "privileged" && spec.ConfirmStrategy == registry.ConfirmUser
+}
+
 func buildToolSystemPrompt(permissionMode string, allowedTools []registry.ToolSpec) string {
 	var sb strings.Builder
 	sb.WriteString("你是一个服务器管理助手，可以帮助用户管理和操作他们的服务器。\n\n")
@@ -1275,9 +1291,9 @@ func permissionRule(mode string) string {
 	case "readonly":
 		return "当前是只读分析模式：仅允许查询、读取、分析；如果用户要求写入、删除或状态变更，请明确说明限制并给出只读替代方案。"
 	case "privileged":
-		return "当前是高权限模式：可使用当前会话可见的全部工具；涉及高风险操作时仍需先说明风险与影响。"
+		return "当前是全部权限模式：可直接使用当前会话可见的全部工具；危险操作无需等待二次确认，但需要在结果中说明风险与影响。"
 	default:
-		return "当前是标准模式：允许常规运维操作；危险动作会进入系统确认流程。"
+		return "当前是标准权限模式：允许常规运维操作；危险动作会进入系统确认流程。"
 	}
 }
 
