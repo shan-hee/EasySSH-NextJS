@@ -48,25 +48,49 @@ export function AgentTimeline({
             if (!entry.data || !renderMessage) {
               return null
             }
-            return <div key={entry.id}>{renderMessage(entry as AgentTimelineMessageEntry)}</div>
+            {
+              const content = renderMessage(entry as AgentTimelineMessageEntry)
+              if (content === null || content === undefined || content === false) {
+                return null
+              }
+              return <div key={entry.id}>{content}</div>
+            }
 
           case "task":
             if (!entry.data || !renderTask) {
               return null
             }
-            return <div key={entry.id}>{renderTask(entry as AgentTimelineTaskEntry)}</div>
+            {
+              const content = renderTask(entry as AgentTimelineTaskEntry)
+              if (content === null || content === undefined || content === false) {
+                return null
+              }
+              return <div key={entry.id}>{content}</div>
+            }
 
           case "confirmation":
             if (!entry.data || !renderConfirmation) {
               return null
             }
-            return <div key={entry.id}>{renderConfirmation(entry as AgentTimelineConfirmationEntry)}</div>
+            {
+              const content = renderConfirmation(entry as AgentTimelineConfirmationEntry)
+              if (content === null || content === undefined || content === false) {
+                return null
+              }
+              return <div key={entry.id}>{content}</div>
+            }
 
           case "error":
             if (!entry.data || !renderError) {
               return null
             }
-            return <div key={entry.id}>{renderError(entry as AgentTimelineErrorEntry)}</div>
+            {
+              const content = renderError(entry as AgentTimelineErrorEntry)
+              if (content === null || content === undefined || content === false) {
+                return null
+              }
+              return <div key={entry.id}>{content}</div>
+            }
 
           default:
             return null

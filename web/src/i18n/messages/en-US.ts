@@ -1752,6 +1752,8 @@ const messages = {
     taskResult: "Result",
     expandTaskOutput: "Expand output",
     collapseTaskOutput: "Collapse output",
+    toolCallGroupTitle: "Called {count} tools",
+    toolCallGroupMore: "{count} more",
     confirmAction: "Confirm",
     rejectAction: "Reject",
     timelineTitle: "Event Timeline",

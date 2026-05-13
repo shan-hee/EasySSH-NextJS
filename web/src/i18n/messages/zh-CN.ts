@@ -1691,6 +1691,8 @@ const messages = {
     taskResult: "执行结果",
     expandTaskOutput: "展开输出",
     collapseTaskOutput: "收起输出",
+    toolCallGroupTitle: "已调用{count}个工具",
+    toolCallGroupMore: "另有 {count} 个",
     confirmAction: "确认执行",
     rejectAction: "拒绝执行",
     timelineTitle: "事件时间线",
