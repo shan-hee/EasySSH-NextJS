@@ -287,6 +287,7 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
         data={optimisticSessions}
         columns={columns}
         loading={refreshing || isPending}
+        currentPage={page}
         pageCount={totalPages}
         pageSize={pageSize}
         totalRows={totalCount}

@@ -38,7 +38,8 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   const [statistics, setStatistics] = useState<AuditLogStatisticsResponse | null>(
     initialData?.statistics || null
   )
-  const [loading, setLoading] = useState(!initialData)
+  const [initialLoading, setInitialLoading] = useState(!initialData)
+  const [tableLoading, setTableLoading] = useState(false)
   const [page, setPage] = useState(initialData?.currentPage || 1)
   const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
   const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
@@ -60,28 +61,43 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
     [t],
   )
 
-  // 加载数据
-  const loadData = async (currentPage: number, currentPageSize: number) => {
+  // 加载统计数据
+  const loadStatistics = async () => {
     try {
-      setLoading(true)
-      // 并行加载日志列表和统计信息
-      const [logsResponse, statsResponse] = await Promise.all([
-        auditLogsApi.list({
-          page: currentPage,
-          page_size: currentPageSize,
-        }),
-        auditLogsApi.getStatistics(),
-      ])
+      const statsResponse = await auditLogsApi.getStatistics()
+      setStatistics(statsResponse)
+    } catch (error: unknown) {
+      console.error("操作日志统计加载失败:", error)
+      toast.error(getErrorMessage(error, t("toastLoadFailed")))
+    }
+  }
+
+  // 加载日志列表
+  const loadLogs = async (
+    currentPage: number,
+    currentPageSize: number,
+    options: { showTableLoading?: boolean } = {},
+  ) => {
+    try {
+      if (options.showTableLoading) {
+        setTableLoading(true)
+      }
+
+      const logsResponse = await auditLogsApi.list({
+        page: currentPage,
+        page_size: currentPageSize,
+      })
 
       setLogs(logsResponse.logs || [])
       setTotalPages(logsResponse.total_pages || 1)
       setTotalRows(logsResponse.total || 0)
-      setStatistics(statsResponse)
     } catch (error: unknown) {
       console.error("操作日志加载失败:", error)
       toast.error(getErrorMessage(error, t("toastLoadFailed")))
     } finally {
-      setLoading(false)
+      if (options.showTableLoading) {
+        setTableLoading(false)
+      }
     }
   }
 
@@ -89,26 +105,39 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   React.useEffect(() => {
     if (initialData) return
     if (!ready) return
-    loadData(page, pageSize)
+
+    const loadInitialData = async () => {
+      try {
+        setInitialLoading(true)
+        await Promise.all([
+          loadLogs(page, pageSize),
+          loadStatistics(),
+        ])
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    loadInitialData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, initialData])
 
   // 页码变化
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
-    loadData(newPage, pageSize)
+    loadLogs(newPage, pageSize, { showTableLoading: true })
   }
 
   // 每页数量变化
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize)
     setPage(1)
-    loadData(1, newPageSize)
+    loadLogs(1, newPageSize, { showTableLoading: true })
   }
 
   // 刷新数据
   const handleRefresh = () => {
-    loadData(page, pageSize)
+    loadLogs(page, pageSize, { showTableLoading: true })
   }
 
   // 筛选选项配置
@@ -146,7 +175,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   return (
     <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
       {/* 统计卡片 - 加载时显示骨架屏 */}
-      {loading && !initialData ? (
+      {initialLoading ? (
         <div className="grid gap-4 md:grid-cols-4">
           <SkeletonStatsCard />
           <SkeletonStatsCard />
@@ -217,7 +246,8 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
       <DataTable
         data={logs}
         columns={visibleColumns}
-        loading={loading}
+        loading={initialLoading || tableLoading}
+        currentPage={page}
         pageCount={totalPages}
         pageSize={pageSize}
         totalRows={totalRows}

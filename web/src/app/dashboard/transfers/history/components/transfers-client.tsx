@@ -487,6 +487,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
         data={optimisticTransfers}
         columns={columns}
         loading={refreshing || isPending}
+        currentPage={page}
         pageCount={totalPages}
         pageSize={pageSize}
         totalRows={totalCount}

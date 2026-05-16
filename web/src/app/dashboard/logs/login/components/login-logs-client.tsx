@@ -48,7 +48,8 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
     failure: 0,
     abnormalIP: 0,
   })
-  const [loading, setLoading] = useState(!initialData)
+  const [initialLoading, setInitialLoading] = useState(!initialData)
+  const [tableLoading, setTableLoading] = useState(false)
   const [page, setPage] = useState(initialData?.currentPage || 1)
   const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
   const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
@@ -82,10 +83,24 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
     return !isPrivate && ip !== "::1" && !ip.startsWith("fe80::")
   }
 
-  // 加载数据
-  const loadData = async (currentPage: number, currentPageSize: number) => {
+  const buildLoginStats = (loginLogs: AuditLog[]): LoginStats => ({
+    total: loginLogs.length,
+    success: loginLogs.filter((log) => log.status === "success").length,
+    failure: loginLogs.filter((log) => log.status === "failure").length,
+    abnormalIP: loginLogs.filter((log) => isAbnormalIP(log.ip)).length,
+  })
+
+  // 加载登录日志列表
+  const loadLogs = async (
+    currentPage: number,
+    currentPageSize: number,
+    options: { showTableLoading?: boolean; updateStats?: boolean } = {},
+  ) => {
     try {
-      setLoading(true)
+      if (options.showTableLoading) {
+        setTableLoading(true)
+      }
+
       // 加载日志列表
       const logsResponse = await auditLogsApi.list({
         page: currentPage,
@@ -98,18 +113,16 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
       setTotalPages(logsResponse.total_pages || 1)
       setTotalRows(logsResponse.total || 0)
 
-      // 重新计算统计数据
-      setLoginStats({
-        total: filteredLogs.length,
-        success: filteredLogs.filter((log) => log.status === "success").length,
-        failure: filteredLogs.filter((log) => log.status === "failure").length,
-        abnormalIP: filteredLogs.filter((log) => isAbnormalIP(log.ip)).length,
-      })
+      if (options.updateStats) {
+        setLoginStats(buildLoginStats(filteredLogs))
+      }
     } catch (error: unknown) {
       console.error("登录日志加载失败:", error)
       toast.error(getErrorMessage(error, t("toastLoadFailed")))
     } finally {
-      setLoading(false)
+      if (options.showTableLoading) {
+        setTableLoading(false)
+      }
     }
   }
 
@@ -117,26 +130,36 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
   React.useEffect(() => {
     if (initialData) return
     if (!ready) return
-    loadData(page, pageSize)
+
+    const loadInitialData = async () => {
+      try {
+        setInitialLoading(true)
+        await loadLogs(page, pageSize, { updateStats: true })
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    loadInitialData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, initialData])
 
   // 页码变化
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
-    loadData(newPage, pageSize)
+    loadLogs(newPage, pageSize, { showTableLoading: true })
   }
 
   // 每页数量变化
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize)
     setPage(1)
-    loadData(1, newPageSize)
+    loadLogs(1, newPageSize, { showTableLoading: true })
   }
 
   // 刷新数据
   const handleRefresh = () => {
-    loadData(page, pageSize)
+    loadLogs(page, pageSize, { showTableLoading: true })
   }
 
   // 筛选选项配置
@@ -168,7 +191,7 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
   return (
     <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
       {/* 统计卡片 - 加载时显示骨架屏 */}
-      {loading && !initialData ? (
+      {initialLoading ? (
         <div className="grid gap-4 md:grid-cols-4">
           <SkeletonStatsCard />
           <SkeletonStatsCard />
@@ -230,7 +253,8 @@ export function LoginLogsClient({ initialData }: LoginLogsClientProps) {
       <DataTable
         data={logs}
         columns={visibleColumns}
-        loading={loading}
+        loading={initialLoading || tableLoading}
+        currentPage={page}
         pageCount={totalPages}
         pageSize={pageSize}
         totalRows={totalRows}

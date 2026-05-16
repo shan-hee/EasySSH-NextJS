@@ -901,9 +901,11 @@ export default function TrashPage() {
           data={trashItems}
           columns={columns}
           loading={isInitialLoading || loading}
+          currentPage={currentPage}
           pageCount={pageCount}
           pageSize={pageSize}
           totalRows={total}
+          onPageChange={setCurrentPage}
           onPageSizeChange={(size) => {
             setPageSize(size)
             setCurrentPage(1)

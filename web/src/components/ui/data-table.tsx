@@ -35,6 +35,7 @@ interface DataTableProps<TData, TValue = unknown> {
   data: TData[]
   columns: ColumnDef<TData, TValue>[]
   loading?: boolean
+  currentPage?: number
   pageCount?: number
   pageSize?: number
   totalRows?: number
@@ -142,9 +143,11 @@ export function DataTable<TData, TValue = unknown>({
   data,
   columns,
   loading = false,
+  currentPage: currentPageProp,
   pageCount,
-  pageSize = 20,
+  pageSize: pageSizeProp,
   totalRows,
+  onPageChange,
   onPageSizeChange,
   emptyMessage,
   className,
@@ -158,10 +161,15 @@ export function DataTable<TData, TValue = unknown>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
-  const [currentPage, setCurrentPage] = React.useState(1)
+  const [internalCurrentPage, setInternalCurrentPage] = React.useState(1)
+  const [internalPageSize, setInternalPageSize] = React.useState(pageSizeProp ?? 20)
   const [inputPage, setInputPage] = React.useState("")
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
 
+  const currentPage = currentPageProp ?? internalCurrentPage
+  const pageSize = pageSizeProp ?? internalPageSize
+  const totalItems = totalRows ?? data.length
+  const totalPages = pageCount ?? Math.ceil(totalItems / pageSize)
   const densityClasses = getDensityClasses(density)
 
   // TanStack Table 的 hook 按设计会返回带有命令式能力的对象，这里保留其官方用法。
@@ -190,7 +198,7 @@ export function DataTable<TData, TValue = unknown>({
         pageSize,
       },
     },
-    manualPagination: !!pageCount,
+    manualPagination: pageCount !== undefined,
     pageCount: pageCount,
   })
 
@@ -202,15 +210,22 @@ export function DataTable<TData, TValue = unknown>({
   }, [loading])
 
   const handlePageChange = (page: number) => {
-    if (page >= 1 && pageCount && page <= pageCount) {
-      setCurrentPage(page)
-      setInputPage("")
+    if (totalPages < 1) {
+      return
+    }
+
+    const nextPage = Math.min(Math.max(page, 1), totalPages)
+    setInternalCurrentPage(nextPage)
+    setInputPage("")
+
+    if (nextPage !== currentPage) {
+      onPageChange?.(nextPage)
     }
   }
 
   const handleJumpToPage = () => {
-    const page = parseInt(inputPage)
-    if (!isNaN(page) && page >= 1 && pageCount && page <= pageCount) {
+    const page = parseInt(inputPage, 10)
+    if (!isNaN(page) && page >= 1 && page <= totalPages) {
       handlePageChange(page)
     } else {
       setInputPage("")
@@ -218,11 +233,11 @@ export function DataTable<TData, TValue = unknown>({
   }
 
   const handlePageSizeChange = (newPageSize: number) => {
-    setCurrentPage(1) // 重置到第一页
+    setInternalPageSize(newPageSize)
+    setInternalCurrentPage(1) // 重置到第一页
+    setInputPage("")
     onPageSizeChange?.(newPageSize)
   }
-
-  const totalPages = pageCount || Math.ceil((totalRows || data.length) / pageSize)
   const effectiveEmptyMessage = emptyMessage ?? tCommon("tableEmpty")
 
   return (
@@ -344,9 +359,9 @@ export function DataTable<TData, TValue = unknown>({
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div>
             {tCommon("tableRange", {
-              from: Math.min((currentPage - 1) * pageSize + 1, totalRows || data.length),
-              to: Math.min(currentPage * pageSize, totalRows || data.length),
-              total: totalRows || data.length,
+              from: Math.min((currentPage - 1) * pageSize + 1, totalItems),
+              to: Math.min(currentPage * pageSize, totalItems),
+              total: totalItems,
             })}
           </div>
           {enableRowSelection && table.getFilteredSelectedRowModel().rows.length > 0 && (

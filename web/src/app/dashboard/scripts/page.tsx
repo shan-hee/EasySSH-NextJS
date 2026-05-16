@@ -636,11 +636,15 @@ const filterOptions = useMemo(() => {
         data={scripts}
         columns={visibleColumns}
         loading={loading || refreshing}
+        currentPage={page}
         pageCount={totalPages}
         pageSize={pageSize}
         totalRows={totalRows}
-        onPageSizeChange={setPageSize}
         onPageChange={setPage}
+        onPageSizeChange={(newPageSize) => {
+          setPageSize(newPageSize)
+          setPage(1)
+        }}
         emptyMessage={t("tableEmpty")}
         className="flex h-full flex-col"
         toolbar={(table) => (
