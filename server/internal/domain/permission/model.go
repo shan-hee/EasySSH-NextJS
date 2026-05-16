@@ -32,7 +32,7 @@ func (m Module) IsValid() bool {
 	}
 }
 
-// RoleList 存储在数据库 jsonb 字段中的角色列表
+// RoleList 存储在数据库文本字段中的 JSON 角色列表
 type RoleList []auth.UserRole
 
 func (r RoleList) Value() (driver.Value, error) {
@@ -71,12 +71,12 @@ func (r *RoleList) Scan(value interface{}) error {
 
 // Permission 权限定义（按角色授予）
 type Permission struct {
-	ID          uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID          uuid.UUID      `gorm:"type:char(36);primary_key" json:"id"`
 	Name        string         `gorm:"not null;size:100" json:"name"`
 	Code        string         `gorm:"not null;uniqueIndex;size:100" json:"code"`
 	Description string         `gorm:"type:text" json:"description"`
 	Module      Module         `gorm:"type:varchar(20);not null" json:"module"`
-	Roles       RoleList       `gorm:"type:jsonb;not null;default:'[]'" json:"roles"`
+	Roles       RoleList       `gorm:"type:text;not null" json:"roles"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`

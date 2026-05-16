@@ -18,12 +18,12 @@ type TrashItemFilters struct {
 
 // TrashStatistics 回收站统计信息
 type TrashStatistics struct {
-	TotalItems   int64 `json:"total_items"`
-	TotalSize    int64 `json:"total_size"`
-	FileCount    int64 `json:"file_count"`
-	FolderCount  int64 `json:"folder_count"`
-	ActiveItems  int64 `json:"active_items"`
-	ActiveSize   int64 `json:"active_size"`
+	TotalItems  int64 `json:"total_items"`
+	TotalSize   int64 `json:"total_size"`
+	FileCount   int64 `json:"file_count"`
+	FolderCount int64 `json:"folder_count"`
+	ActiveItems int64 `json:"active_items"`
+	ActiveSize  int64 `json:"active_size"`
 }
 
 // BatchOperationResult 批量操作结果
@@ -108,11 +108,14 @@ func (r *gormTrashItemRepository) UpsertActive(ctx context.Context, item TrashIt
 	if item.DeletedAt.IsZero() {
 		item.DeletedAt = time.Now()
 	}
+	if item.TrashHash == "" {
+		item.TrashHash = hashText(item.TrashPath)
+	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "user_id"},
 			{Name: "server_id"},
-			{Name: "trash_path"},
+			{Name: "trash_hash"},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"parent_dir":    item.ParentDir,
@@ -267,7 +270,7 @@ func (r *gormTrashItemRepository) MarkRestored(ctx context.Context, userID, id u
 
 func (r *gormTrashItemRepository) MarkRestoredByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, restoredAt time.Time, restoredPath string) error {
 	return r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ?", userID, serverID, trashPath).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ?", userID, serverID, hashText(trashPath)).
 		Updates(map[string]interface{}{
 			"status":        TrashItemStatusRestored,
 			"restored_at":   restoredAt,
@@ -289,7 +292,7 @@ func (r *gormTrashItemRepository) MarkPurgedByTrashPath(ctx context.Context, use
 		status = TrashItemStatusPurged
 	}
 	return r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ?", userID, serverID, trashPath).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ?", userID, serverID, hashText(trashPath)).
 		Updates(map[string]interface{}{
 			"status":    status,
 			"purged_at": purgedAt,
@@ -352,8 +355,8 @@ func (r *gormTrashItemRepository) MarkMissingBatch(ctx context.Context, ids []uu
 // 使用版本号确保操作的原子性，防止与用户恢复操作产生竞态条件
 func (r *gormTrashItemRepository) TryMarkPurging(ctx context.Context, userID, serverID uuid.UUID, trashPath string, expectedVersion int64) (int64, error) {
 	result := r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ? AND version = ?",
-			userID, serverID, trashPath, TrashItemStatusActive, expectedVersion).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ? AND status = ? AND version = ?",
+			userID, serverID, hashText(trashPath), TrashItemStatusActive, expectedVersion).
 		Updates(map[string]interface{}{
 			"status":  TrashItemStatusPurging,
 			"version": expectedVersion + 1,
@@ -379,8 +382,8 @@ func (r *gormTrashItemRepository) TryMarkRestored(ctx context.Context, userID, i
 // FinishPurge 完成清理，将 purging 状态更新为 purged
 func (r *gormTrashItemRepository) FinishPurge(ctx context.Context, userID, serverID uuid.UUID, trashPath string, purgedAt time.Time) error {
 	return r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
-			userID, serverID, trashPath, TrashItemStatusPurging).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ? AND status = ?",
+			userID, serverID, hashText(trashPath), TrashItemStatusPurging).
 		Updates(map[string]interface{}{
 			"status":    TrashItemStatusPurged,
 			"purged_at": purgedAt,
@@ -391,8 +394,8 @@ func (r *gormTrashItemRepository) FinishPurge(ctx context.Context, userID, serve
 // RollbackPurging 回滚 purging 状态到 active（清理失败时调用）
 func (r *gormTrashItemRepository) RollbackPurging(ctx context.Context, userID, serverID uuid.UUID, trashPath string) error {
 	return r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
-			userID, serverID, trashPath, TrashItemStatusPurging).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ? AND status = ?",
+			userID, serverID, hashText(trashPath), TrashItemStatusPurging).
 		Updates(map[string]interface{}{
 			"status":  TrashItemStatusActive,
 			"version": gorm.Expr("version + 1"),
@@ -441,8 +444,8 @@ func (r *gormTrashItemRepository) RollbackRestoring(ctx context.Context, userID,
 func (r *gormTrashItemRepository) GetByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string) (*TrashItem, error) {
 	var item TrashItem
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
-			userID, serverID, trashPath, TrashItemStatusActive).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ? AND status = ?",
+			userID, serverID, hashText(trashPath), TrashItemStatusActive).
 		First(&item).Error; err != nil {
 		return nil, err
 	}
@@ -452,8 +455,8 @@ func (r *gormTrashItemRepository) GetByTrashPath(ctx context.Context, userID, se
 // TryMarkRestoringByTrashPath 按 trashPath 尝试将 active 状态的项标记为 restoring（乐观锁 CAS 操作）
 func (r *gormTrashItemRepository) TryMarkRestoringByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, expectedVersion int64) (int64, error) {
 	result := r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ? AND version = ?",
-			userID, serverID, trashPath, TrashItemStatusActive, expectedVersion).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ? AND status = ? AND version = ?",
+			userID, serverID, hashText(trashPath), TrashItemStatusActive, expectedVersion).
 		Updates(map[string]interface{}{
 			"status":  TrashItemStatusRestoring,
 			"version": expectedVersion + 1,
@@ -464,8 +467,8 @@ func (r *gormTrashItemRepository) TryMarkRestoringByTrashPath(ctx context.Contex
 // FinishRestoreByTrashPath 按 trashPath 完成恢复，将 restoring 状态更新为 restored
 func (r *gormTrashItemRepository) FinishRestoreByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string, restoredAt time.Time, restoredPath string) error {
 	return r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
-			userID, serverID, trashPath, TrashItemStatusRestoring).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ? AND status = ?",
+			userID, serverID, hashText(trashPath), TrashItemStatusRestoring).
 		Updates(map[string]interface{}{
 			"status":        TrashItemStatusRestored,
 			"restored_at":   restoredAt,
@@ -477,8 +480,8 @@ func (r *gormTrashItemRepository) FinishRestoreByTrashPath(ctx context.Context, 
 // RollbackRestoringByTrashPath 按 trashPath 回滚 restoring 状态到 active（恢复失败时调用）
 func (r *gormTrashItemRepository) RollbackRestoringByTrashPath(ctx context.Context, userID, serverID uuid.UUID, trashPath string) error {
 	return r.db.WithContext(ctx).Model(&TrashItem{}).
-		Where("user_id = ? AND server_id = ? AND trash_path = ? AND status = ?",
-			userID, serverID, trashPath, TrashItemStatusRestoring).
+		Where("user_id = ? AND server_id = ? AND trash_hash = ? AND status = ?",
+			userID, serverID, hashText(trashPath), TrashItemStatusRestoring).
 		Updates(map[string]interface{}{
 			"status":  TrashItemStatusActive,
 			"version": gorm.Expr("version + 1"),

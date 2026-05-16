@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -37,11 +38,11 @@ func (r *gormTrashSettingsRepository) Upsert(ctx context.Context, settings Trash
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"retention_hours":    settings.RetentionHours,
-			"max_entries_per_dir": settings.MaxEntriesPerDir,
+			"retention_hours":      settings.RetentionHours,
+			"max_entries_per_dir":  settings.MaxEntriesPerDir,
 			"max_bytes_per_dir_mb": settings.MaxBytesPerDirMB,
-			"auto_clean_enabled": settings.AutoCleanEnabled,
-			"updated_at":         gorm.Expr("NOW()"),
+			"auto_clean_enabled":   settings.AutoCleanEnabled,
+			"updated_at":           time.Now(),
 		}),
 	}).Create(&settings).Error
 }

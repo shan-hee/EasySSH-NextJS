@@ -20,14 +20,14 @@ const (
 
 // LoginAlert 登录告警记录
 type LoginAlert struct {
-	ID           uuid.UUID  `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID       uuid.UUID  `gorm:"type:uuid;not null;index:idx_alert_user_time,priority:1" json:"user_id"`
-	SessionID    uuid.UUID  `gorm:"type:uuid" json:"session_id"`
+	ID           uuid.UUID  `gorm:"type:char(36);primary_key" json:"id"`
+	UserID       uuid.UUID  `gorm:"type:char(36);not null;index:idx_alert_user_time,priority:1" json:"user_id"`
+	SessionID    uuid.UUID  `gorm:"type:char(36)" json:"session_id"`
 	AlertType    AlertType  `gorm:"size:50;index" json:"alert_type"` // new_device, new_location, suspicious_ip
 	IPAddress    string     `gorm:"size:45" json:"ip_address"`
 	Location     string     `gorm:"size:200" json:"location"`
 	DeviceInfo   string     `gorm:"type:text" json:"device_info"`
-	NotifiedAt   *time.Time `json:"notified_at"`                       // 通知发送时间
+	NotifiedAt   *time.Time `json:"notified_at"`                             // 通知发送时间
 	Acknowledged bool       `gorm:"default:false;index" json:"acknowledged"` // 用户是否确认
 	CreatedAt    time.Time  `gorm:"index:idx_alert_user_time,priority:2,sort:desc" json:"created_at"`
 }

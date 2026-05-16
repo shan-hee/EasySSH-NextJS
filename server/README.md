@@ -29,9 +29,9 @@ EasySSH 后端服务采用 Go 语言开发，提供完整的 SSH 服务器管理
 
 ### 1. 环境要求
 
-- Go 1.21+
-- PostgreSQL 12+
-- Redis 6+
+- Go 1.24+
+- 默认 SQLite，无需单独数据库服务
+- 可选 PostgreSQL 12+ 或 MySQL 8+
 
 ### 2. 配置环境
 
@@ -46,15 +46,8 @@ vim .env
 必需配置项：
 ```env
 # 数据库
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=easyssh
-DB_PASSWORD=your-password
-DB_NAME=easyssh
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+DB_DRIVER=sqlite
+DB_PATH=./data/easyssh.db
 
 # JWT 密钥
 JWT_SECRET=your-jwt-secret-key
@@ -79,12 +72,12 @@ go run cmd/api/main.go
 air
 ```
 
-服务将在 `http://localhost:8521` 启动
+服务将在 `http://localhost:8520` 启动
 
 ### 5. 验证运行
 
 ```bash
-curl http://localhost:8521/api/v1/health
+curl http://localhost:8520/api/v1/health
 ```
 
 预期响应：
@@ -94,8 +87,7 @@ curl http://localhost:8521/api/v1/health
   "service": "easyssh-api",
   "version": "1.0.0",
   "dependencies": {
-    "database": "ok",
-    "redis": "ok"
+    "database": "ok"
   }
 }
 ```
@@ -140,8 +132,7 @@ server/
 │   │   └── auditlog/            # 审计日志域
 │   ├── infra/                   # 基础设施层
 │   │   ├── config/              # 配置管理
-│   │   ├── db/                  # 数据库
-│   │   └── cache/               # Redis 缓存
+│   │   └── db/                  # 数据库
 │   └── pkg/                     # 公共包
 │       └── crypto/              # 加密工具
 ├── .env.example                 # 环境变量示例
@@ -210,9 +201,8 @@ server/
 
 ### 核心框架
 - **Web 框架**: Gin v1.10.0
-- **ORM**: GORM v1.25.12
-- **数据库**: PostgreSQL (驱动: gorm.io/driver/postgres)
-- **缓存**: Redis (go-redis/v9)
+- **ORM**: GORM v1.30.0
+- **数据库**: SQLite（默认）、PostgreSQL、MySQL
 
 ### 认证与安全
 - **JWT**: golang-jwt/jwt/v5 v5.2.1
@@ -226,7 +216,6 @@ server/
 
 ### 其他
 - **UUID**: github.com/google/uuid v1.6.0
-- **PostgreSQL 数组**: github.com/lib/pq v1.10.9
 
 ---
 
@@ -242,7 +231,7 @@ server/
 - ✅ **访问令牌 (Access Token)**：短期 JWT，仅通过 `Authorization: Bearer <token>` 传递，由前端内存存储和自动刷新管理
 - ✅ **刷新令牌 (Refresh Token)**：长期 JWT，仅存放于 HttpOnly Cookie（`Path=/api/v1/oauth`），只在 `POST /api/v1/oauth/token` 和推荐的 `POST /api/v1/oauth/logout` 流程中使用
 - ✅ **会话管理**：每次登录创建独立会话 `session_id`，写入 access_token claims，并记录到 `user_sessions` 表，用于“当前会话标记”和远程注销
-- ✅ **令牌黑名单**：Redis 存储已注销访问令牌（登出/踢下线后立即失效）
+- ✅ **令牌黑名单**：单实例进程内 TTL 存储已注销访问令牌（登出/踢下线后立即失效；应用重启后清空）
 - ✅ **RBAC**：基于角色的访问控制（Admin/User/Viewer）
 - ✅ **资源隔离**：用户只能访问自己的资源
 
@@ -303,19 +292,17 @@ golangci-lint run
 
 | 变量名 | 说明 | 默认值 | 必需 |
 |--------|------|--------|------|
-| `SERVER_PORT` | 服务器端口 | 8521 | 否 |
-| `SERVER_ENV` | 运行环境 | development | 否 |
+| `PORT` | 服务器端口 | 8520 | 否 |
+| `ENV` | 运行环境 | development | 否 |
 | `ENCRYPTION_KEY` | AES 加密密钥（32字节，Base64 编码） | - | ✅ |
-| `DB_HOST` | 数据库主机 | localhost | ✅ |
-| `DB_PORT` | 数据库端口 | 5432 | ✅ |
-| `DB_USER` | 数据库用户 | - | ✅ |
-| `DB_PASSWORD` | 数据库密码 | - | ✅ |
-| `DB_NAME` | 数据库名称 | - | ✅ |
-| `DB_SSLMODE` | SSL 模式 | disable | 否 |
-| `REDIS_HOST` | Redis 主机 | localhost | ✅ |
-| `REDIS_PORT` | Redis 端口 | 6379 | ✅ |
-| `REDIS_PASSWORD` | Redis 密码 | - | 否 |
-| `REDIS_DB` | Redis 数据库编号 | 0 | 否 |
+| `DB_DRIVER` | 数据库驱动 | sqlite | 否 |
+| `DB_PATH` | SQLite 文件路径 | ./data/easyssh.db | 否 |
+| `DB_HOST` | 外部数据库主机 | localhost | PostgreSQL/MySQL 时需要 |
+| `DB_PORT` | 外部数据库端口 | 5432/3306 | PostgreSQL/MySQL 时需要 |
+| `DB_USER` | 外部数据库用户 | - | PostgreSQL/MySQL 时需要 |
+| `DB_PASSWORD` | 外部数据库密码 | - | PostgreSQL/MySQL 时需要 |
+| `DB_NAME` | 外部数据库名称 | - | PostgreSQL/MySQL 时需要 |
+| `DB_SSLMODE` | PostgreSQL SSL 模式 | disable | 否 |
 | `JWT_SECRET` | JWT 密钥 | - | ✅ |
 | `JWT_ACCESS_EXPIRE_MINUTES` | Access Token 过期时间（分钟，5-1440） | 15 | 否 |
 | `JWT_REFRESH_IDLE_EXPIRE_DAYS` | Refresh Token 闲置过期时间（天，1-90） | 7 | 否 |
@@ -379,9 +366,10 @@ docker build -t easyssh-server:1.0.0 .
 # 运行容器
 docker run -d \
   --name easyssh-server \
-  -p 8521:8521 \
-  -e DB_HOST=postgres \
-  -e REDIS_HOST=redis \
+  -p 8520:8520 \
+  -v easyssh-data:/app/data \
+  -e DB_DRIVER=sqlite \
+  -e DB_PATH=/app/data/easyssh.db \
   --env-file .env \
   easyssh-server:1.0.0
 ```
@@ -391,7 +379,7 @@ docker run -d \
 ```bash
 # Docker Compose 配置
 healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8521/api/v1/health"]
+  test: ["CMD", "curl", "-f", "http://localhost:8520/api/v1/health"]
   interval: 30s
   timeout: 10s
   retries: 3

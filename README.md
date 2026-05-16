@@ -50,8 +50,8 @@
 
 ### 后端
 - **语言**：Go 1.24
-- **框架**：Gin 1.10.0 + GORM 1.25.12
-- **数据库**：PostgreSQL 16+ + Redis 7+
+- **框架**：Gin 1.10.0 + GORM 1.30.0
+- **数据库**：SQLite（默认）/ PostgreSQL / MySQL
 - **SSH/SFTP**：golang.org/x/crypto + pkg/sftp 1.13.6
 - **AI 集成**：go-anthropic v2.16.3 + go-openai v1.41.2
 - **WebSocket**：Gorilla WebSocket 1.5.3
@@ -70,10 +70,10 @@
 │  │  ├─ WebSocket (SSH)          │  │
 │  │  └─ 静态文件托管             │  │
 │  └──────────────────────────────┘  │
-│           ↓         ↓                │
-│  ┌──────────┐  ┌──────────┐        │
-│  │PostgreSQL│  │  Redis   │        │
-│  └──────────┘  └──────────┘        │
+│           ↓                          │
+│  ┌──────────────────────────┐       │
+│  │ SQLite 数据文件 / 外部 DB │       │
+│  └──────────────────────────┘       │
 └─────────────────────────────────────┘
 ```
 
@@ -82,7 +82,7 @@
 
 ### 方式一：Docker 部署（推荐）
 
-**使用 Docker Compose（包含数据库）**：
+**使用 Docker Compose（默认 SQLite 持久化）**：
 
 ```bash
 # 1. 下载配置文件
@@ -99,25 +99,24 @@ docker compose up -d
 # http://your-server:8520
 ```
 
-> 💡 **说明**：`docker-compose.yml` 包含默认配置和自动生成的安全密钥，可直接启动。如需自定义端口、密码等，请编辑配置文件。
+> 💡 **说明**：`docker-compose.yml` 默认只启动 EasySSH 一个容器，SQLite 数据保存在 `docker/data/`。如需 PostgreSQL/MySQL，可通过 `DB_DRIVER` 与数据库连接变量切换。
 
-**单容器部署**（需要外部数据库）：
+**单容器部署**（默认 SQLite）：
 
 ```bash
 docker run -d \
   --name easyssh \
   -p 8520:8520 \
-  -e DB_HOST=your-postgres-host \
-  -e DB_PORT=5432 \
-  -e DB_USER=easyssh \
-  -e DB_PASSWORD=your-secure-password \
-  -e DB_NAME=easyssh_db \
-  -e REDIS_HOST=your-redis-host \
-  -e REDIS_PORT=6379 \
+  -v easyssh-data:/app/data \
+  -v easyssh-backups:/app/backups \
+  -e DB_DRIVER=sqlite \
+  -e DB_PATH=/app/data/easyssh.db \
   -e JWT_SECRET=$(openssl rand -base64 48) \
   -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
   shanheee/easyssh:latest
 ```
+
+**外部 PostgreSQL/MySQL**：将 `DB_DRIVER` 设置为 `postgres` 或 `mysql`，并配置 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`。PostgreSQL 可额外设置 `DB_SSLMODE`。
 
 **支持架构**：`linux/amd64`、`linux/arm64`
 
@@ -126,7 +125,7 @@ docker run -d \
 **前置要求**：
 - Node.js 20+ / pnpm 9+
 - Go 1.24+
-- PostgreSQL 16+ / Redis 7+
+- 默认无需单独数据库服务；如需外部数据库，可使用 PostgreSQL 或 MySQL
 
 **一键启动**：
 
@@ -185,7 +184,7 @@ EasySSH-NextJS/
 │   ├── internal/
 │   │   ├── api/           # HTTP/WebSocket 处理器
 │   │   ├── domain/        # 业务领域（server/ssh/auth）
-│   │   └── infra/         # 基础设施（db/cache/config）
+│   │   └── infra/         # 基础设施（db/config）
 │   └── migrations/        # 数据库迁移
 │
 ├── docker/                 # Docker 配置与数据持久化
@@ -228,16 +227,17 @@ ENV=production                 # development | production
 PORT=8520                      # 后端服务端口
 WEB_PORT=3000                  # 前端开发端口（仅开发环境）
 
-# 数据库 (PostgreSQL)
-DB_HOST=postgres               # Docker: postgres | 开发: localhost
-DB_PORT=5432
-DB_USER=easyssh
-DB_PASSWORD=CHANGE_ME          # ⚠️ 生产环境必须修改
-DB_NAME=easyssh_db
+# 数据库
+DB_DRIVER=sqlite               # sqlite | postgres(pgsql) | mysql
+DB_PATH=./data/easyssh.db      # SQLite 文件路径
 
-# 缓存 (Redis)
-REDIS_HOST=redis               # Docker: redis | 开发: localhost
-REDIS_PORT=6379
+# 外部 PostgreSQL/MySQL 时启用
+# DB_HOST=localhost
+# DB_PORT=5432                 # MySQL 通常为 3306
+# DB_USER=easyssh
+# DB_PASSWORD=CHANGE_ME
+# DB_NAME=easyssh_db
+# DB_SSLMODE=disable           # 仅 PostgreSQL 使用
 
 # 安全配置 ⚠️ 生产环境必须修改
 JWT_SECRET=CHANGE_ME           # 生成: openssl rand -base64 48
@@ -253,18 +253,19 @@ COOKIE_SAMESITE=lax            # 同域: lax | 跨域+HTTPS: none
 | 变量名 | 说明 | 默认值 | 必需 | 生成方式/示例 |
 |--------|------|--------|------|--------------|
 | PORT | 后端服务端口 | 8520 | 否 | 8520 |
-| DB_HOST | PostgreSQL 主机地址 | postgres | 是 | Docker: postgres / 本地: localhost |
-| DB_PASSWORD | 数据库密码 | - | 是 | `openssl rand -base64 16` |
+| DB_DRIVER | 数据库驱动 | sqlite | 否 | sqlite / postgres(pgsql) / mysql |
+| DB_PATH | SQLite 数据库文件路径 | ./data/easyssh.db | 否 | /app/data/easyssh.db |
+| DB_HOST | 外部数据库主机地址 | localhost | 否 | PostgreSQL/MySQL 时配置 |
+| DB_PASSWORD | 外部数据库密码 | - | 否 | `openssl rand -base64 16` |
 | JWT_SECRET | JWT 签名密钥 | - | 是 | `openssl rand -base64 48` |
 | ENCRYPTION_KEY | 数据加密密钥（2FA等） | - | 是 | `openssl rand -base64 32` |
 | COOKIE_SECURE | Cookie 安全标志 | true | 否 | HTTPS: true / HTTP: false |
 | COOKIE_SAMESITE | Cookie 同站策略 | lax | 否 | lax / none / strict |
-| REDIS_HOST | Redis 主机地址 | redis | 是 | Docker: redis / 本地: localhost |
 
 ### 配置说明
 
 - **开发环境**：使用 `./scripts/dev.sh` 自动配置，或手动编辑 `.env`
-- **生产环境**：务必修改 `JWT_SECRET`、`ENCRYPTION_KEY`、`DB_PASSWORD`
+- **生产环境**：务必修改 `JWT_SECRET`、`ENCRYPTION_KEY`；使用外部数据库时同时修改 `DB_PASSWORD`
 - **Docker 部署**：配置已内置在 `docker-compose.yml` 中
 
 完整配置项请参考 [.env.example](.env.example)

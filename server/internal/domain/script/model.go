@@ -9,13 +9,13 @@ import (
 
 // Script 脚本模型
 type Script struct {
-	ID          uuid.UUID      `gorm:"type:uuid;primary_key" json:"id"`
-	UserID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
+	ID          uuid.UUID      `gorm:"type:char(36);primary_key" json:"id"`
+	UserID      uuid.UUID      `gorm:"type:char(36);not null;index" json:"user_id"`
 	Name        string         `gorm:"type:varchar(100);not null" json:"name"`
 	Description string         `gorm:"type:text" json:"description"`
 	Content     string         `gorm:"type:text;not null" json:"content"`
 	Language    string         `gorm:"type:varchar(20);default:'bash'" json:"language"`
-	Tags        []string       `gorm:"type:jsonb;serializer:json" json:"tags"`
+	Tags        []string       `gorm:"type:text;serializer:json" json:"tags"`
 	Executions  int            `gorm:"default:0" json:"executions"`
 	Author      string         `gorm:"type:varchar(50)" json:"author"`
 	CreatedAt   time.Time      `json:"created_at"`

@@ -30,9 +30,9 @@ const (
 
 // TaskExecution 任务执行记录（主记录）
 type TaskExecution struct {
-	ID              uuid.UUID       `gorm:"type:uuid;primary_key" json:"id"`
-	ScheduledTaskID uuid.UUID       `gorm:"type:uuid;not null;index" json:"scheduled_task_id"`
-	UserID          uuid.UUID       `gorm:"type:uuid;not null;index" json:"user_id"`
+	ID              uuid.UUID       `gorm:"type:char(36);primary_key" json:"id"`
+	ScheduledTaskID uuid.UUID       `gorm:"type:char(36);not null;index" json:"scheduled_task_id"`
+	UserID          uuid.UUID       `gorm:"type:char(36);not null;index" json:"user_id"`
 	Username        string          `gorm:"type:varchar(50)" json:"username"`
 	TaskName        string          `gorm:"type:varchar(100);not null" json:"task_name"`
 	TaskType        string          `gorm:"type:varchar(20);not null" json:"task_type"`
@@ -56,9 +56,9 @@ type TaskExecution struct {
 
 // TaskExecutionServer 单个服务器的执行结果
 type TaskExecutionServer struct {
-	ID           uuid.UUID       `gorm:"type:uuid;primary_key" json:"id"`
-	ExecutionID  uuid.UUID       `gorm:"type:uuid;not null;index" json:"execution_id"`
-	ServerID     uuid.UUID       `gorm:"type:uuid;not null;index" json:"server_id"`
+	ID           uuid.UUID       `gorm:"type:char(36);primary_key" json:"id"`
+	ExecutionID  uuid.UUID       `gorm:"type:char(36);not null;index" json:"execution_id"`
+	ServerID     uuid.UUID       `gorm:"type:char(36);not null;index" json:"server_id"`
 	ServerName   string          `gorm:"type:varchar(100)" json:"server_name"`
 	ServerHost   string          `gorm:"type:varchar(255)" json:"server_host"`
 	Status       ExecutionStatus `gorm:"type:varchar(20);not null" json:"status"`

@@ -48,20 +48,22 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# 运行时组件：证书/时区/健康检查工具，以及数据库备份恢复所需的 pg_dump/psql
-RUN apk --no-cache add ca-certificates tzdata wget postgresql-client
+# 运行时组件：证书、时区与健康检查工具
+RUN apk --no-cache add ca-certificates tzdata wget
 
 # 使用非 root 用户运行
 ARG APP_UID=1001
 ARG APP_GID=1001
 RUN addgroup -S -g ${APP_GID} appuser \
     && adduser -S -u ${APP_UID} appuser -G appuser \
-    && mkdir -p /app/backups \
-    && chown -R appuser:appuser /app/backups
+    && mkdir -p /app/backups /app/data \
+    && chown -R appuser:appuser /app/backups /app/data
 
 # 默认环境（可在运行容器时覆盖）
 ENV TZ=Asia/Shanghai \
-    PORT=8521 \
+    PORT=8520 \
+    DB_DRIVER=sqlite \
+    DB_PATH=/app/data/easyssh.db \
     BACKUP_DIR=/app/backups
 
 # 复制后端二进制与前端静态资源
@@ -70,7 +72,7 @@ COPY --from=backend-builder --chown=appuser:appuser /app/server/static ./static
 
 USER appuser
 
-EXPOSE 8521
+EXPOSE 8520
 
 # 健康检查：命中后端健康接口
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

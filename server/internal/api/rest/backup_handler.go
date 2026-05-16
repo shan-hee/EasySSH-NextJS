@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,36 +16,29 @@ import (
 	"github.com/easyssh/server/internal/domain/notificationconfig"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/systemconfig"
+	"github.com/easyssh/server/internal/infra/config"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 // BackupHandler 简化的备份处理器
 type BackupHandler struct {
-	db         *gorm.DB
-	backupDir  string
-	dbHost     string
-	dbPort     string
-	dbName     string
-	dbUser     string
-	dbPassword string
+	db        *gorm.DB
+	backupDir string
+	dbConfig  *config.DatabaseConfig
 }
 
 // NewBackupHandler 创建备份处理器
-func NewBackupHandler(db *gorm.DB, dbHost, dbPort, dbName, dbUser, dbPassword string) *BackupHandler {
+func NewBackupHandler(db *gorm.DB, dbConfig *config.DatabaseConfig) *BackupHandler {
 	backupDir := strings.TrimSpace(os.Getenv("BACKUP_DIR"))
 	if backupDir == "" {
 		backupDir = "./backups"
 	}
 
 	h := &BackupHandler{
-		db:         db,
-		backupDir:  backupDir,
-		dbHost:     dbHost,
-		dbPort:     dbPort,
-		dbName:     dbName,
-		dbUser:     dbUser,
-		dbPassword: dbPassword,
+		db:        db,
+		backupDir: backupDir,
+		dbConfig:  dbConfig,
 	}
 
 	if err := h.ensureBackupDir(); err != nil {
@@ -237,46 +229,21 @@ func (h *BackupHandler) ExportDatabase(c *gin.Context) {
 	filename := fmt.Sprintf("database_%s.sql", timestamp)
 	filepath := filepath.Join(h.backupDir, filename)
 
-	// 尝试使用 pg_dump 导出数据库
-	cmd := exec.Command("pg_dump",
-		"-h", h.dbHost,
-		"-p", h.dbPort,
-		"-U", h.dbUser,
-		"-d", h.dbName,
-		"-f", filepath,
-		"--no-owner",
-		"--no-acl",
-		"--clean",
-		"--if-exists",
-	)
+	sqlContent, err := h.ExportDatabaseNative()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  "Failed to export database",
+			"detail": err.Error(),
+		})
+		return
+	}
 
-	// 设置密码环境变量
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", h.dbPassword))
-
-	output, dumpErr := cmd.CombinedOutput()
-
-	// 如果 pg_dump 失败（版本不匹配或不存在），使用纯 Go 实现
-	if dumpErr != nil {
-		// 使用纯 Go 实现导出
-		sqlContent, nativeErr := h.ExportDatabaseNative()
-		if nativeErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":         "Failed to export database",
-				"pg_dump_error": strings.TrimSpace(fmt.Sprintf("%v\n%s", dumpErr, output)),
-				"native_error":  nativeErr.Error(),
-			})
-			return
-		}
-
-		// 写入文件
-		if err := os.WriteFile(filepath, []byte(sqlContent), 0644); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":         "Failed to write backup file",
-				"detail":        err.Error(),
-				"pg_dump_error": strings.TrimSpace(fmt.Sprintf("%v\n%s", dumpErr, output)),
-			})
-			return
-		}
+	if err := os.WriteFile(filepath, []byte(sqlContent), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  "Failed to write backup file",
+			"detail": err.Error(),
+		})
+		return
 	}
 
 	// 返回文件下载
@@ -331,44 +298,21 @@ func (h *BackupHandler) ImportDatabase(c *gin.Context) {
 		defer os.Remove(sqlFile) // 清理解压后的文件
 	}
 
-	// 尝试使用 psql 导入数据库
-	cmd := exec.Command("psql",
-		"-v", "ON_ERROR_STOP=1",
-		"--single-transaction",
-		"-h", h.dbHost,
-		"-p", h.dbPort,
-		"-U", h.dbUser,
-		"-d", h.dbName,
-		"-f", sqlFile,
-	)
-
-	// 设置密码环境变量
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", h.dbPassword))
-
-	output, err := cmd.CombinedOutput()
-
-	// 如果 psql 失败，尝试使用纯 Go 实现
+	sqlContent, err := os.ReadFile(sqlFile)
 	if err != nil {
-		// 读取 SQL 文件内容
-		sqlContent, readErr := os.ReadFile(sqlFile)
-		if readErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":      "Failed to import database",
-				"psql_error": string(output),
-				"read_error": readErr.Error(),
-			})
-			return
-		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  "Failed to import database",
+			"detail": err.Error(),
+		})
+		return
+	}
 
-		// 使用纯 Go 执行 SQL
-		if execErr := h.ImportDatabaseNative(string(sqlContent)); execErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":        "Failed to import database",
-				"psql_error":   string(output),
-				"native_error": execErr.Error(),
-			})
-			return
-		}
+	if err := h.ImportDatabaseNative(string(sqlContent)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  "Failed to import database",
+			"detail": err.Error(),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

@@ -28,9 +28,9 @@ type SystemConfig struct {
 
 	// 补全配置（JSON存储）
 	CompletionEnabled   bool   `gorm:"not null;default:true" json:"completion_enabled"`
-	CompletionProviders string `gorm:"type:jsonb" json:"completion_providers"` // JSON: CompletionProvidersConfig
-	CompletionQuotas    string `gorm:"type:jsonb" json:"completion_quotas"`    // JSON: CompletionQuotasConfig
-	CompletionCache     string `gorm:"type:jsonb" json:"completion_cache"`     // JSON: CompletionCacheConfig
+	CompletionProviders string `gorm:"type:text" json:"completion_providers"` // JSON: CompletionProvidersConfig
+	CompletionQuotas    string `gorm:"type:text" json:"completion_quotas"`    // JSON: CompletionQuotasConfig
+	CompletionCache     string `gorm:"type:text" json:"completion_cache"`     // JSON: CompletionCacheConfig
 
 	// 注册配置
 	AllowRegistration bool   `gorm:"not null;default:false" json:"allow_registration"`

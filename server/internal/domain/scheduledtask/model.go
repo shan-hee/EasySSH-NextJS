@@ -9,14 +9,14 @@ import (
 
 // ScheduledTask 定时任务模型
 type ScheduledTask struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primary_key" json:"id"`
-	UserID         uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
+	ID             uuid.UUID      `gorm:"type:char(36);primary_key" json:"id"`
+	UserID         uuid.UUID      `gorm:"type:char(36);not null;index" json:"user_id"`
 	TaskName       string         `gorm:"type:varchar(100);not null" json:"task_name"`
 	TaskType       string         `gorm:"type:varchar(20);not null" json:"task_type"` // command/script/batch
-	ScriptID       *uuid.UUID     `gorm:"type:uuid" json:"script_id,omitempty"`
-	BatchTaskID    *uuid.UUID     `gorm:"type:uuid" json:"batch_task_id,omitempty"`
+	ScriptID       *uuid.UUID     `gorm:"type:char(36)" json:"script_id,omitempty"`
+	BatchTaskID    *uuid.UUID     `gorm:"type:char(36)" json:"batch_task_id,omitempty"`
 	Command        string         `gorm:"type:text" json:"command,omitempty"`
-	ServerIDs      []string       `gorm:"type:jsonb;serializer:json" json:"server_ids"`
+	ServerIDs      []string       `gorm:"type:text;serializer:json" json:"server_ids"`
 	CronExpression string         `gorm:"type:varchar(100);not null" json:"cron_expression"`
 	Timezone       string         `gorm:"type:varchar(50);default:'UTC'" json:"timezone"`
 	Enabled        bool           `gorm:"default:true" json:"enabled"`
@@ -46,16 +46,16 @@ func (ScheduledTask) TableName() string {
 
 // CreateScheduledTaskRequest 创建定时任务请求
 type CreateScheduledTaskRequest struct {
-	TaskName       string    `json:"task_name" binding:"required"`
-	TaskType       string    `json:"task_type" binding:"required,oneof=command script batch"`
-	ScriptID       *string   `json:"script_id,omitempty"`
-	BatchTaskID    *string   `json:"batch_task_id,omitempty"`
-	Command        string    `json:"command,omitempty"`
-	ServerIDs      []string  `json:"server_ids,omitempty"`
-	CronExpression string    `json:"cron_expression" binding:"required"`
-	Timezone       string    `json:"timezone,omitempty"`
-	Enabled        *bool     `json:"enabled,omitempty"`
-	Description    string    `json:"description,omitempty"`
+	TaskName       string   `json:"task_name" binding:"required"`
+	TaskType       string   `json:"task_type" binding:"required,oneof=command script batch"`
+	ScriptID       *string  `json:"script_id,omitempty"`
+	BatchTaskID    *string  `json:"batch_task_id,omitempty"`
+	Command        string   `json:"command,omitempty"`
+	ServerIDs      []string `json:"server_ids,omitempty"`
+	CronExpression string   `json:"cron_expression" binding:"required"`
+	Timezone       string   `json:"timezone,omitempty"`
+	Enabled        *bool    `json:"enabled,omitempty"`
+	Description    string   `json:"description,omitempty"`
 }
 
 // UpdateScheduledTaskRequest 更新定时任务请求

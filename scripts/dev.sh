@@ -22,8 +22,8 @@ if [ -f ".env" ]; then
 fi
 
 # 设置默认端口（如果环境变量未设置）
-BACKEND_PORT=${PORT:-8521}
-FRONTEND_PORT=${WEB_PORT:-8520}
+BACKEND_PORT=${PORT:-8520}
+FRONTEND_PORT=${WEB_PORT:-3000}
 
 # 导出端口配置给前端/后端脚本使用
 export BACKEND_PORT
@@ -36,7 +36,7 @@ command_exists() {
 
 # 检查必需的工具
 if ! command_exists go; then
-    echo -e "${RED}❌ 错误: Go 未安装，请先安装 Go 1.21+${NC}"
+    echo -e "${RED}❌ 错误: Go 未安装，请先安装 Go 1.24+${NC}"
     exit 1
 fi
 
@@ -98,6 +98,14 @@ set_kv() {
 
 # 1) 基本运行模式
 set_kv ENV development
+
+# 默认使用 SQLite；如果已有 DB_DRIVER，则尊重现有配置。
+if ! grep -qE '^DB_DRIVER=' .env 2>/dev/null || [[ -z "${DB_DRIVER:-}" ]]; then
+  set_kv DB_DRIVER sqlite
+fi
+if [[ "${DB_DRIVER:-sqlite}" == "sqlite" ]] && { ! grep -qE '^DB_PATH=' .env 2>/dev/null || [[ -z "${DB_PATH:-}" ]]; }; then
+  set_kv DB_PATH ./data/easyssh.db
+fi
 
 # 2) Cookie 策略（HTTP 开发环境推荐）
 # 通过 Next 代理避免跨站，请使用默认 SameSite=Lax，避免 SameSite=None + 非 Secure 被浏览器拒绝

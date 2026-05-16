@@ -10,7 +10,7 @@ import (
 // UserAIConfig 用户级AI配置模型
 type UserAIConfig struct {
 	ID     uint      `gorm:"primarykey" json:"id"`
-	UserID uuid.UUID `gorm:"type:uuid;uniqueIndex;not null" json:"user_id"` // 关联用户ID
+	UserID uuid.UUID `gorm:"type:char(36);uniqueIndex;not null" json:"user_id"` // 关联用户ID
 
 	// 用户AI配置
 	UseSystemConfig bool   `gorm:"default:true" json:"use_system_config"` // 是否使用系统配置

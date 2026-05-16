@@ -10,8 +10,8 @@ import (
 
 // TrustedDevice 可信设备记录
 type TrustedDevice struct {
-	ID                uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID            uuid.UUID `gorm:"type:uuid;not null;index:idx_trusted_user_fp,priority:1" json:"user_id"`
+	ID                uuid.UUID `gorm:"type:char(36);primary_key" json:"id"`
+	UserID            uuid.UUID `gorm:"type:char(36);not null;index:idx_trusted_user_fp,priority:1" json:"user_id"`
 	DeviceFingerprint string    `gorm:"size:64;index:idx_trusted_user_fp,priority:2" json:"device_fingerprint"` // 设备指纹（哈希）
 	DeviceType        string    `gorm:"size:50" json:"device_type"`                                             // desktop, mobile, tablet
 	DeviceName        string    `gorm:"size:200" json:"device_name"`                                            // 浏览器/设备名称

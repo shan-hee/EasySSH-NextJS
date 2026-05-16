@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -185,10 +186,10 @@ func (r *gormRepository) Search(ctx context.Context, userID uuid.UUID, query str
 	var servers []*Server
 	var total int64
 
-	searchPattern := "%" + query + "%"
+	normalizedPattern := "%" + strings.ToLower(query) + "%"
 	queryBuilder := r.db.WithContext(ctx).Model(&Server{}).
 		Where("user_id = ?", userID).
-		Where("name ILIKE ? OR host ILIKE ? OR \"group\" ILIKE ?", searchPattern, searchPattern, searchPattern)
+		Where("LOWER(name) LIKE ? OR LOWER(host) LIKE ? OR LOWER(server_group) LIKE ?", normalizedPattern, normalizedPattern, normalizedPattern)
 
 	// 获取总数
 	if err := queryBuilder.Count(&total).Error; err != nil {
@@ -212,7 +213,7 @@ func (r *gormRepository) FindByGroup(ctx context.Context, userID uuid.UUID, grou
 	var total int64
 
 	queryBuilder := r.db.WithContext(ctx).Model(&Server{}).
-		Where("user_id = ? AND \"group\" = ?", userID, group)
+		Where("user_id = ? AND server_group = ?", userID, group)
 
 	// 获取总数
 	if err := queryBuilder.Count(&total).Error; err != nil {

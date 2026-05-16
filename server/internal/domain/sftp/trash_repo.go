@@ -31,6 +31,7 @@ func (r *gormTrashDirRepository) UpsertSeen(ctx context.Context, userID, serverI
 		UserID:        userID,
 		ServerID:      serverID,
 		Path:          trashDir,
+		PathHash:      hashText(trashDir),
 		LastSeen:      now,
 		NextAttemptAt: now,
 	}
@@ -39,7 +40,7 @@ func (r *gormTrashDirRepository) UpsertSeen(ctx context.Context, userID, serverI
 		Columns: []clause.Column{
 			{Name: "user_id"},
 			{Name: "server_id"},
-			{Name: "path"},
+			{Name: "path_hash"},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"last_seen":       now,

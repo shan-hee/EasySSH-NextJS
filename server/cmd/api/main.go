@@ -45,7 +45,6 @@ import (
 	"github.com/easyssh/server/internal/domain/user"
 	"github.com/easyssh/server/internal/domain/useraiconfig"
 	"github.com/easyssh/server/internal/domain/verification"
-	"github.com/easyssh/server/internal/infra/cache"
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/easyssh/server/internal/infra/db"
 	"github.com/easyssh/server/internal/pkg/crypto"
@@ -72,28 +71,18 @@ func main() {
 	}
 
 	// 初始化数据库
-	database, err := db.NewPostgresDB(&cfg.Database)
+	database, err := db.NewDB(&cfg.Database)
 	if err != nil {
 		log.Fatalf("❌ Failed to connect to database: %v", err)
 	}
 	defer db.Close(database)
 
-	// 初始化 Redis
-	redisClient, err := cache.NewRedisClient(&cfg.Redis)
-	if err != nil {
-		log.Fatalf("❌ Failed to connect to Redis: %v", err)
-	}
-	defer redisClient.Close()
-
-	// 初始化 GeoIP 客户端并设置 Redis 缓存
-	geoip.SetRedisClient(redisClient)
-	log.Println("✅ GeoIP client initialized with Redis cache")
+	log.Println("✅ GeoIP client initialized with in-memory cache")
 
 	// 数据库迁移（自动迁移）
 	if err := database.AutoMigrate(
 		&auth.User{},
 		&auth.Session{}, // 用户会话表
-		// Authorization Code 已迁移到 Redis，不再需要数据库表
 		&server.Server{},
 		&auditlog.AuditLog{},
 		&script.Script{},               // 脚本表
@@ -141,17 +130,16 @@ func main() {
 		RefreshAbsoluteExpireDuration: refreshAbsoluteDuration,
 		RefreshRotate:                 cfg.JWT.RefreshRotate,
 		RefreshReuseDetection:         cfg.JWT.RefreshReuseDetection,
-	}, redisClient.GetClient())
+	})
 
-	// 一次性 Ticket：存 Redis（用于 WebSocket 握手 / 原生下载等无法附带 Authorization Header 的场景）
-	ticketService := auth.NewRedisTicketService(redisClient.GetClient(), auth.RedisTicketConfig{
-		Prefix: "easyssh:ticket",
-		TTL:    30 * time.Second,
+	// 一次性 Ticket：进程内短期存储（用于 WebSocket 握手 / 原生下载等无法附带 Authorization Header 的场景）
+	ticketService := auth.NewInMemoryTicketService(auth.InMemoryTicketConfig{
+		TTL: 30 * time.Second,
 	})
 
 	// 认证服务（会话过期时间与 JWT 刷新闲置过期时间保持一致）
 	authRepo := auth.NewRepository(database)
-	authService := auth.NewService(authRepo, jwtService, refreshIdleDuration, redisClient.GetClient())
+	authService := auth.NewService(authRepo, jwtService, refreshIdleDuration)
 
 	// 新的配置服务
 	// 系统配置服务
@@ -219,48 +207,37 @@ func main() {
 		}
 	}
 
-	// 账户锁定服务（需要 Redis 和安全配置）
-	var accountLockService auth.AccountLockService
-	if redisClient != nil {
-		// 从安全配置服务获取账户锁定配置
-		lockConfig := auth.DefaultAccountLockConfig
-		if securityConfig, err := securityService.GetAccountLockConfig(context.Background()); err == nil {
-			lockConfig = auth.AccountLockConfig{
-				Enabled:                securityConfig.Enabled,
-				MaxIPFailAttempts:      securityConfig.MaxIPFailAttempts,
-				IPLockDuration:         time.Duration(securityConfig.IPLockDurationMinutes) * time.Minute,
-				MaxAccountFailAttempts: securityConfig.MaxAccountFailAttempts,
-				AccountLockDuration:    time.Duration(securityConfig.AccountLockDurationMinutes) * time.Minute,
-				FailCountWindow:        15 * time.Minute, // 默认 15 分钟窗口
-			}
+	// 账户锁定服务（进程内短期计数 + 数据库账户锁定状态）
+	lockConfig := auth.DefaultAccountLockConfig
+	if securityConfig, err := securityService.GetAccountLockConfig(context.Background()); err == nil {
+		lockConfig = auth.AccountLockConfig{
+			Enabled:                securityConfig.Enabled,
+			MaxIPFailAttempts:      securityConfig.MaxIPFailAttempts,
+			IPLockDuration:         time.Duration(securityConfig.IPLockDurationMinutes) * time.Minute,
+			MaxAccountFailAttempts: securityConfig.MaxAccountFailAttempts,
+			AccountLockDuration:    time.Duration(securityConfig.AccountLockDurationMinutes) * time.Minute,
+			FailCountWindow:        15 * time.Minute, // 默认 15 分钟窗口
 		}
+	}
+	loginAttemptRepo := auth.NewLoginAttemptRepository(database)
+	accountLockService := auth.NewAccountLockService(
+		loginAttemptRepo,
+		authRepo,
+		lockConfig,
+	)
+	log.Println("✅ Account lock service initialized")
 
-		// 创建登录尝试仓储
-		loginAttemptRepo := auth.NewLoginAttemptRepository(database)
-
-		// 创建账户锁定服务
-		accountLockService = auth.NewAccountLockService(
-			redisClient.GetClient(),
-			loginAttemptRepo,
-			authRepo,
-			lockConfig,
-		)
-		log.Println("✅ Account lock service initialized")
-
-		// 注入账户锁定服务到认证服务
-		type accountLockServiceSetter interface {
-			SetAccountLockService(auth.AccountLockService)
-		}
-		if setter, ok := authService.(accountLockServiceSetter); ok {
-			setter.SetAccountLockService(accountLockService)
-		}
+	type accountLockServiceSetter interface {
+		SetAccountLockService(auth.AccountLockService)
+	}
+	if setter, ok := authService.(accountLockServiceSetter); ok {
+		setter.SetAccountLockService(accountLockService)
 	}
 
 	// 登录检测服务（需要数据库）
 	var loginDetectionService auth.LoginDetectionService
 	trustedDeviceRepo := auth.NewTrustedDeviceRepository(database)
 	loginAlertRepo := auth.NewLoginAlertRepository(database)
-	// 获取 GeoIP 客户端（已在前面通过 SetRedisClient 初始化）
 	geoipClient := geoip.NewClient()
 	loginDetectionService = auth.NewLoginDetectionService(trustedDeviceRepo, loginAlertRepo, authRepo, geoipClient, emailService)
 	log.Println("✅ Login detection service initialized")
@@ -273,14 +250,9 @@ func main() {
 		setter.SetLoginDetectionService(loginDetectionService)
 	}
 
-	// 验证码服务（需要 Redis）
-	var verificationService verification.Service
-	if redisClient != nil {
-		verificationService = verification.NewService(redisClient.GetClient())
-		log.Println("✅ Verification service initialized")
-	} else {
-		log.Println("⚠️  Warning: Verification service is disabled (Redis not available)")
-	}
+	// 验证码服务（进程内短期存储）
+	verificationService := verification.NewService()
+	log.Println("✅ Verification service initialized")
 
 	// 加密器（用于服务器密码和私钥）
 	encryptor, err := crypto.NewEncryptor(cfg.Server.EncryptionKey)
@@ -502,11 +474,7 @@ func main() {
 	avatarHandler := rest.NewAvatarHandler()
 	backupHandler := rest.NewBackupHandler(
 		database,
-		cfg.Database.Host,
-		fmt.Sprintf("%d", cfg.Database.Port),
-		cfg.Database.DBName,
-		cfg.Database.User,
-		cfg.Database.Password,
+		&cfg.Database,
 	)
 
 	// 创建 Gin 路由
@@ -543,21 +511,12 @@ func main() {
 				dbStatus = "error: " + err.Error()
 			}
 
-			// 检查 Redis 连接
-			redisStatus := "ok"
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := redisClient.HealthCheck(ctx); err != nil {
-				redisStatus = "error: " + err.Error()
-			}
-
 			c.JSON(http.StatusOK, gin.H{
 				"status":  "ok",
 				"service": "easyssh-api",
 				"version": "1.0.0",
 				"dependencies": gin.H{
 					"database": dbStatus,
-					"redis":    redisStatus,
 				},
 			})
 		})
@@ -582,19 +541,19 @@ func main() {
 			authRoutes.GET("/status", middleware.OptionalAuth(jwtService, ticketService, authRepo), authHandler.CheckStatus) // 检查系统和认证状态
 			// 一次性 Ticket（需认证，用于 WS/下载握手）
 			authRoutes.POST("/ticket", middleware.AuthMiddleware(jwtService, ticketService, authRepo), ticketHandler.CreateTicket)
-			// 初始化管理员接口应用速率限制（支持动态配置，使用 Redis 分布式限流）
-			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.InitializeAdmin)
-			authRoutes.POST("/2fa/verify", middleware.TwoFARateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
+			// 初始化管理员接口应用速率限制（支持动态配置）
+			authRoutes.POST("/initialize-admin", middleware.LoginRateLimitMiddleware(securityService), authHandler.InitializeAdmin)
+			authRoutes.POST("/2fa/verify", middleware.TwoFARateLimitMiddleware(securityService), authHandler.Verify2FACode) // 验证 2FA 代码（登录时）
 		}
 
 		// OAuth 路由（公开）
 		oauthRoutes := v1.Group("/oauth")
 		{
 			// 与 /oauth 前缀下的端点保持一一对应，便于前端统一通过 /api/v1 调用
-			oauthRoutes.POST("/authorize", middleware.LoginRateLimitMiddleware(securityService, redisClient.GetClient()), authHandler.OAuthAuthorize) // 开发版 PKCE 授权码端点（含登录验证）
-			oauthRoutes.POST("/token", authHandler.OAuthToken)                                                                                        // 交换/刷新 access_token
-			oauthRoutes.POST("/logout", authHandler.Logout)                                                                                           // 推荐登出端点（可携带 refresh_token Cookie）
-			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify)                                                                             // 验证 Google ID Token
+			oauthRoutes.POST("/authorize", middleware.LoginRateLimitMiddleware(securityService), authHandler.OAuthAuthorize) // 开发版 PKCE 授权码端点（含登录验证）
+			oauthRoutes.POST("/token", authHandler.OAuthToken)                                                               // 交换/刷新 access_token
+			oauthRoutes.POST("/logout", authHandler.Logout)                                                                  // 推荐登出端点（可携带 refresh_token Cookie）
+			oauthRoutes.POST("/google/verify", oauthHandler.GoogleVerify)                                                    // 验证 Google ID Token
 		}
 
 		// 用户路由（需要认证）

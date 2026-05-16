@@ -8,13 +8,9 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/easyssh/server/internal/infra/cache"
 )
 
 const (
-	// Redis 缓存 key 前缀
-	redisCacheKeyPrefix = "geoip:"
 	// 缓存过期时间
 	cacheTTL = 24 * time.Hour
 )
@@ -46,8 +42,14 @@ func (l *Location) String() string {
 
 // Client GeoIP 客户端
 type Client struct {
-	httpClient  *http.Client
-	redisClient *cache.RedisClient
+	httpClient *http.Client
+	mu         sync.Mutex
+	cache      map[string]cacheEntry
+}
+
+type cacheEntry struct {
+	location  *Location
+	expiresAt time.Time
 }
 
 // 全局单例
@@ -57,24 +59,16 @@ var (
 )
 
 // NewClient 创建 GeoIP 客户端（返回全局单例）
-// 注意：必须先调用 SetRedisClient 设置 Redis 客户端
 func NewClient() *Client {
 	once.Do(func() {
 		defaultClient = &Client{
 			httpClient: &http.Client{
 				Timeout: 5 * time.Second,
 			},
+			cache: make(map[string]cacheEntry),
 		}
 	})
 	return defaultClient
-}
-
-// SetRedisClient 设置 Redis 客户端（应用启动时调用）
-func SetRedisClient(redisClient *cache.RedisClient) {
-	if defaultClient == nil {
-		NewClient()
-	}
-	defaultClient.redisClient = redisClient
 }
 
 // Lookup 查询 IP 地理位置
@@ -109,56 +103,48 @@ func (c *Client) Lookup(ctx context.Context, ipOrHost string) (*Location, error)
 		}, nil
 	}
 
-	// 1. 查 Redis 缓存
-	if loc := c.getFromRedis(ctx, ip); loc != nil {
+	if loc := c.getFromCache(ip); loc != nil {
 		return loc, nil
 	}
 
-	// 2. 查询外部 API
 	location, err := c.queryIPAPI(ctx, ip)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. 写入 Redis 缓存
-	c.setToRedis(ctx, ip, location)
+	c.setToCache(ip, location)
 
 	return location, nil
 }
 
-// getFromRedis 从 Redis 获取
-func (c *Client) getFromRedis(ctx context.Context, ip string) *Location {
-	if c.redisClient == nil {
+func (c *Client) getFromCache(ip string) *Location {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	rec, ok := c.cache[ip]
+	if !ok {
+		return nil
+	}
+	if time.Now().After(rec.expiresAt) {
+		delete(c.cache, ip)
 		return nil
 	}
 
-	key := redisCacheKeyPrefix + ip
-	data, err := c.redisClient.Get(ctx, key)
-	if err != nil {
-		return nil
-	}
-
-	var loc Location
-	if err := json.Unmarshal([]byte(data), &loc); err != nil {
-		return nil
-	}
-
-	return &loc
+	return rec.location
 }
 
-// setToRedis 写入 Redis
-func (c *Client) setToRedis(ctx context.Context, ip string, loc *Location) {
-	if c.redisClient == nil {
+func (c *Client) setToCache(ip string, loc *Location) {
+	if loc == nil {
 		return
 	}
 
-	data, err := json.Marshal(loc)
-	if err != nil {
-		return
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	key := redisCacheKeyPrefix + ip
-	_ = c.redisClient.Set(ctx, key, string(data), cacheTTL)
+	c.cache[ip] = cacheEntry{
+		location:  loc,
+		expiresAt: time.Now().Add(cacheTTL),
+	}
 }
 
 // queryIPAPI 使用 ip-api.com 查询

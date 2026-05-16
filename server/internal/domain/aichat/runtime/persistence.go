@@ -24,16 +24,16 @@ type SessionStore interface {
 }
 
 type AISessionRecord struct {
-	ID             string          `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID         uuid.UUID       `gorm:"type:uuid;not null;index:idx_ai_sessions_user_updated" json:"user_id"`
+	ID             string          `gorm:"type:char(36);primaryKey" json:"id"`
+	UserID         uuid.UUID       `gorm:"type:char(36);not null;index:idx_ai_sessions_user_updated" json:"user_id"`
 	Model          string          `gorm:"type:text" json:"model"`
 	Title          string          `gorm:"type:text" json:"title"`
 	PermissionMode string          `gorm:"type:varchar(32);not null" json:"permission_mode"`
 	Status         string          `gorm:"type:varchar(32);not null;index" json:"status"`
-	Messages       json.RawMessage `gorm:"type:jsonb;not null" json:"messages"`
-	MessageViews   json.RawMessage `gorm:"type:jsonb;not null" json:"message_views"`
-	Tasks          json.RawMessage `gorm:"type:jsonb;not null" json:"tasks"`
-	TaskOrder      json.RawMessage `gorm:"type:jsonb;not null" json:"task_order"`
+	Messages       json.RawMessage `gorm:"type:text;not null" json:"messages"`
+	MessageViews   json.RawMessage `gorm:"type:text;not null" json:"message_views"`
+	Tasks          json.RawMessage `gorm:"type:text;not null" json:"tasks"`
+	TaskOrder      json.RawMessage `gorm:"type:text;not null" json:"task_order"`
 	CreatedAt      time.Time       `gorm:"not null" json:"created_at"`
 	UpdatedAt      time.Time       `gorm:"not null;index:idx_ai_sessions_user_updated" json:"updated_at"`
 	DeletedAt      gorm.DeletedAt  `gorm:"index" json:"-"`
@@ -135,7 +135,11 @@ func (s *gormSessionStore) List(ctx context.Context, userID uuid.UUID, queryText
 	query := s.db.WithContext(ctx).Model(&AISessionRecord{}).Where("user_id = ?", userID)
 	if queryText != "" {
 		like := "%" + strings.ToLower(queryText) + "%"
-		query = query.Where("LOWER(CAST(title AS TEXT)) LIKE ? OR LOWER(CAST(message_views AS TEXT)) LIKE ?", like, like)
+		if s.db.Dialector.Name() == "mysql" {
+			query = query.Where("LOWER(title) LIKE ? OR LOWER(CAST(message_views AS CHAR)) LIKE ?", like, like)
+		} else {
+			query = query.Where("LOWER(title) LIKE ? OR LOWER(CAST(message_views AS TEXT)) LIKE ?", like, like)
+		}
 	}
 
 	var total int64

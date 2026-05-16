@@ -9,26 +9,26 @@ import (
 
 // FileTransfer 文件传输记录模型
 type FileTransfer struct {
-	ID           uuid.UUID      `gorm:"type:uuid;primary_key" json:"id"`
-	UserID       uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
-	ServerID     uuid.UUID      `gorm:"type:uuid;not null;index" json:"server_id"`
-	SessionID    string         `gorm:"type:varchar(100);index" json:"session_id"`
-	TransferType string         `gorm:"type:varchar(20);not null;index" json:"transfer_type"` // upload/download
-	SourcePath   string         `gorm:"type:text;not null" json:"source_path"`
-	DestPath     string         `gorm:"type:text;not null" json:"dest_path"`
-	FileName     string         `gorm:"type:varchar(255);not null" json:"file_name"`
-	FileSize     int64          `gorm:"not null" json:"file_size"` // 字节
-	Status       string         `gorm:"type:varchar(20);default:'pending';index" json:"status"` // pending/transferring/completed/failed
-	Progress     int            `gorm:"default:0" json:"progress"` // 百分比 0-100
-	BytesTransferred int64     `gorm:"default:0" json:"bytes_transferred"`
-	StartedAt    *time.Time     `json:"started_at,omitempty"`
-	CompletedAt  *time.Time     `json:"completed_at,omitempty"`
-	Duration     int            `json:"duration,omitempty"` // 传输时长(秒)
-	Speed        int64          `json:"speed,omitempty"` // 传输速度(字节/秒)
-	ErrorMessage string         `gorm:"type:text" json:"error_message,omitempty"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
+	ID               uuid.UUID      `gorm:"type:char(36);primary_key" json:"id"`
+	UserID           uuid.UUID      `gorm:"type:char(36);not null;index" json:"user_id"`
+	ServerID         uuid.UUID      `gorm:"type:char(36);not null;index" json:"server_id"`
+	SessionID        string         `gorm:"type:varchar(100);index" json:"session_id"`
+	TransferType     string         `gorm:"type:varchar(20);not null;index" json:"transfer_type"` // upload/download
+	SourcePath       string         `gorm:"type:text;not null" json:"source_path"`
+	DestPath         string         `gorm:"type:text;not null" json:"dest_path"`
+	FileName         string         `gorm:"type:varchar(255);not null" json:"file_name"`
+	FileSize         int64          `gorm:"not null" json:"file_size"`                              // 字节
+	Status           string         `gorm:"type:varchar(20);default:'pending';index" json:"status"` // pending/transferring/completed/failed
+	Progress         int            `gorm:"default:0" json:"progress"`                              // 百分比 0-100
+	BytesTransferred int64          `gorm:"default:0" json:"bytes_transferred"`
+	StartedAt        *time.Time     `json:"started_at,omitempty"`
+	CompletedAt      *time.Time     `json:"completed_at,omitempty"`
+	Duration         int            `json:"duration,omitempty"` // 传输时长(秒)
+	Speed            int64          `json:"speed,omitempty"`    // 传输速度(字节/秒)
+	ErrorMessage     string         `gorm:"type:text" json:"error_message,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // BeforeCreate GORM钩子：创建前生成UUID
@@ -58,10 +58,10 @@ type CreateFileTransferRequest struct {
 
 // UpdateFileTransferRequest 更新文件传输记录请求
 type UpdateFileTransferRequest struct {
-	Status           string  `json:"status,omitempty"`
-	Progress         *int    `json:"progress,omitempty"`
-	BytesTransferred *int64  `json:"bytes_transferred,omitempty"`
-	ErrorMessage     string  `json:"error_message,omitempty"`
+	Status           string `json:"status,omitempty"`
+	Progress         *int   `json:"progress,omitempty"`
+	BytesTransferred *int64 `json:"bytes_transferred,omitempty"`
+	ErrorMessage     string `json:"error_message,omitempty"`
 }
 
 // ListFileTransfersRequest 文件传输列表查询请求
@@ -84,11 +84,11 @@ type ListFileTransfersResponse struct {
 
 // FileTransferStatistics 文件传输统计信息
 type FileTransferStatistics struct {
-	TotalTransfers    int64          `json:"total_transfers"`
-	CompletedTransfers int64         `json:"completed_transfers"`
-	FailedTransfers   int64          `json:"failed_transfers"`
-	TotalBytesUploaded int64         `json:"total_bytes_uploaded"`
-	TotalBytesDownloaded int64       `json:"total_bytes_downloaded"`
-	ByType            map[string]int `json:"by_type"` // upload/download
-	ByStatus          map[string]int `json:"by_status"`
+	TotalTransfers       int64          `json:"total_transfers"`
+	CompletedTransfers   int64          `json:"completed_transfers"`
+	FailedTransfers      int64          `json:"failed_transfers"`
+	TotalBytesUploaded   int64          `json:"total_bytes_uploaded"`
+	TotalBytesDownloaded int64          `json:"total_bytes_downloaded"`
+	ByType               map[string]int `json:"by_type"` // upload/download
+	ByStatus             map[string]int `json:"by_status"`
 }

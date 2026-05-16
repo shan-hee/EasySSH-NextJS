@@ -52,18 +52,18 @@ const (
 
 // AuditLog 审计日志模型
 type AuditLog struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID    uuid.UUID  `gorm:"type:uuid;index;not null;index:idx_audit_user_time,priority:1" json:"user_id"`
-	Username  string     `gorm:"size:50" json:"username"`                                       // 冗余字段，方便查询
-	ServerID  *uuid.UUID `gorm:"type:uuid;index" json:"server_id,omitempty"`                    // 关联的服务器 ID（可选）
+	ID        uuid.UUID  `gorm:"type:char(36);primary_key" json:"id"`
+	UserID    uuid.UUID  `gorm:"type:char(36);index;not null;index:idx_audit_user_time,priority:1" json:"user_id"`
+	Username  string     `gorm:"size:50" json:"username"`                        // 冗余字段，方便查询
+	ServerID  *uuid.UUID `gorm:"type:char(36);index" json:"server_id,omitempty"` // 关联的服务器 ID（可选）
 	Action    ActionType `gorm:"type:varchar(50);not null;index;index:idx_audit_action_time,priority:1" json:"action"`
-	Resource  string     `gorm:"size:255" json:"resource"`                                      // 操作的资源，如文件路径、服务器名称等
+	Resource  string     `gorm:"size:255" json:"resource"` // 操作的资源，如文件路径、服务器名称等
 	Status    Status     `gorm:"type:varchar(20);not null;index" json:"status"`
-	IP        string     `gorm:"size:45;index:idx_audit_ip_time,priority:1" json:"ip"`          // 客户端 IP 地址，添加索引用于安全分析
-	UserAgent string     `gorm:"size:500" json:"user_agent"`                                    // 用户代理
-	Details   string     `gorm:"type:text" json:"details"`                                      // 详细信息（JSON 格式）
-	ErrorMsg  string     `gorm:"type:text" json:"error_msg,omitempty"`                          // 错误信息（失败时）
-	Duration  int64      `gorm:"default:0" json:"duration"`                                     // 操作耗时（毫秒）
+	IP        string     `gorm:"size:45;index:idx_audit_ip_time,priority:1" json:"ip"`                                                                                                                 // 客户端 IP 地址，添加索引用于安全分析
+	UserAgent string     `gorm:"size:500" json:"user_agent"`                                                                                                                                           // 用户代理
+	Details   string     `gorm:"type:text" json:"details"`                                                                                                                                             // 详细信息（JSON 格式）
+	ErrorMsg  string     `gorm:"type:text" json:"error_msg,omitempty"`                                                                                                                                 // 错误信息（失败时）
+	Duration  int64      `gorm:"default:0" json:"duration"`                                                                                                                                            // 操作耗时（毫秒）
 	CreatedAt time.Time  `gorm:"index;index:idx_audit_user_time,priority:2,sort:desc;index:idx_audit_action_time,priority:2,sort:desc;index:idx_audit_ip_time,priority:2,sort:desc" json:"created_at"` // 复合索引优化时间范围查询
 }
 
@@ -85,17 +85,17 @@ func (a *AuditLog) BeforeCreate(tx *gorm.DB) error {
 
 // CreateAuditLogRequest 创建审计日志请求
 type CreateAuditLogRequest struct {
-	UserID    uuid.UUID   `json:"user_id" binding:"required"`
-	Username  string      `json:"username"`
-	ServerID  *uuid.UUID  `json:"server_id,omitempty"`
-	Action    ActionType  `json:"action" binding:"required"`
-	Resource  string      `json:"resource"`
-	Status    Status      `json:"status" binding:"required"`
-	IP        string      `json:"ip"`
-	UserAgent string      `json:"user_agent"`
-	Details   string      `json:"details"`
-	ErrorMsg  string      `json:"error_msg,omitempty"`
-	Duration  int64       `json:"duration"`
+	UserID    uuid.UUID  `json:"user_id" binding:"required"`
+	Username  string     `json:"username"`
+	ServerID  *uuid.UUID `json:"server_id,omitempty"`
+	Action    ActionType `json:"action" binding:"required"`
+	Resource  string     `json:"resource"`
+	Status    Status     `json:"status" binding:"required"`
+	IP        string     `json:"ip"`
+	UserAgent string     `json:"user_agent"`
+	Details   string     `json:"details"`
+	ErrorMsg  string     `json:"error_msg,omitempty"`
+	Duration  int64      `json:"duration"`
 }
 
 // ListAuditLogsRequest 查询审计日志请求
@@ -112,12 +112,12 @@ type ListAuditLogsRequest struct {
 
 // AuditLogStatistics 审计日志统计
 type AuditLogStatistics struct {
-	TotalLogs       int64                `json:"total_logs"`
-	SuccessCount    int64                `json:"success_count"`
-	FailureCount    int64                `json:"failure_count"`
-	ActionStats     map[ActionType]int64 `json:"action_stats"` // 各类操作统计
-	RecentFailures  []*AuditLog          `json:"recent_failures"` // 最近失败的操作
-	TopUsers        []UserActionCount    `json:"top_users"` // 操作最多的用户
+	TotalLogs      int64                `json:"total_logs"`
+	SuccessCount   int64                `json:"success_count"`
+	FailureCount   int64                `json:"failure_count"`
+	ActionStats    map[ActionType]int64 `json:"action_stats"`    // 各类操作统计
+	RecentFailures []*AuditLog          `json:"recent_failures"` // 最近失败的操作
+	TopUsers       []UserActionCount    `json:"top_users"`       // 操作最多的用户
 }
 
 // UserActionCount 用户操作统计

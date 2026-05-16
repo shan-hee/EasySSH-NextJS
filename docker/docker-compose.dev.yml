@@ -1,17 +1,4 @@
-version: '3.8'
-
-# ================================
-# 开发环境 Docker Compose 配置
-# 用于本地构建和测试
-# ================================
-# 使用方法：
-#   docker-compose -f docker-compose.dev.yml up -d --build
-# ================================
-
 services:
-  # ================================
-  # EasySSH 服务 (Go API + 静态文件托管)
-  # ================================
   easyssh:
     build:
       context: ..
@@ -22,69 +9,40 @@ services:
     ports:
       - "${PORT:-8520}:8520"
     environment:
-      # ------------------------------
-      # 数据库配置（PostgreSQL）
-      # ------------------------------
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${DB_USER:-easyssh}
-      DB_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 16
-      DB_NAME: ${DB_NAME:-Easyssh_db}
+      DB_DRIVER: ${DB_DRIVER:-sqlite}
+      DB_PATH: ${DB_PATH:-/app/data/easyssh.db}
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-}
+      DB_USER: ${DB_USER:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_NAME: ${DB_NAME:-}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
 
-      # 数据库连接池配置
-      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}  # 最大空闲连接数
-      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-100}  # 最大打开连接数
-      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-60}  # 连接最大生命周期（分钟）
-      DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-10}  # 连接最大空闲时间（分钟）
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-100}
+      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-60}
+      DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-10}
 
-      # ------------------------------
-      # 缓存配置（Redis）
-      # ------------------------------
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: ${REDIS_DB:-0}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}  # 留空表示无密码 | 生成: openssl rand -base64 16
-
-      # ------------------------------
-      # 应用运行与端口
-      # ------------------------------
       ENV: ${ENV:-development}
       PORT: 8520
+      BACKUP_DIR: /app/backups
 
-      # ------------------------------
-      # 安全密钥（请务必替换为强随机值）
-      # ------------------------------
-      JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-development}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 48
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-easyssh-encryption-key-32bytes!!}  # ⚠️ 生产环境请修改 | 生成: openssl rand -base64 32
+      JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-development}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-ZWFzeXNzaC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE=}
 
-      # ------------------------------
-      # JWT 过期与刷新策略
-      # ------------------------------
-      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-15}  # 访问令牌过期时间（分钟）
-      JWT_REFRESH_IDLE_EXPIRE_DAYS: ${JWT_REFRESH_IDLE_EXPIRE_DAYS:-7}  # 刷新令牌闲置过期时间（天）
-      JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS: ${JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS:-30}  # 刷新令牌绝对过期时间（天）
-      JWT_REFRESH_ROTATE: ${JWT_REFRESH_ROTATE:-true}  # 刷新令牌轮换
-      JWT_REFRESH_REUSE_DETECTION: ${JWT_REFRESH_REUSE_DETECTION:-true}  # 复用检测
+      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-15}
+      JWT_REFRESH_IDLE_EXPIRE_DAYS: ${JWT_REFRESH_IDLE_EXPIRE_DAYS:-7}
+      JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS: ${JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS:-30}
+      JWT_REFRESH_ROTATE: ${JWT_REFRESH_ROTATE:-true}
+      JWT_REFRESH_REUSE_DETECTION: ${JWT_REFRESH_REUSE_DETECTION:-true}
 
-      # ------------------------------
-      # Cookie-only 策略相关
-      # ------------------------------
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}    # HTTPS 环境 true | HTTP 开发 false
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}        # 多子域共享：.example.com；留空=当前域
-      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax} # lax|none|strict（跨域直连需 none + HTTPS）
-
-      # WebSocket Origin 白名单（逗号分隔）
-      # 未设置：默认允许与当前请求 Host / X-Forwarded-Host 同主机名的 Origin（同域/同端口）
-      # 跨域直连/多前端域时显式配置（需包含协议与端口）：
-      #   例：ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
-
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    volumes:
+      - ./data-dev:/app/data
+      - ./backups-dev:/app/backups
     networks:
       - easyssh-network
     healthcheck:
@@ -94,58 +52,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # ================================
-  # PostgreSQL 数据库
-  # ================================
-  postgres:
-    image: postgres:16-alpine
-    container_name: easyssh-postgres-dev
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-easyssh}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-easyssh_dev_password}  # ⚠️ 和 DB_PASSWORD 一致
-      POSTGRES_DB: ${DB_NAME:-Easyssh_db}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
-    networks:
-      - easyssh-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-easyssh} -d ${DB_NAME:-Easyssh_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  # ================================
-  # Redis 缓存
-  # ================================
-  redis:
-    image: redis:7-alpine
-    container_name: easyssh-redis-dev
-    restart: unless-stopped
-    command: >
-      sh -c "
-      if [ -n \"${REDIS_PASSWORD:-}\" ]; then
-        redis-server --appendonly yes --requirepass \"${REDIS_PASSWORD}\"
-      else
-        redis-server --appendonly yes
-      fi
-      "
-    volumes:
-      - ./data/redis:/data
-    networks:
-      - easyssh-network
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping 2>/dev/null || redis-cli ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-
-# ================================
-# 网络配置
-# ================================
 networks:
   easyssh-network:
     name: easyssh-network-dev

@@ -22,10 +22,10 @@ type SecurityConfig struct {
 	BlocklistIPs string `gorm:"type:text" json:"blocklist_ips"` // IP黑名单（换行分隔）
 
 	// CORS配置（JSON存储）
-	CORSConfig string `gorm:"type:jsonb" json:"cors_config"` // JSON: CORSConfig
+	CORSConfig string `gorm:"type:text" json:"cors_config"` // JSON: CORSConfig
 
 	// Cookie配置（JSON存储）
-	CookieConfig string `gorm:"type:jsonb" json:"cookie_config"` // JSON: CookieConfig
+	CookieConfig string `gorm:"type:text" json:"cookie_config"` // JSON: CookieConfig
 
 	// 速率限制
 	LoginLimit  int `gorm:"not null;default:5" json:"login_limit"`    // 登录接口速率限制（次/分钟/IP）

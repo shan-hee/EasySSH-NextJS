@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -27,29 +26,29 @@ const (
 
 // Server 服务器模型
 type Server struct {
-	ID            uuid.UUID      `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID        uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
-	Name          string         `gorm:"size:100" json:"name"`
-	Host          string         `gorm:"not null;size:255" json:"host"`
-	Port          int            `gorm:"default:22" json:"port"`
-	Username      string         `gorm:"not null;size:50" json:"username"`
-	AuthMethod    AuthMethod     `gorm:"type:varchar(20);not null" json:"auth_method"`
-	Password      string         `gorm:"type:text" json:"-"`       // 加密存储，不在 JSON 中返回
-	PrivateKey    string         `gorm:"type:text" json:"-"`       // 加密存储，不在 JSON 中返回
-	Group         string         `gorm:"size:50" json:"group"`
-	Tags          pq.StringArray `gorm:"type:text[]" json:"tags"`
-	Status        ServerStatus   `gorm:"type:varchar(20);default:'offline'" json:"status"`
-	LastConnected *time.Time     `json:"last_connected,omitempty"`
-	Description   string         `gorm:"type:text" json:"description"`
-	SortOrder     int            `gorm:"default:0;index" json:"sort_order"` // 用户自定义排序顺序
+	ID            uuid.UUID    `gorm:"type:char(36);primary_key" json:"id"`
+	UserID        uuid.UUID    `gorm:"type:char(36);not null;index" json:"user_id"`
+	Name          string       `gorm:"size:100" json:"name"`
+	Host          string       `gorm:"not null;size:255" json:"host"`
+	Port          int          `gorm:"default:22" json:"port"`
+	Username      string       `gorm:"not null;size:50" json:"username"`
+	AuthMethod    AuthMethod   `gorm:"type:varchar(20);not null" json:"auth_method"`
+	Password      string       `gorm:"type:text" json:"-"` // 加密存储，不在 JSON 中返回
+	PrivateKey    string       `gorm:"type:text" json:"-"` // 加密存储，不在 JSON 中返回
+	Group         string       `gorm:"column:server_group;size:50" json:"group"`
+	Tags          []string     `gorm:"type:text;serializer:json" json:"tags"`
+	Status        ServerStatus `gorm:"type:varchar(20);default:'offline'" json:"status"`
+	LastConnected *time.Time   `json:"last_connected,omitempty"`
+	Description   string       `gorm:"type:text" json:"description"`
+	SortOrder     int          `gorm:"default:0;index" json:"sort_order"` // 用户自定义排序顺序
 	// 地理位置信息（通过 IP 自动查询）
-	Country     string `gorm:"size:100" json:"country,omitempty"`
-	CountryCode string `gorm:"size:10" json:"country_code,omitempty"`
-	Region      string `gorm:"size:100" json:"region,omitempty"`
-	City        string `gorm:"size:100" json:"city,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"` // 软删除
+	Country     string         `gorm:"size:100" json:"country,omitempty"`
+	CountryCode string         `gorm:"size:10" json:"country_code,omitempty"`
+	Region      string         `gorm:"size:100" json:"region,omitempty"`
+	City        string         `gorm:"size:100" json:"city,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"` // 软删除
 }
 
 // TableName 指定表名

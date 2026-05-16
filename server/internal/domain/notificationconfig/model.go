@@ -11,16 +11,16 @@ type NotificationConfig struct {
 	ID uint `gorm:"primarykey" json:"id"`
 
 	// SMTP配置（JSON存储）
-	SMTPConfig string `gorm:"type:jsonb" json:"smtp_config"` // JSON: SMTPConfig
+	SMTPConfig string `gorm:"type:text" json:"smtp_config"` // JSON: SMTPConfig
 
 	// Webhook配置（JSON存储）
-	WebhookConfig string `gorm:"type:jsonb" json:"webhook_config"` // JSON: WebhookConfig
+	WebhookConfig string `gorm:"type:text" json:"webhook_config"` // JSON: WebhookConfig
 
 	// 钉钉配置（JSON存储）
-	DingTalkConfig string `gorm:"type:jsonb" json:"dingtalk_config"` // JSON: DingTalkConfig
+	DingTalkConfig string `gorm:"type:text" json:"dingtalk_config"` // JSON: DingTalkConfig
 
 	// 企业微信配置（JSON存储）
-	WeComConfig string `gorm:"type:jsonb" json:"wecom_config"` // JSON: WeComConfig
+	WeComConfig string `gorm:"type:text" json:"wecom_config"` // JSON: WeComConfig
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

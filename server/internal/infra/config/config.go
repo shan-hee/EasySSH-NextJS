@@ -3,15 +3,20 @@ package config
 import (
 	"encoding/base64"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"time"
+
+	mysqlconfig "github.com/go-sql-driver/mysql"
 )
 
 // Config 应用配置
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
-	Redis    RedisConfig
 	JWT      JWTConfig
 	SFTP     SFTPConfig
 }
@@ -26,6 +31,8 @@ type ServerConfig struct {
 
 // DatabaseConfig 数据库配置
 type DatabaseConfig struct {
+	Driver          string // sqlite, postgres, mysql
+	Path            string // SQLite 数据库文件路径
 	Host            string
 	Port            int
 	User            string
@@ -37,14 +44,6 @@ type DatabaseConfig struct {
 	MaxOpenConns    int  // 最大打开连接数
 	ConnMaxLifetime int  // 连接最大生命周期（分钟）
 	ConnMaxIdleTime int  // 连接最大空闲时间（分钟）
-}
-
-// RedisConfig Redis 配置
-type RedisConfig struct {
-	Host     string
-	Port     int
-	Password string
-	DB       int
 }
 
 // JWTConfig JWT 配置
@@ -86,12 +85,14 @@ type SFTPConfig struct {
 func Load() (*Config, error) {
 	config := &Config{
 		Server: ServerConfig{
-			Port:          getEnvInt("PORT", 8521),
+			Port:          getEnvInt("PORT", 8520),
 			Env:           getEnv("ENV", "development"),
 			EncryptionKey: getEnv("ENCRYPTION_KEY", "ZWFzeXNzaC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE="), // Base64 编码的 32 字节（仅开发环境占位）
-			WebDevPort:    getEnvInt("WEB_PORT", 8520),
+			WebDevPort:    getEnvInt("WEB_PORT", 3000),
 		},
 		Database: DatabaseConfig{
+			Driver:          getEnv("DB_DRIVER", "sqlite"),
+			Path:            getEnv("DB_PATH", "./data/easyssh.db"),
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnvInt("DB_PORT", 5432),
 			User:            getEnv("DB_USER", "easyssh"),
@@ -103,12 +104,6 @@ func Load() (*Config, error) {
 			ConnMaxLifetime: getEnvInt("DB_CONN_MAX_LIFETIME", 60),  // 60分钟
 			ConnMaxIdleTime: getEnvInt("DB_CONN_MAX_IDLE_TIME", 10), // 10分钟
 		},
-		Redis: RedisConfig{
-			Host:     getEnv("REDIS_HOST", "localhost"),
-			Port:     getEnvInt("REDIS_PORT", 6379),
-			Password: getEnv("REDIS_PASSWORD", ""),
-			DB:       getEnvInt("REDIS_DB", 0),
-		},
 		JWT: JWTConfig{
 			Secret:                    getEnv("JWT_SECRET", "easyssh-secret-change-in-production"),
 			AccessExpireMinutes:       getEnvInt("JWT_ACCESS_EXPIRE_MINUTES", 15),        // 15 分钟
@@ -118,11 +113,11 @@ func Load() (*Config, error) {
 			RefreshReuseDetection:     getEnvBool("JWT_REFRESH_REUSE_DETECTION", true),   // 默认启用复用检测
 		},
 		SFTP: SFTPConfig{
-			MaxIdleTimeSeconds:     getEnvInt("SFTP_MAX_IDLE_TIME_SECONDS", 120),     // 2分钟
-			CleanupIntervalSeconds: getEnvInt("SFTP_CLEANUP_INTERVAL_SECONDS", 30),   // 30秒
-			MaxLifeTimeMinutes:     getEnvInt("SFTP_MAX_LIFE_TIME_MINUTES", 0),       // 默认不启用
-			ConnTimeoutSeconds:     getEnvInt("SFTP_CONN_TIMEOUT_SECONDS", 10),       // 10秒
-			MaxSFTPSessionsPerConn: getEnvInt("SFTP_MAX_SESSIONS_PER_CONN", 8),       // 每条 SSH 默认最多 8 个 SFTP 会话
+			MaxIdleTimeSeconds:     getEnvInt("SFTP_MAX_IDLE_TIME_SECONDS", 120),   // 2分钟
+			CleanupIntervalSeconds: getEnvInt("SFTP_CLEANUP_INTERVAL_SECONDS", 30), // 30秒
+			MaxLifeTimeMinutes:     getEnvInt("SFTP_MAX_LIFE_TIME_MINUTES", 0),     // 默认不启用
+			ConnTimeoutSeconds:     getEnvInt("SFTP_CONN_TIMEOUT_SECONDS", 10),     // 10秒
+			MaxSFTPSessionsPerConn: getEnvInt("SFTP_MAX_SESSIONS_PER_CONN", 8),     // 每条 SSH 默认最多 8 个 SFTP 会话
 
 			TrashCleanerEnabled:         getEnvBool("SFTP_TRASH_CLEANER_ENABLED", true),
 			TrashCleanIntervalSeconds:   getEnvInt("SFTP_TRASH_CLEAN_INTERVAL_SECONDS", 600),   // 10分钟
@@ -131,7 +126,7 @@ func Load() (*Config, error) {
 			TrashMaxEntriesPerTrashDir:  getEnvInt("SFTP_TRASH_MAX_ENTRIES_PER_DIR", 5000),
 			TrashMaxBytesPerTrashDirMB:  getEnvInt("SFTP_TRASH_MAX_BYTES_PER_DIR_MB", 2048), // 2GB
 			TrashMaxDeletesPerDirPerRun: getEnvInt("SFTP_TRASH_MAX_DELETES_PER_DIR", 500),
-			TrashMaxFailCount:           getEnvInt("SFTP_TRASH_MAX_FAIL_COUNT", 10),            // 最多重试 10 次
+			TrashMaxFailCount:           getEnvInt("SFTP_TRASH_MAX_FAIL_COUNT", 10), // 最多重试 10 次
 			TrashBatchSize:              getEnvInt("SFTP_TRASH_BATCH_SIZE", 200),
 			TrashConcurrency:            getEnvInt("SFTP_TRASH_CONCURRENCY", 2),
 			TrashConnectTimeoutSeconds:  getEnvInt("SFTP_TRASH_CONNECT_TIMEOUT_SECONDS", 10),
@@ -159,6 +154,29 @@ func (c *Config) applyEnvironmentDefaults() {
 		c.Database.Debug = true // 开发环境开启 SQL 调试
 	} else {
 		c.Database.Debug = false // 生产环境关闭 SQL 调试
+	}
+
+	if c.Database.Driver == "" {
+		c.Database.Driver = "sqlite"
+	}
+	c.Database.Driver = strings.ToLower(strings.TrimSpace(c.Database.Driver))
+	switch c.Database.Driver {
+	case "pgsql", "postgresql":
+		c.Database.Driver = "postgres"
+	}
+	if os.Getenv("DB_PORT") == "" {
+		switch c.Database.Driver {
+		case "postgres":
+			c.Database.Port = 5432
+		case "mysql":
+			c.Database.Port = 3306
+		}
+	}
+
+	// SQLite 是默认单机模式，连接池保持保守可以避免写锁争用。
+	if c.Database.Driver == "sqlite" {
+		c.Database.MaxIdleConns = 1
+		c.Database.MaxOpenConns = 1
 	}
 
 	// 设置 Gin 框架模式（通过环境变量）
@@ -191,30 +209,41 @@ func (c *Config) Validate() error {
 	}
 
 	// 数据库配置验证
-	if c.Database.Host == "" {
-		return fmt.Errorf("database host is required")
-	}
-	if c.Database.Port < 1 || c.Database.Port > 65535 {
-		return fmt.Errorf("database port must be between 1 and 65535")
-	}
-	if c.Database.User == "" {
-		return fmt.Errorf("database user is required")
-	}
-	if c.Database.DBName == "" {
-		return fmt.Errorf("database name is required")
-	}
-	validSSLModes := map[string]bool{
-		"disable":     true,
-		"require":     true,
-		"verify-ca":   true,
-		"verify-full": true,
-	}
-	if !validSSLModes[c.Database.SSLMode] {
-		return fmt.Errorf("invalid database SSL mode: %s (must be disable, require, verify-ca, or verify-full)", c.Database.SSLMode)
-	}
-	// 生产环境建议使用 SSL
-	if c.Server.Env == "production" && c.Database.SSLMode == "disable" {
-		fmt.Println("⚠️  Warning: Database SSL is disabled in production environment")
+	switch c.Database.Driver {
+	case "sqlite":
+		if c.Database.Path == "" {
+			return fmt.Errorf("database path is required for sqlite")
+		}
+	case "postgres", "mysql":
+		if c.Database.Host == "" {
+			return fmt.Errorf("database host is required")
+		}
+		if c.Database.Port < 1 || c.Database.Port > 65535 {
+			return fmt.Errorf("database port must be between 1 and 65535")
+		}
+		if c.Database.User == "" {
+			return fmt.Errorf("database user is required")
+		}
+		if c.Database.DBName == "" {
+			return fmt.Errorf("database name is required")
+		}
+		if c.Database.Driver == "postgres" {
+			validSSLModes := map[string]bool{
+				"disable":     true,
+				"require":     true,
+				"verify-ca":   true,
+				"verify-full": true,
+			}
+			if !validSSLModes[c.Database.SSLMode] {
+				return fmt.Errorf("invalid database SSL mode: %s (must be disable, require, verify-ca, or verify-full)", c.Database.SSLMode)
+			}
+			// 生产环境建议使用 SSL
+			if c.Server.Env == "production" && c.Database.SSLMode == "disable" {
+				fmt.Println("⚠️  Warning: Database SSL is disabled in production environment")
+			}
+		}
+	default:
+		return fmt.Errorf("unsupported database driver: %s (must be sqlite, postgres/pgsql, or mysql)", c.Database.Driver)
 	}
 	// 连接池参数验证
 	if c.Database.MaxIdleConns < 1 || c.Database.MaxIdleConns > 100 {
@@ -231,17 +260,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Database.ConnMaxIdleTime < 1 || c.Database.ConnMaxIdleTime > 60 {
 		return fmt.Errorf("database connection max idle time must be between 1 and 60 minutes")
-	}
-
-	// Redis 配置验证
-	if c.Redis.Host == "" {
-		return fmt.Errorf("redis host is required")
-	}
-	if c.Redis.Port < 1 || c.Redis.Port > 65535 {
-		return fmt.Errorf("redis port must be between 1 and 65535")
-	}
-	if c.Redis.DB < 0 || c.Redis.DB > 15 {
-		return fmt.Errorf("redis database must be between 0 and 15")
 	}
 
 	// JWT 配置验证
@@ -291,15 +309,34 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// GetDSN 获取数据库连接字符串
-func (c *DatabaseConfig) GetDSN() string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode)
+// GetPostgresDSN 获取 PostgreSQL 连接字符串
+func (c *DatabaseConfig) GetPostgresDSN() string {
+	dsn := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(c.User, c.Password),
+		Host:   net.JoinHostPort(c.Host, strconv.Itoa(c.Port)),
+		Path:   c.DBName,
+	}
+	query := dsn.Query()
+	query.Set("sslmode", c.SSLMode)
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
 }
 
-// GetRedisAddr 获取 Redis 地址
-func (c *RedisConfig) GetRedisAddr() string {
-	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+// GetMySQLDSN 获取 MySQL 连接字符串
+func (c *DatabaseConfig) GetMySQLDSN() string {
+	cfg := mysqlconfig.NewConfig()
+	cfg.User = c.User
+	cfg.Passwd = c.Password
+	cfg.Net = "tcp"
+	cfg.Addr = net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
+	cfg.DBName = c.DBName
+	cfg.ParseTime = true
+	cfg.Loc = time.Local
+	cfg.Params = map[string]string{
+		"charset": "utf8mb4",
+	}
+	return cfg.FormatDSN()
 }
 
 // 辅助函数：获取环境变量（字符串）

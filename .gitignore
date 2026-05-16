@@ -71,6 +71,17 @@ next-env.d.ts
 # Docker volumes and data
 /docker/volumes/
 /docker/data/
+/docker/data-dev/
+/docker/data-test/
+/docker/backups/
+/docker/backups-dev/
+/docker/backups-test/
+
+# Local SQLite database and backup output
+/data/
+/server/data/
+/backups/
+/server/backups/
 
 # Docker compose dev config
 /docker/docker-compose.test.yml

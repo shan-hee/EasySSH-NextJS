@@ -40,8 +40,8 @@ func (r *repository) List(ctx context.Context, offset, limit int, module string,
 
 	q = strings.TrimSpace(q)
 	if q != "" {
-		like := "%" + q + "%"
-		query = query.Where("name ILIKE ? OR code ILIKE ?", like, like)
+		like := "%" + strings.ToLower(q) + "%"
+		query = query.Where("LOWER(name) LIKE ? OR LOWER(code) LIKE ?", like, like)
 	}
 
 	if err := query.Count(&total).Error; err != nil {

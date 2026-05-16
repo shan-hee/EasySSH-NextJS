@@ -4,12 +4,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // TrashSettings 用户回收站配置（用户级别覆盖系统默认值）
 type TrashSettings struct {
-	ID     uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"user_id"`
+	ID     uuid.UUID `gorm:"type:char(36);primary_key" json:"id"`
+	UserID uuid.UUID `gorm:"type:char(36);not null;uniqueIndex" json:"user_id"`
 
 	// 保留期（小时），0 表示使用系统默认值
 	RetentionHours int `gorm:"not null;default:0" json:"retention_hours"`
@@ -29,6 +30,13 @@ type TrashSettings struct {
 
 func (TrashSettings) TableName() string {
 	return "sftp_trash_settings"
+}
+
+func (s *TrashSettings) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == uuid.Nil {
+		s.ID = uuid.New()
+	}
+	return nil
 }
 
 // GetRetentionHoursOrDefault 获取保留期，若未设置则返回系统默认值

@@ -1,6 +1,10 @@
 package script
 
 import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -58,8 +62,8 @@ func (r *repository) List(userID uuid.UUID, req *ListScriptsRequest) ([]Script, 
 
 	// 搜索关键词
 	if req.Search != "" {
-		searchPattern := "%" + req.Search + "%"
-		query = query.Where("name LIKE ? OR description LIKE ?", searchPattern, searchPattern)
+		searchPattern := "%" + strings.ToLower(req.Search) + "%"
+		query = query.Where("LOWER(name) LIKE ? OR LOWER(description) LIKE ?", searchPattern, searchPattern)
 	}
 
 	// 语言筛选
@@ -70,7 +74,7 @@ func (r *repository) List(userID uuid.UUID, req *ListScriptsRequest) ([]Script, 
 	// 标签筛选
 	if len(req.Tags) > 0 {
 		for _, tag := range req.Tags {
-			query = query.Where("tags @> ?", `["`+tag+`"]`)
+			query = applyTagFilter(query, r.db.Dialector.Name(), tag)
 		}
 	}
 
@@ -101,6 +105,24 @@ func (r *repository) List(userID uuid.UUID, req *ListScriptsRequest) ([]Script, 
 	}
 
 	return scripts, total, nil
+}
+
+func applyTagFilter(query *gorm.DB, driver, tag string) *gorm.DB {
+	switch driver {
+	case "sqlite":
+		return query.Where("EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)", tag)
+	case "mysql":
+		return query.Where("JSON_CONTAINS(tags, JSON_QUOTE(?))", tag)
+	case "postgres":
+		payload, err := json.Marshal([]string{tag})
+		if err != nil {
+			return query.Where("1 = 0")
+		}
+		return query.Where("CAST(tags AS jsonb) @> CAST(? AS jsonb)", string(payload))
+	default:
+		escaped := strings.ReplaceAll(tag, `"`, `\"`)
+		return query.Where("tags LIKE ?", fmt.Sprintf("%%\"%s\"%%", escaped))
+	}
 }
 
 // IncrementExecutions 增加执行次数

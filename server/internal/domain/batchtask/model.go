@@ -9,13 +9,13 @@ import (
 
 // BatchTask 批量任务模型
 type BatchTask struct {
-	ID            uuid.UUID      `gorm:"type:uuid;primary_key" json:"id"`
-	UserID        uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
+	ID            uuid.UUID      `gorm:"type:char(36);primary_key" json:"id"`
+	UserID        uuid.UUID      `gorm:"type:char(36);not null;index" json:"user_id"`
 	TaskName      string         `gorm:"type:varchar(100);not null" json:"task_name"`
 	TaskType      string         `gorm:"type:varchar(20);not null" json:"task_type"` // command/script/file
 	Content       string         `gorm:"type:text" json:"content"`                   // 命令内容或文件路径
-	ScriptID      *uuid.UUID     `gorm:"type:uuid" json:"script_id,omitempty"`       // 关联的脚本ID
-	ServerIDs     []string       `gorm:"type:jsonb;serializer:json;not null" json:"server_ids"`
+	ScriptID      *uuid.UUID     `gorm:"type:char(36)" json:"script_id,omitempty"`   // 关联的脚本ID
+	ServerIDs     []string       `gorm:"type:text;serializer:json;not null" json:"server_ids"`
 	ExecutionMode string         `gorm:"type:varchar(20);default:'parallel'" json:"execution_mode"` // parallel/sequential
 	Status        string         `gorm:"type:varchar(20);default:'pending'" json:"status"`          // pending/running/completed/failed
 	SuccessCount  int            `gorm:"default:0" json:"success_count"`
@@ -43,12 +43,12 @@ func (b *BatchTask) BeforeCreate(tx *gorm.DB) error {
 
 // CreateBatchTaskRequest 创建批量任务请求
 type CreateBatchTaskRequest struct {
-	TaskName      string    `json:"task_name" binding:"required"`
-	TaskType      string    `json:"task_type" binding:"required,oneof=command script file"`
-	Content       string    `json:"content"`
-	ScriptID      *string   `json:"script_id,omitempty"`
-	ServerIDs     []string  `json:"server_ids" binding:"required,min=1"`
-	ExecutionMode string    `json:"execution_mode"`
+	TaskName      string   `json:"task_name" binding:"required"`
+	TaskType      string   `json:"task_type" binding:"required,oneof=command script file"`
+	Content       string   `json:"content"`
+	ScriptID      *string  `json:"script_id,omitempty"`
+	ServerIDs     []string `json:"server_ids" binding:"required,min=1"`
+	ExecutionMode string   `json:"execution_mode"`
 }
 
 // UpdateBatchTaskRequest 更新批量任务请求
@@ -63,7 +63,7 @@ type UpdateBatchTaskRequest struct {
 type ListBatchTasksRequest struct {
 	Page     int    `form:"page" json:"page"`
 	Limit    int    `form:"limit" json:"limit"`
-	Status   string `form:"status" json:"status"`     // 状态筛选
+	Status   string `form:"status" json:"status"`       // 状态筛选
 	TaskType string `form:"task_type" json:"task_type"` // 类型筛选
 }
 
