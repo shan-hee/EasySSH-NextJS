@@ -7,24 +7,22 @@ services:
     container_name: easyssh-dev
     restart: unless-stopped
     ports:
-      - "${PORT:-8520}:8520"
+      - "8520:8520"
     environment:
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8520}
+      WEB_PORT: ${WEB_PORT:-3000}
+      ENV: ${ENV:-development}
+
       DB_DRIVER: ${DB_DRIVER:-sqlite}
       DB_DSN: ${DB_DSN:-/app/data/easyssh.db}
       DB_PASSWORD: ${DB_PASSWORD:-}
-
       DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}
       DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-100}
       DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-60}
       DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-10}
 
-      ENV: ${ENV:-development}
-      PORT: 8520
-      BACKUP_DIR: /app/backups
-
       JWT_SECRET: ${JWT_SECRET:-easyssh-secret-change-in-development}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-ZWFzeXNzaC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE=}
-
       JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-15}
       JWT_REFRESH_IDLE_EXPIRE_DAYS: ${JWT_REFRESH_IDLE_EXPIRE_DAYS:-7}
       JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS: ${JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS:-30}
@@ -34,6 +32,10 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+
+      BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
+      CONTENT_SECURITY_POLICY: ${CONTENT_SECURITY_POLICY:-}
+      NEXT_PUBLIC_WS_HOST: ${NEXT_PUBLIC_WS_HOST:-}
     volumes:
       - ./data-dev:/app/data
       - ./backups-dev:/app/backups

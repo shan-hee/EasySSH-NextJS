@@ -79,7 +79,7 @@ type SFTPConfig struct {
 func Load() (*Config, error) {
 	config := &Config{
 		Server: ServerConfig{
-			Port:          getEnvInt("PORT", 8520),
+			Port:          getBackendPort(),
 			Env:           getEnv("ENV", "development"),
 			EncryptionKey: getEnv("ENCRYPTION_KEY", "ZWFzeXNzaC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE="), // Base64 编码的 32 字节（仅开发环境占位）
 			WebDevPort:    getEnvInt("WEB_PORT", 3000),
@@ -391,7 +391,7 @@ func normalizeMySQLDSN(dsn string) (string, error) {
 		}
 	}
 
-	return cfg.FormatDSN()
+	return cfg.FormatDSN(), nil
 }
 
 var envRefPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}`)
@@ -410,6 +410,48 @@ func expandEnvRefs(value string) string {
 		}
 		return ""
 	})
+}
+
+func getBackendPort() int {
+	rawURL := strings.TrimSpace(os.Getenv("NEXT_PUBLIC_BACKEND_URL"))
+	if rawURL == "" {
+		return 8520
+	}
+
+	port, err := explicitPortFromURL(rawURL)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: invalid NEXT_PUBLIC_BACKEND_URL %q, using default backend port 8520: %v\n", rawURL, err)
+		return 8520
+	}
+	if port == 0 {
+		return 8520
+	}
+	return port
+}
+
+func explicitPortFromURL(rawURL string) (int, error) {
+	if !strings.Contains(rawURL, "://") {
+		rawURL = "http://" + rawURL
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return 0, err
+	}
+
+	rawPort := parsed.Port()
+	if rawPort == "" {
+		return 0, nil
+	}
+
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return 0, fmt.Errorf("invalid port %q", rawPort)
+	}
+	if port < 1 || port > 65535 {
+		return 0, fmt.Errorf("port must be between 1 and 65535")
+	}
+	return port, nil
 }
 
 // 辅助函数：获取环境变量（字符串）

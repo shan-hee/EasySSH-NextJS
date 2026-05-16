@@ -72,7 +72,7 @@ DB_DSN="mysql://easyssh:${DB_PASSWORD:-your_secure_password}@mysql.example.com:3
 
 ```bash
 ENV=production
-PORT=8520
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8520
 COOKIE_SECURE=true
 COOKIE_SAMESITE=lax
 ```

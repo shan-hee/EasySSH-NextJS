@@ -61,9 +61,10 @@ RUN addgroup -S -g ${APP_GID} appuser \
 
 # 默认环境（可在运行容器时覆盖）
 ENV TZ=Asia/Shanghai \
-    PORT=8520 \
+    NEXT_PUBLIC_BACKEND_URL=http://localhost:8520 \
+    WEB_PORT=3000 \
     DB_DRIVER=sqlite \
-    DB_PATH=/app/data/easyssh.db \
+    DB_DSN=/app/data/easyssh.db \
     BACKUP_DIR=/app/backups
 
 # 复制后端二进制与前端静态资源
@@ -76,6 +77,6 @@ EXPOSE 8520
 
 # 健康检查：命中后端健康接口
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider "http://localhost:${PORT}/api/v1/health" || exit 1
+  CMD wget --no-verbose --tries=1 --spider "http://localhost:8520/api/v1/health" || exit 1
 
 CMD ["./easyssh-api"]

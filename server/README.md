@@ -292,7 +292,7 @@ golangci-lint run
 
 | 变量名 | 说明 | 默认值 | 必需 |
 |--------|------|--------|------|
-| `PORT` | 服务器端口 | 8520 | 否 |
+| `NEXT_PUBLIC_BACKEND_URL` | 后端服务地址；监听端口从这里解析 | http://localhost:8520 | 否 |
 | `ENV` | 运行环境 | development | 否 |
 | `ENCRYPTION_KEY` | AES 加密密钥（32字节，Base64 编码） | - | ✅ |
 | `DB_DRIVER` | 数据库驱动 | sqlite | 否 |

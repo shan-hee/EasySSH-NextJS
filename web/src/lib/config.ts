@@ -7,10 +7,11 @@
 
 /**
  * 开发环境默认后端地址（不包含 /api/v1）
- * - 开发脚本 scripts/dev.sh 会根据 .env 中的 PORT 自动更新此常量
- * - 如需手动修改端口或主机名，可直接编辑这里
+ * - 开发脚本 scripts/dev.sh 会读取 .env 中的 NEXT_PUBLIC_BACKEND_URL
+ * - 如需手动修改端口或主机名，可设置 NEXT_PUBLIC_BACKEND_URL
  */
-const DEV_BACKEND_BASE_URL = "http://localhost:2580"
+const DEV_BACKEND_BASE_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL?.trim() || "http://localhost:8520"
 
 /**
  * 获取 API URL (带 /api/v1 路径)
@@ -41,7 +42,7 @@ export function getWsHost(): string {
     return envWsHost.trim()
   }
 
-  // 开发环境：优先使用 DEV_BACKEND_BASE_URL 的 host（scripts/dev.sh 会自动更新）
+  // 开发环境：优先使用 DEV_BACKEND_BASE_URL 的 host
   if (process.env.NODE_ENV !== 'production') {
     try {
       const url = new URL(DEV_BACKEND_BASE_URL)

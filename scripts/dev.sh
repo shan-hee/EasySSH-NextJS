@@ -21,13 +21,39 @@ if [ -f ".env" ]; then
     set +a  # 关闭自动导出
 fi
 
-# 设置默认端口（如果环境变量未设置）
-BACKEND_PORT=${PORT:-8520}
+get_url_port() {
+  local url="$1"
+  local host_port="$url"
+  if [[ "$host_port" == *"://"* ]]; then
+    host_port="${host_port#*://}"
+  fi
+  host_port="${host_port%%/*}"
+  host_port="${host_port%%\?*}"
+  host_port="${host_port%%\#*}"
+
+  local port=""
+  if [[ "$host_port" =~ ^\[.*\]:([0-9]+)$ ]]; then
+    port="${BASH_REMATCH[1]}"
+  elif [[ "$host_port" =~ :([0-9]+)$ ]]; then
+    port="${BASH_REMATCH[1]}"
+  fi
+
+  if [[ -n "$port" && "$port" -ge 1 && "$port" -le 65535 ]]; then
+    echo "$port"
+  else
+    echo "8520"
+  fi
+}
+
+# 设置默认端口与后端地址（如果环境变量未设置）
+BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8520}
+BACKEND_PORT=$(get_url_port "$BACKEND_URL")
 FRONTEND_PORT=${WEB_PORT:-3000}
 
 # 导出端口配置给前端/后端脚本使用
 export BACKEND_PORT
 export FRONTEND_PORT
+export NEXT_PUBLIC_BACKEND_URL="${BACKEND_URL}"
 
 # 函数：检查命令是否存在
 command_exists() {
@@ -98,6 +124,9 @@ set_kv() {
 
 # 1) 基本运行模式
 set_kv ENV development
+if ! grep -qE '^NEXT_PUBLIC_BACKEND_URL=.+' .env 2>/dev/null; then
+  set_kv NEXT_PUBLIC_BACKEND_URL "${BACKEND_URL}"
+fi
 
 # 默认使用 SQLite；如果已有 DB_DRIVER，则尊重现有配置。
 if ! grep -qE '^DB_DRIVER=' .env 2>/dev/null || [[ -z "${DB_DRIVER:-}" ]]; then
@@ -121,14 +150,8 @@ if [[ "${COOKIE_SECURE}" == "true" ]]; then
   echo -e "${YELLOW}⚠️  当前 COOKIE_SECURE=true 可能导致 HTTP 下 Cookie 被拒收，已建议写入 false。${NC}"
 fi
 
-# 3) 根据 .env 中后端端口,自动更新前端开发配置中的后端地址
-DEV_BACKEND_URL="http://localhost:${BACKEND_PORT}"
-CONFIG_FILE="web/src/lib/config.ts"
-if [ -f "${CONFIG_FILE}" ]; then
-  echo -e "${BLUE}🔧 更新前端开发后端地址为: ${DEV_BACKEND_URL}${NC}"
-  # 将 DEV_BACKEND_BASE_URL 常量替换为当前后端地址
-  sed -i "s#^const DEV_BACKEND_BASE_URL = \".*\"#const DEV_BACKEND_BASE_URL = \"${DEV_BACKEND_URL}\"#" "${CONFIG_FILE}" || true
-fi
+# 3) 前端开发后端地址
+echo -e "${BLUE}🔧 前端开发后端地址: ${NEXT_PUBLIC_BACKEND_URL}${NC}"
 # 检查前端依赖
 if [ ! -d "web/node_modules" ]; then
     echo -e "${YELLOW}📦 安装前端依赖...${NC}"

@@ -223,9 +223,9 @@ make test         # 运行测试
 # 运行模式
 ENV=production                 # development | production
 
-# 服务端口
-PORT=8520                      # 后端服务端口
-WEB_PORT=3000                  # 前端开发端口（仅开发环境）
+# 服务地址
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8520  # 后端服务地址；后端监听端口从这里解析
+WEB_PORT=3000                                  # 前端开发端口（仅开发环境）
 
 # 数据库
 DB_DRIVER=sqlite               # sqlite | postgres(pgsql) | mysql
@@ -250,7 +250,7 @@ COOKIE_SAMESITE=lax            # 同域: lax | 跨域+HTTPS: none
 
 | 变量名 | 说明 | 默认值 | 必需 | 生成方式/示例 |
 |--------|------|--------|------|--------------|
-| PORT | 后端服务端口 | 8520 | 否 | 8520 |
+| NEXT_PUBLIC_BACKEND_URL | 后端服务地址 | http://localhost:8520 | 否 | 开发环境前端请求地址，后端监听端口也从这里解析 |
 | DB_DRIVER | 数据库驱动 | sqlite | 否 | sqlite / postgres(pgsql) / mysql |
 | DB_DSN | 数据库连接串 | ./data/easyssh.db | 否 | SQLite 路径 / PostgreSQL URL / MySQL URL |
 | JWT_SECRET | JWT 签名密钥 | - | 是 | `openssl rand -base64 48` |

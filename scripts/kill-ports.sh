@@ -18,11 +18,36 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # 存储需要释放的端口
 declare -a PORTS_TO_KILL
 
+get_url_port() {
+    local url="$1"
+    local host_port="$url"
+    if [[ "$host_port" == *"://"* ]]; then
+        host_port="${host_port#*://}"
+    fi
+    host_port="${host_port%%/*}"
+    host_port="${host_port%%\?*}"
+    host_port="${host_port%%\#*}"
+
+    local port=""
+    if [[ "$host_port" =~ ^\[.*\]:([0-9]+)$ ]]; then
+        port="${BASH_REMATCH[1]}"
+    elif [[ "$host_port" =~ :([0-9]+)$ ]]; then
+        port="${BASH_REMATCH[1]}"
+    fi
+
+    if [[ -n "$port" && "$port" -ge 1 && "$port" -le 65535 ]]; then
+        echo "$port"
+    else
+        echo "8520"
+    fi
+}
+
 # 读取根目录的 .env 文件
 ROOT_ENV="$PROJECT_ROOT/.env"
 if [ -f "$ROOT_ENV" ]; then
-    # 读取后端端口
-    SERVER_PORT=$(grep "^PORT=" "$ROOT_ENV" | cut -d '=' -f2 | tr -d ' \r\n')
+    # 从后端服务地址读取端口
+    BACKEND_URL=$(grep "^NEXT_PUBLIC_BACKEND_URL=" "$ROOT_ENV" | cut -d '=' -f2- | tr -d ' "\r\n')
+    SERVER_PORT=$(get_url_port "${BACKEND_URL:-http://localhost:8520}")
     if [ ! -z "$SERVER_PORT" ]; then
         PORTS_TO_KILL+=($SERVER_PORT)
     fi
