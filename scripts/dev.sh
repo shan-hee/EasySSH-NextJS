@@ -103,19 +103,14 @@ set_kv ENV development
 if ! grep -qE '^DB_DRIVER=' .env 2>/dev/null || [[ -z "${DB_DRIVER:-}" ]]; then
   set_kv DB_DRIVER sqlite
 fi
-if [[ "${DB_DRIVER:-sqlite}" == "sqlite" ]] && { ! grep -qE '^DB_PATH=' .env 2>/dev/null || [[ -z "${DB_PATH:-}" ]]; }; then
-  set_kv DB_PATH ./data/easyssh.db
+if [[ "${DB_DRIVER:-sqlite}" == "sqlite" ]] && { ! grep -qE '^DB_DSN=' .env 2>/dev/null || [[ -z "${DB_DSN:-}" ]]; }; then
+  set_kv DB_DSN ./data/easyssh.db
 fi
 
 # 2) Cookie 策略（HTTP 开发环境推荐）
 # 通过 Next 代理避免跨站，请使用默认 SameSite=Lax，避免 SameSite=None + 非 Secure 被浏览器拒绝
 set_kv COOKIE_SECURE false
 set_kv COOKIE_SAMESITE lax
-
-# 3) WS Origin 白名单（可选，明确本机前端端口）
-if ! grep -qE '^ALLOWED_ORIGINS=' .env 2>/dev/null || [[ -z "${ALLOWED_ORIGINS:-}" ]]; then
-  set_kv ALLOWED_ORIGINS http://localhost:${FRONTEND_PORT},http://127.0.0.1:${FRONTEND_PORT}
-fi
 
 export ENV=development
 export COOKIE_SECURE=false
@@ -126,7 +121,7 @@ if [[ "${COOKIE_SECURE}" == "true" ]]; then
   echo -e "${YELLOW}⚠️  当前 COOKIE_SECURE=true 可能导致 HTTP 下 Cookie 被拒收，已建议写入 false。${NC}"
 fi
 
-# 4) 根据 .env 中后端端口,自动更新前端开发配置中的后端地址
+# 3) 根据 .env 中后端端口,自动更新前端开发配置中的后端地址
 DEV_BACKEND_URL="http://localhost:${BACKEND_PORT}"
 CONFIG_FILE="web/src/lib/config.ts"
 if [ -f "${CONFIG_FILE}" ]; then

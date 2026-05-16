@@ -47,7 +47,7 @@ vim .env
 ```env
 # 数据库
 DB_DRIVER=sqlite
-DB_PATH=./data/easyssh.db
+DB_DSN=./data/easyssh.db
 
 # JWT 密钥
 JWT_SECRET=your-jwt-secret-key
@@ -296,13 +296,7 @@ golangci-lint run
 | `ENV` | 运行环境 | development | 否 |
 | `ENCRYPTION_KEY` | AES 加密密钥（32字节，Base64 编码） | - | ✅ |
 | `DB_DRIVER` | 数据库驱动 | sqlite | 否 |
-| `DB_PATH` | SQLite 文件路径 | ./data/easyssh.db | 否 |
-| `DB_HOST` | 外部数据库主机 | localhost | PostgreSQL/MySQL 时需要 |
-| `DB_PORT` | 外部数据库端口 | 5432/3306 | PostgreSQL/MySQL 时需要 |
-| `DB_USER` | 外部数据库用户 | - | PostgreSQL/MySQL 时需要 |
-| `DB_PASSWORD` | 外部数据库密码 | - | PostgreSQL/MySQL 时需要 |
-| `DB_NAME` | 外部数据库名称 | - | PostgreSQL/MySQL 时需要 |
-| `DB_SSLMODE` | PostgreSQL SSL 模式 | disable | 否 |
+| `DB_DSN` | 数据库连接串 | ./data/easyssh.db | 否 |
 | `JWT_SECRET` | JWT 密钥 | - | ✅ |
 | `JWT_ACCESS_EXPIRE_MINUTES` | Access Token 过期时间（分钟，5-1440） | 15 | 否 |
 | `JWT_REFRESH_IDLE_EXPIRE_DAYS` | Refresh Token 闲置过期时间（天，1-90） | 7 | 否 |
@@ -369,7 +363,7 @@ docker run -d \
   -p 8520:8520 \
   -v easyssh-data:/app/data \
   -e DB_DRIVER=sqlite \
-  -e DB_PATH=/app/data/easyssh.db \
+  -e DB_DSN=/app/data/easyssh.db \
   --env-file .env \
   easyssh-server:1.0.0
 ```

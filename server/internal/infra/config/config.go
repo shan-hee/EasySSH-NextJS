@@ -3,9 +3,9 @@ package config
 import (
 	"encoding/base64"
 	"fmt"
-	"net"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -32,18 +32,12 @@ type ServerConfig struct {
 // DatabaseConfig 数据库配置
 type DatabaseConfig struct {
 	Driver          string // sqlite, postgres, mysql
-	Path            string // SQLite 数据库文件路径
-	Host            string
-	Port            int
-	User            string
-	Password        string
-	DBName          string
-	SSLMode         string
-	Debug           bool // 是否开启SQL调试日志
-	MaxIdleConns    int  // 最大空闲连接数
-	MaxOpenConns    int  // 最大打开连接数
-	ConnMaxLifetime int  // 连接最大生命周期（分钟）
-	ConnMaxIdleTime int  // 连接最大空闲时间（分钟）
+	DSN             string // 数据库连接串；SQLite 时为数据库文件路径或 file: DSN
+	Debug           bool   // 是否开启SQL调试日志
+	MaxIdleConns    int    // 最大空闲连接数
+	MaxOpenConns    int    // 最大打开连接数
+	ConnMaxLifetime int    // 连接最大生命周期（分钟）
+	ConnMaxIdleTime int    // 连接最大空闲时间（分钟）
 }
 
 // JWTConfig JWT 配置
@@ -92,13 +86,7 @@ func Load() (*Config, error) {
 		},
 		Database: DatabaseConfig{
 			Driver:          getEnv("DB_DRIVER", "sqlite"),
-			Path:            getEnv("DB_PATH", "./data/easyssh.db"),
-			Host:            getEnv("DB_HOST", "localhost"),
-			Port:            getEnvInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", "easyssh"),
-			Password:        getEnv("DB_PASSWORD", "easyssh_dev_password"),
-			DBName:          getEnv("DB_NAME", "easyssh"),
-			SSLMode:         getEnv("DB_SSLMODE", "disable"),
+			DSN:             expandEnvRefs(getEnv("DB_DSN", "./data/easyssh.db")),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 100),
 			ConnMaxLifetime: getEnvInt("DB_CONN_MAX_LIFETIME", 60),  // 60分钟
@@ -164,13 +152,9 @@ func (c *Config) applyEnvironmentDefaults() {
 	case "pgsql", "postgresql":
 		c.Database.Driver = "postgres"
 	}
-	if os.Getenv("DB_PORT") == "" {
-		switch c.Database.Driver {
-		case "postgres":
-			c.Database.Port = 5432
-		case "mysql":
-			c.Database.Port = 3306
-		}
+	c.Database.DSN = strings.TrimSpace(c.Database.DSN)
+	if c.Database.DSN == "" && c.Database.Driver == "sqlite" {
+		c.Database.DSN = "./data/easyssh.db"
 	}
 
 	// SQLite 是默认单机模式，连接池保持保守可以避免写锁争用。
@@ -211,36 +195,20 @@ func (c *Config) Validate() error {
 	// 数据库配置验证
 	switch c.Database.Driver {
 	case "sqlite":
-		if c.Database.Path == "" {
-			return fmt.Errorf("database path is required for sqlite")
+		if c.Database.DSN == "" {
+			return fmt.Errorf("database connection string is required for sqlite")
 		}
-	case "postgres", "mysql":
-		if c.Database.Host == "" {
-			return fmt.Errorf("database host is required")
+	case "postgres":
+		if err := validatePostgresDSN(c.Database.DSN); err != nil {
+			return err
 		}
-		if c.Database.Port < 1 || c.Database.Port > 65535 {
-			return fmt.Errorf("database port must be between 1 and 65535")
+		// 生产环境建议使用 SSL
+		if c.Server.Env == "production" && postgresSSLMode(c.Database.DSN) == "disable" {
+			fmt.Println("⚠️  Warning: Database SSL is disabled in production environment")
 		}
-		if c.Database.User == "" {
-			return fmt.Errorf("database user is required")
-		}
-		if c.Database.DBName == "" {
-			return fmt.Errorf("database name is required")
-		}
-		if c.Database.Driver == "postgres" {
-			validSSLModes := map[string]bool{
-				"disable":     true,
-				"require":     true,
-				"verify-ca":   true,
-				"verify-full": true,
-			}
-			if !validSSLModes[c.Database.SSLMode] {
-				return fmt.Errorf("invalid database SSL mode: %s (must be disable, require, verify-ca, or verify-full)", c.Database.SSLMode)
-			}
-			// 生产环境建议使用 SSL
-			if c.Server.Env == "production" && c.Database.SSLMode == "disable" {
-				fmt.Println("⚠️  Warning: Database SSL is disabled in production environment")
-			}
+	case "mysql":
+		if err := validateMySQLDSN(c.Database.DSN); err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("unsupported database driver: %s (must be sqlite, postgres/pgsql, or mysql)", c.Database.Driver)
@@ -309,34 +277,139 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// GetPostgresDSN 获取 PostgreSQL 连接字符串
-func (c *DatabaseConfig) GetPostgresDSN() string {
-	dsn := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(c.User, c.Password),
-		Host:   net.JoinHostPort(c.Host, strconv.Itoa(c.Port)),
-		Path:   c.DBName,
+// DialectorDSN 返回传给 GORM dialector 的连接串。
+func (c *DatabaseConfig) DialectorDSN() (string, error) {
+	if c.Driver == "mysql" {
+		return normalizeMySQLDSN(c.DSN)
 	}
-	query := dsn.Query()
-	query.Set("sslmode", c.SSLMode)
-	dsn.RawQuery = query.Encode()
-	return dsn.String()
+	return c.DSN, nil
 }
 
-// GetMySQLDSN 获取 MySQL 连接字符串
-func (c *DatabaseConfig) GetMySQLDSN() string {
+func validatePostgresDSN(dsn string) error {
+	if strings.TrimSpace(dsn) == "" {
+		return fmt.Errorf("database connection string is required for postgres")
+	}
+
+	// pgx 同时支持 URL DSN 与 keyword/value DSN；这里只对 URL 形式做结构校验。
+	if strings.Contains(dsn, "://") {
+		parsed, err := url.Parse(dsn)
+		if err != nil {
+			return fmt.Errorf("invalid postgres connection string: %w", err)
+		}
+		if parsed.Scheme != "postgres" && parsed.Scheme != "postgresql" {
+			return fmt.Errorf("invalid postgres connection string scheme: %s", parsed.Scheme)
+		}
+		if parsed.Host == "" {
+			return fmt.Errorf("postgres connection string must include host")
+		}
+		if strings.Trim(parsed.Path, "/") == "" {
+			return fmt.Errorf("postgres connection string must include database name")
+		}
+	}
+
+	return nil
+}
+
+func validateMySQLDSN(dsn string) error {
+	if strings.TrimSpace(dsn) == "" {
+		return fmt.Errorf("database connection string is required for mysql")
+	}
+
+	_, err := normalizeMySQLDSN(dsn)
+	return err
+}
+
+func postgresSSLMode(dsn string) string {
+	if parsed, err := url.Parse(dsn); err == nil && (parsed.Scheme == "postgres" || parsed.Scheme == "postgresql") {
+		return strings.ToLower(strings.TrimSpace(parsed.Query().Get("sslmode")))
+	}
+
+	for _, field := range strings.Fields(dsn) {
+		key, value, ok := strings.Cut(field, "=")
+		if ok && strings.EqualFold(key, "sslmode") {
+			return strings.ToLower(strings.Trim(value, `'"`))
+		}
+	}
+
+	return ""
+}
+
+func normalizeMySQLDSN(dsn string) (string, error) {
+	dsn = strings.TrimSpace(dsn)
+	if !strings.HasPrefix(strings.ToLower(dsn), "mysql://") {
+		return dsn, nil
+	}
+
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		return "", fmt.Errorf("invalid mysql connection string: %w", err)
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("mysql connection string must include host")
+	}
+
+	dbName := strings.TrimPrefix(parsed.Path, "/")
+	if dbName == "" {
+		return "", fmt.Errorf("mysql connection string must include database name")
+	}
+
 	cfg := mysqlconfig.NewConfig()
-	cfg.User = c.User
-	cfg.Passwd = c.Password
+	cfg.User = parsed.User.Username()
+	if password, ok := parsed.User.Password(); ok {
+		cfg.Passwd = password
+	}
 	cfg.Net = "tcp"
-	cfg.Addr = net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
-	cfg.DBName = c.DBName
+	cfg.Addr = parsed.Host
+	cfg.DBName = dbName
 	cfg.ParseTime = true
 	cfg.Loc = time.Local
 	cfg.Params = map[string]string{
 		"charset": "utf8mb4",
 	}
+
+	query := parsed.Query()
+	for key, values := range query {
+		if len(values) == 0 {
+			continue
+		}
+		value := values[len(values)-1]
+		switch strings.ToLower(key) {
+		case "parsetime":
+			parsedValue, err := strconv.ParseBool(value)
+			if err != nil {
+				return "", fmt.Errorf("invalid mysql parseTime value: %s", value)
+			}
+			cfg.ParseTime = parsedValue
+		case "loc":
+			loc, err := time.LoadLocation(value)
+			if err != nil {
+				return "", fmt.Errorf("invalid mysql loc value: %s", value)
+			}
+			cfg.Loc = loc
+		default:
+			cfg.Params[key] = value
+		}
+	}
+
 	return cfg.FormatDSN()
+}
+
+var envRefPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}`)
+
+func expandEnvRefs(value string) string {
+	return envRefPattern.ReplaceAllStringFunc(value, func(match string) string {
+		parts := envRefPattern.FindStringSubmatch(match)
+		if len(parts) == 0 {
+			return match
+		}
+		if envValue := os.Getenv(parts[1]); envValue != "" {
+			return envValue
+		}
+		if len(parts) > 3 {
+			return parts[3]
+		}
+		return ""
+	})
 }
 
 // 辅助函数：获取环境变量（字符串）

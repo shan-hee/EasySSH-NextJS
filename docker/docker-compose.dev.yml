@@ -10,13 +10,8 @@ services:
       - "${PORT:-8520}:8520"
     environment:
       DB_DRIVER: ${DB_DRIVER:-sqlite}
-      DB_PATH: ${DB_PATH:-/app/data/easyssh.db}
-      DB_HOST: ${DB_HOST:-}
-      DB_PORT: ${DB_PORT:-}
-      DB_USER: ${DB_USER:-}
+      DB_DSN: ${DB_DSN:-/app/data/easyssh.db}
       DB_PASSWORD: ${DB_PASSWORD:-}
-      DB_NAME: ${DB_NAME:-}
-      DB_SSLMODE: ${DB_SSLMODE:-disable}
 
       DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}
       DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-100}
@@ -39,7 +34,6 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
     volumes:
       - ./data-dev:/app/data
       - ./backups-dev:/app/backups

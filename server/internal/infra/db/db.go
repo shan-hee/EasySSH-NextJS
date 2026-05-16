@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/easyssh/server/internal/infra/config"
@@ -25,16 +26,20 @@ func NewDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 	}
 
 	var dialector gorm.Dialector
+	dsn, err := cfg.DialectorDSN()
+	if err != nil {
+		return nil, err
+	}
 	switch cfg.Driver {
 	case "sqlite":
-		if err := ensureSQLiteDir(cfg.Path); err != nil {
+		if err := ensureSQLiteDir(dsn); err != nil {
 			return nil, err
 		}
-		dialector = sqlite.Open(cfg.Path)
+		dialector = sqlite.Open(dsn)
 	case "postgres", "pgsql", "postgresql":
-		dialector = postgres.Open(cfg.GetPostgresDSN())
+		dialector = postgres.Open(dsn)
 	case "mysql":
-		dialector = mysql.Open(cfg.GetMySQLDSN())
+		dialector = mysql.Open(dsn)
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
 	}
@@ -95,7 +100,8 @@ func gormLogger(debug bool) logger.Interface {
 	)
 }
 
-func ensureSQLiteDir(dbPath string) error {
+func ensureSQLiteDir(dsn string) error {
+	dbPath := sqlitePathFromDSN(dsn)
 	if dbPath == "" || dbPath == ":memory:" {
 		return nil
 	}
@@ -107,6 +113,20 @@ func ensureSQLiteDir(dbPath string) error {
 		return fmt.Errorf("failed to create sqlite database directory: %w", err)
 	}
 	return nil
+}
+
+func sqlitePathFromDSN(dsn string) string {
+	dbPath := strings.TrimSpace(dsn)
+	if strings.HasPrefix(dbPath, "file:") {
+		dbPath = strings.TrimPrefix(dbPath, "file:")
+		if idx := strings.IndexByte(dbPath, '?'); idx >= 0 {
+			dbPath = dbPath[:idx]
+		}
+	}
+	if strings.HasPrefix(dbPath, ":memory:") {
+		return ":memory:"
+	}
+	return dbPath
 }
 
 func configureSQLite(database *gorm.DB) error {

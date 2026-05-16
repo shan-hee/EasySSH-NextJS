@@ -99,7 +99,7 @@ docker compose up -d
 # http://your-server:8520
 ```
 
-> 💡 **说明**：`docker-compose.yml` 默认只启动 EasySSH 一个容器，SQLite 数据保存在 `docker/data/`。如需 PostgreSQL/MySQL，可通过 `DB_DRIVER` 与数据库连接变量切换。
+> 💡 **说明**：`docker-compose.yml` 默认只启动 EasySSH 一个容器，SQLite 数据保存在 `docker/data/`。如需 PostgreSQL/MySQL，可通过 `DB_DRIVER` 与 `DB_DSN` 连接串切换。
 
 **单容器部署**（默认 SQLite）：
 
@@ -110,13 +110,13 @@ docker run -d \
   -v easyssh-data:/app/data \
   -v easyssh-backups:/app/backups \
   -e DB_DRIVER=sqlite \
-  -e DB_PATH=/app/data/easyssh.db \
+  -e DB_DSN=/app/data/easyssh.db \
   -e JWT_SECRET=$(openssl rand -base64 48) \
   -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
   shanheee/easyssh:latest
 ```
 
-**外部 PostgreSQL/MySQL**：将 `DB_DRIVER` 设置为 `postgres` 或 `mysql`，并配置 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`。PostgreSQL 可额外设置 `DB_SSLMODE`。
+**外部 PostgreSQL/MySQL**：将 `DB_DRIVER` 设置为 `postgres` 或 `mysql`，并通过 `DB_DSN` 提供完整连接串，例如 `postgres://easyssh:${DB_PASSWORD:-easyssh_password}@postgres:5432/easyssh_db?sslmode=disable`。
 
 **支持架构**：`linux/amd64`、`linux/arm64`
 
@@ -229,15 +229,13 @@ WEB_PORT=3000                  # 前端开发端口（仅开发环境）
 
 # 数据库
 DB_DRIVER=sqlite               # sqlite | postgres(pgsql) | mysql
-DB_PATH=./data/easyssh.db      # SQLite 文件路径
+DB_DSN=./data/easyssh.db       # SQLite 文件路径或外部数据库连接串
 
 # 外部 PostgreSQL/MySQL 时启用
-# DB_HOST=localhost
-# DB_PORT=5432                 # MySQL 通常为 3306
-# DB_USER=easyssh
-# DB_PASSWORD=CHANGE_ME
-# DB_NAME=easyssh_db
-# DB_SSLMODE=disable           # 仅 PostgreSQL 使用
+# DB_DRIVER=postgres
+# DB_DSN="postgres://easyssh:${DB_PASSWORD:-easyssh_password}@localhost:5432/easyssh_db?sslmode=disable"
+# DB_DRIVER=mysql
+# DB_DSN="mysql://easyssh:${DB_PASSWORD:-easyssh_password}@localhost:3306/easyssh_db?charset=utf8mb4&parseTime=true"
 
 # 安全配置 ⚠️ 生产环境必须修改
 JWT_SECRET=CHANGE_ME           # 生成: openssl rand -base64 48
@@ -254,9 +252,7 @@ COOKIE_SAMESITE=lax            # 同域: lax | 跨域+HTTPS: none
 |--------|------|--------|------|--------------|
 | PORT | 后端服务端口 | 8520 | 否 | 8520 |
 | DB_DRIVER | 数据库驱动 | sqlite | 否 | sqlite / postgres(pgsql) / mysql |
-| DB_PATH | SQLite 数据库文件路径 | ./data/easyssh.db | 否 | /app/data/easyssh.db |
-| DB_HOST | 外部数据库主机地址 | localhost | 否 | PostgreSQL/MySQL 时配置 |
-| DB_PASSWORD | 外部数据库密码 | - | 否 | `openssl rand -base64 16` |
+| DB_DSN | 数据库连接串 | ./data/easyssh.db | 否 | SQLite 路径 / PostgreSQL URL / MySQL URL |
 | JWT_SECRET | JWT 签名密钥 | - | 是 | `openssl rand -base64 48` |
 | ENCRYPTION_KEY | 数据加密密钥（2FA等） | - | 是 | `openssl rand -base64 32` |
 | COOKIE_SECURE | Cookie 安全标志 | true | 否 | HTTPS: true / HTTP: false |
@@ -265,7 +261,7 @@ COOKIE_SAMESITE=lax            # 同域: lax | 跨域+HTTPS: none
 ### 配置说明
 
 - **开发环境**：使用 `./scripts/dev.sh` 自动配置，或手动编辑 `.env`
-- **生产环境**：务必修改 `JWT_SECRET`、`ENCRYPTION_KEY`；使用外部数据库时同时修改 `DB_PASSWORD`
+- **生产环境**：务必修改 `JWT_SECRET`、`ENCRYPTION_KEY`；使用外部数据库时同时修改 `DB_DSN`
 - **Docker 部署**：配置已内置在 `docker-compose.yml` 中
 
 完整配置项请参考 [.env.example](.env.example)

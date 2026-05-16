@@ -47,7 +47,7 @@ http://localhost:8520
 
 ```bash
 DB_DRIVER=sqlite
-DB_PATH=/app/data/easyssh.db
+DB_DSN=/app/data/easyssh.db
 JWT_SECRET=$(openssl rand -base64 48)
 ENCRYPTION_KEY=$(openssl rand -base64 32)
 ```
@@ -56,23 +56,16 @@ ENCRYPTION_KEY=$(openssl rand -base64 32)
 
 ```bash
 DB_DRIVER=postgres
-DB_HOST=postgres.example.com
-DB_PORT=5432
-DB_USER=easyssh
 DB_PASSWORD=your_secure_password
-DB_NAME=easyssh_db
-DB_SSLMODE=require
+DB_DSN="postgres://easyssh:${DB_PASSWORD:-your_secure_password}@postgres.example.com:5432/easyssh_db?sslmode=require"
 ```
 
 外部 MySQL 示例：
 
 ```bash
 DB_DRIVER=mysql
-DB_HOST=mysql.example.com
-DB_PORT=3306
-DB_USER=easyssh
 DB_PASSWORD=your_secure_password
-DB_NAME=easyssh_db
+DB_DSN="mysql://easyssh:${DB_PASSWORD:-your_secure_password}@mysql.example.com:3306/easyssh_db?charset=utf8mb4&parseTime=true"
 ```
 
 常用应用配置：
@@ -82,7 +75,6 @@ ENV=production
 PORT=8520
 COOKIE_SECURE=true
 COOKIE_SAMESITE=lax
-ALLOWED_ORIGINS=
 ```
 
 ## 常用命令
