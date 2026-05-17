@@ -77,25 +77,29 @@ export function FileManagerPanel({
   const topOffset = anchorTop ?? 0
   const [isPanelVisible, setIsPanelVisible] = useState(false)
 
-	  useEffect(() => {
-	    let frame = 0
-	    if (isOpen) {
-	      frame = window.requestAnimationFrame(() => {
-	        setIsPanelVisible(true)
-	      })
-	    } else {
-	      frame = window.requestAnimationFrame(() => {
-	        setIsPanelVisible(false)
-	      })
-	    }
-	
-	    return () => window.cancelAnimationFrame(frame)
-	  }, [isOpen])
+  useEffect(() => {
+    let frame = 0
+    if (isOpen) {
+      frame = window.requestAnimationFrame(() => {
+        setIsPanelVisible(true)
+      })
+    } else {
+      frame = window.requestAnimationFrame(() => {
+        setIsPanelVisible(false)
+      })
+    }
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isOpen])
 
   // 保存宽度到 localStorage
   useEffect(() => {
+    if (isResizing) {
+      return
+    }
+
     localStorage.setItem('file-manager-panel-width', width.toString())
-  }, [width])
+  }, [isResizing, width])
 
   // 快捷键支持 (Ctrl/Cmd + E)
   useEffect(() => {
@@ -141,6 +145,22 @@ export function FileManagerPanel({
   }, [])
 
   useEffect(() => {
+    if (!isResizing) {
+      return
+    }
+
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+    }
+  }, [isResizing])
+
+  useEffect(() => {
     if (isResizing) {
       window.addEventListener('mousemove', handleResizeMove)
       window.addEventListener('mouseup', handleResizeEnd)
@@ -171,8 +191,9 @@ export function FileManagerPanel({
         className={cn(
           // 如果挂载到内部容器，则使用 absolute 并且位于工具栏下方
           internalContainer
-            ? "absolute right-0 z-[200] flex overflow-hidden transition-all duration-300 ease-out"
-            : "fixed top-0 right-0 h-full z-[999] flex overflow-hidden transition-all duration-300 ease-out",
+            ? "absolute right-0 z-[200] flex overflow-hidden ease-out"
+            : "fixed top-0 right-0 h-full z-[999] flex overflow-hidden ease-out",
+          isResizing ? "transition-none" : "transition-[width,opacity,transform] duration-300",
         )}
         style={{
           width: isPanelVisible ? `${width}px` : 0,
@@ -185,7 +206,7 @@ export function FileManagerPanel({
         }}
       >
         <div
-          className="flex h-full flex-shrink-0"
+          className="flex h-full min-w-0 flex-shrink-0"
           style={{ width: `${width}px` }}
         >
           {/* 调整大小手柄 - 仅桌面端，左侧圆角 */}
@@ -210,11 +231,11 @@ export function FileManagerPanel({
 
           {/* 主面板内容 */}
           <div className={cn(
-            "flex-1 flex flex-col bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl",
+            "flex-1 min-w-0 flex flex-col bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl",
             !isMobile && "rounded-l-xl" // 桌面端添加左侧圆角
           )}>
             {/* SFTP 管理器内容 - 直接显示，无顶部工具栏 */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 min-w-0 overflow-hidden">
               {sftpProps.isConnected ? (
                 <SftpManager
                   {...sftpProps}

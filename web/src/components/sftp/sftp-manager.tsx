@@ -1296,12 +1296,12 @@ export function SftpManager(props: SftpManagerProps) {
   const managerContent = (
     <TooltipProvider delayDuration={300}>
       <SftpSessionProvider value={sessionContextValue}>
-      <div
-        className={cn(
-          "flex flex-col h-full overflow-hidden transition-colors bg-background",
-          isFullscreen ? "fixed inset-0 z-[9999] rounded-none border-0" : "rounded-xl border"
-        )}
-      >
+        <div
+          className={cn(
+            "flex h-full min-w-0 flex-col overflow-hidden transition-colors bg-background",
+            isFullscreen ? "fixed inset-0 z-[9999] rounded-none border-0" : "rounded-xl border"
+          )}
+        >
       {/* 工具栏 */}
       <div className="border-b text-sm flex items-center justify-between px-3 py-1.5">
         {/* 左侧: 会话标签 - 带拖拽手柄 */}

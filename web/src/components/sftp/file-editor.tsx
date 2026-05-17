@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { createPortal } from "react-dom"
 import Editor from "@monaco-editor/react"
 import { useTheme } from "next-themes"
@@ -32,6 +32,11 @@ interface FileEditorProps {
   onDownload?: () => void
 }
 
+type MonacoEditorHandle = {
+  getAction?: (id: string) => { run?: () => unknown } | null | undefined
+  layout?: () => void
+}
+
 export function FileEditor({
   fileName,
   fileContent,
@@ -50,7 +55,8 @@ export function FileEditor({
   const wordWrap: 'on' | 'off' = 'on'
   const fontSize = 13
   const showMinimap = false // 默认关闭小地图提升性能
-  const editorRef = useState<unknown | null>(null)
+  const editorRef = useRef<MonacoEditorHandle | null>(null)
+  const editorContainerRef = useRef<HTMLDivElement | null>(null)
 
   // 缓存文件统计信息，避免每次渲染都计算
   const fileStats = useMemo(() => {
@@ -129,26 +135,17 @@ export function FileEditor({
 
   // 查找
   const handleFind = () => {
-    if (editorRef[0]) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (editorRef[0] as any).getAction?.('actions.find')?.run()
-    }
+    editorRef.current?.getAction?.('actions.find')?.run?.()
   }
 
   // 替换
   const handleReplace = () => {
-    if (editorRef[0]) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (editorRef[0] as any).getAction?.('editor.action.startFindReplaceAction')?.run()
-    }
+    editorRef.current?.getAction?.('editor.action.startFindReplaceAction')?.run?.()
   }
 
   // 格式化代码
   const formatCode = () => {
-    if (editorRef[0]) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (editorRef[0] as any).getAction?.('editor.action.formatDocument')?.run()
-    }
+    editorRef.current?.getAction?.('editor.action.formatDocument')?.run?.()
   }
 
   // 切换全屏
@@ -183,29 +180,58 @@ export function FileEditor({
     }
   }, [isOpen, handleKeyDown])
 
+  useEffect(() => {
+    if (!isOpen || !editorContainerRef.current) {
+      return
+    }
+
+    let frame = 0
+    const layoutEditor = () => {
+      if (frame) {
+        window.cancelAnimationFrame(frame)
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        editorRef.current?.layout?.()
+      })
+    }
+
+    const resizeObserver = new ResizeObserver(layoutEditor)
+    resizeObserver.observe(editorContainerRef.current)
+    layoutEditor()
+
+    return () => {
+      resizeObserver.disconnect()
+      if (frame) {
+        window.cancelAnimationFrame(frame)
+      }
+    }
+  }, [isFullscreen, isOpen])
+
   if (!isOpen) return null
 
   // 全屏内容
   const fullscreenContent = (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-background">
+    <div className="fixed inset-0 z-[9999] flex min-w-0 flex-col overflow-hidden bg-background">
         <div
           className={cn(
-            "flex flex-col h-full bg-white dark:bg-zinc-900",
+            "flex h-full min-w-0 flex-col overflow-hidden bg-white dark:bg-zinc-900",
           )}
         >
           {/* 编辑器工具栏 */}
           <div
             className={cn(
-              "flex items-center justify-between px-3 py-2 border-b bg-zinc-50 border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
+              "flex min-w-0 items-center justify-between gap-2 px-3 py-2 border-b bg-zinc-50 border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
             )}
           >
             {/* 左侧：文件信息 */}
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <FileText className={cn(
                 "h-4 w-4 text-blue-500 dark:text-blue-400",
               )} />
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm">{fileName}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate font-semibold text-sm">{fileName}</span>
                 {isModified && (
                   <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                     {tSftp("editorBadgeUnsaved")}
@@ -215,7 +241,7 @@ export function FileEditor({
             </div>
 
             {/* 右侧：操作按钮 */}
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               {/* Find */}
               <Button
                 variant="ghost"
@@ -345,9 +371,10 @@ export function FileEditor({
           </div>
 
           {/* Monaco Editor */}
-          <div className="flex-1 min-h-0 overflow-visible">
+          <div ref={editorContainerRef} className="flex-1 min-h-0 min-w-0 overflow-hidden">
              <Editor
                height="100%"
+               width="100%"
                language={getLanguage(fileName)}
                value={content}
                onChange={handleEditorChange}
@@ -377,7 +404,8 @@ export function FileEditor({
                 },
               }}
               onMount={(editor) => {
-                editorRef[0] = editor
+                editorRef.current = editor
+                window.requestAnimationFrame(() => editor.layout())
               }}
               loading={
                 <div className="flex items-center justify-center h-full">
@@ -394,17 +422,17 @@ export function FileEditor({
           {/* 底部状态栏 */}
           <div
             className={cn(
-              "flex items-center justify-between px-3 py-1 border-t text-xs bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-500",
+              "flex min-w-0 items-center justify-between gap-3 px-3 py-1 border-t text-xs bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-500",
             )}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <span className="font-mono">
                 {getLanguage(fileName).toUpperCase()}
               </span>
               <span>UTF-8</span>
               <span>LF</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-3">
               <span>
                 {tSftp("editorStatusLine", { line: fileStats.lines })}
               </span>
@@ -431,33 +459,34 @@ export function FileEditor({
 
   // 嵌入模式
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
       {/* Editor toolbar */}
       <div
         className={cn(
-          "flex items-center justify-between px-3 py-2 border-b bg-zinc-50 border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
+          "flex min-w-0 items-center justify-between gap-2 px-3 py-2 border-b bg-zinc-50 border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800",
         )}
       >
         {/* Left: file info */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
+              "h-7 w-7 shrink-0 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={onClose}
             title={tSftp("editorTitleBackToList")}
+            aria-label={tSftp("editorTitleBackToList")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <FileText className={cn(
-            "h-4 w-4 text-blue-500 dark:text-blue-400",
+            "h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400",
           )} />
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">{fileName}</span>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-semibold text-sm">{fileName}</span>
             {isModified && (
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+              <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
                 {tSftp("editorBadgeUnsaved")}
               </Badge>
             )}
@@ -465,47 +494,46 @@ export function FileEditor({
         </div>
 
         {/* Right: actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {/* Find */}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             className={cn(
-              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
+              "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleFind}
             title={tSftp("editorActionFindTooltip")}
+            aria-label={tSftp("editorActionFind")}
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="text-xs">{tSftp("editorActionFind")}</span>
           </Button>
 
-          {/* Replace */}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             className={cn(
-              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
+              "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleReplace}
             title={tSftp("editorActionReplaceTooltip")}
+            aria-label={tSftp("editorActionReplace")}
           >
             <Replace className="h-3.5 w-3.5" />
-            <span className="text-xs">{tSftp("editorActionReplace")}</span>
           </Button>
 
           {/* Format */}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             className={cn(
-              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
+              "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={formatCode}
             title={tSftp("editorActionFormatTooltip")}
+            aria-label={tSftp("editorActionFormat")}
           >
             <FileCode className="h-3.5 w-3.5" />
-            <span className="text-xs">{tSftp("editorActionFormat")}</span>
           </Button>
 
           <div className={cn(
@@ -515,51 +543,47 @@ export function FileEditor({
           {/* Reset */}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             className={cn(
-              "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
+              "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
             )}
             onClick={handleReset}
             disabled={!isModified}
             title={tSftp("editorActionResetTooltip")}
+            aria-label={tSftp("editorActionReset")}
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            <span className="text-xs">{tSftp("editorActionReset")}</span>
           </Button>
 
           {/* Download */}
           {onDownload && (
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               className={cn(
-                "h-7 px-2 gap-1.5 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
+                "h-7 w-7 hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white",
               )}
               onClick={onDownload}
               title={tSftp("editorActionDownloadTooltip")}
-          >
-            <Download className="h-3.5 w-3.5" />
-              <span className="text-xs">{tSftp("editorActionDownload")}</span>
-          </Button>
+              aria-label={tSftp("editorActionDownload")}
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
           )}
 
           {/* Save */}
           <Button
             variant="default"
-            size="sm"
+            size="icon"
             className={cn(
-              "h-7 px-2 gap-1.5 bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700",
+              "h-7 w-7 bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700",
             )}
             onClick={handleSave}
             disabled={!isModified || isSaving}
             title={tSftp("editorActionSaveTooltip")}
+            aria-label={isSaving ? tSftp("editorActionSaveSaving") : tSftp("editorActionSave")}
           >
             <Save className="h-3.5 w-3.5" />
-            <span className="text-xs">
-              {isSaving
-                ? tSftp("editorActionSaveSaving")
-                : tSftp("editorActionSave")}
-            </span>
           </Button>
 
           <div className={cn(
@@ -575,6 +599,7 @@ export function FileEditor({
             )}
             onClick={toggleFullscreen}
             title={tSftp("editorFullscreenEnterTooltip")}
+            aria-label={tSftp("editorFullscreenEnterTooltip")}
           >
             <Maximize2 className="h-4 w-4" />
           </Button>
@@ -582,9 +607,10 @@ export function FileEditor({
       </div>
 
       {/* Monaco Editor */}
-      <div className="flex-1 min-h-0 overflow-visible">
+      <div ref={editorContainerRef} className="flex-1 min-h-0 min-w-0 overflow-hidden">
         <Editor
           height="100%"
+          width="100%"
           language={getLanguage(fileName)}
           value={content}
           onChange={handleEditorChange}
@@ -614,7 +640,8 @@ export function FileEditor({
             },
           }}
           onMount={(editor) => {
-            editorRef[0] = editor
+            editorRef.current = editor
+            window.requestAnimationFrame(() => editor.layout())
           }}
           loading={
             <div className="flex items-center justify-center h-full">
@@ -631,17 +658,17 @@ export function FileEditor({
       {/* 底部状态栏 */}
       <div
         className={cn(
-          "flex items-center justify-between px-3 py-1 border-t text-xs bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-500",
+          "flex min-w-0 items-center justify-between gap-3 px-3 py-1 border-t text-xs bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-500",
         )}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <span className="font-mono">
             {getLanguage(fileName).toUpperCase()}
           </span>
           <span>UTF-8</span>
           <span>LF</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <span>
             {tSftp("editorStatusLine", { line: fileStats.lines })}
           </span>
