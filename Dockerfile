@@ -21,7 +21,7 @@ COPY web/ ./
 RUN pnpm run build
 
 # Stage 2: 构建后端（Go）
-FROM golang:1.24-alpine AS backend-builder
+FROM golang:1.25-alpine AS backend-builder
 
 WORKDIR /app/server
 
@@ -44,7 +44,7 @@ RUN CGO_ENABLED=0 \
     go build -ldflags="-s -w" -o easyssh-api ./cmd/api
 
 # Stage 3: 运行时镜像
-FROM alpine:3.19
+FROM alpine:3.22
 
 WORKDIR /app
 
