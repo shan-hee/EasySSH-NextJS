@@ -183,6 +183,10 @@ func (h *AuditLogHandler) CleanupOldLogs(c *gin.Context) {
 	if err != nil || retentionDays <= 0 {
 		retentionDays = 90
 	}
+	if retentionDays > 3650 {
+		RespondError(c, http.StatusBadRequest, "invalid_retention_days", "Retention days must be between 1 and 3650")
+		return
+	}
 
 	// 清理旧日志
 	deletedCount, err := h.auditService.CleanupOldLogs(c.Request.Context(), retentionDays)

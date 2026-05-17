@@ -1376,6 +1376,21 @@ const messages = {
     searchPlaceholder: "Search by user or action...",
     emptyMessage: "No operation logs",
     toastLoadFailed: "Failed to load operation logs",
+    cleanupButton: "Clean logs",
+    cleanupDialogTitle: "Clean audit logs",
+    cleanupDialogDescription:
+      "Delete old audit logs by retention days. Deleted logs cannot be restored.",
+    cleanupRetentionLabel: "Retention days",
+    cleanupRetentionHint:
+      "Operation and login logs older than this value will be deleted. For example, 90 keeps the latest 90 days.",
+    cleanupWarning:
+      "This affects both operation logs and login logs. Make sure you have any backup you need.",
+    cleanupCancel: "Cancel",
+    cleanupConfirm: "Clean logs",
+    cleanupRunning: "Cleaning...",
+    cleanupSuccess: "Cleaned {count} logs",
+    cleanupFailed: "Failed to clean logs",
+    cleanupInvalidRetention: "Retention days must be between 1 and 3650",
     durationSeconds: "{seconds}s",
     durationMinutesSeconds: "{minutes}m {seconds}s",
     actionLogin: "Login",

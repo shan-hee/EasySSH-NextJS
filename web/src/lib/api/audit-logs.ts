@@ -48,6 +48,14 @@ export interface AuditLogStatisticsResponse {
 }
 
 /**
+ * 审计日志清理响应
+ */
+export interface AuditLogCleanupResponse {
+  deleted_count: number
+  retention_days: number
+}
+
+/**
  * 审计日志 API 服务
  */
 export const auditLogsApi = {
@@ -126,10 +134,13 @@ export const auditLogsApi = {
   /**
    * 清理旧日志
    */
-  async cleanup(beforeDate: string): Promise<{ deleted: number }> {
-    return apiFetch<{ deleted: number }>(`/audit-logs/cleanup`, {
+  async cleanup(retentionDays: number): Promise<AuditLogCleanupResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.set("retention_days", retentionDays.toString())
+
+    return apiFetch<AuditLogCleanupResponse>(`/audit-logs/cleanup?${queryParams.toString()}`, {
       method: "DELETE",
-      body: { before_date: beforeDate },
+      retry: false,
     })
   },
 }

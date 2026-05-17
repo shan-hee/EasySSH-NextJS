@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, XCircle, Activity, User } from "lucide-react"
+import { CheckCircle, XCircle, Activity, User, Trash2, Loader2 } from "lucide-react"
 import { SkeletonStatsCard } from "@/components/ui/loading"
 import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
 import { getErrorMessage } from "@/lib/error-utils"
@@ -10,8 +10,22 @@ import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { createAuditLogColumns } from "./audit-log-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useClientAuth } from "@/components/client-auth-provider"
 import { useTranslations } from "next-intl"
 
 interface AuditLogsPageData {
@@ -33,6 +47,7 @@ interface AuditLogsClientProps {
  */
 export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   const { ready } = useAuthReady()
+  const { user } = useClientAuth()
   const t = useTranslations("logsAudit")
   const [logs, setLogs] = useState<AuditLog[]>(initialData?.logs || [])
   const [statistics, setStatistics] = useState<AuditLogStatisticsResponse | null>(
@@ -44,6 +59,9 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
   const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
   const [totalRows, setTotalRows] = useState(initialData?.totalCount || 0)
+  const [cleanupOpen, setCleanupOpen] = useState(false)
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [retentionDays, setRetentionDays] = useState("90")
   const [columnVisibility, setColumnVisibility] = useState({
     created_at: true,
     username: true,
@@ -172,6 +190,37 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
     [columnVisibility, columns]
   )
 
+  const isAdmin = user?.role === "admin"
+
+  const handleCleanupLogs = async () => {
+    const parsedRetentionDays = Number(retentionDays)
+    if (
+      !Number.isInteger(parsedRetentionDays) ||
+      parsedRetentionDays < 1 ||
+      parsedRetentionDays > 3650
+    ) {
+      toast.error(t("cleanupInvalidRetention"))
+      return
+    }
+
+    try {
+      setCleanupLoading(true)
+      const result = await auditLogsApi.cleanup(parsedRetentionDays)
+      toast.success(t("cleanupSuccess", { count: result.deleted_count }))
+      setCleanupOpen(false)
+      setPage(1)
+      await Promise.all([
+        loadLogs(1, pageSize, { showTableLoading: true }),
+        loadStatistics(),
+      ])
+    } catch (error: unknown) {
+      console.error("操作日志清理失败:", error)
+      toast.error(getErrorMessage(error, t("cleanupFailed")))
+    } finally {
+      setCleanupLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
       {/* 统计卡片 - 加载时显示骨架屏 */}
@@ -274,6 +323,17 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
             onRefresh={handleRefresh}
             showRefresh={true}
           >
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-destructive hover:text-destructive"
+                onClick={() => setCleanupOpen(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t("cleanupButton")}
+              </Button>
+            )}
             <ColumnVisibility
               columns={[
                 { id: "created_at", label: t("columnTime") },
@@ -300,6 +360,53 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
           </DataTableToolbar>
         )}
       />
+
+      <AlertDialog open={cleanupOpen} onOpenChange={setCleanupOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("cleanupDialogTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("cleanupDialogDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="audit-log-retention-days">{t("cleanupRetentionLabel")}</Label>
+            <Input
+              id="audit-log-retention-days"
+              type="number"
+              min={1}
+              max={3650}
+              value={retentionDays}
+              disabled={cleanupLoading}
+              onChange={(event) => setRetentionDays(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t("cleanupRetentionHint")}</p>
+            <p className="text-xs text-destructive">{t("cleanupWarning")}</p>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cleanupLoading}>{t("cleanupCancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={cleanupLoading}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleCleanupLogs()
+              }}
+            >
+              {cleanupLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("cleanupRunning")}
+                </>
+              ) : (
+                t("cleanupConfirm")
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
