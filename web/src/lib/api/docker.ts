@@ -90,10 +90,16 @@ export const dockerApi = {
   async getContainerLogs(
     serverId: string,
     containerId: string,
-    tail = 100
+    tail = 100,
+    encoding = "utf-8"
   ): Promise<ContainerLogsResponse> {
+    const params = new URLSearchParams({
+      tail: String(tail),
+      encoding,
+    })
+
     return apiFetch<ContainerLogsResponse>(
-      `/docker/${serverId}/containers/${containerId}/logs?tail=${tail}`
+      `/docker/${serverId}/containers/${containerId}/logs?${params.toString()}`
     )
   },
 

@@ -482,7 +482,9 @@ func (h *BackupHandler) restoreConfigSection(tx *gorm.DB, section *BackupDataSec
 func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSection, strategy RestoreConflictStrategy) (*restoreSectionSummary, error) {
 	summary := &restoreSectionSummary{}
 	restoredTables := make([]BackupTable, 0)
-	for _, table := range section.Tables {
+	userIDMappings := make(map[string]interface{})
+
+	for _, table := range orderedDataRestoreTables(section.Tables) {
 		if isConfigBackupTable(table.Name) {
 			continue
 		}
@@ -511,6 +513,9 @@ func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSecti
 			if err != nil {
 				return nil, err
 			}
+			if !isUsersRestoreTable(table.Name) {
+				applyRestoreUserIDMapping(row, userIDMappings)
+			}
 
 			conflictKey, err := h.findBackupConflictKey(tx, table.Name, conflictKeys, row)
 			if err != nil {
@@ -518,6 +523,12 @@ func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSecti
 			}
 
 			if conflictKey != nil {
+				if isUsersRestoreTable(table.Name) {
+					if err := h.recordExistingUserIDMapping(tx, table.Name, table.PrimaryKey, *conflictKey, row, userIDMappings); err != nil {
+						return nil, err
+					}
+				}
+
 				switch strategy {
 				case RestoreConflictSkip:
 					summary.Skipped++
@@ -525,7 +536,7 @@ func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSecti
 				case RestoreConflictError:
 					return nil, fmt.Errorf("table %s item already exists: %s", table.Name, formatConflictKey(*conflictKey, row))
 				case RestoreConflictOverwrite:
-					if err := h.updateBackupRow(tx, table.Name, *conflictKey, row); err != nil {
+					if err := h.updateBackupRow(tx, table.Name, *conflictKey, table.PrimaryKey, row); err != nil {
 						return nil, err
 					}
 					summary.Updated++
@@ -536,6 +547,9 @@ func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSecti
 
 			if err := tx.Table(table.Name).Create(row).Error; err != nil {
 				return nil, fmt.Errorf("failed to restore table %s: %w", table.Name, err)
+			}
+			if isUsersRestoreTable(table.Name) {
+				recordInsertedUserIDMapping(table.PrimaryKey, row, userIDMappings)
 			}
 			summary.Inserted++
 			restoredTables = append(restoredTables, table)
@@ -752,6 +766,12 @@ func (h *BackupHandler) findBackupConflictKey(tx *gorm.DB, table string, keys []
 			return nil, err
 		}
 		if exists {
+			if isUsersEmailRestoreKey(table, key.Columns) {
+				if err := h.ensureRestoreUserEmailMatchesAdmin(tx, table, key.Columns, row); err != nil {
+					return nil, err
+				}
+			}
+
 			matched := key
 			return &matched, nil
 		}
@@ -778,7 +798,131 @@ func (h *BackupHandler) backupRowExistsByColumns(tx *gorm.DB, table string, colu
 	return count > 0, nil
 }
 
-func (h *BackupHandler) updateBackupRow(tx *gorm.DB, table string, key restoreConflictKey, row map[string]interface{}) error {
+func orderedDataRestoreTables(tables []BackupTable) []BackupTable {
+	ordered := make([]BackupTable, 0, len(tables))
+	for _, table := range tables {
+		if isUsersRestoreTable(table.Name) {
+			ordered = append(ordered, table)
+		}
+	}
+	for _, table := range tables {
+		if !isUsersRestoreTable(table.Name) {
+			ordered = append(ordered, table)
+		}
+	}
+	return ordered
+}
+
+func isUsersRestoreTable(table string) bool {
+	return strings.EqualFold(strings.TrimSpace(table), "users")
+}
+
+func isUsersEmailRestoreKey(table string, columns []string) bool {
+	return isUsersRestoreTable(table) && len(columns) == 1 && strings.EqualFold(columns[0], "email")
+}
+
+func (h *BackupHandler) ensureRestoreUserEmailMatchesAdmin(tx *gorm.DB, table string, keyColumns []string, row map[string]interface{}) error {
+	role, err := h.getExistingRowColumnValue(tx, table, keyColumns, row, "role")
+	if err != nil {
+		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(fmt.Sprint(role)), "admin") {
+		return nil
+	}
+	return fmt.Errorf("users email %v already exists but matched user is not an admin", row["email"])
+}
+
+func applyRestoreUserIDMapping(row map[string]interface{}, userIDMappings map[string]interface{}) {
+	if len(userIDMappings) == 0 {
+		return
+	}
+
+	value, ok := row["user_id"]
+	if !ok || value == nil {
+		return
+	}
+	if mappedValue, ok := userIDMappings[restoreMappingKey(value)]; ok {
+		row["user_id"] = mappedValue
+	}
+}
+
+func recordInsertedUserIDMapping(primaryKey []string, row map[string]interface{}, userIDMappings map[string]interface{}) {
+	if !isSingleIDPrimaryKey(primaryKey) {
+		return
+	}
+	value, ok := row["id"]
+	if !ok || value == nil {
+		return
+	}
+	userIDMappings[restoreMappingKey(value)] = value
+}
+
+func (h *BackupHandler) recordExistingUserIDMapping(tx *gorm.DB, table string, primaryKey []string, conflictKey restoreConflictKey, row map[string]interface{}, userIDMappings map[string]interface{}) error {
+	if !isSingleIDPrimaryKey(primaryKey) {
+		return nil
+	}
+
+	backupID, ok := row["id"]
+	if !ok || backupID == nil {
+		return nil
+	}
+
+	existingID, err := h.getExistingRowColumnValue(tx, table, conflictKey.Columns, row, "id")
+	if err != nil {
+		return err
+	}
+	if existingID == nil {
+		return nil
+	}
+
+	userIDMappings[restoreMappingKey(backupID)] = existingID
+	return nil
+}
+
+func (h *BackupHandler) getExistingRowColumnValue(tx *gorm.DB, table string, keyColumns []string, row map[string]interface{}, selectColumn string) (interface{}, error) {
+	query := tx.Table(table).Select(quoteIdentifier(tx.Dialector.Name(), selectColumn)).Limit(1)
+	driver := tx.Dialector.Name()
+	for _, column := range keyColumns {
+		value, ok := row[column]
+		if !ok || value == nil {
+			return nil, fmt.Errorf("table %s row is missing conflict key column %s", table, column)
+		}
+		query = query.Where(fmt.Sprintf("%s = ?", quoteIdentifier(driver, column)), value)
+	}
+
+	rows, err := query.Rows()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read existing %s.%s: %w", table, selectColumn, err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, nil
+	}
+
+	var value interface{}
+	if err := rows.Scan(&value); err != nil {
+		return nil, fmt.Errorf("failed to scan existing %s.%s: %w", table, selectColumn, err)
+	}
+	return normalizeBackupValue(value), nil
+}
+
+func restoreMappingKey(value interface{}) string {
+	switch v := value.(type) {
+	case fmt.Stringer:
+		return v.String()
+	case []byte:
+		return string(v)
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func isSingleIDPrimaryKey(primaryKey []string) bool {
+	return len(primaryKey) == 1 && strings.EqualFold(primaryKey[0], "id")
+}
+
+func (h *BackupHandler) updateBackupRow(tx *gorm.DB, table string, key restoreConflictKey, primaryKey []string, row map[string]interface{}) error {
 	query := tx.Table(table)
 	driver := tx.Dialector.Name()
 	for _, column := range key.Columns {
@@ -791,7 +935,7 @@ func (h *BackupHandler) updateBackupRow(tx *gorm.DB, table string, key restoreCo
 
 	updates := make(map[string]interface{}, len(row))
 	for column, value := range row {
-		if containsString(key.Columns, column) {
+		if containsStringFold(key.Columns, column) || containsStringFold(primaryKey, column) {
 			continue
 		}
 		updates[column] = value
@@ -857,6 +1001,15 @@ func columnsSignature(columns []string) string {
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func containsStringFold(values []string, target string) bool {
+	for _, value := range values {
+		if strings.EqualFold(value, target) {
 			return true
 		}
 	}
