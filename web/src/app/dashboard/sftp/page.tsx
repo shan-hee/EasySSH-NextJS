@@ -841,7 +841,7 @@ export default function SftpPage() {
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
  // 直接触发浏览器下载，由浏览器自带下载管理器处理
- sftpApi.downloadFile(session.serverId, filePath, fileName)
+ sftpApi.downloadFile(session.serverId, filePath)
  toast.success(tSftp("toastDownloadStartSingle", { file: fileName }))
  }, [tSftp])
 

@@ -526,7 +526,7 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
         : `${currentPath}/${fileName}`;
 
       // 直接触发浏览器下载，由浏览器自带下载管理器处理
-      sftpApi.downloadFile(serverId, fullPath, fileName);
+      sftpApi.downloadFile(serverId, fullPath);
       toast.success(tSftp("toastDownloadStartSingle", { file: fileName }));
     },
     [serverId, currentPath, files, tSftp]

@@ -297,14 +297,15 @@ export function useFileTransfer() {
 
           // 等待 WebSocket 连接（最多 2 秒）
           if (wsConnection) {
+            const uploadWs = wsConnection;
             await new Promise<void>((resolve) => {
               const timeout = setTimeout(() => resolve(), 2000);
-              if (wsConnection?.readyState === WebSocket.OPEN) {
+              if (uploadWs.readyState === WebSocket.OPEN) {
                 clearTimeout(timeout);
                 resolve();
                 return;
               }
-              wsConnection.onopen = () => {
+              uploadWs.onopen = () => {
                 clearTimeout(timeout);
                 resolve();
               };
