@@ -67,6 +67,12 @@ type restoreSectionSummary struct {
 	ConfigReset int `json:"config_reset,omitempty"`
 }
 
+type restoreConflictKey struct {
+	Name     string
+	Columns  []string
+	Required bool
+}
+
 var configBackupTables = map[string]bool{
 	"system_config":       true,
 	"security_config":     true,
@@ -492,8 +498,12 @@ func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSecti
 		if len(table.PrimaryKey) == 0 {
 			table.PrimaryKey = fallbackPrimaryKey(table.Columns)
 		}
-		if len(table.PrimaryKey) == 0 {
-			return nil, fmt.Errorf("table %s has no primary key, cannot apply conflict strategy", table.Name)
+		conflictKeys, err := h.getRestoreConflictKeys(tx, table.Name, table.PrimaryKey)
+		if err != nil {
+			return nil, err
+		}
+		if len(conflictKeys) == 0 {
+			return nil, fmt.Errorf("table %s has no primary or unique key, cannot apply conflict strategy", table.Name)
 		}
 
 		for _, rawRow := range table.Rows {
@@ -502,20 +512,20 @@ func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSecti
 				return nil, err
 			}
 
-			exists, err := h.backupRowExists(tx, table.Name, table.PrimaryKey, row)
+			conflictKey, err := h.findBackupConflictKey(tx, table.Name, conflictKeys, row)
 			if err != nil {
 				return nil, err
 			}
 
-			if exists {
+			if conflictKey != nil {
 				switch strategy {
 				case RestoreConflictSkip:
 					summary.Skipped++
 					continue
 				case RestoreConflictError:
-					return nil, fmt.Errorf("table %s item already exists: %s", table.Name, formatPrimaryKey(table.PrimaryKey, row))
+					return nil, fmt.Errorf("table %s item already exists: %s", table.Name, formatConflictKey(*conflictKey, row))
 				case RestoreConflictOverwrite:
-					if err := h.updateBackupRow(tx, table.Name, table.PrimaryKey, row); err != nil {
+					if err := h.updateBackupRow(tx, table.Name, *conflictKey, row); err != nil {
 						return nil, err
 					}
 					summary.Updated++
@@ -695,13 +705,68 @@ func (h *BackupHandler) tableHasRows(tx *gorm.DB, table string) (bool, error) {
 	return count > 0, nil
 }
 
-func (h *BackupHandler) backupRowExists(tx *gorm.DB, table string, primaryKey []string, row map[string]interface{}) (bool, error) {
+func (h *BackupHandler) getRestoreConflictKeys(tx *gorm.DB, table string, primaryKey []string) ([]restoreConflictKey, error) {
+	keys := make([]restoreConflictKey, 0)
+	seen := make(map[string]bool)
+
+	if len(primaryKey) > 0 {
+		key := restoreConflictKey{
+			Name:     "primary key",
+			Columns:  append([]string(nil), primaryKey...),
+			Required: true,
+		}
+		keys = append(keys, key)
+		seen[columnsSignature(key.Columns)] = true
+	}
+
+	uniqueKeys, err := h.getTableUniqueKeys(tx, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unique keys for table %s: %w", table, err)
+	}
+	for _, key := range uniqueKeys {
+		if len(key.Columns) == 0 {
+			continue
+		}
+		signature := columnsSignature(key.Columns)
+		if seen[signature] {
+			continue
+		}
+		seen[signature] = true
+		keys = append(keys, key)
+	}
+
+	return keys, nil
+}
+
+func (h *BackupHandler) findBackupConflictKey(tx *gorm.DB, table string, keys []restoreConflictKey, row map[string]interface{}) (*restoreConflictKey, error) {
+	for _, key := range keys {
+		if missingColumn := missingConflictKeyColumn(row, key.Columns); missingColumn != "" {
+			if key.Required {
+				return nil, fmt.Errorf("table %s row is missing %s column %s", table, key.Name, missingColumn)
+			}
+			continue
+		}
+
+		exists, err := h.backupRowExistsByColumns(tx, table, key.Columns, row)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			matched := key
+			return &matched, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (h *BackupHandler) backupRowExistsByColumns(tx *gorm.DB, table string, columns []string, row map[string]interface{}) (bool, error) {
 	query := tx.Table(table)
 	driver := tx.Dialector.Name()
-	for _, column := range primaryKey {
+	for _, column := range columns {
 		value, ok := row[column]
 		if !ok || value == nil {
-			return false, fmt.Errorf("table %s row is missing primary key column %s", table, column)
+			return false, fmt.Errorf("table %s row is missing conflict key column %s", table, column)
 		}
 		query = query.Where(fmt.Sprintf("%s = ?", quoteIdentifier(driver, column)), value)
 	}
@@ -713,16 +778,20 @@ func (h *BackupHandler) backupRowExists(tx *gorm.DB, table string, primaryKey []
 	return count > 0, nil
 }
 
-func (h *BackupHandler) updateBackupRow(tx *gorm.DB, table string, primaryKey []string, row map[string]interface{}) error {
+func (h *BackupHandler) updateBackupRow(tx *gorm.DB, table string, key restoreConflictKey, row map[string]interface{}) error {
 	query := tx.Table(table)
 	driver := tx.Dialector.Name()
-	for _, column := range primaryKey {
-		query = query.Where(fmt.Sprintf("%s = ?", quoteIdentifier(driver, column)), row[column])
+	for _, column := range key.Columns {
+		value, ok := row[column]
+		if !ok || value == nil {
+			return fmt.Errorf("table %s row is missing conflict key column %s", table, column)
+		}
+		query = query.Where(fmt.Sprintf("%s = ?", quoteIdentifier(driver, column)), value)
 	}
 
 	updates := make(map[string]interface{}, len(row))
 	for column, value := range row {
-		if containsString(primaryKey, column) {
+		if containsString(key.Columns, column) {
 			continue
 		}
 		updates[column] = value
@@ -732,7 +801,7 @@ func (h *BackupHandler) updateBackupRow(tx *gorm.DB, table string, primaryKey []
 		return nil
 	}
 	if err := query.Updates(updates).Error; err != nil {
-		return fmt.Errorf("failed to update table %s item %s: %w", table, formatPrimaryKey(primaryKey, row), err)
+		return fmt.Errorf("failed to update table %s item %s: %w", table, formatConflictKey(key, row), err)
 	}
 	return nil
 }
@@ -747,11 +816,42 @@ func fallbackPrimaryKey(columns []string) []string {
 }
 
 func formatPrimaryKey(primaryKey []string, row map[string]interface{}) string {
-	parts := make([]string, 0, len(primaryKey))
-	for _, column := range primaryKey {
+	return formatConflictColumns(primaryKey, row)
+}
+
+func formatConflictKey(key restoreConflictKey, row map[string]interface{}) string {
+	label := strings.TrimSpace(key.Name)
+	if label == "" {
+		label = "conflict key"
+	}
+	return fmt.Sprintf("%s (%s)", label, formatConflictColumns(key.Columns, row))
+}
+
+func formatConflictColumns(columns []string, row map[string]interface{}) string {
+	parts := make([]string, 0, len(columns))
+	for _, column := range columns {
 		parts = append(parts, fmt.Sprintf("%s=%v", column, row[column]))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func missingConflictKeyColumn(row map[string]interface{}, columns []string) string {
+	for _, column := range columns {
+		value, ok := row[column]
+		if !ok || value == nil {
+			return column
+		}
+	}
+	return ""
+}
+
+func columnsSignature(columns []string) string {
+	normalized := make([]string, 0, len(columns))
+	for _, column := range columns {
+		normalized = append(normalized, strings.ToLower(strings.TrimSpace(column)))
+	}
+	sort.Strings(normalized)
+	return strings.Join(normalized, "\x00")
 }
 
 func containsString(values []string, target string) bool {
@@ -765,6 +865,163 @@ func containsString(values []string, target string) bool {
 
 func isValidDBIdentifier(value string) bool {
 	return identifierPattern.MatchString(value)
+}
+
+func (h *BackupHandler) getTableUniqueKeys(db *gorm.DB, tableName string) ([]restoreConflictKey, error) {
+	driver := db.Dialector.Name()
+	switch driver {
+	case "sqlite":
+		return h.getSQLiteUniqueKeys(db, tableName)
+	case "postgres":
+		return h.getPostgresUniqueKeys(db, tableName)
+	case "mysql":
+		return h.getMySQLUniqueKeys(db, tableName)
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s", driver)
+	}
+}
+
+func (h *BackupHandler) getSQLiteUniqueKeys(db *gorm.DB, tableName string) ([]restoreConflictKey, error) {
+	var indexes []struct {
+		Name    string `gorm:"column:name"`
+		Unique  int    `gorm:"column:unique"`
+		Origin  string `gorm:"column:origin"`
+		Partial int    `gorm:"column:partial"`
+	}
+	if err := db.Raw(fmt.Sprintf("PRAGMA index_list(%s)", quoteIdentifier("sqlite", tableName))).Scan(&indexes).Error; err != nil {
+		return nil, err
+	}
+
+	keys := make([]restoreConflictKey, 0)
+	for _, index := range indexes {
+		if index.Unique == 0 || index.Origin == "pk" || index.Partial != 0 {
+			continue
+		}
+
+		var rows []struct {
+			SeqNo int    `gorm:"column:seqno"`
+			Name  string `gorm:"column:name"`
+		}
+		if err := db.Raw(fmt.Sprintf("PRAGMA index_info(%s)", quoteIdentifier("sqlite", index.Name))).Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		sort.Slice(rows, func(i, j int) bool {
+			return rows[i].SeqNo < rows[j].SeqNo
+		})
+
+		columns := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if strings.TrimSpace(row.Name) != "" {
+				columns = append(columns, row.Name)
+			}
+		}
+		if len(columns) > 0 {
+			keys = append(keys, restoreConflictKey{Name: index.Name, Columns: columns})
+		}
+	}
+
+	return keys, nil
+}
+
+func (h *BackupHandler) getPostgresUniqueKeys(db *gorm.DB, tableName string) ([]restoreConflictKey, error) {
+	var rows []struct {
+		IndexName string `gorm:"column:index_name"`
+		Column    string `gorm:"column:column_name"`
+		Ordinal   int    `gorm:"column:ordinal"`
+	}
+	if err := db.Raw(`
+		SELECT
+			i.relname AS index_name,
+			a.attname AS column_name,
+			array_position(ix.indkey::int2[], a.attnum::int2) AS ordinal
+		FROM pg_class AS t
+		JOIN pg_namespace AS ns ON ns.oid = t.relnamespace
+		JOIN pg_index AS ix ON ix.indrelid = t.oid
+		JOIN pg_class AS i ON i.oid = ix.indexrelid
+		JOIN pg_attribute AS a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+		WHERE ns.nspname = 'public'
+		  AND t.relname = ?
+		  AND ix.indisunique = true
+		  AND ix.indisprimary = false
+		  AND ix.indpred IS NULL
+		ORDER BY i.relname, array_position(ix.indkey::int2[], a.attnum::int2)
+	`, tableName).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	return groupedUniqueKeys(rows, func(row struct {
+		IndexName string `gorm:"column:index_name"`
+		Column    string `gorm:"column:column_name"`
+		Ordinal   int    `gorm:"column:ordinal"`
+	}) (string, string, int) {
+		return row.IndexName, row.Column, row.Ordinal
+	}), nil
+}
+
+func (h *BackupHandler) getMySQLUniqueKeys(db *gorm.DB, tableName string) ([]restoreConflictKey, error) {
+	var rows []struct {
+		IndexName string `gorm:"column:index_name"`
+		Column    string `gorm:"column:column_name"`
+		Ordinal   int    `gorm:"column:seq_in_index"`
+	}
+	if err := db.Raw(`
+		SELECT index_name, column_name, seq_in_index
+		FROM information_schema.statistics
+		WHERE table_schema = DATABASE()
+		  AND table_name = ?
+		  AND non_unique = 0
+		  AND index_name <> 'PRIMARY'
+		ORDER BY index_name, seq_in_index
+	`, tableName).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	return groupedUniqueKeys(rows, func(row struct {
+		IndexName string `gorm:"column:index_name"`
+		Column    string `gorm:"column:column_name"`
+		Ordinal   int    `gorm:"column:seq_in_index"`
+	}) (string, string, int) {
+		return row.IndexName, row.Column, row.Ordinal
+	}), nil
+}
+
+func groupedUniqueKeys[T any](rows []T, unpack func(T) (string, string, int)) []restoreConflictKey {
+	type uniqueColumn struct {
+		Name    string
+		Ordinal int
+	}
+
+	grouped := make(map[string][]uniqueColumn)
+	order := make([]string, 0)
+	for _, row := range rows {
+		indexName, column, ordinal := unpack(row)
+		indexName = strings.TrimSpace(indexName)
+		column = strings.TrimSpace(column)
+		if indexName == "" || column == "" {
+			continue
+		}
+		if _, ok := grouped[indexName]; !ok {
+			order = append(order, indexName)
+		}
+		grouped[indexName] = append(grouped[indexName], uniqueColumn{Name: column, Ordinal: ordinal})
+	}
+
+	keys := make([]restoreConflictKey, 0, len(grouped))
+	for _, indexName := range order {
+		columns := grouped[indexName]
+		sort.Slice(columns, func(i, j int) bool {
+			return columns[i].Ordinal < columns[j].Ordinal
+		})
+
+		keyColumns := make([]string, 0, len(columns))
+		for _, column := range columns {
+			keyColumns = append(keyColumns, column.Name)
+		}
+		if len(keyColumns) > 0 {
+			keys = append(keys, restoreConflictKey{Name: indexName, Columns: keyColumns})
+		}
+	}
+	return keys
 }
 
 func (h *BackupHandler) getTablePrimaryKeys(db *gorm.DB, tableName string, columns []string) ([]string, error) {

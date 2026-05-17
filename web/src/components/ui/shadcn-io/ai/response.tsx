@@ -311,14 +311,21 @@ const components: Options['components'] = {
   },
   pre: ({ node, className, children }) => {
     let language = 'javascript';
+    let code = '';
 
     if (typeof node?.properties?.className === 'string') {
       language = node.properties.className.replace('language-', '');
     }
 
-    // Extract code content from children safely
-    let code = '';
-    if (isValidElement<{ children?: unknown }>(children)) {
+    if (isValidElement<{ children?: unknown; className?: unknown }>(children)) {
+      const childClassName = children.props.className;
+      if (typeof childClassName === 'string') {
+        const languageMatch = childClassName.match(/language-([^\s]+)/);
+        if (languageMatch?.[1]) {
+          language = languageMatch[1];
+        }
+      }
+
       const nestedChildren = children.props.children;
       if (typeof nestedChildren === 'string') {
         code = nestedChildren;

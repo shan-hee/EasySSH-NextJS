@@ -11,8 +11,10 @@ import (
 
 	"github.com/easyssh/server/internal/domain/aichat/provider"
 	"github.com/easyssh/server/internal/domain/aichat/registry"
+	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type memorySessionStore struct {
@@ -177,6 +179,46 @@ func TestSessionSnapshotRecordRoundTrip(t *testing.T) {
 	require.Len(t, restored.Tasks, 1)
 	require.Equal(t, "task-1", restored.TaskOrder[0])
 	require.JSONEq(t, `{"server_id":"srv-1","command":"uptime"}`, string(restored.Tasks[0].ToolCall.Arguments))
+}
+
+func TestGormSessionStoreListScansSQLiteJSONText(t *testing.T) {
+	t.Parallel()
+
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&AISessionRecord{}))
+
+	store := NewGormSessionStore(db)
+	userID := uuid.New()
+	now := time.Now().UTC().Truncate(time.Second)
+	snapshot := SessionSnapshot{
+		ID:             uuid.NewString(),
+		UserID:         userID,
+		Model:          "gpt-test",
+		Title:          "SQLite 会话",
+		PermissionMode: "balanced",
+		Status:         SessionStatusIdle,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		Messages: []provider.Message{
+			{Role: "user", Content: "你好"},
+		},
+		MessageViews: []MessageView{
+			{ID: "msg-1", Role: "user", Content: "你好", CreatedAt: now},
+		},
+		Tasks:     []PersistedTask{},
+		TaskOrder: []string{},
+	}
+
+	require.NoError(t, store.Save(context.Background(), snapshot))
+
+	items, total, err := store.List(context.Background(), userID, "", 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, items, 1)
+	require.Equal(t, snapshot.ID, items[0].ID)
+	require.Equal(t, snapshot.Messages[0].Content, items[0].Messages[0].Content)
+	require.Equal(t, snapshot.MessageViews[0].Content, items[0].MessageViews[0].Content)
 }
 
 func TestManagerPersistsRestoresAndListsSessions(t *testing.T) {

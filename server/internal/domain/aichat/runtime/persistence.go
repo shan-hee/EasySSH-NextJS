@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -24,19 +26,61 @@ type SessionStore interface {
 }
 
 type AISessionRecord struct {
-	ID             string          `gorm:"type:char(36);primaryKey" json:"id"`
-	UserID         uuid.UUID       `gorm:"type:char(36);not null;index:idx_ai_sessions_user_updated" json:"user_id"`
-	Model          string          `gorm:"type:text" json:"model"`
-	Title          string          `gorm:"type:text" json:"title"`
-	PermissionMode string          `gorm:"type:varchar(32);not null" json:"permission_mode"`
-	Status         string          `gorm:"type:varchar(32);not null;index" json:"status"`
-	Messages       json.RawMessage `gorm:"type:text;not null" json:"messages"`
-	MessageViews   json.RawMessage `gorm:"type:text;not null" json:"message_views"`
-	Tasks          json.RawMessage `gorm:"type:text;not null" json:"tasks"`
-	TaskOrder      json.RawMessage `gorm:"type:text;not null" json:"task_order"`
-	CreatedAt      time.Time       `gorm:"not null" json:"created_at"`
-	UpdatedAt      time.Time       `gorm:"not null;index:idx_ai_sessions_user_updated" json:"updated_at"`
-	DeletedAt      gorm.DeletedAt  `gorm:"index" json:"-"`
+	ID             string         `gorm:"type:char(36);primaryKey" json:"id"`
+	UserID         uuid.UUID      `gorm:"type:char(36);not null;index:idx_ai_sessions_user_updated" json:"user_id"`
+	Model          string         `gorm:"type:text" json:"model"`
+	Title          string         `gorm:"type:text" json:"title"`
+	PermissionMode string         `gorm:"type:varchar(32);not null" json:"permission_mode"`
+	Status         string         `gorm:"type:varchar(32);not null;index" json:"status"`
+	Messages       jsonText       `gorm:"type:text;not null" json:"messages"`
+	MessageViews   jsonText       `gorm:"type:text;not null" json:"message_views"`
+	Tasks          jsonText       `gorm:"type:text;not null" json:"tasks"`
+	TaskOrder      jsonText       `gorm:"type:text;not null" json:"task_order"`
+	CreatedAt      time.Time      `gorm:"not null" json:"created_at"`
+	UpdatedAt      time.Time      `gorm:"not null;index:idx_ai_sessions_user_updated" json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type jsonText []byte
+
+func (j *jsonText) Scan(value interface{}) error {
+	if j == nil {
+		return errors.New("jsonText: Scan on nil receiver")
+	}
+
+	switch v := value.(type) {
+	case nil:
+		*j = jsonText("null")
+	case []byte:
+		if len(v) == 0 {
+			*j = jsonText("null")
+			return nil
+		}
+		*j = append((*j)[:0], v...)
+	case string:
+		if v == "" {
+			*j = jsonText("null")
+			return nil
+		}
+		*j = append((*j)[:0], v...)
+	default:
+		return fmt.Errorf("jsonText: unsupported Scan type %T", value)
+	}
+	return nil
+}
+
+func (j jsonText) Value() (driver.Value, error) {
+	if len(j) == 0 {
+		return "null", nil
+	}
+	return string(j), nil
+}
+
+func (j jsonText) MarshalJSON() ([]byte, error) {
+	if len(j) == 0 {
+		return []byte("null"), nil
+	}
+	return json.RawMessage(j).MarshalJSON()
 }
 
 func (AISessionRecord) TableName() string {
@@ -223,10 +267,10 @@ func (snapshot SessionSnapshot) toRecord() (AISessionRecord, error) {
 		Title:          snapshot.Title,
 		PermissionMode: snapshot.PermissionMode,
 		Status:         string(snapshot.Status),
-		Messages:       messages,
-		MessageViews:   messageViews,
-		Tasks:          tasks,
-		TaskOrder:      taskOrder,
+		Messages:       jsonText(messages),
+		MessageViews:   jsonText(messageViews),
+		Tasks:          jsonText(tasks),
+		TaskOrder:      jsonText(taskOrder),
 		CreatedAt:      snapshot.CreatedAt,
 		UpdatedAt:      snapshot.UpdatedAt,
 	}, nil

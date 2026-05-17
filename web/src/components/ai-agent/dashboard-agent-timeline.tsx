@@ -5,6 +5,7 @@ import { ChevronDown, Loader2 } from "lucide-react"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 
 import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-notice"
+import { Response } from "@/components/ui/shadcn-io/ai/response"
 import type { ResolvedTimelineItem } from "@/lib/ai-agent/session-state"
 import { getTaskStatusLabel, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
 import type { TaskView } from "@/lib/api/ai-agent"
@@ -474,25 +475,39 @@ function TimelineMessageItem({
 }) {
   const isUser = entry.data.role === "user"
 
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div className="flex max-w-[85%] flex-col items-end gap-1">
+          <span className="px-1 text-xs text-muted-foreground">
+            {formatDateTime(entry.data.created_at)}
+          </span>
+          <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 shadow-sm">
+            <div className="whitespace-pre-wrap break-words text-sm leading-6">
+              {entry.data.content}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "max-w-[85%] rounded-2xl px-4 py-3 shadow-sm",
-          isUser ? "bg-primary text-primary-foreground" : "border border-border/60 bg-muted/20"
-        )}
-      >
+    <div className="flex justify-start">
+      <div className="max-w-[85%] px-1 py-1">
         <div className="mb-2 flex items-center gap-2 text-xs opacity-80">
-          <span>{isUser ? tText("exportRoleUser") : tText("exportRoleAssistant")}</span>
+          <span>{tText("exportRoleAssistant")}</span>
           <span>{formatDateTime(entry.data.created_at)}</span>
-          {entry.data.pending && !isUser && (
+          {entry.data.pending && (
             <span className="inline-flex items-center gap-1">
               <Loader2 className="size-3 animate-spin" />
               {tText("assistantReplying")}
             </span>
           )}
         </div>
-        <div className="whitespace-pre-wrap break-words text-sm leading-6">{entry.data.content}</div>
+        <Response className="text-sm leading-6 break-words [&_pre]:text-xs">
+          {entry.data.content}
+        </Response>
       </div>
     </div>
   )

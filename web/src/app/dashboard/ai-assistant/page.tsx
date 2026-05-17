@@ -702,14 +702,14 @@ export default function AIAssistantPage() {
           )}
         </aside>
 
-        <div className="order-1 min-w-0 flex-1 overflow-y-auto px-4 pb-4 md:px-6 md:pb-6 lg:overflow-hidden">
+        <div className="order-1 min-w-0 flex-1 overflow-y-auto pb-4 md:pb-6 lg:overflow-hidden">
           <div className="flex h-full min-h-0 flex-col">
             <div className="min-h-0 flex-1 overflow-hidden">
               {hasTimeline ? (
-                <Conversation className="mx-auto h-full w-full max-w-5xl">
+                <Conversation className="h-full w-full">
                   <ConversationContent
-                    className="mx-auto w-full max-w-4xl space-y-4 px-0 py-6"
-                    scrollClassName="h-full w-full overflow-y-auto px-1 scrollbar-custom"
+                    className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6"
+                    scrollClassName="h-full w-full overflow-y-auto scrollbar-custom"
                   >
                     <DashboardAgentTimeline entries={visibleTimeline} tText={t} />
                   </ConversationContent>
@@ -722,7 +722,7 @@ export default function AIAssistantPage() {
 
             <div className="shrink-0 pt-4">
             {ready && isConfigured && pendingConfirmationTasks.length > 0 && (
-              <div className="mx-auto mb-3 w-full max-w-4xl rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 shadow-sm">
+              <div className="mx-auto mb-3 w-full max-w-[72rem] rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 shadow-sm">
                 <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
                   <Shield className="size-4" />
                   {t("pendingConfirmationTitle")}
@@ -751,12 +751,12 @@ export default function AIAssistantPage() {
             )}
 
             {error && (
-              <AgentNoticeCard tone="error" size="md" className="mx-auto mb-3 w-full max-w-4xl shadow-sm">
+              <AgentNoticeCard tone="error" size="md" className="mx-auto mb-3 w-full max-w-[72rem] shadow-sm">
                 {error}
               </AgentNoticeCard>
             )}
 
-            <div className="mx-auto w-full max-w-4xl">
+            <div className="mx-auto w-full max-w-[72rem]">
               <input
                   ref={fileInputRef}
                   type="file"
@@ -786,12 +786,12 @@ export default function AIAssistantPage() {
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     placeholder={hasTimeline ? t("composerPlaceholder") : t("inputPlaceholder")}
-                    minHeight={76}
-                    maxHeight={220}
-                    className="px-4 pt-4"
+                    minHeight={56}
+                    maxHeight={180}
+                    className="px-4 pt-3 text-sm"
                   />
 
-                <PromptInputToolbar className="flex-wrap gap-3 px-2 py-2">
+                <PromptInputToolbar className="flex-wrap gap-3 px-2 py-1.5">
                   <PromptInputTools className="flex flex-wrap items-center gap-2">
                     <PromptInputModelSelect
                         value={selectedModel}
@@ -966,7 +966,7 @@ export default function AIAssistantPage() {
                           type="button"
                           status="streaming"
                           size="icon"
-                          className="h-10 w-10"
+                          className="h-9 w-9"
                           aria-label="中断回复"
                           title="中断回复"
                           onClick={() => void cancelSession()}
@@ -977,7 +977,7 @@ export default function AIAssistantPage() {
                         <PromptInputSubmit
                           disabled={!canSubmit}
                           size="icon"
-                          className="h-10 w-10"
+                          className="h-9 w-9"
                           aria-label={t("send")}
                           title={t("send")}
                         >

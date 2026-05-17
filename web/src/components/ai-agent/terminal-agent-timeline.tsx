@@ -1,12 +1,13 @@
 "use client"
 
 import { memo, useMemo, useState } from "react"
-import { Bot, Brain, ChevronRight, Loader2, Sparkles, User } from "lucide-react"
+import { Bot, Brain, ChevronRight, Loader2, Sparkles } from "lucide-react"
 
 import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-notice"
 import { AgentTimeline } from "@/components/ai-agent/agent-timeline"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Response } from "@/components/ui/shadcn-io/ai/response"
 import {
   Collapsible,
   CollapsibleContent,
@@ -102,46 +103,6 @@ function getTaskBadgeClassName(status: TaskView["status"]) {
   }
 }
 
-const MessageContent = memo(({ content }: { content: string }) => {
-  const parts = content.split(/```(\w+)?\n?([\s\S]*?)```/g)
-
-  return (
-    <div className="space-y-2">
-      {parts.map((part, index) => {
-        if (index % 3 === 2) {
-          const language = parts[index - 1] || "text"
-          return (
-            <div key={index} className="group relative">
-              {language && language !== "text" && (
-                <div className="absolute right-2 top-2 rounded border border-border bg-background/80 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-                  {language}
-                </div>
-              )}
-              <pre className="overflow-x-auto rounded-md border border-zinc-800/50 bg-zinc-950 p-3 dark:bg-zinc-900/50">
-                <code className="text-xs font-mono leading-relaxed text-zinc-100 dark:text-zinc-300">
-                  {part.trim()}
-                </code>
-              </pre>
-            </div>
-          )
-        }
-
-        if (index % 3 === 0 && part) {
-          return (
-            <div key={index} className="whitespace-pre-wrap">
-              {part}
-            </div>
-          )
-        }
-
-        return null
-      })}
-    </div>
-  )
-})
-
-MessageContent.displayName = "MessageContent"
-
 const MessageItem = memo(({
   message,
   thinkingLabel,
@@ -166,19 +127,14 @@ const MessageItem = memo(({
 
   if (message.role === "user") {
     return (
-      <div className="flex flex-row-reverse items-start gap-3">
-        <div
-          className="h-7 w-7 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center"
-          aria-hidden="true"
-        >
-          <User className="h-3.5 w-3.5" />
-        </div>
-
+      <div className="flex justify-end">
         <div className="flex max-w-[85%] flex-col items-end gap-1">
-          <div className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
-            <MessageContent content={message.content} />
-          </div>
           <span className="px-1 text-xs text-muted-foreground">{formatMessageTime(message.created_at)}</span>
+          <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm text-foreground">
+            <div className="whitespace-pre-wrap break-words leading-6">
+              {message.content}
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -228,8 +184,10 @@ const MessageItem = memo(({
         )}
 
         {parsedAssistant?.content && (
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
-            <MessageContent content={parsedAssistant.content} />
+          <div className="px-1 py-1 text-sm text-foreground">
+            <Response className="text-sm leading-6 break-words [&_pre]:text-xs">
+              {parsedAssistant.content}
+            </Response>
           </div>
         )}
 

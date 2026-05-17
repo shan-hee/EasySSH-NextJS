@@ -124,6 +124,7 @@ export function ServerTagCombobox({
               key={tag}
               type="button"
               role="option"
+              aria-selected={false}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => commitTag(tag)}
               className={cn(
@@ -140,6 +141,7 @@ export function ServerTagCombobox({
             <button
               type="button"
               role="option"
+              aria-selected={false}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => commitTag(tagToCreate)}
               className={cn(
