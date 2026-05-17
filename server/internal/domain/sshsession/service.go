@@ -22,6 +22,7 @@ type Service interface {
 	GetSSHSessionBySessionID(sessionID string) (*SSHSession, error)
 	ListSSHSessions(userID uuid.UUID, req *ListSSHSessionsRequest) (*ListSSHSessionsResponse, error)
 	GetStatistics(userID uuid.UUID) (*SSHSessionStatistics, error)
+	CleanupOldHistory(userID uuid.UUID, retentionDays int) (int64, error)
 	CloseSession(userID uuid.UUID, id uuid.UUID) error
 	UpdateSessionMetrics(sessionID string, bytesSent, bytesReceived int64) error
 }
@@ -44,15 +45,15 @@ func (s *service) CreateSSHSession(req *CreateSSHSessionRequest) (*SSHSession, e
 
 	// 构建SSH会话记录
 	session := &SSHSession{
-		UserID:       req.UserID,
-		ServerID:     req.ServerID,
-		SessionID:    req.SessionID,
-		ClientIP:     req.ClientIP,
-		ClientPort:   req.ClientPort,
-		TerminalType: req.TerminalType,
-		Status:       "active",
-		ConnectedAt:  time.Now(),
-		BytesSent:    0,
+		UserID:        req.UserID,
+		ServerID:      req.ServerID,
+		SessionID:     req.SessionID,
+		ClientIP:      req.ClientIP,
+		ClientPort:    req.ClientPort,
+		TerminalType:  req.TerminalType,
+		Status:        "active",
+		ConnectedAt:   time.Now(),
+		BytesSent:     0,
 		BytesReceived: 0,
 	}
 
@@ -188,6 +189,16 @@ func (s *service) ListSSHSessions(userID uuid.UUID, req *ListSSHSessionsRequest)
 // GetStatistics 获取SSH会话统计信息
 func (s *service) GetStatistics(userID uuid.UUID) (*SSHSessionStatistics, error) {
 	return s.repo.GetStatistics(userID)
+}
+
+// CleanupOldHistory 清理当前用户超过保留期的历史会话记录
+func (s *service) CleanupOldHistory(userID uuid.UUID, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		retentionDays = 90
+	}
+
+	before := time.Now().AddDate(0, 0, -retentionDays)
+	return s.repo.DeleteOldHistory(userID, before)
 }
 
 // CloseSession 关闭SSH会话

@@ -57,6 +57,9 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onEscapeKeyDown,
+  onInteractOutside,
+  onPointerDownOutside,
   onOpenAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -72,6 +75,18 @@ function DialogContent({
           className
         )}
         onOpenAutoFocus={onOpenAutoFocus}
+        onEscapeKeyDown={(event) => {
+          onEscapeKeyDown?.(event)
+          event.preventDefault()
+        }}
+        onInteractOutside={(event) => {
+          onInteractOutside?.(event)
+          event.preventDefault()
+        }}
+        onPointerDownOutside={(event) => {
+          onPointerDownOutside?.(event)
+          event.preventDefault()
+        }}
         {...props}
       >
         {children}

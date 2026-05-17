@@ -2,6 +2,7 @@ package rest
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/gin-gonic/gin"
@@ -124,6 +125,43 @@ func (h *SSHSessionHandler) Delete(c *gin.Context) {
 	}
 
 	RespondSuccess(c, gin.H{"message": "SSH session deleted successfully"})
+}
+
+// CleanupOldHistory 清理旧 SSH 会话记录
+// DELETE /api/v1/ssh-sessions?retention_days=90
+func (h *SSHSessionHandler) CleanupOldHistory(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "user_id not found")
+		return
+	}
+
+	uid, err := uuid.Parse(userID.(string))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid_user_id", err.Error())
+		return
+	}
+
+	retentionStr := c.DefaultQuery("retention_days", "90")
+	retentionDays, err := strconv.Atoi(retentionStr)
+	if err != nil || retentionDays <= 0 {
+		retentionDays = 90
+	}
+	if retentionDays > 3650 {
+		RespondError(c, http.StatusBadRequest, "invalid_retention_days", "Retention days must be between 1 and 3650")
+		return
+	}
+
+	deletedCount, err := h.sshSessionService.CleanupOldHistory(uid, retentionDays)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "cleanup_failed", err.Error())
+		return
+	}
+
+	RespondSuccessWithMessage(c, gin.H{
+		"deleted_count":  deletedCount,
+		"retention_days": retentionDays,
+	}, "Old SSH session history cleaned up successfully")
 }
 
 // GetStatistics 获取SSH会话统计信息

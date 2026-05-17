@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import type { QuickServer } from "./quick-connect"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
@@ -30,6 +30,61 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { useTranslations } from "next-intl"
 
 type LoaderState = "entering" | "loading" | "exiting"
+
+type LoaderAction =
+  | { type: "sync"; sessions: TerminalSession[] }
+  | { type: "animation-complete"; sessionId: string }
+
+const reduceLoaderStates = (
+  state: Record<string, LoaderState>,
+  action: LoaderAction
+): Record<string, LoaderState> => {
+  switch (action.type) {
+    case "animation-complete": {
+      if (!state[action.sessionId]) {
+        return state
+      }
+
+      const next = { ...state }
+      delete next[action.sessionId]
+      return next
+    }
+    case "sync": {
+      let changed = false
+      const next = { ...state }
+      const sessionIds = new Set(action.sessions.map((session) => session.id))
+
+      Object.keys(next).forEach((sessionId) => {
+        if (!sessionIds.has(sessionId)) {
+          delete next[sessionId]
+          changed = true
+        }
+      })
+
+      action.sessions.forEach((session) => {
+        const shouldShow = shouldShowConnectionLoader(session)
+        const currentState = next[session.id]
+
+        if (shouldShow) {
+          if (!currentState || currentState === "exiting") {
+            next[session.id] = "entering"
+            changed = true
+          }
+          return
+        }
+
+        if (currentState && currentState !== "exiting") {
+          next[session.id] = "exiting"
+          changed = true
+        }
+      })
+
+      return changed ? next : state
+    }
+    default:
+      return state
+  }
+}
 
 const PAGE_NAVIGATION_CLEANUP_DELAY_MS = 750
 const TAB_SWITCH_CLEANUP_DELAY_MS = 120
@@ -113,7 +168,7 @@ export function TerminalComponent({
     externalActiveSessionId || sessions[0]?.id || ""
   )
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [loaderStates, setLoaderStates] = useState<Record<string, LoaderState>>({})
+  const [loaderStates, dispatchLoaderStates] = useReducer(reduceLoaderStates, {})
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [internalBackVersion, setInternalBackVersion] = useState(0)
   const [activeSessionHistoryVersion, setActiveSessionHistoryVersion] = useState(0)
@@ -130,6 +185,10 @@ export function TerminalComponent({
   const deleteTabState = useTabUIStore(state => state.deleteTabState)
 
   // ==================== 获取活跃会话 ====================
+  const sessionIdSet = useMemo(
+    () => new Set(sessions.map((session) => session.id)),
+    [sessions]
+  )
   const active = sessions.find((s) => s.id === activeSession)
 
   const setActiveSessionFromUser = useCallback((nextSessionId: string) => {
@@ -138,8 +197,7 @@ export function TerminalComponent({
         return previousSessionId
       }
 
-      const sessionIds = new Set(sessions.map((session) => session.id))
-      if (previousSessionId && sessionIds.has(previousSessionId)) {
+      if (previousSessionId && sessionIdSet.has(previousSessionId)) {
         activeSessionHistoryRef.current = [
           ...activeSessionHistoryRef.current.filter((id) => id !== previousSessionId),
           previousSessionId,
@@ -149,7 +207,7 @@ export function TerminalComponent({
 
       return nextSessionId
     })
-  }, [sessions])
+  }, [sessionIdSet])
 
   const setActiveSessionWithoutHistory = useCallback((nextSessionId: string) => {
     setActiveSession(nextSessionId)
@@ -157,13 +215,16 @@ export function TerminalComponent({
 
   // 当外部传入 activeSessionId 时，切换激活的会话
   useEffect(() => {
-    if (
-      externalActiveSessionId &&
-      sessions.some((session) => session.id === externalActiveSessionId)
-    ) {
-      setActiveSessionWithoutHistory(externalActiveSessionId)
+	    if (
+	      externalActiveSessionId &&
+	      sessionIdSet.has(externalActiveSessionId)
+	    ) {
+      const frame = window.requestAnimationFrame(() => {
+        setActiveSessionWithoutHistory(externalActiveSessionId)
+      })
+      return () => window.cancelAnimationFrame(frame)
     }
-  }, [externalActiveSessionId, sessions, setActiveSessionWithoutHistory])
+  }, [externalActiveSessionId, sessionIdSet, setActiveSessionWithoutHistory])
 
   useEffect(() => {
     activeSessionRef.current = activeSession
@@ -177,14 +238,16 @@ export function TerminalComponent({
   }, [activeSession, onActiveSessionChange])
 
   useEffect(() => {
-    const sessionIds = new Set(sessions.map((session) => session.id))
-    const filteredHistory = activeSessionHistoryRef.current.filter((id) => sessionIds.has(id))
+    const filteredHistory = activeSessionHistoryRef.current.filter((id) => sessionIdSet.has(id))
 
     if (filteredHistory.length !== activeSessionHistoryRef.current.length) {
       activeSessionHistoryRef.current = filteredHistory
-      setActiveSessionHistoryVersion((version) => version + 1)
+      const frame = window.requestAnimationFrame(() => {
+        setActiveSessionHistoryVersion((version) => version + 1)
+      })
+      return () => window.cancelAnimationFrame(frame)
     }
-  }, [sessions])
+  }, [sessionIdSet])
 
   const handleInternalBackHandlerChange = useCallback((
     sessionId: string,
@@ -565,17 +628,9 @@ export function TerminalComponent({
     cleanupSessionsAfterTabSwitch(removedSessionIds)
   }
 
-  const handleAnimationComplete = (sessionId: string) => {
-    setLoaderStates(prev => {
-      if (!prev[sessionId]) {
-        return prev
-      }
-
-      const next = { ...prev }
-      delete next[sessionId]
-      return next
-    })
-  }
+	  const handleAnimationComplete = (sessionId: string) => {
+	    dispatchLoaderStates({ type: "animation-complete", sessionId })
+	  }
 
   const activeLoaderState = active ? loaderStates[active.id] : undefined
   const effectiveIsLoading = !!(
@@ -583,45 +638,10 @@ export function TerminalComponent({
     (shouldShowConnectionLoader(active) || activeLoaderState)
   )
 
-  // Loader 只跟随连接 phase，不再依赖额外的 onLoadingChange 回调。
-  useEffect(() => {
-    setLoaderStates(prev => {
-      let changed = false
-      const next = { ...prev }
-      const sessionIds = new Set(sessions.map((session) => session.id))
-
-      Object.keys(next).forEach((sessionId) => {
-        if (!sessionIds.has(sessionId)) {
-          delete next[sessionId]
-          changed = true
-        }
-      })
-
-      sessions.forEach((session) => {
-        const shouldShow = shouldShowConnectionLoader(session)
-        const currentState = next[session.id]
-
-        if (shouldShow) {
-          if (!currentState || currentState === "exiting") {
-            next[session.id] = "entering"
-            changed = true
-          }
-          return
-        }
-
-        if (currentState && currentState !== "exiting") {
-          next[session.id] = "exiting"
-          changed = true
-        }
-      })
-
-      if (!changed) {
-        return prev
-      }
-
-      return next
-    })
-  }, [sessions])
+	  // Loader 只跟随连接 phase，不再依赖额外的 onLoadingChange 回调。
+	  useEffect(() => {
+	    dispatchLoaderStates({ type: "sync", sessions })
+	  }, [sessions])
 
   // 键盘快捷键支持
   // AI 助手快捷键（Ctrl+K）已移至 TabTerminalContent 组件内部

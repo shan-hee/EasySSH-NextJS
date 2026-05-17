@@ -842,6 +842,7 @@ func main() {
 		sshSessionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
 			sshSessionRoutes.GET("", sshSessionHandler.List)                     // 会话列表
+			sshSessionRoutes.DELETE("", sshSessionHandler.CleanupOldHistory)     // 清理旧会话记录
 			sshSessionRoutes.GET("/statistics", sshSessionHandler.GetStatistics) // 统计信息
 			sshSessionRoutes.GET("/:id", sshSessionHandler.GetByID)              // 会话详情
 			sshSessionRoutes.DELETE("/:id", sshSessionHandler.Delete)            // 删除会话

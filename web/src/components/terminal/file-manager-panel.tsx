@@ -77,17 +77,20 @@ export function FileManagerPanel({
   const topOffset = anchorTop ?? 0
   const [isPanelVisible, setIsPanelVisible] = useState(false)
 
-  useEffect(() => {
-    if (isOpen) {
-      const frame = window.requestAnimationFrame(() => {
-        setIsPanelVisible(true)
-      })
-
-      return () => window.cancelAnimationFrame(frame)
-    }
-
-    setIsPanelVisible(false)
-  }, [isOpen])
+	  useEffect(() => {
+	    let frame = 0
+	    if (isOpen) {
+	      frame = window.requestAnimationFrame(() => {
+	        setIsPanelVisible(true)
+	      })
+	    } else {
+	      frame = window.requestAnimationFrame(() => {
+	        setIsPanelVisible(false)
+	      })
+	    }
+	
+	    return () => window.cancelAnimationFrame(frame)
+	  }, [isOpen])
 
   // 保存宽度到 localStorage
   useEffect(() => {

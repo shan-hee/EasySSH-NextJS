@@ -676,7 +676,7 @@ export const sftpApi = {
   /**
    * 单文件下载（直接触发浏览器下载，使用浏览器原生下载管理器显示进度）
    */
-  downloadFile(serverId: string, path: string, fileName?: string): void {
+  downloadFile(serverId: string, path: string): void {
     void (async () => {
       try {
         const apiUrl = getApiUrl()

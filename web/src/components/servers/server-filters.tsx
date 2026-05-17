@@ -20,7 +20,7 @@ import {
 } from "lucide-react"
 
 interface FilterOptions {
-  status: string
+  group: string
   tag: string
   os: string
   sortBy: string
@@ -34,7 +34,7 @@ interface Server {
   host: string
   port: number
   username: string
-  status: "online" | "offline" | "warning"
+  group?: string
   os: string
   cpu: string
   memory: string
@@ -59,7 +59,7 @@ export function ServerFilters({
 }: ServerFiltersProps) {
   const t = useTranslations("servers")
   const [filters, setFilters] = useState<FilterOptions>({
-    status: 'all',
+    group: 'all',
     tag: 'all',
     os: 'all',
     sortBy: 'name',
@@ -83,13 +83,15 @@ export function ServerFilters({
     new Set(servers.map(server => server.os).filter(os => os && os.trim()))
   )
 
-  // 获取状态统计
-  const statusCounts = {
-    all: servers.length,
-    online: servers.filter(s => s.status === 'online').length,
-    offline: servers.filter(s => s.status === 'offline').length,
-    warning: servers.filter(s => s.status === 'warning').length
-  }
+  // 获取分组统计
+  const groupCounts = Array.from(
+    servers.reduce((counts, server) => {
+      const group = server.group?.trim()
+      if (!group) return counts
+      counts.set(group, (counts.get(group) || 0) + 1)
+      return counts
+    }, new Map<string, number>())
+  ).sort(([a], [b]) => a.localeCompare(b, "zh-CN"))
 
   const handleFilterChange = (key: keyof FilterOptions, value: string) => {
     const newFilters = { ...filters, [key]: value }
@@ -104,7 +106,7 @@ export function ServerFilters({
 
   const resetFilters = () => {
     const defaultFilters: FilterOptions = {
-      status: 'all',
+      group: 'all',
       tag: 'all',
       os: 'all',
       sortBy: 'name',
@@ -145,45 +147,27 @@ export function ServerFilters({
       </div>
 
       <div className="space-y-4">
-        {/* 状态筛选 */}
+        {/* 分组筛选 */}
         <div className="flex flex-wrap gap-2">
           <Button
-            variant={filters.status === 'all' ? 'default' : 'outline'}
+            variant={filters.group === 'all' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => handleFilterChange('status', 'all')}
+            onClick={() => handleFilterChange('group', 'all')}
             className="h-8"
           >
-            全部 ({statusCounts.all})
+            {t("tabAll")} ({servers.length})
           </Button>
-          <Button
-            variant={filters.status === 'online' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handleFilterChange('status', 'online')}
-            className="h-8"
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />
-            {t("filterStatusOnlineLabel")} ({statusCounts.online})
-          </Button>
-          <Button
-            variant={filters.status === 'offline' ? 'outline' : 'outline'}
-            size="sm"
-            onClick={() => handleFilterChange('status', 'offline')}
-            className="h-8"
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 mr-1.5" />
-            {t("filterStatusOfflineLabel")} ({statusCounts.offline})
-          </Button>
-          {statusCounts.warning > 0 && (
+          {groupCounts.map(([group, count]) => (
             <Button
-              variant={filters.status === 'warning' ? 'default' : 'outline'}
+              key={group}
+              variant={filters.group === group ? 'default' : 'outline'}
               size="sm"
-              onClick={() => handleFilterChange('status', 'warning')}
+              onClick={() => handleFilterChange('group', group)}
               className="h-8"
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1.5" />
-              {t("filterStatusWarningLabel")} ({statusCounts.warning})
+              {group} ({count})
             </Button>
-          )}
+          ))}
         </div>
 
         {/* 高级筛选 - 只在有数据时显示 */}
@@ -263,9 +247,6 @@ export function ServerFilters({
                       <SelectItem value="host">
                         {t("filterSortOptionHost")}
                       </SelectItem>
-                      <SelectItem value="status">
-                        {t("filterSortOptionStatus")}
-                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -286,7 +267,7 @@ export function ServerFilters({
         )}
 
         {/* 重置按钮 */}
-        {(filters.status !== 'all' || filters.tag !== 'all' || filters.os !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
+        {(filters.group !== 'all' || filters.tag !== 'all' || filters.os !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
           <>
             <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
             <div className="flex justify-between items-center">

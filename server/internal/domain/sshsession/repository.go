@@ -1,6 +1,8 @@
 package sshsession
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -10,6 +12,7 @@ type Repository interface {
 	Create(session *SSHSession) error
 	Update(id uuid.UUID, updates map[string]interface{}) error
 	Delete(id uuid.UUID) error
+	DeleteOldHistory(userID uuid.UUID, before time.Time) (int64, error)
 	GetByID(id uuid.UUID) (*SSHSession, error)
 	GetBySessionID(sessionID string) (*SSHSession, error)
 	List(userID uuid.UUID, req *ListSSHSessionsRequest) ([]SSHSessionWithServer, int64, error)
@@ -40,6 +43,15 @@ func (r *repository) Update(id uuid.UUID, updates map[string]interface{}) error 
 // Delete 删除SSH会话记录（软删除）
 func (r *repository) Delete(id uuid.UUID) error {
 	return r.db.Where("id = ?", id).Delete(&SSHSession{}).Error
+}
+
+// DeleteOldHistory 清理指定用户已结束且超过保留期的 SSH 会话记录（软删除）
+func (r *repository) DeleteOldHistory(userID uuid.UUID, before time.Time) (int64, error) {
+	result := r.db.
+		Where("user_id = ? AND status <> ? AND COALESCE(disconnected_at, connected_at) < ?", userID, "active", before).
+		Delete(&SSHSession{})
+
+	return result.RowsAffected, result.Error
 }
 
 // GetByID 根据ID获取SSH会话记录

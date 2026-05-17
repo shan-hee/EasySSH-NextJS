@@ -1,15 +1,28 @@
 "use client"
 
-import React, { useState, useCallback, useTransition, useOptimistic } from "react"
+import React, { useState, useCallback, useMemo, useTransition, useOptimistic } from "react"
 import { useTranslations } from "next-intl"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, Activity, ArrowUpDown, ArrowDownUp } from "lucide-react"
+import { Clock, Activity, ArrowUpDown, ArrowDownUp, Trash2, Loader2 } from "lucide-react"
 import { SkeletonStatsCard } from "@/components/ui/loading"
 import { sshSessionsApi, type SSHSessionDetail, type SSHSessionStatistics } from "@/lib/api/ssh-sessions"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { createSessionColumns } from "./session-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 
@@ -53,11 +66,15 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     total_bytes_received: 0,
     by_server: {},
   })
-  const [refreshing, setRefreshing] = useState(!initialData)
+  const [initialLoading, setInitialLoading] = useState(!initialData)
+  const [tableLoading, setTableLoading] = useState(false)
   const [page, setPage] = useState(initialData?.currentPage || 1)
-  const [pageSize, setPageSize] = useState(initialData?.pageSize || 10)
-  const [totalPages, setTotalPages] = useState(initialData?.totalPages || 1)
+  const [pageSize, setPageSize] = useState(initialData?.pageSize || 20)
+  const [totalPages, setTotalPages] = useState(initialData?.totalPages || 0)
   const [totalCount, setTotalCount] = useState(initialData?.totalCount || 0)
+  const [cleanupOpen, setCleanupOpen] = useState(false)
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [retentionDays, setRetentionDays] = useState("90")
 
   // 乐观更新：立即从 UI 中移除删除的项目
   const [optimisticSessions, setOptimisticSessions] = useOptimistic(
@@ -65,19 +82,22 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     (state, deletedId: string) => state.filter((session) => session.id !== deletedId)
   )
 
-  // 加载数据
-  const loadData = useCallback(
-    async (currentPage: number, currentPageSize: number) => {
+  // 加载会话列表
+  const loadSessions = useCallback(
+    async (
+      currentPage: number,
+      currentPageSize: number,
+      options: { showTableLoading?: boolean } = {},
+    ) => {
       try {
-        setRefreshing(true)
-        // 并行加载会话列表和统计信息
-        const [sessionsResponse, statsResponse] = await Promise.all([
-          sshSessionsApi.list({
-            page: currentPage,
-            limit: currentPageSize,
-          }),
-          sshSessionsApi.getStatistics(),
-        ])
+        if (options.showTableLoading) {
+          setTableLoading(true)
+        }
+
+        const sessionsResponse = await sshSessionsApi.list({
+          page: currentPage,
+          limit: currentPageSize,
+        })
 
         // 确保 data 是数组
         const sessionData = Array.isArray(sessionsResponse.data)
@@ -86,36 +106,62 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
         setSessions(sessionData)
         setTotalPages(sessionsResponse.total_pages || 1)
         setTotalCount(sessionsResponse.total || 0)
-        setStatistics(statsResponse)
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, t("toastLoadFailed")))
       } finally {
-        setRefreshing(false)
+        if (options.showTableLoading) {
+          setTableLoading(false)
+        }
       }
     },
     [t]
   )
 
+  // 加载统计信息
+  const loadStatistics = useCallback(async () => {
+    try {
+      const statsResponse = await sshSessionsApi.getStatistics()
+      setStatistics(statsResponse)
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, t("toastLoadFailed")))
+    }
+  }, [t])
+
   // 初始加载数据（纯 CSR 模式，仅在已认证且全局状态就绪时触发）
   React.useEffect(() => {
     if (initialData) return
     if (!ready) return
-    loadData(page, pageSize)
+    const loadInitialData = async () => {
+      try {
+        setInitialLoading(true)
+        await Promise.all([
+          loadSessions(page, pageSize),
+          loadStatistics(),
+        ])
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    loadInitialData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, initialData])
 
   // 刷新数据
-  const handleRefresh = async () => {
-    await loadData(page, pageSize)
-  }
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      loadSessions(page, pageSize, { showTableLoading: true }),
+      loadStatistics(),
+    ])
+  }, [loadSessions, loadStatistics, page, pageSize])
 
   // 页码变化
   const handlePageChange = useCallback(
     (newPage: number) => {
       setPage(newPage)
-      loadData(newPage, pageSize)
+      loadSessions(newPage, pageSize, { showTableLoading: true })
     },
-    [pageSize, loadData]
+    [pageSize, loadSessions]
   )
 
   // 每页数量变化
@@ -123,13 +169,13 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     (newPageSize: number) => {
       setPageSize(newPageSize)
       setPage(1) // 重置到第一页
-      loadData(1, newPageSize)
+      loadSessions(1, newPageSize, { showTableLoading: true })
     },
-    [loadData]
+    [loadSessions]
   )
 
   // 删除会话记录（使用 API + 乐观更新）
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     if (!confirm(t("toastDeleteConfirm"))) {
       return
     }
@@ -142,17 +188,28 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
         await sshSessionsApi.delete(id)
         toast.success(t("toastDeleteSuccess"))
         // 刷新数据
-        await loadData(page, pageSize)
+        await Promise.all([
+          loadSessions(page, pageSize, { showTableLoading: true }),
+          loadStatistics(),
+        ])
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, t("toastDeleteFailed")))
         // 恢复数据
-        await loadData(page, pageSize)
+        await loadSessions(page, pageSize, { showTableLoading: true })
       }
     })
-  }
+  }, [
+    loadSessions,
+    loadStatistics,
+    page,
+    pageSize,
+    setOptimisticSessions,
+    startTransition,
+    t,
+  ])
 
   // 导出会话数据
-  const handleExportSession = (session: SSHSessionDetail) => {
+  const handleExportSession = useCallback((session: SSHSessionDetail) => {
     const data = {
       sessionId: session.session_id,
       clientIp: session.client_ip,
@@ -176,34 +233,69 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     a.click()
     URL.revokeObjectURL(url)
     toast.success(t("toastExportSuccess"))
-  }
+  }, [t])
+
+  const handleCleanupSessions = useCallback(async () => {
+    const parsedRetentionDays = Number(retentionDays)
+    if (
+      !Number.isInteger(parsedRetentionDays) ||
+      parsedRetentionDays < 1 ||
+      parsedRetentionDays > 3650
+    ) {
+      toast.error(t("cleanupInvalidRetention"))
+      return
+    }
+
+    try {
+      setCleanupLoading(true)
+      const result = await sshSessionsApi.cleanup(parsedRetentionDays)
+      toast.success(t("cleanupSuccess", { count: result.deleted_count }))
+      setCleanupOpen(false)
+      setPage(1)
+      await Promise.all([
+        loadSessions(1, pageSize, { showTableLoading: true }),
+        loadStatistics(),
+      ])
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, t("cleanupFailed")))
+    } finally {
+      setCleanupLoading(false)
+    }
+  }, [loadSessions, loadStatistics, pageSize, retentionDays, t])
 
   // 创建列定义
-  const columns = createSessionColumns(
-    {
-      onExport: handleExportSession,
-      onDelete: handleDelete,
-    },
-    (key, values) => t(key as Parameters<typeof t>[0], values)
+  const columns = useMemo(
+    () =>
+      createSessionColumns(
+        {
+          onExport: handleExportSession,
+          onDelete: handleDelete,
+        },
+        (key, values) => t(key as Parameters<typeof t>[0], values)
+      ),
+    [handleDelete, handleExportSession, t]
   )
 
   // 状态筛选选项
-  const statusFilters = [
-    {
-      column: "status",
-      title: t("filterStatusTitle"),
-      options: [
-        { label: t("filterStatusActive"), value: "active" },
-        { label: t("filterStatusClosed"), value: "closed" },
-        { label: t("filterStatusTimeout"), value: "timeout" },
-      ],
-    },
-  ]
+  const statusFilters = useMemo(
+    () => [
+      {
+        column: "status",
+        title: t("filterStatusTitle"),
+        options: [
+          { label: t("filterStatusActive"), value: "active" },
+          { label: t("filterStatusClosed"), value: "closed" },
+          { label: t("filterStatusTimeout"), value: "timeout" },
+        ],
+      },
+    ],
+    [t]
+  )
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
+    <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
       {/* 统计卡片 - 加载时显示骨架屏 */}
-      {refreshing && !initialData ? (
+      {initialLoading ? (
         <div className="grid gap-4 md:grid-cols-4 shrink-0">
           <SkeletonStatsCard />
           <SkeletonStatsCard />
@@ -286,7 +378,7 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
       <DataTable
         data={optimisticSessions}
         columns={columns}
-        loading={refreshing || isPending}
+        loading={initialLoading || tableLoading || isPending}
         currentPage={page}
         pageCount={totalPages}
         pageSize={pageSize}
@@ -302,9 +394,66 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
             filters={statusFilters}
             onRefresh={handleRefresh}
             showRefresh={true}
-          />
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-destructive hover:text-destructive"
+              onClick={() => setCleanupOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t("cleanupButton")}
+            </Button>
+          </DataTableToolbar>
         )}
       />
+
+      <AlertDialog open={cleanupOpen} onOpenChange={setCleanupOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("cleanupDialogTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("cleanupDialogDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="ssh-session-retention-days">{t("cleanupRetentionLabel")}</Label>
+            <Input
+              id="ssh-session-retention-days"
+              type="number"
+              min={1}
+              max={3650}
+              value={retentionDays}
+              disabled={cleanupLoading}
+              onChange={(event) => setRetentionDays(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t("cleanupRetentionHint")}</p>
+            <p className="text-xs text-destructive">{t("cleanupWarning")}</p>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cleanupLoading}>{t("cleanupCancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={cleanupLoading}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleCleanupSessions()
+              }}
+            >
+              {cleanupLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("cleanupRunning")}
+                </>
+              ) : (
+                t("cleanupConfirm")
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

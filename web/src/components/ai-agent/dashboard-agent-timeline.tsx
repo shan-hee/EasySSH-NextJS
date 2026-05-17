@@ -520,7 +520,7 @@ function TimelineTaskGroup({
   tText: TimelineTranslate
 }) {
   const { isAtBottom, scrollToBottom, state } = useStickToBottomContext()
-  const tasks = entries.map((entry) => entry.data)
+  const tasks = useMemo(() => entries.map((entry) => entry.data), [entries])
   const shouldStayOpen = shouldKeepTaskGroupOpen(tasks)
   const previousShouldStayOpenRef = useRef(shouldStayOpen)
   const [isOpen, setIsOpen] = useState(shouldStayOpen)
@@ -550,14 +550,26 @@ function TimelineTaskGroup({
   }, [scrollToBottom, shouldKeepConversationBottomVisible])
 
   useEffect(() => {
+    const wasStayingOpen = previousShouldStayOpenRef.current
+    previousShouldStayOpenRef.current = shouldStayOpen
+
+    let frame = 0
     if (shouldStayOpen) {
-      setIsOpen(true)
-    } else if (previousShouldStayOpenRef.current) {
-      setIsOpen(false)
-      syncConversationBottom("instant")
+      frame = window.requestAnimationFrame(() => {
+        setIsOpen(true)
+      })
+    } else if (wasStayingOpen) {
+      frame = window.requestAnimationFrame(() => {
+        setIsOpen(false)
+        syncConversationBottom("instant")
+      })
     }
 
-    previousShouldStayOpenRef.current = shouldStayOpen
+    return () => {
+      if (frame) {
+        window.cancelAnimationFrame(frame)
+      }
+    }
   }, [shouldStayOpen, syncConversationBottom])
 
   return (

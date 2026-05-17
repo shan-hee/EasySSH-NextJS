@@ -989,18 +989,15 @@ const messages = {
   },
   servers: {
     pageTitle: "Connection configs",
-    tooltipOffline: "Offline",
     tooltipConnect: "Connect terminal",
     tooltipEdit: "Edit config",
     tooltipDelete: "Delete server",
     searchPlaceholder: "Search by server name, host or username...",
     addServer: "Add server",
     tabAll: "All",
-    tabOnline: "Online",
-    tabOffline: "Offline",
     loadingList: "Loading server list...",
     emptyFilteredTitle: "No matching servers found",
-    emptyFilteredDescription: "Try adjusting the search text or filter tags",
+    emptyFilteredDescription: "Try adjusting the search text or group filter",
     emptyAllTitle: "No server configs",
     emptyAllDescription: "Click the button above to add your first server",
     confirmDelete: "Are you sure you want to delete this server? This action cannot be undone.",
@@ -1077,6 +1074,8 @@ const messages = {
     quickFormUsernamePlaceholder: "Enter username",
     quickFormNameLabel: "Note (optional)",
     quickFormNamePlaceholder: "Enter a note",
+    quickFormGroupLabel: "Group",
+    quickFormGroupPlaceholder: "Enter or select a group",
     quickFormAuthMethodLabel: "Authentication method",
     quickFormAuthMethodPassword: "Password",
     quickFormAuthMethodPrivateKey: "Private key",
@@ -1093,6 +1092,7 @@ const messages = {
     quickFormJumpServerNone: "None",
     quickFormTagsLabel: "Tags",
     quickFormTagsPlaceholder: "Add tag",
+    quickFormCreateTag: "Create tag {tag}",
     quickFormAutoConnectLabel: "Auto connect",
     quickFormAutoConnectDescription:
       "Automatically establish connection in the server list.",
@@ -1103,9 +1103,6 @@ const messages = {
     quickFormSaveButton: "Save",
 
     // List filters
-    filterStatusOnlineLabel: "Online",
-    filterStatusOfflineLabel: "Offline",
-    filterStatusWarningLabel: "Warning",
     filterTagLabel: "Filter by tag",
     filterTagPlaceholder: "Select tag",
     filterTagAll: "All tags",
@@ -1115,7 +1112,6 @@ const messages = {
     filterSortLabel: "Sort by",
     filterSortOptionName: "Name",
     filterSortOptionHost: "Host",
-    filterSortOptionStatus: "Status",
     filterResetButton: "Reset filters",
   },
   monitoringHealth: {
@@ -2683,6 +2679,22 @@ const messages = {
     durationMinutes: "{minutes} minutes",
     durationHoursMinutes: "{hours}h {minutes}m",
     durationHours: "{hours}h",
+
+    cleanupButton: "Clean history",
+    cleanupDialogTitle: "Clean connection history",
+    cleanupDialogDescription:
+      "Delete old connection history by retention days. This cannot be undone.",
+    cleanupRetentionLabel: "Retention days",
+    cleanupRetentionHint:
+      "Ended connection records older than this value will be deleted. For example, 90 keeps the latest 90 days.",
+    cleanupWarning:
+      "Active sessions will not be cleaned. Make sure these history records are no longer needed.",
+    cleanupCancel: "Cancel",
+    cleanupConfirm: "Clean",
+    cleanupRunning: "Cleaning...",
+    cleanupSuccess: "Cleaned {count} connection history records",
+    cleanupFailed: "Failed to clean connection history",
+    cleanupInvalidRetention: "Retention days must be between 1 and 3650",
 
     toastLoadFailed: "Failed to load connection history.",
     toastDeleteConfirm:

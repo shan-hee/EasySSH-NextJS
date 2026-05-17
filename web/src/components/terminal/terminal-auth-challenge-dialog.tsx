@@ -53,27 +53,35 @@ export function TerminalAuthChallengeDialog({
   const prompts = useMemo(() => prompt?.prompts ?? [], [prompt])
   const isCredentialRetry = prompt?.kind === "credential_retry"
 
-  useEffect(() => {
-    if (!prompt) {
-      setAnswers([])
-      setAuthMethod("password")
-      return
-    }
-
-    setAnswers(new Array(prompt.prompts.length).fill(""))
-    setAuthMethod(prompt.auth_method === "key" ? "key" : "password")
-    const timer = window.setTimeout(() => {
-      if (prompt.auth_method === "key") {
-        firstTextAreaRef.current?.focus()
+	  useEffect(() => {
+	    let frame = 0
+	    if (!prompt) {
+	      frame = window.requestAnimationFrame(() => {
+	        setAnswers([])
+	        setAuthMethod("password")
+	      })
+	      return () => window.cancelAnimationFrame(frame)
+	    }
+	
+	    frame = window.requestAnimationFrame(() => {
+	      setAnswers(new Array(prompt.prompts.length).fill(""))
+	      setAuthMethod(prompt.auth_method === "key" ? "key" : "password")
+	    })
+	    const timer = window.setTimeout(() => {
+	      if (prompt.auth_method === "key") {
+	        firstTextAreaRef.current?.focus()
         firstTextAreaRef.current?.select()
       } else {
         firstInputRef.current?.focus()
         firstInputRef.current?.select()
       }
-    }, 0)
-
-    return () => window.clearTimeout(timer)
-  }, [prompt])
+	    }, 0)
+	
+	    return () => {
+	      window.cancelAnimationFrame(frame)
+	      window.clearTimeout(timer)
+	    }
+	  }, [prompt])
 
   useEffect(() => {
     if (!prompt) return

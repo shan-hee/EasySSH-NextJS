@@ -204,18 +204,26 @@ export function TabTerminalContent({
   const hasBackgroundImage = settings.backgroundImage.trim().length > 0
   const enableTerminalWebgl = true
 
-  useEffect(() => {
-    if (canUseFileManager) {
-      setShouldRenderFileManager(true)
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setShouldRenderFileManager(false)
-    }, FILE_MANAGER_PANEL_ANIMATION_MS)
-
-    return () => window.clearTimeout(timer)
-  }, [canUseFileManager])
+	  useEffect(() => {
+	    let frame = 0
+	    if (canUseFileManager) {
+	      frame = window.requestAnimationFrame(() => {
+	        setShouldRenderFileManager(true)
+	      })
+	      return () => window.cancelAnimationFrame(frame)
+	    }
+	
+	    const timer = window.setTimeout(() => {
+	      setShouldRenderFileManager(false)
+	    }, FILE_MANAGER_PANEL_ANIMATION_MS)
+	
+	    return () => {
+	      if (frame) {
+	        window.cancelAnimationFrame(frame)
+	      }
+	      window.clearTimeout(timer)
+	    }
+	  }, [canUseFileManager])
 
   const canHandleInternalBack = isActive && (
     isFullscreen ||

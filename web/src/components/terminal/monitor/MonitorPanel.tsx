@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatBytes } from '@/lib/format-utils';
-import { WSStatus } from './hooks/useMonitorWebSocket';
+import { WSStatus, type MonitorMetrics } from './hooks/useMonitorWebSocket';
 import { useMonitoringData } from './contexts/MonitorWebSocketContext';
 import { SystemInfo } from './components/SystemInfo';
 import { CPUChart } from './components/CPUChart';
@@ -18,6 +18,8 @@ import { MemoryChart } from './components/MemoryChart';
 import { NetworkChart } from './components/NetworkChart';
 import { DiskUsage } from './components/DiskUsage';
 import { MonitorSkeleton } from './components/MonitorSkeleton';
+
+const EMPTY_METRICS_HISTORY: MonitorMetrics[] = [];
 
 interface MonitorPanelProps {
   className?: string;
@@ -62,16 +64,20 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
     status: WSStatus.DISCONNECTED,
     history: [],
   }));
-  const liveHistory = isLive ? getMetricsHistory() : [];
+  const liveHistory = isLive ? getMetricsHistory() : EMPTY_METRICS_HISTORY;
 
   useEffect(() => {
     if (!isLive) return;
 
-    setFrozenSnapshot({
-      metrics,
-      status,
-      history: liveHistory,
+    const frame = window.requestAnimationFrame(() => {
+      setFrozenSnapshot({
+        metrics,
+        status,
+        history: liveHistory,
+      });
     });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [isLive, metrics, status, liveHistory]);
 
   const displayMetrics = isLive ? metrics : frozenSnapshot.metrics;

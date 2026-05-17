@@ -224,7 +224,6 @@ export function useFileTransfer() {
 
       // WebSocket 连接引用
       let wsConnection: WebSocket | null = null;
-      let wsConnected = false;
 
       try {
         // 如果启用 WebSocket，先建立连接
@@ -294,22 +293,23 @@ export function useFileTransfer() {
               console.error('[useFileTransfer] WebSocket error:', err);
             };
 
-            wsConnection.onopen = () => {
-              wsConnected = true;
-            };
           }
 
           // 等待 WebSocket 连接（最多 2 秒）
-          await new Promise<void>((resolve) => {
-            const timeout = setTimeout(() => resolve(), 2000);
-            if (wsConnection) {
+          if (wsConnection) {
+            await new Promise<void>((resolve) => {
+              const timeout = setTimeout(() => resolve(), 2000);
+              if (wsConnection?.readyState === WebSocket.OPEN) {
+                clearTimeout(timeout);
+                resolve();
+                return;
+              }
               wsConnection.onopen = () => {
-                wsConnected = true;
                 clearTimeout(timeout);
                 resolve();
               };
-            }
-          });
+            });
+          }
         }
 
         // 浏览器到后端这一段仍由 XHR 提供客户端侧发送进度；后端 WebSocket 提供远端写入确认进度。

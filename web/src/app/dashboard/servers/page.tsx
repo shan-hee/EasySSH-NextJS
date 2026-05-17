@@ -1,20 +1,15 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
 import { EditServerDialog } from "@/components/servers/edit-server-dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
-import { serversApi, type Server, type AuthMethod, type ServerStatisticsResponse } from "@/lib/api"
+import { serversApi, type Server, type AuthMethod } from "@/lib/api"
 import {
  Search,
  Plus,
@@ -84,28 +79,14 @@ function SortableServerItem({
       {...listeners}
       className="group flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40 cursor-grab active:cursor-grabbing transition-colors duration-200"
     >
-      <ServerIcon className={`h-5 w-5 flex-shrink-0 transition-colors ${server.status === 'online' ? 'text-sidebar-foreground group-hover:text-green-500 dark:group-hover:text-green-400' : 'text-zinc-400 dark:text-zinc-600'}`} />
+      <ServerIcon className="h-5 w-5 flex-shrink-0 text-sidebar-foreground transition-colors group-hover:text-green-500 dark:group-hover:text-green-400" />
 
       <div className="flex-1 min-w-0 flex items-center gap-4">
         <div className="flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className={`text-sm font-medium transition-colors truncate ${server.status === 'online' ? 'text-zinc-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+            <div className="text-sm font-medium text-zinc-900 transition-colors truncate group-hover:text-green-600 dark:text-white dark:group-hover:text-green-400">
               {server.name || server.host}
             </div>
-            {server.status !== 'online' && (
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex-shrink-0 text-red-500 font-bold text-lg animate-pulse cursor-default select-none">
-                      !
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p>{t("tooltipOffline")}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
           </div>
           <div className={"text-xs font-mono whitespace-nowrap text-zinc-500 dark:text-zinc-600"}>
             {server.username}@{server.host}:{server.port}
@@ -117,12 +98,6 @@ function SortableServerItem({
           </div>
         )}
       </div>
-
-      {server.group && (
-        <Badge variant="secondary" className="text-xs flex-shrink-0">
-          {server.group}
-        </Badge>
-      )}
 
       {server.tags && server.tags.length > 0 && (
         <div className="flex gap-1 flex-shrink-0">
@@ -175,17 +150,43 @@ export default function ServersPage() {
  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
  const [editingServer, setEditingServer] = useState<Server | null>(null)
+ const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
  const [loading, setLoading] = useState(true)
- const [activeTab, setActiveTab] = useState<string>('all')
+ const [activeGroup, setActiveGroup] = useState<string>('all')
  const [draggedServer, setDraggedServer] = useState<Server | null>(null)
  const [isMounted, setIsMounted] = useState(false)
- const [statistics, setStatistics] = useState<ServerStatisticsResponse>({
- total: 0,
- online: 0,
- offline: 0,
- by_group: {},
- by_tag: {},
- })
+
+ const groupFilters = useMemo(() => {
+ const counts = new Map<string, number>()
+ for (const server of servers) {
+ const group = server.group?.trim()
+ if (!group) continue
+ counts.set(group, (counts.get(group) || 0) + 1)
+ }
+
+ return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b, "zh-CN"))
+ }, [servers])
+
+ const availableGroups = useMemo(
+ () => groupFilters.map(([group]) => group),
+ [groupFilters]
+ )
+
+ const availableTags = useMemo(() => {
+ const tags = new Set<string>()
+ for (const server of servers) {
+ for (const tag of server.tags || []) {
+ const normalizedTag = tag.trim()
+ if (normalizedTag) tags.add(normalizedTag)
+ }
+ }
+ return Array.from(tags).sort((a, b) => a.localeCompare(b, "zh-CN"))
+ }, [servers])
+
+ const deleteTargetServer = useMemo(
+ () => servers.find(server => server.id === deleteTargetId) || null,
+ [deleteTargetId, servers]
+ )
 
  // 配置拖拽传感器
  const sensors = useSensors(
@@ -196,18 +197,13 @@ export default function ServersPage() {
    })
  )
 
- // 根据搜索词和激活的标签过滤服务器
+ // 根据搜索词和当前分组过滤服务器
  useEffect(() => {
  let filtered = [...servers]
 
- // 按状态或用户标签过滤
- if (activeTab === 'online') {
- filtered = filtered.filter(s => s.status === 'online')
- } else if (activeTab === 'offline') {
- filtered = filtered.filter(s => s.status === 'offline')
- } else if (activeTab !== 'all') {
- // 用户自定义标签过滤
- filtered = filtered.filter(s => s.tags && s.tags.includes(activeTab))
+ // 按分组过滤
+ if (activeGroup !== 'all') {
+ filtered = filtered.filter(s => s.group?.trim() === activeGroup)
  }
 
  // 按搜索词过滤
@@ -220,7 +216,13 @@ export default function ServersPage() {
  }
 
  setFilteredServers(filtered)
- }, [servers, searchTerm, activeTab])
+ }, [servers, searchTerm, activeGroup])
+
+ useEffect(() => {
+ if (activeGroup !== 'all' && !groupFilters.some(([group]) => group === activeGroup)) {
+ setActiveGroup('all')
+ }
+ }, [activeGroup, groupFilters])
 
  // 客户端挂载检测
  useEffect(() => {
@@ -251,29 +253,11 @@ export default function ServersPage() {
  }
  }, [t])
 
- const loadStatistics = useCallback(async () => {
- try {
- // 认证基于 HttpOnly Cookie
-
- const stats = await serversApi.getStatistics()
- setStatistics({
- total: stats.total ?? 0,
- online: stats.online ?? 0,
- offline: stats.offline ?? 0,
- by_group: stats.by_group ?? {},
- by_tag: stats.by_tag ?? {},
- })
- } catch (error) {
- console.error("Failed to load statistics:", error)
- }
- }, [])
-
  // 加载服务器列表
  useEffect(() => {
    if (!ready) return
    loadServers()
-   loadStatistics()
- }, [ready, loadServers, loadStatistics])
+ }, [ready, loadServers])
 
  const handleConnect = (serverId: string) => {
  // 查找服务器以获取名称
@@ -292,12 +276,11 @@ export default function ServersPage() {
  setIsEditDialogOpen(true)
  }
 
-
- const handleDelete = async (serverId: string) => {
- if (!confirm(t("confirmDelete"))) {
- return
+ const handleRequestDelete = (serverId: string) => {
+ setDeleteTargetId(serverId)
  }
 
+ const handleDelete = async (serverId: string) => {
  try {
  // 认证基于 HttpOnly Cookie
 
@@ -306,9 +289,7 @@ export default function ServersPage() {
 
  // 乐观更新：直接从本地列表移除，避免整个页面刷新
  setServers(prev => prev.filter(s => s.id !== serverId))
-
- // 只刷新统计信息
- await loadStatistics()
+ setDeleteTargetId(null)
  } catch (error: unknown) {
  console.error("Failed to delete server:", error)
  toast.error(getErrorMessage(error, t("toastDeleteFailed")))
@@ -376,7 +357,7 @@ export default function ServersPage() {
  auth_method: data.authMethod === "privateKey" ? "key" : "password",
  password: data.password,
  private_key: data.privateKey,
- group: data.group,
+ group: data.group?.trim() || undefined,
  tags: data.tags,
  description: data.description,
  }
@@ -388,9 +369,6 @@ export default function ServersPage() {
 
  // 乐观更新：直接添加到本地列表，避免整个页面刷新
  setServers(prev => [...prev, newServer])
-
- // 只刷新统计信息
- await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to add server:", error)
  toast.error(getErrorMessage(error, t("toastCreateFailed")))
@@ -423,7 +401,7 @@ export default function ServersPage() {
  port: parseInt(data.port) || 22,
  username: data.username,
  auth_method: data.authMethod === "privateKey" ? "key" : "password",
- group: data.group,
+ group: data.group?.trim() || "",
  tags: data.tags,
  description: data.description,
  }
@@ -448,9 +426,6 @@ export default function ServersPage() {
  setServers(prev => prev.map(s =>
  s.id === editingServer.id ? updatedServer : s
  ))
-
- // 只刷新统计信息（如果标签或分组改变）
- await loadStatistics()
  } catch (error: unknown) {
  console.error("Failed to update server:", error)
  toast.error(getErrorMessage(error, t("toastUpdateFailed")))
@@ -465,10 +440,10 @@ export default function ServersPage() {
  <div className={"absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent to-transparent via-black/5 dark:via-white/5"} />
 
  <div className="flex-1 flex flex-col items-center px-8 py-8 overflow-y-auto">
- <div className="max-w-3xl w-full space-y-6">
+ <div className="max-w-3xl w-full space-y-3">
  {/* 搜索栏和添加按钮 - 始终显示（有服务器时） */}
  {(loading || servers.length > 0) && (
- <div className="space-y-4">
+ <div className="space-y-3">
  <div className="flex items-center justify-between gap-4">
  {/* 左侧：搜索框 */}
  <div className="relative flex-1 max-w-md">
@@ -488,43 +463,25 @@ export default function ServersPage() {
  </Button>
  </div>
 
- {/* 标签切换 - 始终显示 */}
- <div className="flex gap-2 items-center flex-wrap">
+ {/* 分组切换 - 始终显示 */}
+ <div className="flex flex-wrap items-center gap-x-2 gap-y-2 py-1">
  <Button
- variant={activeTab === 'all' ? 'default' : 'outline'}
+ variant={activeGroup === 'all' ? 'default' : 'outline'}
  size="sm"
- onClick={() => setActiveTab('all')}
+ onClick={() => setActiveGroup('all')}
  className="h-8"
  >
- {t("tabAll")} ({statistics.total})
+ {t("tabAll")} ({servers.length})
  </Button>
+ {groupFilters.map(([group, count]) => (
  <Button
- variant={activeTab === 'online' ? 'default' : 'outline'}
+ key={group}
+ variant={activeGroup === group ? 'default' : 'outline'}
  size="sm"
- onClick={() => setActiveTab('online')}
+ onClick={() => setActiveGroup(group)}
  className="h-8"
  >
- <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />
- {t("tabOnline")} ({statistics.online})
- </Button>
- <Button
- variant={activeTab === 'offline' ? 'default' : 'outline'}
- size="sm"
- onClick={() => setActiveTab('offline')}
- className="h-8"
- >
- <div className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />
- {t("tabOffline")} ({statistics.offline})
- </Button>
- {statistics.by_tag && Object.entries(statistics.by_tag).map(([tag, count]) => (
- <Button
- key={tag}
- variant={activeTab === tag ? 'default' : 'outline'}
- size="sm"
- onClick={() => setActiveTab(tag)}
- className="h-8"
- >
- {tag} ({count})
+ {group} ({count})
  </Button>
  ))}
  </div>
@@ -567,7 +524,7 @@ export default function ServersPage() {
  server={server}
  onConnect={handleConnect}
  onEdit={handleEdit}
- onDelete={handleDelete}
+ onDelete={handleRequestDelete}
  />
  ))}
  </AnimatedList>
@@ -593,28 +550,14 @@ export default function ServersPage() {
  key={server.id}
  className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40"}
  >
- <ServerIcon className={`h-5 w-5 flex-shrink-0 transition-colors ${server.status === 'online' ? 'text-sidebar-foreground group-hover:text-green-500 dark:group-hover:text-green-400' : 'text-zinc-400 dark:text-zinc-600'}`} />
+ <ServerIcon className="h-5 w-5 flex-shrink-0 text-sidebar-foreground transition-colors group-hover:text-green-500 dark:group-hover:text-green-400" />
 
  <div className="flex-1 min-w-0 flex items-center gap-4">
  <div className="flex-shrink-0">
  <div className="flex items-center gap-2">
- <div className={`text-sm font-medium transition-colors truncate ${server.status === 'online' ? 'text-zinc-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+ <div className="text-sm font-medium text-zinc-900 transition-colors truncate group-hover:text-green-600 dark:text-white dark:group-hover:text-green-400">
  {server.name || server.host}
  </div>
- {server.status !== 'online' && (
- <TooltipProvider delayDuration={0}>
- <Tooltip>
- <TooltipTrigger asChild>
- <span className="flex-shrink-0 text-red-500 font-bold text-lg animate-pulse cursor-default select-none">
- !
- </span>
- </TooltipTrigger>
- <TooltipContent side="top">
- <p>{t("tooltipOffline")}</p>
- </TooltipContent>
- </Tooltip>
- </TooltipProvider>
- )}
  </div>
  <div className={"text-xs font-mono whitespace-nowrap text-zinc-500 dark:text-zinc-600"}>
  {server.username}@{server.host}:{server.port}
@@ -695,6 +638,8 @@ export default function ServersPage() {
  open={isAddDialogOpen}
  onOpenChange={setIsAddDialogOpen}
  onSubmit={handleAddServer}
+ availableGroups={availableGroups}
+ availableTags={availableTags}
  />
 
  {/* 编辑服务器弹窗 */}
@@ -702,6 +647,8 @@ export default function ServersPage() {
  open={isEditDialogOpen}
  onOpenChange={setIsEditDialogOpen}
  onSubmit={handleEditServer}
+ availableGroups={availableGroups}
+ availableTags={availableTags}
  initialData={editingServer ? {
  name: editingServer.name,
  host: editingServer.host,
@@ -718,6 +665,24 @@ export default function ServersPage() {
  autoConnect: false,
  keepAlive: true,
  } : undefined}
+ />
+
+ <ConfirmDialog
+ open={deleteTargetId !== null}
+ onOpenChange={(nextOpen) => {
+ if (!nextOpen) setDeleteTargetId(null)
+ }}
+ title={t("tooltipDelete")}
+ description={deleteTargetServer?.name || deleteTargetServer?.host
+ ? `${t("confirmDelete")}\n${deleteTargetServer.name || deleteTargetServer.host}`
+ : t("confirmDelete")}
+ confirmText={t("tooltipDelete")}
+ variant="destructive"
+ onConfirm={() => {
+ if (deleteTargetId) {
+ void handleDelete(deleteTargetId)
+ }
+ }}
  />
  </>
  )

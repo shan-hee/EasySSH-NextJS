@@ -1092,9 +1092,10 @@ export function SftpManager(props: SftpManagerProps) {
     editorState.isOpen,
     onRefresh,
     requestBatchDelete,
-    handleBatchDownload,
-    handleSelectAll,
-  ])
+	    handleBatchDownload,
+	    handleCloseEditor,
+	    handleSelectAll,
+	  ])
 
   // 获取文件类型信息（用于 3D File 组件）- 使用 useCallback 优化
   const getFileTypeInfo = useCallback((fileName: string) => {

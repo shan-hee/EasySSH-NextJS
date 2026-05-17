@@ -53,6 +53,11 @@ export interface SSHSessionStatistics {
   }
 }
 
+export interface SSHSessionCleanupResponse {
+  deleted_count: number
+  retention_days: number
+}
+
 /**
  * SSH 会话 API 服务
  */
@@ -84,6 +89,18 @@ export const sshSessionsApi = {
    */
   async delete(id: string): Promise<{ message: string }> {
     return apiFetch<{ message: string }>(`/ssh-sessions/${id}`, {
+      method: "DELETE",
+    })
+  },
+
+  /**
+   * 清理旧SSH会话记录
+   */
+  async cleanup(retentionDays: number): Promise<SSHSessionCleanupResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append("retention_days", retentionDays.toString())
+
+    return apiFetch<SSHSessionCleanupResponse>(`/ssh-sessions?${queryParams.toString()}`, {
       method: "DELETE",
     })
   },
