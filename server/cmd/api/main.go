@@ -956,6 +956,8 @@ func main() {
 		backupRoutes := v1.Group("/backup")
 		backupRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
+			backupRoutes.GET("/export", backupHandler.ExportBackup)             // 导出统一备份
+			backupRoutes.POST("/restore", backupHandler.RestoreBackup)          // 恢复统一备份
 			backupRoutes.GET("/export-config", backupHandler.ExportConfig)      // 导出配置
 			backupRoutes.POST("/import-config", backupHandler.ImportConfig)     // 导入配置
 			backupRoutes.GET("/export-database", backupHandler.ExportDatabase)  // 导出数据库

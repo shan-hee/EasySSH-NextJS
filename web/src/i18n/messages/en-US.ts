@@ -2551,50 +2551,59 @@ const messages = {
   },
   settingsManagementBackup: {
     alertTitle: "Important:",
-    alertItemConfig:
-      "Exported config file includes system settings and user-related configs.",
-    alertItemDatabase:
-      "Exported database includes all business data.",
-    alertItemImportWarning:
-      "Importing will overwrite existing data. Proceed with caution.",
+    alertItemUnified:
+      "Backups are now a single JSON file that can include config and database data.",
+    alertItemSelectable:
+      "Export and restore both let you choose config, database, or both.",
+    alertItemRestoreStrategy:
+      "Restore can skip existing items, overwrite them, or fail on conflict.",
+    alertItemSensitive:
+      "Backup files may contain keys, tokens, encrypted server credentials, and other sensitive data.",
     alertItemSuggestion:
       "Recommended to export backups regularly to a secure location.",
-    cardConfigTitle: "Config file",
-    cardConfigDescription: "Import or export system config file",
-    btnExportConfig: "Export config file",
-    btnExportConfigLoading: "Exporting...",
-    btnImportConfig: "Import config file",
-    btnImportConfigLoading: "Importing...",
-    configHintFormats: "• Formats: JSON, YAML",
-    configHintContent:
-      "• Includes: system settings, notification config, security config, etc.",
-    cardDbTitle: "Database",
-    cardDbDescription: "Import or export full database",
-    btnExportDb: "Export database",
-    btnExportDbLoading: "Exporting...",
-    btnImportDb: "Import database",
-    btnImportDbLoading: "Importing...",
-    dbHintFormats: "• Formats: SQL, SQL.GZ, ZIP",
-    dbHintContent:
-      "• Includes: all servers, users, logs and other data",
-    dbHintWarning: "• Import will overwrite existing data!",
-    confirmExportDb:
-      "Are you sure you want to export the database? This may take several minutes.",
-    confirmImportDb:
-      "Warning: Importing database will overwrite ALL existing data. Continue?",
-    toastExportConfigLoading: "Exporting config file...",
-    toastExportConfigSuccess: "Config file exported",
-    toastExportConfigFailed: "Failed to export config file",
-    toastImportConfigLoading: "Importing config file...",
-    toastImportConfigSuccess: "Config file imported",
-    toastImportConfigFailed: "Failed to import config file",
-    toastExportDbLoading: "Exporting database...",
-    toastExportDbSuccess: "Database exported",
-    toastExportDbFailed: "Failed to export database",
-    toastImportDbLoading: "Importing database...",
-    toastImportDbSuccess:
-      "Database imported. System will restart in 5 seconds...",
-    toastImportDbFailed: "Failed to import database",
+    exportTitle: "Export",
+    exportDescription:
+      "Generate one unified backup file and choose what it contains.",
+    restoreTitle: "Restore",
+    restoreDescription:
+      "Restore from a unified backup file with content and conflict controls.",
+    contentConfigTitle: "Config",
+    contentConfigDescription:
+      "System settings, security policy, notifications, and system AI config",
+    contentDatabaseTitle: "Database",
+    contentDatabaseDescription:
+      "Users, servers, scripts, tasks, logs, keys, sessions, and other business data",
+    btnExport: "Export backup",
+    btnExportLoading: "Exporting...",
+    btnRestore: "Choose file and restore",
+    btnRestoreLoading: "Restoring...",
+    exportHintFormat: "• Export format: EasySSH unified backup JSON",
+    exportHintContent: "• Export config only, database only, or both",
+    restoreHintFormat: "• Supported format: EasySSH unified backup JSON",
+    restoreHintWarning:
+      "• Overwrite updates records with the same primary key. Only restore trusted backups.",
+    conflictStrategyLabel: "Conflict handling",
+    conflictStrategyDescription:
+      "Choose what happens when a backup record already exists.",
+    conflictSkipTitle: "Skip existing items",
+    conflictSkipDescription:
+      "Keep current data and import only records that do not exist.",
+    conflictOverwriteTitle: "Overwrite existing items",
+    conflictOverwriteDescription:
+      "Update current records with backup records that share the same primary key.",
+    conflictErrorTitle: "Fail on conflict",
+    conflictErrorDescription:
+      "Stop restoring as soon as any existing record is found.",
+    confirmOverwriteRestore:
+      "Overwrite will update current records with the same primary key. Continue?",
+    toastSelectExportContent: "Select at least one export content type",
+    toastSelectRestoreContent: "Select at least one restore content type",
+    toastExportLoading: "Exporting backup...",
+    toastExportSuccess: "Backup exported",
+    toastExportFailed: "Failed to export backup",
+    toastRestoreLoading: "Restoring backup...",
+    toastRestoreSuccess: "Backup restored",
+    toastRestoreFailed: "Failed to restore backup",
   },
   terminalMonitor: {
     cpuLabel: "CPU",

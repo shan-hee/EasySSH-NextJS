@@ -218,6 +218,14 @@ type RegisterRequest struct {
 	RunMode          RunMode `json:"run_mode,omitempty"`                         // 运行模式（可选，仅用于初始化管理员）
 }
 
+// InitializeAdminRequest 初始化管理员请求
+type InitializeAdminRequest struct {
+	Username string  `json:"username" binding:"required"`
+	Email    string  `json:"email" binding:"required,email"`
+	Password string  `json:"password" binding:"required,min=6"`
+	RunMode  RunMode `json:"run_mode,omitempty"`
+}
+
 // ChangePasswordRequest 修改密码请求
 type ChangePasswordRequest struct {
 	OldPassword string `json:"old_password" binding:"required"`
@@ -1184,9 +1192,19 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 // InitializeAdmin 初始化管理员账户
 // POST /api/v1/auth/initialize-admin
 func (h *AuthHandler) InitializeAdmin(c *gin.Context) {
-	var req RegisterRequest
+	var req InitializeAdminRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	// 验证密码强度
+	if err := password.ValidateWithDefault(req.Password); err != nil {
+		if password.IsValidationError(err) {
+			RespondError(c, http.StatusBadRequest, "password_policy_error", err.Error())
+			return
+		}
+		RespondError(c, http.StatusBadRequest, "validation_error", "Invalid password")
 		return
 	}
 
