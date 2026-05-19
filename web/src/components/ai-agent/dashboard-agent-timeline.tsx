@@ -5,6 +5,7 @@ import { ChevronDown, Loader2 } from "lucide-react"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 
 import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-notice"
+import { Button } from "@/components/ui/button"
 import { Response } from "@/components/ui/shadcn-io/ai/response"
 import type { ResolvedTimelineItem } from "@/lib/ai-agent/session-state"
 import { getTaskStatusLabel, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
@@ -418,11 +419,13 @@ function TimelineTaskCard({
   task,
   tText,
   shouldAutoCollapse,
+  onConfirmTask,
   compact = false,
 }: {
   task: TaskView
   tText: TimelineTranslate
   shouldAutoCollapse: boolean
+  onConfirmTask?: (taskId: string, decision: "confirm" | "reject") => void
   compact?: boolean
 }) {
   const summary = task.summary && task.summary !== task.tool_display_name ? task.summary : undefined
@@ -461,6 +464,22 @@ function TimelineTaskCard({
         <AgentNoticeCard tone="error" size="md" className={cn(compact ? "mx-2.5 mb-2" : "mt-3")}>
           {task.error}
         </AgentNoticeCard>
+      )}
+
+      {task.status === "waiting_confirm" && onConfirmTask && (
+        <div className={cn("flex flex-wrap gap-2", compact ? "px-2.5 pb-2.5 pt-1" : "mt-3")}>
+          <Button size="sm" className="h-7 text-xs" onClick={() => onConfirmTask(task.id, "confirm")}>
+            {tText("confirmAction")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => onConfirmTask(task.id, "reject")}
+          >
+            {tText("rejectAction")}
+          </Button>
+        </div>
       )}
     </div>
   )
@@ -530,9 +549,11 @@ function TimelineErrorItem({
 function TimelineTaskGroup({
   entries,
   tText,
+  onConfirmTask,
 }: {
   entries: DashboardTaskEntry[]
   tText: TimelineTranslate
+  onConfirmTask?: (taskId: string, decision: "confirm" | "reject") => void
 }) {
   const { isAtBottom, scrollToBottom, state } = useStickToBottomContext()
   const tasks = useMemo(() => entries.map((entry) => entry.data), [entries])
@@ -647,6 +668,7 @@ function TimelineTaskGroup({
               task={entry.data}
               tText={tText}
               shouldAutoCollapse={true}
+              onConfirmTask={onConfirmTask}
               compact
             />
           ))}
@@ -659,12 +681,19 @@ function TimelineTaskGroup({
 interface DashboardAgentTimelineProps {
   entries: ResolvedTimelineItem[]
   tText: TimelineTranslate
+  isAssistantLoading?: boolean
+  onConfirmTask?: (taskId: string, decision: "confirm" | "reject") => void
 }
 
-export function DashboardAgentTimeline({ entries, tText }: DashboardAgentTimelineProps) {
+export function DashboardAgentTimeline({
+  entries,
+  tText,
+  isAssistantLoading = false,
+  onConfirmTask,
+}: DashboardAgentTimelineProps) {
   const blocks = useMemo(() => groupTimelineBlocks(entries), [entries])
 
-  if (blocks.length === 0) {
+  if (blocks.length === 0 && !isAssistantLoading) {
     return (
       <AgentEmptyState>
         {tText("timelineEmpty")}
@@ -685,6 +714,7 @@ export function DashboardAgentTimeline({ entries, tText }: DashboardAgentTimelin
                   task={block.entry.data}
                   tText={tText}
                   shouldAutoCollapse={true}
+                  onConfirmTask={onConfirmTask}
                   compact
                 />
               </div>
@@ -695,6 +725,7 @@ export function DashboardAgentTimeline({ entries, tText }: DashboardAgentTimelin
                 key={block.id}
                 entries={block.entries}
                 tText={tText}
+                onConfirmTask={onConfirmTask}
               />
             )
           case "error":
@@ -703,6 +734,15 @@ export function DashboardAgentTimeline({ entries, tText }: DashboardAgentTimelin
             return null
         }
       })}
+
+      {isAssistantLoading && (
+        <div className="flex justify-start">
+          <div className="inline-flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            <span>{tText("panelThinking")}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -157,7 +157,8 @@ export function TabTerminalContent({
   const canUseHeavyPanels = isActive && hasReadyServer
   const canUseFileManager = canUseHeavyPanels && isFileManagerOpen
   const shouldKeepFileManagerMounted = canUseHeavyPanels && shouldRenderFileManager
-  const canUseAi = isActive && session.type !== 'quick' && !effectiveIsLoading && isAiInputOpen
+  const canMountAi = isActive && session.type !== 'quick' && !effectiveIsLoading
+  const canUseAi = canMountAi && isAiInputOpen
   const shouldReserveInlineMonitor =
     isDesktopLayout &&
     hasReadyServer &&
@@ -487,6 +488,13 @@ export function TabTerminalContent({
               )}
             </div>
 
+            {canMountAi && (
+              <AiAssistantPanel
+                isOpen={canUseAi}
+                onClose={() => setTabState(session.id, { isAiInputOpen: false })}
+              />
+            )}
+
             {canUseMobileMonitor && (
               <div
                 className={cn(
@@ -539,13 +547,6 @@ export function TabTerminalContent({
           />
         )}
 
-        {/* AI 助手面板 */}
-        {canUseAi && (
-          <AiAssistantPanel
-            isOpen
-            onClose={() => setTabState(session.id, { isAiInputOpen: false })}
-          />
-        )}
       </div>
     </MonitorWebSocketProvider>
   )
