@@ -164,21 +164,54 @@ fi
 # 启动后端
 echo -e "${GREEN}🔧 启动 Go 后端服务 (热重载模式)...${NC}"
 cd server
+rm -f tmp/build-errors.log
 $AIR_PATH &
 SERVER_PID=$!
 cd ..
+
+print_backend_build_errors() {
+    local log_file="server/tmp/build-errors.log"
+    if [ -s "$log_file" ]; then
+        echo -e "\n${RED}❌ Go 后端编译失败:${NC}"
+        sed -n '1,160p' "$log_file"
+        echo ""
+    fi
+}
 
 # 等待后端完全启动并就绪
 echo -e "${YELLOW}⏳ 等待后端服务完全启动...${NC}"
 MAX_WAIT=60
 WAIT_COUNT=0
 BACKEND_READY=false
+BACKEND_BIN="server/tmp/main"
+BACKEND_BIN_STARTED_AT=0
+if [ -f "$BACKEND_BIN" ]; then
+    BACKEND_BIN_STARTED_AT=$(stat -c %Y "$BACKEND_BIN" 2>/dev/null || echo 0)
+fi
 
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
     # 检查后端进程是否还在运行
     if ! kill -0 $SERVER_PID 2>/dev/null; then
         echo -e "${RED}❌ 后端启动失败，请检查数据库配置${NC}"
+        print_backend_build_errors
         exit 1
+    fi
+
+    if [ -s "server/tmp/build-errors.log" ]; then
+        echo -e "${RED}❌ 后端热重载编译失败，已停止启动流程${NC}"
+        print_backend_build_errors
+        exit 1
+    fi
+
+    current_backend_bin_mtime=0
+    if [ -f "$BACKEND_BIN" ]; then
+        current_backend_bin_mtime=$(stat -c %Y "$BACKEND_BIN" 2>/dev/null || echo 0)
+    fi
+    if [ "$current_backend_bin_mtime" -le "$BACKEND_BIN_STARTED_AT" ]; then
+        echo -n "."
+        sleep 1
+        WAIT_COUNT=$((WAIT_COUNT + 1))
+        continue
     fi
 
     # 检查后端端口是否就绪
@@ -215,6 +248,7 @@ if [ "$BACKEND_READY" = true ]; then
     echo -e "${GREEN}✅ 后端服务已完全就绪 (等待了 ${WAIT_COUNT} 秒)${NC}\n"
 else
     echo -e "${RED}❌ 后端启动超时 (等待了 ${MAX_WAIT} 秒)${NC}"
+    print_backend_build_errors
     echo -e "${YELLOW}请检查后端日志或手动启动后端服务${NC}"
     exit 1
 fi
