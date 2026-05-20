@@ -298,11 +298,8 @@ golangci-lint run
 | `DB_DRIVER` | 数据库驱动 | sqlite | 否 |
 | `DB_DSN` | 数据库连接串 | ./data/easyssh.db | 否 |
 | `JWT_SECRET` | JWT 密钥 | - | ✅ |
-| `JWT_ACCESS_EXPIRE_MINUTES` | Access Token 过期时间（分钟，5-1440） | 15 | 否 |
-| `JWT_REFRESH_IDLE_EXPIRE_DAYS` | Refresh Token 闲置过期时间（天，1-90） | 7 | 否 |
-| `JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS` | Refresh Token 绝对过期时间（天，1-365） | 30 | 否 |
-| `JWT_REFRESH_ROTATE` | 是否启用刷新令牌轮换 | true | 否 |
-| `JWT_REFRESH_REUSE_DETECTION` | 是否启用刷新令牌复用检测 | true | 否 |
+
+Access Token 有效期、Refresh Token 闲置/绝对过期和刷新令牌安全机制已移动到系统设置的“会话管理”中；`JWT_SECRET` 仍只通过环境变量配置。
 
 ### 生成加密密钥
 

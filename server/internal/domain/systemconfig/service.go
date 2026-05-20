@@ -112,6 +112,26 @@ func (s *service) validate(config *SystemConfig) error {
 		return err
 	}
 
+	if err := s.validateJWTSessionConfig(config.JWTSessionConfig()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *service) validateJWTSessionConfig(config *JWTSessionConfig) error {
+	if config.AccessExpireMinutes < 5 || config.AccessExpireMinutes > 1440 {
+		return errors.New("JWT access token expiration must be between 5 and 1440 minutes")
+	}
+	if config.RefreshIdleExpireDays < 1 || config.RefreshIdleExpireDays > 90 {
+		return errors.New("JWT refresh token idle expiration must be between 1 and 90 days")
+	}
+	if config.RefreshAbsoluteExpireDays < 1 || config.RefreshAbsoluteExpireDays > 365 {
+		return errors.New("JWT refresh token absolute expiration must be between 1 and 365 days")
+	}
+	if config.RefreshAbsoluteExpireDays < config.RefreshIdleExpireDays {
+		return errors.New("JWT refresh token absolute expiration must be greater than or equal to idle expiration")
+	}
 	return nil
 }
 

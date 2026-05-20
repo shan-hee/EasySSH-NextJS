@@ -44,16 +44,22 @@ func (r *repository) Get(ctx context.Context) (*SystemConfig, error) {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 如果不存在，创建默认配置
+			jwtDefaults := DefaultJWTSessionConfig()
 			config = SystemConfig{
-				SystemName:              "EasySSH",
-				DefaultLanguage:         "zh-CN",
-				DefaultTimezone:         "Asia/Shanghai",
-				DateFormat:              "YYYY-MM-DD HH:mm:ss",
-				DefaultDownloadMode:     "fast",
-				SkipExcludedOnUpload:    true,
-				MaxFileUploadSize:       100,
-				DownloadExcludePatterns: DefaultDownloadExcludePatterns(),
-				CompletionEnabled:       true,
+				SystemName:                   "EasySSH",
+				DefaultLanguage:              "zh-CN",
+				DefaultTimezone:              "Asia/Shanghai",
+				DateFormat:                   "YYYY-MM-DD HH:mm:ss",
+				DefaultDownloadMode:          "fast",
+				SkipExcludedOnUpload:         true,
+				MaxFileUploadSize:            100,
+				DownloadExcludePatterns:      DefaultDownloadExcludePatterns(),
+				CompletionEnabled:            true,
+				JWTAccessExpireMinutes:       jwtDefaults.AccessExpireMinutes,
+				JWTRefreshIdleExpireDays:     jwtDefaults.RefreshIdleExpireDays,
+				JWTRefreshAbsoluteExpireDays: jwtDefaults.RefreshAbsoluteExpireDays,
+				JWTRefreshRotate:             jwtDefaults.RefreshRotate,
+				JWTRefreshReuseDetection:     jwtDefaults.RefreshReuseDetection,
 			}
 
 			// 序列化默认补全配置

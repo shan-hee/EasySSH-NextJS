@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/easyssh/server/internal/pkg/ttlcache"
@@ -152,7 +153,15 @@ type authService struct {
 	loginDetectionService LoginDetectionService // 登录检测服务（可选）
 	runMode               string                // 存储运行模式
 	sessionIdleDuration   time.Duration         // 会话闲置过期时间（用于 user_sessions.ExpiresAt）
+	refreshGraceDuration  time.Duration         // refresh token 轮换后的短暂并发宽限窗口
+	refreshLocks          map[string]*refreshLock
+	refreshLocksMu        sync.Mutex
 	authCodes             *ttlcache.Cache[authorizationCodeRecord]
+}
+
+type refreshLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 type authorizationCodeRecord struct {
@@ -189,6 +198,8 @@ func NewService(repo Repository, jwtService JWTService, sessionIdleDuration time
 		loginDetectionService: nil, // 默认不启用登录检测
 		runMode:               "production",
 		sessionIdleDuration:   sessionIdleDuration,
+		refreshGraceDuration:  30 * time.Second,
+		refreshLocks:          make(map[string]*refreshLock),
 		authCodes:             ttlcache.New[authorizationCodeRecord](time.Minute),
 	}
 }
@@ -419,6 +430,30 @@ func (s *authService) hashToken(token string) string {
 	return fmt.Sprintf("%x", hash)
 }
 
+func (s *authService) lockRefreshToken(tokenHash string) func() {
+	s.refreshLocksMu.Lock()
+	lock := s.refreshLocks[tokenHash]
+	if lock == nil {
+		lock = &refreshLock{}
+		s.refreshLocks[tokenHash] = lock
+	}
+	lock.refs++
+	s.refreshLocksMu.Unlock()
+
+	lock.mu.Lock()
+
+	return func() {
+		lock.mu.Unlock()
+
+		s.refreshLocksMu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(s.refreshLocks, tokenHash)
+		}
+		s.refreshLocksMu.Unlock()
+	}
+}
+
 func (s *authService) Logout(ctx context.Context, accessToken string) error {
 	// 将 Access Token 加入黑名单
 	// 设置过期时间为令牌的剩余有效时间
@@ -583,7 +618,10 @@ func (s *authService) RegisterOAuthUser(ctx context.Context, username, email, av
 
 func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) {
 	tokenHashToFind := s.hashToken(refreshToken)
-	session, err := s.repo.FindSessionByRefreshToken(ctx, tokenHashToFind)
+	unlock := s.lockRefreshToken(tokenHashToFind)
+	defer unlock()
+
+	session, matchedPreviousToken, err := s.repo.FindSessionByRefreshTokenWithGrace(ctx, tokenHashToFind)
 	if err != nil || session == nil {
 		return "", "", ErrSessionNotFound
 	}
@@ -595,12 +633,20 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 		return "", "", ErrSessionExpired
 	}
 
-	newAccessToken, newRefreshToken, err := s.jwtService.RefreshToken(refreshToken)
-	if err != nil {
-		if errors.Is(err, ErrTokenFamilyRevoked) || errors.Is(err, ErrTokenReuseDetected) {
-			_ = s.repo.DeleteSession(ctx, session.ID)
+	var newAccessToken, newRefreshToken string
+	if matchedPreviousToken {
+		newAccessToken, err = s.jwtService.RefreshTokenWithinGrace(refreshToken)
+		if err != nil {
+			return "", "", err
 		}
-		return "", "", err
+	} else {
+		newAccessToken, newRefreshToken, err = s.jwtService.RefreshToken(refreshToken)
+		if err != nil {
+			if errors.Is(err, ErrTokenFamilyRevoked) || errors.Is(err, ErrTokenReuseDetected) {
+				_ = s.repo.DeleteSession(ctx, session.ID)
+			}
+			return "", "", err
+		}
 	}
 
 	// 更新会话活动时间 + 滑动闲置过期
@@ -610,7 +656,14 @@ func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken strin
 
 	// 如果生成了新的 refresh token，更新会话中的 token 哈希
 	if newRefreshToken != "" {
+		previousTokenValidUntil := time.Now().Add(s.refreshGraceDuration)
+		session.PreviousRefreshToken = tokenHashToFind
+		session.PreviousRefreshTokenValidUntil = &previousTokenValidUntil
 		session.RefreshToken = s.hashToken(newRefreshToken)
+	} else if matchedPreviousToken {
+		// 如果禁用轮换但命中旧 token 宽限，清理宽限字段，避免长期保留旧哈希。
+		session.PreviousRefreshToken = ""
+		session.PreviousRefreshTokenValidUntil = nil
 	}
 
 	if err := s.repo.UpdateSession(ctx, session); err != nil {

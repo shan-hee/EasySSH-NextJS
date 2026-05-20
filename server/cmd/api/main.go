@@ -117,19 +117,28 @@ func main() {
 	}
 	log.Println("✅ Database migrated successfully")
 
+	// 系统配置服务（JWT_SECRET 仍来自 .env，其余 JWT 过期/刷新配置来自系统设置）
+	systemConfigRepo := systemconfig.NewRepository(database)
+	systemConfigService := systemconfig.NewService(systemConfigRepo)
+	systemCfg, err := systemConfigService.Get(context.Background())
+	if err != nil {
+		log.Fatalf("❌ Failed to load system config: %v", err)
+	}
+	jwtSettings := systemCfg.JWTSessionConfig()
+
 	// 初始化服务层
 	// JWT 服务
-	accessTokenDuration := time.Duration(cfg.JWT.AccessExpireMinutes) * time.Minute
-	refreshIdleDuration := time.Duration(cfg.JWT.RefreshIdleExpireDays) * 24 * time.Hour
-	refreshAbsoluteDuration := time.Duration(cfg.JWT.RefreshAbsoluteExpireDays) * 24 * time.Hour
+	accessTokenDuration := time.Duration(jwtSettings.AccessExpireMinutes) * time.Minute
+	refreshIdleDuration := time.Duration(jwtSettings.RefreshIdleExpireDays) * 24 * time.Hour
+	refreshAbsoluteDuration := time.Duration(jwtSettings.RefreshAbsoluteExpireDays) * 24 * time.Hour
 
 	jwtService := auth.NewJWTService(auth.JWTConfig{
 		SecretKey:                     cfg.JWT.Secret,
 		AccessTokenDuration:           accessTokenDuration,
 		RefreshIdleExpireDuration:     refreshIdleDuration,
 		RefreshAbsoluteExpireDuration: refreshAbsoluteDuration,
-		RefreshRotate:                 cfg.JWT.RefreshRotate,
-		RefreshReuseDetection:         cfg.JWT.RefreshReuseDetection,
+		RefreshRotate:                 jwtSettings.RefreshRotate,
+		RefreshReuseDetection:         jwtSettings.RefreshReuseDetection,
 	})
 
 	// 一次性 Ticket：进程内短期存储（用于 WebSocket 握手 / 原生下载等无法附带 Authorization Header 的场景）
@@ -140,11 +149,6 @@ func main() {
 	// 认证服务（会话过期时间与 JWT 刷新闲置过期时间保持一致）
 	authRepo := auth.NewRepository(database)
 	authService := auth.NewService(authRepo, jwtService, refreshIdleDuration)
-
-	// 新的配置服务
-	// 系统配置服务
-	systemConfigRepo := systemconfig.NewRepository(database)
-	systemConfigService := systemconfig.NewService(systemConfigRepo)
 
 	// 安全配置服务
 	securityRepo := security.NewRepository(database)
@@ -457,6 +461,7 @@ func main() {
 	permissionHandler := rest.NewPermissionHandler(permissionService)
 	// 新的配置处理器
 	securityHandler := rest.NewSecurityHandler(securityService)
+	securityHandler.SetSystemConfigService(systemConfigService)
 	systemConfigHandler := rest.NewSystemConfigHandler(systemConfigService)
 	notificationConfigHandler := rest.NewNotificationConfigHandler(notificationConfigService)
 	aiConfigHandler := rest.NewAIConfigHandler(aiConfigService)
@@ -881,6 +886,7 @@ func main() {
 			settingsGroup.PATCH("/system/basic", systemConfigHandler.PatchBasicInfo)
 			settingsGroup.PATCH("/system/file-transfer", systemConfigHandler.PatchFileTransferConfig)
 			settingsGroup.PATCH("/system/completion", systemConfigHandler.PatchCompletionConfig)
+			settingsGroup.PATCH("/system/jwt-session", systemConfigHandler.PatchJWTSessionConfig)
 
 			// 安全配置
 			settingsGroup.GET("/security", securityHandler.GetSecurityConfig)

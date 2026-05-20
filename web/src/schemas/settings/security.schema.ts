@@ -16,7 +16,27 @@ export const sessionManagementSchema = z.object({
     .max(1440, "settingsValidation.inactiveMinutesMax"),
   remember_login: z.boolean(),
   hibernate: z.boolean(),
-})
+  jwt_access_expire_minutes: z
+    .number()
+    .min(5, "settingsValidation.jwtAccessExpireMin")
+    .max(1440, "settingsValidation.jwtAccessExpireMax"),
+  jwt_refresh_idle_expire_days: z
+    .number()
+    .min(1, "settingsValidation.jwtRefreshIdleExpireMin")
+    .max(90, "settingsValidation.jwtRefreshIdleExpireMax"),
+  jwt_refresh_absolute_expire_days: z
+    .number()
+    .min(1, "settingsValidation.jwtRefreshAbsoluteExpireMin")
+    .max(365, "settingsValidation.jwtRefreshAbsoluteExpireMax"),
+  jwt_refresh_rotate: z.boolean(),
+  jwt_refresh_reuse_detection: z.boolean(),
+}).refine(
+  (data) => data.jwt_refresh_absolute_expire_days >= data.jwt_refresh_idle_expire_days,
+  {
+    message: "settingsValidation.jwtRefreshAbsoluteGteIdle",
+    path: ["jwt_refresh_absolute_expire_days"],
+  }
+)
 
 // CORS配置 Schema
 export const corsConfigSchema = z.object({

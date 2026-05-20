@@ -2057,10 +2057,14 @@ const messages = {
 
     // Security - JWT
     jwtSecretMin: "JWT secret must be at least 32 characters.",
-    accessExpireMin: "Access token expiry cannot be less than 1 hour.",
-    accessExpireMax: "Access token expiry cannot exceed 168 hours.",
-    refreshExpireMin: "Refresh token expiry cannot be less than 24 hours.",
-    refreshExpireMax: "Refresh token expiry cannot exceed 720 hours.",
+    jwtAccessExpireMin: "Access token lifetime cannot be less than 5 minutes.",
+    jwtAccessExpireMax: "Access token lifetime cannot exceed 1440 minutes.",
+    jwtRefreshIdleExpireMin: "Idle login lifetime cannot be less than 1 day.",
+    jwtRefreshIdleExpireMax: "Idle login lifetime cannot exceed 90 days.",
+    jwtRefreshAbsoluteExpireMin: "Maximum login lifetime cannot be less than 1 day.",
+    jwtRefreshAbsoluteExpireMax: "Maximum login lifetime cannot exceed 365 days.",
+    jwtRefreshAbsoluteGteIdle:
+      "Maximum login lifetime must be greater than or equal to idle login lifetime.",
 
     // System config - basic
     systemNameRequired: "System name is required.",
@@ -2156,6 +2160,24 @@ const messages = {
     fieldHibernate: "Background tab hibernation",
     fieldHibernateDesc:
       "When enabled, background tabs will hibernate automatically to save resources",
+    jwtSectionTitle: "Token expiry and refresh",
+    jwtSectionDescription:
+      "Configure access token lifetime and login persistence. JWT secret is still read from .env.",
+    fieldJWTAccessExpire: "Access token lifetime (minutes)",
+    fieldJWTAccessExpireDesc:
+      "Short-lived access token lifetime (5-1440 minutes). It refreshes automatically during normal use.",
+    fieldJWTRefreshIdleExpire: "Idle login lifetime (days)",
+    fieldJWTRefreshIdleExpireDesc:
+      "Users must sign in again after this many days without session refresh (1-90 days).",
+    fieldJWTRefreshAbsoluteExpire: "Maximum login lifetime (days)",
+    fieldJWTRefreshAbsoluteExpireDesc:
+      "Users must sign in again after this upper bound even if they keep using the app (1-365 days).",
+    fieldJWTRefreshRotate: "Refresh token rotation",
+    fieldJWTRefreshRotateDesc:
+      "Replace the refresh token whenever a new access token is issued. Recommended.",
+    fieldJWTRefreshReuseDetection: "Refresh token reuse detection",
+    fieldJWTRefreshReuseDetectionDesc:
+      "Detect abnormal reuse of old refresh tokens. Recommended.",
     previewTitle: "Current configuration preview:",
     previewSessionTimeoutPrefix: "• User will be logged out after ",
     previewSessionTimeoutSuffix: " minutes of inactivity",
@@ -2165,8 +2187,19 @@ const messages = {
     previewEnabled: "Enabled",
     previewDisabled: "Disabled",
     previewHibernatePrefix: "• Background hibernation: ",
+    jwtPreviewTitle: "Token configuration preview:",
+    previewJWTAccessPrefix: "• Access token expires after ",
+    previewJWTAccessSuffix: " minutes",
+    previewJWTRefreshIdlePrefix: "• Sign in again after ",
+    previewJWTRefreshIdleSuffix: " idle days",
+    previewJWTRefreshAbsolutePrefix: "• Maximum login lifetime is ",
+    previewJWTRefreshAbsoluteSuffix: " days",
+    previewJWTRefreshRotatePrefix: "• Refresh token rotation: ",
+    previewJWTReuseDetectionPrefix: "• Reuse detection: ",
     alertContent:
       "Session settings affect login experience for all users. Set timeout values based on real usage to balance security and usability.",
+    jwtAlertContent:
+      "These settings take effect after the backend service restarts. Already issued token expiry times are not rewritten immediately.",
   },
   settingsSecurityNetwork: {
     corsSectionTitle: "CORS configuration",

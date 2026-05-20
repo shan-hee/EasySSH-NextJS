@@ -25,27 +25,33 @@ type GetSystemConfigResponseV2 struct {
 
 // SystemConfigDTOV2 系统配置DTO（新版）
 type SystemConfigDTOV2 struct {
-	SystemName              string                                   `json:"system_name"`
-	SystemLogo              string                                   `json:"system_logo"`
-	SystemFavicon           string                                   `json:"system_favicon"`
-	DefaultLanguage         string                                   `json:"default_language"`
-	DefaultTimezone         string                                   `json:"default_timezone"`
-	DateFormat              string                                   `json:"date_format"`
-	DownloadExcludePatterns string                                   `json:"download_exclude_patterns"`
-	DefaultDownloadMode     string                                   `json:"default_download_mode"`
-	SkipExcludedOnUpload    bool                                     `json:"skip_excluded_on_upload"`
-	MaxFileUploadSize       int                                      `json:"max_file_upload_size"`
-	CompletionEnabled       bool                                     `json:"completion_enabled"`
-	CompletionProviders     *systemconfig.CompletionProvidersConfig  `json:"completion_providers,omitempty"`
-	CompletionQuotas        *systemconfig.CompletionQuotasConfig     `json:"completion_quotas,omitempty"`
-	CompletionCache         *systemconfig.CompletionCacheConfig      `json:"completion_cache,omitempty"`
+	SystemName              string                                  `json:"system_name"`
+	SystemLogo              string                                  `json:"system_logo"`
+	SystemFavicon           string                                  `json:"system_favicon"`
+	DefaultLanguage         string                                  `json:"default_language"`
+	DefaultTimezone         string                                  `json:"default_timezone"`
+	DateFormat              string                                  `json:"date_format"`
+	DownloadExcludePatterns string                                  `json:"download_exclude_patterns"`
+	DefaultDownloadMode     string                                  `json:"default_download_mode"`
+	SkipExcludedOnUpload    bool                                    `json:"skip_excluded_on_upload"`
+	MaxFileUploadSize       int                                     `json:"max_file_upload_size"`
+	CompletionEnabled       bool                                    `json:"completion_enabled"`
+	CompletionProviders     *systemconfig.CompletionProvidersConfig `json:"completion_providers,omitempty"`
+	CompletionQuotas        *systemconfig.CompletionQuotasConfig    `json:"completion_quotas,omitempty"`
+	CompletionCache         *systemconfig.CompletionCacheConfig     `json:"completion_cache,omitempty"`
 	// 注册配置
-	AllowRegistration       bool                                     `json:"allow_registration"`
-	DefaultRole             string                                   `json:"default_role"`
+	AllowRegistration bool   `json:"allow_registration"`
+	DefaultRole       string `json:"default_role"`
 	// OAuth 配置
-	OAuthEnabled            bool                                     `json:"oauth_enabled"`
-	GoogleClientID          string                                   `json:"google_client_id"`
-	GoogleClientSecret      string                                   `json:"google_client_secret,omitempty"`
+	OAuthEnabled       bool   `json:"oauth_enabled"`
+	GoogleClientID     string `json:"google_client_id"`
+	GoogleClientSecret string `json:"google_client_secret,omitempty"`
+	// JWT 过期与刷新（不包含 JWT_SECRET）
+	JWTAccessExpireMinutes       int  `json:"jwt_access_expire_minutes"`
+	JWTRefreshIdleExpireDays     int  `json:"jwt_refresh_idle_expire_days"`
+	JWTRefreshAbsoluteExpireDays int  `json:"jwt_refresh_absolute_expire_days"`
+	JWTRefreshRotate             bool `json:"jwt_refresh_rotate"`
+	JWTRefreshReuseDetection     bool `json:"jwt_refresh_reuse_detection"`
 }
 
 // GetSystemConfig 获取系统配置
@@ -100,23 +106,29 @@ func (h *SystemConfigHandler) SaveSystemConfig(c *gin.Context) {
 
 // toDTO 将模型转换为DTO
 func (h *SystemConfigHandler) toDTO(config *systemconfig.SystemConfig) *SystemConfigDTOV2 {
+	jwtConfig := config.JWTSessionConfig()
 	dto := &SystemConfigDTOV2{
-		SystemName:              config.SystemName,
-		SystemLogo:              config.SystemLogo,
-		SystemFavicon:           config.SystemFavicon,
-		DefaultLanguage:         config.DefaultLanguage,
-		DefaultTimezone:         config.DefaultTimezone,
-		DateFormat:              config.DateFormat,
-		DownloadExcludePatterns: config.DownloadExcludePatterns,
-		DefaultDownloadMode:     config.DefaultDownloadMode,
-		SkipExcludedOnUpload:    config.SkipExcludedOnUpload,
-		MaxFileUploadSize:       config.MaxFileUploadSize,
-		CompletionEnabled:       config.CompletionEnabled,
-		AllowRegistration:       config.AllowRegistration,
-		DefaultRole:             config.DefaultRole,
-		OAuthEnabled:            config.OAuthEnabled,
-		GoogleClientID:          config.GoogleClientID,
-		GoogleClientSecret:      config.GoogleClientSecret,
+		SystemName:                   config.SystemName,
+		SystemLogo:                   config.SystemLogo,
+		SystemFavicon:                config.SystemFavicon,
+		DefaultLanguage:              config.DefaultLanguage,
+		DefaultTimezone:              config.DefaultTimezone,
+		DateFormat:                   config.DateFormat,
+		DownloadExcludePatterns:      config.DownloadExcludePatterns,
+		DefaultDownloadMode:          config.DefaultDownloadMode,
+		SkipExcludedOnUpload:         config.SkipExcludedOnUpload,
+		MaxFileUploadSize:            config.MaxFileUploadSize,
+		CompletionEnabled:            config.CompletionEnabled,
+		AllowRegistration:            config.AllowRegistration,
+		DefaultRole:                  config.DefaultRole,
+		OAuthEnabled:                 config.OAuthEnabled,
+		GoogleClientID:               config.GoogleClientID,
+		GoogleClientSecret:           config.GoogleClientSecret,
+		JWTAccessExpireMinutes:       jwtConfig.AccessExpireMinutes,
+		JWTRefreshIdleExpireDays:     jwtConfig.RefreshIdleExpireDays,
+		JWTRefreshAbsoluteExpireDays: jwtConfig.RefreshAbsoluteExpireDays,
+		JWTRefreshRotate:             jwtConfig.RefreshRotate,
+		JWTRefreshReuseDetection:     jwtConfig.RefreshReuseDetection,
 	}
 
 	// 解析补全配置
@@ -147,22 +159,27 @@ func (h *SystemConfigHandler) toDTO(config *systemconfig.SystemConfig) *SystemCo
 // fromDTO 将DTO转换为模型
 func (h *SystemConfigHandler) fromDTO(dto *SystemConfigDTOV2) (*systemconfig.SystemConfig, error) {
 	config := &systemconfig.SystemConfig{
-		SystemName:              dto.SystemName,
-		SystemLogo:              dto.SystemLogo,
-		SystemFavicon:           dto.SystemFavicon,
-		DefaultLanguage:         dto.DefaultLanguage,
-		DefaultTimezone:         dto.DefaultTimezone,
-		DateFormat:              dto.DateFormat,
-		DownloadExcludePatterns: dto.DownloadExcludePatterns,
-		DefaultDownloadMode:     dto.DefaultDownloadMode,
-		SkipExcludedOnUpload:    dto.SkipExcludedOnUpload,
-		MaxFileUploadSize:       dto.MaxFileUploadSize,
-		CompletionEnabled:       dto.CompletionEnabled,
-		AllowRegistration:       dto.AllowRegistration,
-		DefaultRole:             dto.DefaultRole,
-		OAuthEnabled:            dto.OAuthEnabled,
-		GoogleClientID:          dto.GoogleClientID,
-		GoogleClientSecret:      dto.GoogleClientSecret,
+		SystemName:                   dto.SystemName,
+		SystemLogo:                   dto.SystemLogo,
+		SystemFavicon:                dto.SystemFavicon,
+		DefaultLanguage:              dto.DefaultLanguage,
+		DefaultTimezone:              dto.DefaultTimezone,
+		DateFormat:                   dto.DateFormat,
+		DownloadExcludePatterns:      dto.DownloadExcludePatterns,
+		DefaultDownloadMode:          dto.DefaultDownloadMode,
+		SkipExcludedOnUpload:         dto.SkipExcludedOnUpload,
+		MaxFileUploadSize:            dto.MaxFileUploadSize,
+		CompletionEnabled:            dto.CompletionEnabled,
+		AllowRegistration:            dto.AllowRegistration,
+		DefaultRole:                  dto.DefaultRole,
+		OAuthEnabled:                 dto.OAuthEnabled,
+		GoogleClientID:               dto.GoogleClientID,
+		GoogleClientSecret:           dto.GoogleClientSecret,
+		JWTAccessExpireMinutes:       dto.JWTAccessExpireMinutes,
+		JWTRefreshIdleExpireDays:     dto.JWTRefreshIdleExpireDays,
+		JWTRefreshAbsoluteExpireDays: dto.JWTRefreshAbsoluteExpireDays,
+		JWTRefreshRotate:             dto.JWTRefreshRotate,
+		JWTRefreshReuseDetection:     dto.JWTRefreshReuseDetection,
 	}
 
 	// 序列化补全配置
@@ -331,4 +348,39 @@ func (h *SystemConfigHandler) PatchCompletionConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Completion config updated successfully"})
+}
+
+// PatchJWTSessionConfig 部分更新 JWT 过期与刷新配置。
+// @Summary 部分更新 JWT 会话配置
+// @Tags 系统设置
+// @Accept json
+// @Produce json
+// @Param request body SystemConfigDTOV2 true "JWT 会话配置"
+// @Success 200 {object} map[string]string
+// @Router /api/v1/settings/system/jwt-session [patch]
+func (h *SystemConfigHandler) PatchJWTSessionConfig(c *gin.Context) {
+	var dto SystemConfigDTOV2
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	existingConfig, err := h.service.Get(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	existingConfig.JWTAccessExpireMinutes = dto.JWTAccessExpireMinutes
+	existingConfig.JWTRefreshIdleExpireDays = dto.JWTRefreshIdleExpireDays
+	existingConfig.JWTRefreshAbsoluteExpireDays = dto.JWTRefreshAbsoluteExpireDays
+	existingConfig.JWTRefreshRotate = dto.JWTRefreshRotate
+	existingConfig.JWTRefreshReuseDetection = dto.JWTRefreshReuseDetection
+
+	if err := h.service.Save(c.Request.Context(), existingConfig); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "JWT session configuration saved successfully"})
 }

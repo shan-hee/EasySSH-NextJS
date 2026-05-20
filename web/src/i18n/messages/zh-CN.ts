@@ -1990,10 +1990,13 @@ const messages = {
 
     // 安全中心 - JWT
     jwtSecretMin: "JWT 密钥长度不能小于 32 个字符",
-    accessExpireMin: "访问令牌过期时间不能小于 1 小时",
-    accessExpireMax: "访问令牌过期时间不能超过 168 小时",
-    refreshExpireMin: "刷新令牌过期时间不能小于 24 小时",
-    refreshExpireMax: "刷新令牌过期时间不能超过 720 小时",
+    jwtAccessExpireMin: "访问令牌有效期不能小于 5 分钟",
+    jwtAccessExpireMax: "访问令牌有效期不能超过 1440 分钟",
+    jwtRefreshIdleExpireMin: "闲置登录有效期不能小于 1 天",
+    jwtRefreshIdleExpireMax: "闲置登录有效期不能超过 90 天",
+    jwtRefreshAbsoluteExpireMin: "最长登录有效期不能小于 1 天",
+    jwtRefreshAbsoluteExpireMax: "最长登录有效期不能超过 365 天",
+    jwtRefreshAbsoluteGteIdle: "最长登录有效期必须大于或等于闲置登录有效期",
 
     // 系统配置 - 基本信息
     systemNameRequired: "系统名称不能为空",
@@ -2081,6 +2084,24 @@ const messages = {
     fieldHibernate: "后台标签页休眠",
     fieldHibernateDesc:
       "启用后，后台标签页将自动休眠以节省资源",
+    jwtSectionTitle: "令牌过期与刷新",
+    jwtSectionDescription:
+      "配置访问令牌有效期和登录保持策略。JWT 密钥仍从 .env 读取。",
+    fieldJWTAccessExpire: "访问令牌有效期（分钟）",
+    fieldJWTAccessExpireDesc:
+      "短期访问令牌的有效时间（5-1440 分钟），正常使用时会自动刷新。",
+    fieldJWTRefreshIdleExpire: "闲置登录有效期（天）",
+    fieldJWTRefreshIdleExpireDesc:
+      "用户连续未刷新会话超过该时间后需要重新登录（1-90 天）。",
+    fieldJWTRefreshAbsoluteExpire: "最长登录有效期（天）",
+    fieldJWTRefreshAbsoluteExpireDesc:
+      "即使持续使用，到达该上限后也需要重新登录（1-365 天）。",
+    fieldJWTRefreshRotate: "刷新令牌轮换",
+    fieldJWTRefreshRotateDesc:
+      "每次刷新访问令牌时同时更换刷新令牌，建议保持开启。",
+    fieldJWTRefreshReuseDetection: "刷新令牌复用检测",
+    fieldJWTRefreshReuseDetectionDesc:
+      "检测旧刷新令牌被异常复用的情况，建议保持开启。",
     previewTitle: "当前配置预览：",
     previewSessionTimeoutPrefix: "• 用户在 ",
     previewSessionTimeoutSuffix: " 分钟无操作后将自动退出",
@@ -2090,8 +2111,19 @@ const messages = {
     previewEnabled: "已启用",
     previewDisabled: "已禁用",
     previewHibernatePrefix: "• 后台休眠：",
+    jwtPreviewTitle: "令牌配置预览：",
+    previewJWTAccessPrefix: "• 访问令牌 ",
+    previewJWTAccessSuffix: " 分钟后过期",
+    previewJWTRefreshIdlePrefix: "• 闲置 ",
+    previewJWTRefreshIdleSuffix: " 天未使用后需要重新登录",
+    previewJWTRefreshAbsolutePrefix: "• 最长登录保持 ",
+    previewJWTRefreshAbsoluteSuffix: " 天",
+    previewJWTRefreshRotatePrefix: "• 刷新令牌轮换：",
+    previewJWTReuseDetectionPrefix: "• 复用检测：",
     alertContent:
       "会话管理配置会影响所有用户的登录体验。建议根据实际使用场景合理设置超时时间，既要保证安全性，也要兼顾用户体验。",
+    jwtAlertContent:
+      "这些配置保存后会在后端服务重启后生效；已签发令牌的过期时间不会被立即改写。",
   },
   settingsSecurityNetwork: {
     corsSectionTitle: "CORS 跨域配置",

@@ -40,6 +40,7 @@ type JWTService interface {
 	GenerateTokensForSession(user *User, sessionID uuid.UUID) (accessToken, refreshToken string, err error)
 	ValidateToken(tokenString string) (*Claims, error)
 	RefreshToken(refreshToken string) (accessToken, newRefreshToken string, err error)
+	RefreshTokenWithinGrace(refreshToken string) (accessToken string, err error)
 	BlacklistToken(tokenString string, expiration time.Duration) error
 	IsBlacklisted(tokenString string) (bool, error)
 	GenerateTempToken(userID string) (string, error)
@@ -165,12 +166,18 @@ func (s *jwtService) generateRefreshToken(user *User, now time.Time, tokenFamily
 }
 
 func (s *jwtService) ValidateToken(tokenString string) (*Claims, error) {
-	blacklisted, err := s.IsBlacklisted(tokenString)
-	if err != nil {
-		return nil, err
-	}
-	if blacklisted {
-		return nil, ErrTokenBlacklisted
+	return s.validateToken(tokenString, true)
+}
+
+func (s *jwtService) validateToken(tokenString string, checkBlacklist bool) (*Claims, error) {
+	if checkBlacklist {
+		blacklisted, err := s.IsBlacklisted(tokenString)
+		if err != nil {
+			return nil, err
+		}
+		if blacklisted {
+			return nil, ErrTokenBlacklisted
+		}
 	}
 
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
@@ -201,6 +208,25 @@ func (s *jwtService) ValidateToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
+func (s *jwtService) validateRefreshClaims(claims *Claims, now time.Time) error {
+	if len(claims.Audience) == 0 || claims.Audience[0] != "refresh" {
+		return errors.New("not a refresh token")
+	}
+
+	if claims.AbsoluteExpiry > 0 && now.Unix() > claims.AbsoluteExpiry {
+		return errors.New("refresh token has reached absolute expiration")
+	}
+
+	if claims.LastUsed > 0 {
+		idleTime := now.Unix() - claims.LastUsed
+		if idleTime > int64(s.refreshIdleExpireDuration.Seconds()) {
+			return errors.New("refresh token has been idle for too long")
+		}
+	}
+
+	return nil
+}
+
 func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 	now := time.Now()
 
@@ -209,19 +235,8 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 		return "", "", err
 	}
 
-	if len(claims.Audience) == 0 || claims.Audience[0] != "refresh" {
-		return "", "", errors.New("not a refresh token")
-	}
-
-	if claims.AbsoluteExpiry > 0 && now.Unix() > claims.AbsoluteExpiry {
-		return "", "", errors.New("refresh token has reached absolute expiration")
-	}
-
-	if claims.LastUsed > 0 {
-		idleTime := now.Unix() - claims.LastUsed
-		if idleTime > int64(s.refreshIdleExpireDuration.Seconds()) {
-			return "", "", errors.New("refresh token has been idle for too long")
-		}
+	if err := s.validateRefreshClaims(claims, now); err != nil {
+		return "", "", err
 	}
 
 	if s.refreshReuseDetection && claims.TokenFamily != "" {
@@ -278,6 +293,36 @@ func (s *jwtService) RefreshToken(refreshToken string) (string, string, error) {
 	}
 
 	return newAccessToken, "", nil
+}
+
+// RefreshTokenWithinGrace 为短暂并发刷新宽限场景签发新的 access_token。
+// 该路径仍校验 refresh token 的签名、类型和过期时间，但跳过黑名单/已使用缓存，
+// 避免同一浏览器多标签页同时刷新时把合法旧 token 误判为复用攻击。
+func (s *jwtService) RefreshTokenWithinGrace(refreshToken string) (string, error) {
+	now := time.Now()
+
+	claims, err := s.validateToken(refreshToken, false)
+	if err != nil {
+		return "", err
+	}
+	if err := s.validateRefreshClaims(claims, now); err != nil {
+		return "", err
+	}
+
+	user := &User{
+		ID:       claims.UserID,
+		Username: claims.Username,
+		Email:    claims.Email,
+		Role:     claims.Role,
+	}
+
+	var sessionIDPtr *uuid.UUID
+	if claims.SessionID != (uuid.UUID{}) {
+		sid := claims.SessionID
+		sessionIDPtr = &sid
+	}
+
+	return s.generateAccessToken(user, now, sessionIDPtr)
 }
 
 func hashTokenForKey(tokenString string) string {

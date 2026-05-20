@@ -43,12 +43,7 @@ type DatabaseConfig struct {
 
 // JWTConfig JWT 配置
 type JWTConfig struct {
-	Secret                    string
-	AccessExpireMinutes       int  // 访问令牌过期时间（分钟）
-	RefreshIdleExpireDays     int  // 刷新令牌闲置过期时间（天）
-	RefreshAbsoluteExpireDays int  // 刷新令牌绝对过期时间（天）
-	RefreshRotate             bool // 刷新令牌轮换
-	RefreshReuseDetection     bool // 复用检测
+	Secret string
 }
 
 // SFTPConfig SFTP/SSH 池化相关配置
@@ -98,12 +93,7 @@ func Load() (*Config, error) {
 			ConnMaxIdleTime: getEnvInt("DB_CONN_MAX_IDLE_TIME", 10), // 10分钟
 		},
 		JWT: JWTConfig{
-			Secret:                    getEnv("JWT_SECRET", "easyssh-secret-change-in-production"),
-			AccessExpireMinutes:       getEnvInt("JWT_ACCESS_EXPIRE_MINUTES", 15),        // 15 分钟
-			RefreshIdleExpireDays:     getEnvInt("JWT_REFRESH_IDLE_EXPIRE_DAYS", 7),      // 7 天
-			RefreshAbsoluteExpireDays: getEnvInt("JWT_REFRESH_ABSOLUTE_EXPIRE_DAYS", 30), // 30 天
-			RefreshRotate:             getEnvBool("JWT_REFRESH_ROTATE", true),            // 默认启用轮换
-			RefreshReuseDetection:     getEnvBool("JWT_REFRESH_REUSE_DETECTION", true),   // 默认启用复用检测
+			Secret: getEnv("JWT_SECRET", "easyssh-secret-change-in-production"),
 		},
 		SFTP: SFTPConfig{
 			MaxIdleTimeSeconds:     getEnvInt("SFTP_MAX_IDLE_TIME_SECONDS", 120),   // 2分钟
@@ -245,23 +235,6 @@ func (c *Config) Validate() error {
 	if c.Server.Env == "production" && c.JWT.Secret == "easyssh-secret-change-in-production" {
 		return fmt.Errorf("must change JWT secret in production environment")
 	}
-	// 访问令牌验证
-	if c.JWT.AccessExpireMinutes < 5 || c.JWT.AccessExpireMinutes > 1440 {
-		return fmt.Errorf("JWT access token expiration must be between 5 and 1440 minutes (5 minutes to 24 hours)")
-	}
-	// 刷新令牌闲置过期验证
-	if c.JWT.RefreshIdleExpireDays < 1 || c.JWT.RefreshIdleExpireDays > 90 {
-		return fmt.Errorf("JWT refresh token idle expiration must be between 1 and 90 days")
-	}
-	// 刷新令牌绝对过期验证
-	if c.JWT.RefreshAbsoluteExpireDays < 1 || c.JWT.RefreshAbsoluteExpireDays > 365 {
-		return fmt.Errorf("JWT refresh token absolute expiration must be between 1 and 365 days")
-	}
-	// 绝对过期必须大于等于闲置过期
-	if c.JWT.RefreshAbsoluteExpireDays < c.JWT.RefreshIdleExpireDays {
-		return fmt.Errorf("JWT refresh token absolute expiration must be greater than or equal to idle expiration")
-	}
-
 	// SFTP/SSH 池化配置验证
 	if c.SFTP.MaxIdleTimeSeconds < 5 || c.SFTP.MaxIdleTimeSeconds > 3600 {
 		return fmt.Errorf("sftp max idle time must be between 5 and 3600 seconds")

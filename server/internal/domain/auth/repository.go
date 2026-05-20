@@ -61,6 +61,9 @@ type Repository interface {
 	// FindSessionByRefreshToken 根据 refresh token 查找会话
 	FindSessionByRefreshToken(ctx context.Context, tokenHash string) (*Session, error)
 
+	// FindSessionByRefreshTokenWithGrace 根据当前或宽限期内的上一个 refresh token 查找会话
+	FindSessionByRefreshTokenWithGrace(ctx context.Context, tokenHash string) (*Session, bool, error)
+
 	// ListUserSessions 获取用户的所有活跃会话
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]*Session, error)
 
@@ -231,6 +234,29 @@ func (r *gormRepository) FindSessionByRefreshToken(ctx context.Context, tokenHas
 		return nil, err
 	}
 	return &session, nil
+}
+
+// FindSessionByRefreshTokenWithGrace 根据当前 refresh token 或短暂宽限期内的上一个 refresh token 查找会话。
+func (r *gormRepository) FindSessionByRefreshTokenWithGrace(ctx context.Context, tokenHash string) (*Session, bool, error) {
+	now := time.Now()
+
+	var session Session
+	if err := r.db.WithContext(ctx).Where("refresh_token = ?", tokenHash).First(&session).Error; err == nil {
+		return &session, false, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, false, err
+	}
+
+	if err := r.db.WithContext(ctx).
+		Where("previous_refresh_token = ? AND previous_refresh_token_valid_until > ?", tokenHash, now).
+		First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, false, ErrSessionNotFound
+		}
+		return nil, false, err
+	}
+
+	return &session, true, nil
 }
 
 // ListUserSessions 获取用户的所有活跃会话（未过期）

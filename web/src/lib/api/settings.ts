@@ -107,6 +107,11 @@ export interface SystemConfig {
     max_entries: number
   }
   tab_session?: TabSessionConfig
+  jwt_access_expire_minutes?: number
+  jwt_refresh_idle_expire_days?: number
+  jwt_refresh_absolute_expire_days?: number
+  jwt_refresh_rotate?: boolean
+  jwt_refresh_reuse_detection?: boolean
 
   // 注册配置
   allow_registration?: boolean
@@ -141,6 +146,19 @@ export interface TabSessionConfig {
   hibernate: boolean
   session_timeout: number
   remember_login: boolean
+  jwt_access_expire_minutes?: number
+  jwt_refresh_idle_expire_days?: number
+  jwt_refresh_absolute_expire_days?: number
+  jwt_refresh_rotate?: boolean
+  jwt_refresh_reuse_detection?: boolean
+}
+
+export interface JWTSessionConfig {
+  jwt_access_expire_minutes: number
+  jwt_refresh_idle_expire_days: number
+  jwt_refresh_absolute_expire_days: number
+  jwt_refresh_rotate: boolean
+  jwt_refresh_reuse_detection: boolean
 }
 
 /**
@@ -401,6 +419,16 @@ export const settingsApi = {
    */
   async saveCompletionConfig(config: SaveCompletionConfigRequest): Promise<void> {
     return apiFetch<void>("/settings/system/completion", {
+      method: "PATCH",
+      body: config,
+    })
+  },
+
+  /**
+   * 保存 JWT 过期与刷新配置
+   */
+  async saveJWTSessionConfig(config: JWTSessionConfig): Promise<void> {
+    return apiFetch<void>("/settings/system/jwt-session", {
       method: "PATCH",
       body: config,
     })

@@ -5,17 +5,24 @@ import (
 	"net/http"
 
 	"github.com/easyssh/server/internal/domain/security"
+	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/gin-gonic/gin"
 )
 
 // SecurityHandler 安全配置处理器
 type SecurityHandler struct {
-	service security.Service
+	service             security.Service
+	systemConfigService systemconfig.Service
 }
 
 // NewSecurityHandler 创建安全配置处理器
 func NewSecurityHandler(service security.Service) *SecurityHandler {
 	return &SecurityHandler{service: service}
+}
+
+// SetSystemConfigService 设置系统配置服务，用于在会话设置接口中合并 JWT 过期与刷新配置。
+func (h *SecurityHandler) SetSystemConfigService(service systemconfig.Service) {
+	h.systemConfigService = service
 }
 
 // SecurityConfigDTO 安全配置DTO
@@ -275,15 +282,26 @@ func (h *SecurityHandler) GetTabSessionConfig(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"config": gin.H{
-			"max_tabs":         config.MaxTabs,
-			"inactive_minutes": config.InactiveMinutes,
-			"hibernate":        config.Hibernate,
-			"session_timeout":  config.SessionTimeout,
-			"remember_login":   config.RememberLogin,
-		},
-	})
+	response := gin.H{
+		"max_tabs":         config.MaxTabs,
+		"inactive_minutes": config.InactiveMinutes,
+		"hibernate":        config.Hibernate,
+		"session_timeout":  config.SessionTimeout,
+		"remember_login":   config.RememberLogin,
+	}
+
+	if h.systemConfigService != nil {
+		if systemCfg, err := h.systemConfigService.Get(c.Request.Context()); err == nil {
+			jwtCfg := systemCfg.JWTSessionConfig()
+			response["jwt_access_expire_minutes"] = jwtCfg.AccessExpireMinutes
+			response["jwt_refresh_idle_expire_days"] = jwtCfg.RefreshIdleExpireDays
+			response["jwt_refresh_absolute_expire_days"] = jwtCfg.RefreshAbsoluteExpireDays
+			response["jwt_refresh_rotate"] = jwtCfg.RefreshRotate
+			response["jwt_refresh_reuse_detection"] = jwtCfg.RefreshReuseDetection
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"config": response})
 }
 
 // SaveTabSessionConfig 保存标签/会话配置
