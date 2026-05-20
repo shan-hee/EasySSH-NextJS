@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import { usePathname } from "next/navigation"
 import type { SystemConfig } from "@/lib/api/settings"
 import { authApi, type AuthStatusResponse } from "@/lib/api/auth"
 import { useAuthStore } from "@/stores/auth-store"
@@ -14,7 +15,8 @@ interface SystemConfigContextType {
   config: SystemConfig | null
   isLoading: boolean
   error: Error | null
-  refreshConfig: () => Promise<void>
+  refreshConfig: (options?: { refreshAuth?: boolean }) => Promise<void>
+  markLoggedOut: () => void
   authStatus: AuthStatusResponse | null
 }
 
@@ -64,19 +66,20 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
  * 在应用启动时自动加载系统配置并提供给所有子组件
  */
 export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
+  const pathname = usePathname()
   const [config, setConfig] = useState<SystemConfig | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null)
   const setToken = useAuthStore((state) => state.setToken)
 
-  const loadConfig = async () => {
+  const loadConfig = async (options: { refreshAuth?: boolean } = {}) => {
     try {
       setIsLoading(true)
       setError(null)
 
       // 仅通过 /auth/status 获取系统配置和认证状态（开发版约定始终返回 system_config）
-      const status = await authApi.checkStatus()
+      const status = await authApi.checkStatus({ refresh: options.refreshAuth ?? false })
       setAuthStatus(status)
 
       if (!status.system_config) {
@@ -96,12 +99,30 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
     }
   }
 
-  const refreshConfig = async () => {
-    await loadConfig()
+  const refreshConfig = async (options: { refreshAuth?: boolean } = {}) => {
+    await loadConfig(options)
+  }
+
+  const markLoggedOut = () => {
+    const systemConfig = config ?? authStatus?.system_config ?? DEFAULT_SYSTEM_CONFIG
+    setConfig(systemConfig)
+    setAuthStatus({
+      need_init: authStatus?.need_init ?? false,
+      is_authenticated: false,
+      system_config: systemConfig,
+      access_token_ttl_seconds: authStatus?.access_token_ttl_seconds ?? 0,
+    })
+    setError(null)
+    setIsLoading(false)
   }
 
   useEffect(() => {
-    loadConfig()
+    const shouldRestoreSession =
+      pathname === "/" || pathname?.startsWith("/dashboard")
+    loadConfig({ refreshAuth: shouldRestoreSession })
+    // 初始加载时按入口路径决定是否尝试 refresh cookie 恢复会话。
+    // 后续路由跳转由登录/登出流程显式调用 refreshConfig 控制。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 当 /auth/status 返回新的 access_token 时, 同步写入内存中的 token store
@@ -121,7 +142,7 @@ export function SystemConfigProvider({ children }: SystemConfigProviderProps) {
   }, [authStatus, setToken])
 
   return (
-    <SystemConfigContext.Provider value={{ config, isLoading, error, refreshConfig, authStatus }}>
+    <SystemConfigContext.Provider value={{ config, isLoading, error, refreshConfig, markLoggedOut, authStatus }}>
       {children}
     </SystemConfigContext.Provider>
   )

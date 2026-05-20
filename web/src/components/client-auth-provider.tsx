@@ -34,7 +34,7 @@ interface ClientAuthProviderProps {
 export function ClientAuthProvider({ children, initialUser }: ClientAuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser)
   const router = useRouter()
-  const { refreshConfig } = useSystemConfig()
+  const { markLoggedOut } = useSystemConfig()
   const clearToken = useAuthStore((state) => state.clearToken)
   const resetTerminals = useTerminalStore((state) => state.resetAll)
 
@@ -122,14 +122,9 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
     setUser(null)
     clearToken()
     resetTerminals()
-    // 刷新全局认证状态,确保 SessionRefreshProvider 等及时停止工作
-    try {
-      await refreshConfig()
-    } catch (error) {
-      console.error("Failed to refresh system config after logout:", error)
-    }
+    markLoggedOut()
     router.replace("/login")
-  }, [clearToken, refreshConfig, resetTerminals, router])
+  }, [clearToken, markLoggedOut, resetTerminals, router])
 
   return (
     <ClientAuthContext.Provider

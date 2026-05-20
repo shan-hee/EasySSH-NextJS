@@ -205,14 +205,14 @@ export const authApi = {
   /**
    * 检查系统和认证状态
    */
-  async checkStatus(): Promise<AuthStatusResponse> {
+  async checkStatus(options: { refresh?: boolean } = {}): Promise<AuthStatusResponse> {
     // 第一步：直接查询当前状态（如果已有有效 access_token，会被视为已认证）
     let status = await apiFetch<AuthStatusResponse>("/auth/status", {
       method: "GET",
     })
 
     // 已认证或运行在服务端环境时，直接返回
-    if (status.is_authenticated || typeof window === "undefined") {
+    if (status.is_authenticated || typeof window === "undefined" || !options.refresh) {
       return status
     }
 

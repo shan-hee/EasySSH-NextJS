@@ -8,6 +8,7 @@ import { authApi } from "@/lib/api/auth"
 import { useAuthStore } from "@/stores/auth-store"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { getErrorMessage } from "@/lib/error-utils"
+import { isApiError } from "@/lib/api-client"
 import { AuthI18nProvider } from "@/providers/auth-i18n-provider"
 
 // 解析 state 中携带的 next 信息
@@ -46,9 +47,18 @@ function GoogleAuthCallbackInner() {
     const state = queryParams.get("state") || searchParams.get("state")
     const next = parseNextFromState(state)
 
-    const redirectBackToLogin = () => {
-      const nextQuery = next ? `?next=${encodeURIComponent(next)}` : ""
-      router.replace(`/login${nextQuery}`)
+    const redirectBackToLogin = (params: Record<string, string> = {}) => {
+      const query = new URLSearchParams()
+      if (next) {
+        query.set("next", next)
+      }
+      for (const [key, value] of Object.entries(params)) {
+        if (value) {
+          query.set(key, value)
+        }
+      }
+      const queryString = query.toString()
+      router.replace(queryString ? `/login?${queryString}` : "/login")
     }
 
     if (error) {
@@ -96,7 +106,7 @@ function GoogleAuthCallbackInner() {
           description: t("loginToastSuccessDesc"),
         })
 
-        await refreshConfig()
+        await refreshConfig({ refreshAuth: true })
 
         if (next) {
           router.replace(next)
@@ -105,10 +115,17 @@ function GoogleAuthCallbackInner() {
         }
       } catch (err) {
         console.error("Google callback login error:", err)
+        const message = getErrorMessage(err, t("loginGoogleRetryDesc"))
         toast.error(t("loginGoogleFailedTitle"), {
-          description: getErrorMessage(err, t("loginGoogleRetryDesc")),
+          description: message,
         })
-        redirectBackToLogin()
+        const detail = isApiError(err) && typeof err.detail === "object" && err.detail !== null
+          ? (err.detail as { error?: string; message?: string })
+          : null
+        redirectBackToLogin({
+          google_error: detail?.error ?? "google_login_failed",
+          google_message: message,
+        })
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps

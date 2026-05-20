@@ -105,6 +105,25 @@ export function LoginForm({
     }
   }, [searchParams, tAuth])
 
+  useEffect(() => {
+    const googleError = searchParams.get("google_error")
+    if (!googleError) {
+      return
+    }
+
+    const message = searchParams.get("google_message") || tAuth("loginGoogleRetryDesc")
+    toast.error(tAuth("loginGoogleFailedTitle"), {
+      description: message,
+    })
+
+    const next = searchParams.get("next")
+    const query = new URLSearchParams()
+    if (next) {
+      query.set("next", next)
+    }
+    router.replace(query.toString() ? `/login?${query.toString()}` : "/login")
+  }, [router, searchParams, tAuth])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     // 避免重复提交
@@ -175,7 +194,7 @@ export function LoginForm({
         description: tAuth("loginToastSuccessDesc"),
       })
       // 刷新全局 authStatus/system_config
-      await refreshConfig()
+      await refreshConfig({ refreshAuth: true })
       router.replace(getRedirectTarget())
     } catch (error: unknown) {
       console.error("Login error:", error)
@@ -254,7 +273,7 @@ export function LoginForm({
         description: tAuth("login2faToastSuccessDesc"),
       })
 
-      await refreshConfig()
+      await refreshConfig({ refreshAuth: true })
       router.replace(getRedirectTarget())
     } catch (error: unknown) {
       console.error("2FA verification error:", error)

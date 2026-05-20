@@ -37,7 +37,9 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   "password validation failed": "密码验证失败，请确保密码符合要求",
 
   // 权限相关错误
+  "registration_disabled": "用户注册功能已关闭，请联系管理员先创建或绑定账号",
   "User registration is currently disabled": "用户注册功能已关闭",
+  "User registration is disabled. Please contact administrator.": "用户注册功能已关闭，请联系管理员先创建或绑定账号",
   "Verification service is not available. Please contact administrator.": "验证码服务不可用，请联系管理员",
   "Email service is not configured. Please configure SMTP settings in: Settings > Integrations > Email Notifications": "邮件服务未配置，请在设置中配置SMTP",
 
@@ -60,15 +62,27 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
 
 export function getErrorMessage(error: unknown, defaultMessage = "操作失败"): string {
   if (isApiError(error)) {
-    // 优先返回服务器返回的具体错误消息，并尝试翻译
-    if (error.message) {
-      // 如果有中文翻译，返回翻译后的消息
-      const translatedMessage = ERROR_MESSAGE_MAP[error.message]
+    const detail = error.detail
+    if (detail && typeof detail === "object") {
+      const detailObj = detail as { error?: unknown; message?: unknown }
+      const candidates = [detailObj.message, detailObj.error]
+
+      for (const candidate of candidates) {
+        if (typeof candidate !== "string" || candidate.trim() === "") {
+          continue
+        }
+        const translatedMessage = ERROR_MESSAGE_MAP[candidate]
+        if (translatedMessage) {
+          return translatedMessage
+        }
+        return candidate
+      }
+    } else if (typeof detail === "string" && detail.trim() !== "") {
+      const translatedMessage = ERROR_MESSAGE_MAP[detail]
       if (translatedMessage) {
         return translatedMessage
       }
-      // 否则返回原始消息
-      return error.message
+      return detail
     }
 
     // 根据HTTP状态码提供更友好的消息（作为后备）
