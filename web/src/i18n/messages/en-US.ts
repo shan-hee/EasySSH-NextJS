@@ -1343,6 +1343,7 @@ const messages = {
     fieldCommandScriptLabel: "Command / script content",
     fieldCommandScriptPlaceholder: "Enter the command or script to run...",
     fieldTargetServers: "Target servers",
+    serverSearchPlaceholder: "Search servers...",
     selectedServersCount: "Selected {selected} servers",
     selectAll: "Select all",
     unselectAll: "Clear selection",
@@ -1478,6 +1479,10 @@ const messages = {
     statusPartial: "Partial",
     exitCodeLabel: "Exit code:",
     toastLoadFailed: "Failed to load execution history",
+    toastRetryStarted: "Retry started",
+    toastRetryFailed: "Failed to retry execution",
+    toastRetryUnsupported: "This record does not contain retryable command or server information.",
+    retryTaskPrefix: "Retry",
     durationSeconds: "{seconds}s",
     durationMinutesSeconds: "{minutes}m {seconds}s",
     durationHoursMinutes: "{hours}h {minutes}m",
@@ -1602,7 +1607,6 @@ const messages = {
       "Are you sure you want to delete this script?",
     toastDeleteSuccess: "Script deleted.",
     toastDeleteFailed: "Failed to delete script.",
-    toastExecuteInfo: "Script execution feature is coming soon.",
     toastLoadFailed: "Failed to load scripts.",
     toastLoadServersFailed: "Failed to load servers.",
     toastSelectAtLeastOneServer: "Please select at least one online server.",
@@ -2048,6 +2052,8 @@ const messages = {
     loginLimitMax: "Login rate limit cannot exceed 100 per minute.",
     apiLimitMin: "API rate limit cannot be less than 10 per minute.",
     apiLimitMax: "API rate limit cannot exceed 10000 per minute.",
+    twoFALimitMin: "2FA verification rate limit cannot be less than 1 per minute.",
+    twoFALimitMax: "2FA verification rate limit cannot exceed 20 per minute.",
 
     // Security - JWT
     jwtSecretMin: "JWT secret must be at least 32 characters.",
@@ -2186,11 +2192,16 @@ const messages = {
     fieldApiLimit: "API rate limit (requests/minute)",
     fieldApiLimitDesc:
       "Maximum API requests per user per minute (10-10000)",
+    fieldTwoFALimit: "2FA verification rate limit (requests/minute)",
+    fieldTwoFALimitDesc:
+      "Maximum 2FA code verification attempts per IP per minute (1-20)",
     previewTitle: "Current configuration preview:",
     previewLoginPrefix: "• Each IP can attempt login at most ",
     previewLoginSuffix: " times per minute",
     previewApiPrefix: "• Each user can send at most ",
     previewApiSuffix: " API requests per minute",
+    previewTwoFAPrefix: "• Each IP can verify 2FA codes at most ",
+    previewTwoFASuffix: " times per minute",
     alertContent:
       "Rate limiting effectively prevents brute-force attacks and API abuse. Set values according to real usage.",
   },
@@ -2903,8 +2914,6 @@ const messages = {
     tabPermissions: "Permissions",
     // Permissions management
     permissionsTitle: "Permissions Management",
-    permissionsComingSoon: "Coming Soon",
-    permissionsComingSoonDesc: "Permissions management feature is under development",
     // Permissions list
     permTableEmpty: "No permissions configured",
     permSearchPlaceholder: "Search permission name or code...",
@@ -2923,7 +2932,6 @@ const messages = {
     permIsDefaultYes: "Default",
     permActionSetDefault: "Set as Registration Default",
     permActionUnsetDefault: "Unset Registration Default",
-    permFeatureNotReady: "Permission management is not available yet",
     // Permission dialogs
     permDialogCreateTitle: "New Permission",
     permDialogCreateDescription: "Create a new system permission configuration",

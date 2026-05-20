@@ -52,6 +52,13 @@ func (r *repository) Get(ctx context.Context) (*SecurityConfig, error) {
 				Hibernate:       true,
 				LoginLimit:      5,
 				APILimit:        100,
+				TwoFALimit:      5,
+
+				AccountLockEnabled:         true,
+				MaxIPFailAttempts:          10,
+				IPLockDurationMinutes:      30,
+				MaxAccountFailAttempts:     5,
+				AccountLockDurationMinutes: 60,
 			}
 
 			// 序列化默认CORS配置

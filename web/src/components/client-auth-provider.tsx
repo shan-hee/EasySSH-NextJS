@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { authApi, type User, type LoginRequest } from "@/lib/api/auth"
+import { authApi, type User } from "@/lib/api/auth"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { useAuthStore } from "@/stores/auth-store"
 import { useTerminalStore } from "@/stores/terminal-store"
@@ -11,7 +11,6 @@ import { isApiError } from "@/lib/api-client"
 interface ClientAuthContextType {
   user: User | null
   isAuthenticated: boolean
-  login: (credentials: LoginRequest) => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -72,45 +71,6 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
     }
   }, [router])
 
-  // 登录
-  // PKCE 开发版：通过 /oauth/authorize + /oauth/token 获取 access_token，并写入内存 Store
-  const login = useCallback(
-    async (credentials: LoginRequest) => {
-      try {
-        // 1. 使用 PKCE 授权获取授权码（使用邮箱 + 密码）
-        const { email, password } = credentials
-        const redirectUri =
-          typeof window !== "undefined"
-            ? `${window.location.origin}/auth/callback`
-            : "/auth/callback"
-
-        const { code } = await authApi.authorizeWithPkce({
-          email,
-          password,
-          client_id: "easyssh-web",
-          redirect_uri: redirectUri,
-          scope: "openid profile easyssh",
-          // code_challenge 与 code_verifier 由 login 页面统一管理；
-          // 这里作为兜底登录方案，仅用于极少数场景，因此直接抛出错误以提示使用登录页面。
-          code_challenge: "",
-          code_challenge_method: "S256",
-        })
-
-        if (!code) {
-          throw new Error("PKCE login via ClientAuthProvider is not fully supported, please use the /login page.")
-        }
-
-        // 此处仅作为兜底逻辑，正常情况下不会走到这里
-        // 为避免引入重复的 PKCE 实现，不在此处继续交换令牌
-        router.replace("/login")
-      } catch (error) {
-        console.error("Login failed:", error)
-        throw error
-      }
-    },
-    [router]
-  )
-
   // 登出
   // 后端会自动清除 HttpOnly Cookie，同时前端清空内存中的 access_token
   const logout = useCallback(async () => {
@@ -131,7 +91,6 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
       value={{
         user,
         isAuthenticated,
-        login,
         logout,
         refreshUser,
       }}

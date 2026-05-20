@@ -367,7 +367,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const currentPathRef = useRef(initialPath);
   const [pathBackStack, setPathBackStack] = useState<string[]>([]);
-  const [pathForwardStack, setPathForwardStack] = useState<string[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -426,7 +425,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
 
       if (loadedPath && loadedPath !== previousPath) {
         setPathBackStack((prev) => [...prev, previousPath].slice(-50));
-        setPathForwardStack([]);
       }
     },
     [loadDirectory]
@@ -439,32 +437,11 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     const previousPath = pathBackStack[pathBackStack.length - 1];
     if (!previousPath) return;
 
-    const currentBeforeBack = currentPathRef.current;
     const loadedPath = await loadDirectory(previousPath);
     if (!loadedPath) return;
 
     setPathBackStack((prev) => prev.slice(0, -1));
-    if (loadedPath !== currentBeforeBack) {
-      setPathForwardStack((prev) => [...prev, currentBeforeBack].slice(-50));
-    }
   }, [loadDirectory, pathBackStack]);
-
-  /**
-   * 前进到本会话内下一次访问的目录，暂未暴露 UI，但保留状态能力。
-   */
-  const goForward = useCallback(async () => {
-    const nextPath = pathForwardStack[pathForwardStack.length - 1];
-    if (!nextPath) return;
-
-    const currentBeforeForward = currentPathRef.current;
-    const loadedPath = await loadDirectory(nextPath);
-    if (!loadedPath) return;
-
-    setPathForwardStack((prev) => prev.slice(0, -1));
-    if (loadedPath !== currentBeforeForward) {
-      setPathBackStack((prev) => [...prev, currentBeforeForward].slice(-50));
-    }
-  }, [loadDirectory, pathForwardStack]);
 
   /**
    * 刷新当前目录
@@ -682,7 +659,6 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     currentPathRef.current = initialPath;
     setCurrentPath(initialPath);
     setPathBackStack([]);
-    setPathForwardStack([]);
   }, [serverId, initialPath]);
 
   // 页面卸载/切换 serverId 时，主动关闭连接以加速资源回收
@@ -703,12 +679,10 @@ export function useSftpSession(serverId: string, initialPath: string = '/') {
     error,
     transferTasks: fileTransfer.tasks,
     canGoBack: pathBackStack.length > 0,
-    canGoForward: pathForwardStack.length > 0,
 
     // 操作
     navigate,
     goBack,
-    goForward,
     refresh,
     uploadFiles,
     downloadFile,

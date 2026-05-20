@@ -38,6 +38,7 @@ import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/ut
 import { SkeletonStatsCard } from "@/components/ui/loading"
 import { createExecutionHistoryColumns } from "./components/execution-history-columns"
 import {
+  batchTasksApi,
   taskExecutionsApi,
   type TaskExecution,
   type ExecutionStatistics,
@@ -190,9 +191,35 @@ export default function AutomationHistoryPage() {
     }
   }
 
-  const handleRetry = (execution: TaskExecution) => {
-    // TODO: 实现重新执行功能
-    toast.info(`即将重新执行任务: ${execution.task_name}`)
+  const handleRetry = async (execution: TaskExecution) => {
+    try {
+      const detail = await taskExecutionsApi.getById(execution.id)
+      const serverIds = Array.from(
+        new Set((detail.server_results || []).map((result) => result.server_id).filter(Boolean))
+      )
+      const command = detail.command?.trim()
+
+      if (serverIds.length > 0 && command) {
+        const response = await batchTasksApi.create({
+          task_name: `${t("retryTaskPrefix")}: ${detail.task_name}`,
+          task_type: "command",
+          content: command,
+          server_ids: serverIds,
+          execution_mode: "parallel",
+        })
+        const task = "data" in response ? response.data : response
+        await batchTasksApi.start(task.id)
+        toast.success(t("toastRetryStarted"))
+        await loadData()
+        return
+      }
+
+      toast.error(t("toastRetryUnsupported"))
+    } catch (error) {
+      toast.error(t("toastRetryFailed"), {
+        description: getErrorMessage(error),
+      })
+    }
   }
 
   const handleDownloadOutput = async (execution: TaskExecution) => {

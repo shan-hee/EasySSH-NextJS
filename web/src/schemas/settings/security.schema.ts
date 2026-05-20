@@ -35,6 +35,10 @@ export const rateLimitSchema = z.object({
     .number()
     .min(10, "settingsValidation.apiLimitMin")
     .max(10000, "settingsValidation.apiLimitMax"),
+  two_fa_limit: z
+    .number()
+    .min(1, "settingsValidation.twoFALimitMin")
+    .max(20, "settingsValidation.twoFALimitMax"),
 })
 
 // 网络安全配置 Schema (包含 IP 白名单/黑名单)

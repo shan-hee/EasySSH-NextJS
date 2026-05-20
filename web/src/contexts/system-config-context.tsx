@@ -59,6 +59,13 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     ttl_minutes: 5,
     max_entries: 100,
   },
+  tab_session: {
+    max_tabs: 50,
+    inactive_minutes: 60,
+    hibernate: true,
+    session_timeout: 30,
+    remember_login: true,
+  },
 }
 
 /**

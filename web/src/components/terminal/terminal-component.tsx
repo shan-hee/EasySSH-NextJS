@@ -141,6 +141,7 @@ interface TerminalComponentProps {
   externalActiveSessionId?: string | null
   onActiveSessionChange?: (sessionId: string) => void
   onConnectionPhaseChange?: (sessionId: string, phase: TerminalConnectionPhase) => void
+  onBehaviorSettingsChange?: (settings: { maxTabs: number; inactiveMinutes: number }) => void
 }
 
 export function TerminalComponent({
@@ -160,6 +161,7 @@ export function TerminalComponent({
   externalActiveSessionId,
   onActiveSessionChange,
   onConnectionPhaseChange,
+  onBehaviorSettingsChange,
 }: TerminalComponentProps) {
   const { config } = useSystemConfig()
   const tTerminal = useTranslations("terminal")
@@ -475,6 +477,10 @@ export function TerminalComponent({
   // 保存设置到 localStorage（使用防抖优化性能）
   const handleSettingsChange = (newSettings: TerminalSettings) => {
     setSettings(newSettings)
+    onBehaviorSettingsChange?.({
+      maxTabs: newSettings.maxTabs,
+      inactiveMinutes: newSettings.inactiveMinutes,
+    })
 
     // 防抖保存到 localStorage，避免频繁写入
     if (saveTimerRef.current) {

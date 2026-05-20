@@ -37,6 +37,7 @@ export function NetworkSecurityTab() {
         // 速率限制配置
         login_limit: rateLimitData.login_limit || 5,
         api_limit: rateLimitData.api_limit || 100,
+        two_fa_limit: rateLimitData.two_fa_limit || 5,
       }
     },
     saveFn: async (data) => {
@@ -50,6 +51,7 @@ export function NetworkSecurityTab() {
         settingsApi.saveRateLimitConfig({
           login_limit: data.login_limit,
           api_limit: data.api_limit,
+          two_fa_limit: data.two_fa_limit,
         }),
       ])
     },
@@ -264,6 +266,18 @@ export function NetworkSecurityTab() {
           required
         />
 
+        <FormInput
+          form={form}
+          name="two_fa_limit"
+          label={t("fieldTwoFALimit")}
+          description={t("fieldTwoFALimitDesc")}
+          type="number"
+          min={1}
+          max={20}
+          step={1}
+          required
+        />
+
         <div className="rounded-lg border p-4 bg-muted/50">
           <p className="text-sm font-medium mb-2">{t("previewTitle")}</p>
           <div className="text-sm text-muted-foreground space-y-1">
@@ -276,6 +290,11 @@ export function NetworkSecurityTab() {
               {t("previewApiPrefix")}
               <span className="font-semibold text-foreground">{form.watch("api_limit")}</span>
               {t("previewApiSuffix")}
+            </p>
+            <p>
+              {t("previewTwoFAPrefix")}
+              <span className="font-semibold text-foreground">{form.watch("two_fa_limit")}</span>
+              {t("previewTwoFASuffix")}
             </p>
           </div>
         </div>

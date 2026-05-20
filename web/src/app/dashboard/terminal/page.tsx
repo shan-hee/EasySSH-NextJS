@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, Suspense, startTransition } f
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
+import type { TerminalSettings } from "@/components/terminal/terminal-settings-dialog"
 import type {
   TerminalSession,
   TerminalConnectionPhase,
@@ -13,6 +14,7 @@ import { serversApi, type Server } from "@/lib/api"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
+import { useSystemConfig } from "@/contexts/system-config-context"
 
 const statusFromConnectionPhase = (phase: TerminalConnectionPhase) => {
   if (phase === "ready") return "connected" as const
@@ -41,8 +43,46 @@ const createQuickSession = (
   }
 }
 
+const readTerminalBehaviorSettings = (defaults: { maxTabs: number; inactiveMinutes: number }) => {
+  if (typeof window === "undefined") {
+    return defaults
+  }
+
+  try {
+    const saved = localStorage.getItem("terminal-settings")
+    if (saved) {
+      const parsed = JSON.parse(saved) as Partial<TerminalSettings>
+      return {
+        maxTabs:
+          typeof parsed.maxTabs === "number" && Number.isFinite(parsed.maxTabs)
+            ? parsed.maxTabs
+            : defaults.maxTabs,
+        inactiveMinutes:
+          typeof parsed.inactiveMinutes === "number" && Number.isFinite(parsed.inactiveMinutes)
+            ? parsed.inactiveMinutes
+            : defaults.inactiveMinutes,
+      }
+    }
+
+    const legacyMaxTabs = Number(localStorage.getItem("tab.maxTabs") || defaults.maxTabs)
+    const legacyInactiveMinutes = Number(
+      localStorage.getItem("tab.inactiveMinutes") || defaults.inactiveMinutes
+    )
+
+    return {
+      maxTabs: Number.isFinite(legacyMaxTabs) ? legacyMaxTabs : defaults.maxTabs,
+      inactiveMinutes: Number.isFinite(legacyInactiveMinutes)
+        ? legacyInactiveMinutes
+        : defaults.inactiveMinutes,
+    }
+  } catch {
+    return defaults
+  }
+}
+
 function TerminalPageContent() {
   const { ready } = useAuthReady()
+  const { config: systemConfig } = useSystemConfig()
   const t = useTranslations("terminal")
   const quickConnectName = t("quickConnectTabName")
   const [servers, setServers] = useState<QuickServer[]>([])
@@ -59,6 +99,16 @@ function TerminalPageContent() {
   const setActiveSessionId = useTerminalStore((state) => state.setActiveSessionId)
   const updateSessionActivity = useTerminalStore((state) => state.updateSessionActivity)
   const getSessionLastActivity = useTerminalStore((state) => state.getSessionLastActivity)
+  const tabPolicyMaxTabs = systemConfig?.tab_session?.max_tabs ?? 50
+  const tabPolicyInactiveMinutes = systemConfig?.tab_session?.inactive_minutes ?? 60
+
+  const applyTerminalBehaviorSettings = useCallback(
+    (settings: { maxTabs: number; inactiveMinutes: number }) => {
+      setMaxTabs(Math.max(1, Math.min(settings.maxTabs, tabPolicyMaxTabs)))
+      setInactiveMinutes(Math.max(5, Math.min(settings.inactiveMinutes, tabPolicyInactiveMinutes)))
+    },
+    [tabPolicyMaxTabs, tabPolicyInactiveMinutes]
+  )
 
   const resetToQuickSession = useCallback(() => {
     const quickSession = createQuickSession(quickConnectName, `quick-${Date.now()}`)
@@ -232,15 +282,14 @@ function TerminalPageContent() {
     })
   }, [loading, quickConnectName, servers, setSessions, t])
 
-  // 读取通用设置（仅使用本地存储集成）
+  // 读取终端行为设置，和终端设置弹窗使用同一个 localStorage key。
   useEffect(() => {
     const loadSettings = () => {
-      try {
-        const mt = Number(localStorage.getItem("tab.maxTabs") || "50")
-        if (!isNaN(mt)) setMaxTabs(mt)
-        const im = Number(localStorage.getItem("tab.inactiveMinutes") || "60")
-        if (!isNaN(im)) setInactiveMinutes(im)
-      } catch {}
+      const settings = readTerminalBehaviorSettings({
+        maxTabs: tabPolicyMaxTabs,
+        inactiveMinutes: tabPolicyInactiveMinutes,
+      })
+      applyTerminalBehaviorSettings(settings)
     }
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
@@ -248,7 +297,7 @@ function TerminalPageContent() {
     } else {
       setTimeout(loadSettings, 0)
     }
-  }, [])
+  }, [applyTerminalBehaviorSettings, tabPolicyInactiveMinutes, tabPolicyMaxTabs])
 
   const handleNewSession = (): string | void => {
     if (sessions.length >= maxTabs) {
@@ -479,6 +528,7 @@ function TerminalPageContent() {
         externalActiveSessionId={activeSessionId}
         onActiveSessionChange={setActiveSessionId}
         onConnectionPhaseChange={handleConnectionPhaseChange}
+        onBehaviorSettingsChange={applyTerminalBehaviorSettings}
       />
     </div>
   )

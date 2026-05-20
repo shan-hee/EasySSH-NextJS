@@ -106,6 +106,7 @@ export interface SystemConfig {
     ttl_minutes: number
     max_entries: number
   }
+  tab_session?: TabSessionConfig
 
   // 注册配置
   allow_registration?: boolean
@@ -188,6 +189,7 @@ export interface GetCORSConfigResponse {
 export interface RateLimitConfig {
   login_limit: number
   api_limit: number
+  two_fa_limit: number
 }
 
 /**
@@ -306,7 +308,7 @@ export const settingsApi = {
    * 保存钉钉配置
    */
   async saveDingTalkConfigOnly(config: DingTalkConfig): Promise<void> {
-    return apiFetch<void>("/settings/dingding", {
+    return apiFetch<void>("/settings/dingtalk", {
       method: "POST",
       body: config,
     })
@@ -316,7 +318,7 @@ export const settingsApi = {
    * 保存企业微信配置
    */
   async saveWeComConfigOnly(config: WeComConfig): Promise<void> {
-    return apiFetch<void>("/settings/wechat", {
+    return apiFetch<void>("/settings/wecom", {
       method: "POST",
       body: config,
     })
@@ -348,7 +350,7 @@ export const settingsApi = {
    * 测试钉钉连接
    */
   async testDingTalkConnection(config: DingTalkConfig): Promise<void> {
-    return apiFetch<void>("/settings/dingding/test", {
+    return apiFetch<void>("/settings/dingtalk/test", {
       method: "POST",
       body: config,
     })
@@ -358,7 +360,7 @@ export const settingsApi = {
    * 测试企业微信连接
    */
   async testWeComConnection(config: WeComConfig): Promise<void> {
-    return apiFetch<void>("/settings/wechat/test", {
+    return apiFetch<void>("/settings/wecom/test", {
       method: "POST",
       body: config,
     })

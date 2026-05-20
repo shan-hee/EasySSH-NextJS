@@ -1296,6 +1296,7 @@ const messages = {
     fieldCommandScriptLabel: "命令/脚本内容",
     fieldCommandScriptPlaceholder: "输入要执行的命令或脚本...",
     fieldTargetServers: "目标服务器",
+    serverSearchPlaceholder: "搜索服务器...",
     selectedServersCount: "已选择 {selected} 台服务器",
     selectAll: "全选",
     unselectAll: "取消全选",
@@ -1369,6 +1370,10 @@ const messages = {
     statusPartial: "部分成功",
     exitCodeLabel: "退出码:",
     toastLoadFailed: "加载执行记录失败",
+    toastRetryStarted: "已重新发起执行",
+    toastRetryFailed: "重新执行失败",
+    toastRetryUnsupported: "这条记录缺少可重试的命令或服务器信息",
+    retryTaskPrefix: "重新执行",
     durationSeconds: "{seconds}秒",
     durationMinutesSeconds: "{minutes}分{seconds}秒",
     durationHoursMinutes: "{hours}小时{minutes}分",
@@ -1488,7 +1493,6 @@ const messages = {
     toastDeleteConfirm: "确定要删除这个脚本吗？",
     toastDeleteSuccess: "脚本删除成功",
     toastDeleteFailed: "删除脚本失败",
-    toastExecuteInfo: "脚本执行功能即将推出",
     toastLoadFailed: "加载脚本失败",
     toastLoadServersFailed: "加载服务器列表失败",
     toastSelectAtLeastOneServer: "请选择至少一个在线服务器",
@@ -1981,6 +1985,8 @@ const messages = {
     loginLimitMax: "登录速率限制不能超过 100 次/分钟",
     apiLimitMin: "API 速率限制不能小于 10 次/分钟",
     apiLimitMax: "API 速率限制不能超过 10000 次/分钟",
+    twoFALimitMin: "2FA 验证速率限制不能小于 1 次/分钟",
+    twoFALimitMax: "2FA 验证速率限制不能超过 20 次/分钟",
 
     // 安全中心 - JWT
     jwtSecretMin: "JWT 密钥长度不能小于 32 个字符",
@@ -2110,11 +2116,16 @@ const messages = {
     fieldApiLimit: "API 速率限制（次/分钟）",
     fieldApiLimitDesc:
       "每个用户每分钟允许的 API 请求次数（10-10000）",
+    fieldTwoFALimit: "2FA 验证速率限制（次/分钟）",
+    fieldTwoFALimitDesc:
+      "每个 IP 地址每分钟允许的双因子验证码校验次数（1-20）",
     previewTitle: "当前配置预览：",
     previewLoginPrefix: "• 每个 IP 每分钟最多尝试登录 ",
     previewLoginSuffix: " 次",
     previewApiPrefix: "• 每个用户每分钟最多发起 ",
     previewApiSuffix: " 次 API 请求",
+    previewTwoFAPrefix: "• 每个 IP 每分钟最多校验 2FA 验证码 ",
+    previewTwoFASuffix: " 次",
     alertContent:
       "速率限制可以有效防止暴力破解和 API 滥用。建议根据实际使用情况合理设置限制值。",
   },
@@ -2755,8 +2766,6 @@ const messages = {
     tabPermissions: "权限",
     // 权限管理
     permissionsTitle: "权限管理",
-    permissionsComingSoon: "功能开发中",
-    permissionsComingSoonDesc: "权限管理功能即将上线，敬请期待",
     // 权限列表
     permTableEmpty: "暂无权限配置",
     permSearchPlaceholder: "搜索权限名称或代码...",
@@ -2775,7 +2784,6 @@ const messages = {
     permIsDefaultYes: "默认",
     permActionSetDefault: "设为注册默认",
     permActionUnsetDefault: "取消注册默认",
-    permFeatureNotReady: "权限管理功能暂未开放",
     // 权限对话框
     permDialogCreateTitle: "新建权限",
     permDialogCreateDescription: "创建一个新的系统权限配置",

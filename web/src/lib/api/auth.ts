@@ -34,17 +34,6 @@ export interface User {
 }
 
 /**
- * 登录请求
- */
-export interface LoginRequest {
-  email: string
-  password: string
-}
-
-/**
- * 登录响应
- */
-/**
  * 注册请求
  */
 export interface RegisterRequest {

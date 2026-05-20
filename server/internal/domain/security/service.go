@@ -44,6 +44,43 @@ type service struct {
 	repo Repository
 }
 
+func applySecurityConfigDefaults(config *SecurityConfig) {
+	if config == nil {
+		return
+	}
+
+	if config.SessionTimeout <= 0 {
+		config.SessionTimeout = 30
+	}
+	if config.MaxTabs <= 0 {
+		config.MaxTabs = 10
+	}
+	if config.InactiveMinutes <= 0 {
+		config.InactiveMinutes = 15
+	}
+	if config.LoginLimit <= 0 {
+		config.LoginLimit = 5
+	}
+	if config.APILimit <= 0 {
+		config.APILimit = 100
+	}
+	if config.TwoFALimit <= 0 {
+		config.TwoFALimit = 5
+	}
+	if config.MaxIPFailAttempts <= 0 {
+		config.MaxIPFailAttempts = 10
+	}
+	if config.IPLockDurationMinutes <= 0 {
+		config.IPLockDurationMinutes = 30
+	}
+	if config.MaxAccountFailAttempts <= 0 {
+		config.MaxAccountFailAttempts = 5
+	}
+	if config.AccountLockDurationMinutes <= 0 {
+		config.AccountLockDurationMinutes = 60
+	}
+}
+
 // NewService 创建安全配置服务
 func NewService(repo Repository) Service {
 	return &service{repo: repo}
@@ -51,7 +88,12 @@ func NewService(repo Repository) Service {
 
 // Get 获取安全配置
 func (s *service) Get(ctx context.Context) (*SecurityConfig, error) {
-	return s.repo.Get(ctx)
+	config, err := s.repo.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	applySecurityConfigDefaults(config)
+	return config, nil
 }
 
 // Save 保存安全配置

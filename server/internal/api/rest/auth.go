@@ -1184,6 +1184,18 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 				"oauth_enabled":             cfg.OAuthEnabled,
 				"google_client_id":          cfg.GoogleClientID,
 			}
+
+			if h.securityService != nil {
+				if securityCfg, err := h.securityService.Get(c.Request.Context()); err == nil && securityCfg != nil {
+					response["system_config"].(gin.H)["tab_session"] = gin.H{
+						"max_tabs":         securityCfg.MaxTabs,
+						"inactive_minutes": securityCfg.InactiveMinutes,
+						"hibernate":        securityCfg.Hibernate,
+						"session_timeout":  securityCfg.SessionTimeout,
+						"remember_login":   securityCfg.RememberLogin,
+					}
+				}
+			}
 		}
 	}
 

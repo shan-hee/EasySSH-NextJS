@@ -191,7 +191,11 @@ func (h *SecurityHandler) SaveRateLimitConfig(c *gin.Context) {
 
 	config.LoginLimit = req.LoginLimit
 	config.APILimit = req.APILimit
-	config.TwoFALimit = req.TwoFALimit
+	if req.TwoFALimit > 0 {
+		config.TwoFALimit = req.TwoFALimit
+	} else if config.TwoFALimit <= 0 {
+		config.TwoFALimit = 5
+	}
 
 	if err := h.service.Save(c.Request.Context(), config); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

@@ -108,7 +108,7 @@ export default function AutomationSchedulesPage() {
  })
 
  // 服务器选择器状态
- const serverSearchTerm = "" // TODO: 实现服务器搜索功能
+ const [serverSearchTerm, setServerSearchTerm] = useState("")
  const [scriptSearchTerm, setScriptSearchTerm] = useState("")
 
  // 加载所有数据
@@ -638,13 +638,22 @@ export default function AutomationSchedulesPage() {
     {t("selectedServersCount", { selected: newTask.server_ids.length })}
     </span>
  <Button variant="ghost" size="sm" onClick={toggleSelectAll}>
- {newTask.server_ids.length === servers.filter((s) => s.status === "online").length
+ {newTask.server_ids.length === filteredServers.filter((s) => s.status === "online").length
  ? t("unselectAll")
  : t("selectAll")}
  </Button>
  </div>
+ <div className="relative mb-2">
+ <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+ <Input
+ placeholder={t("serverSearchPlaceholder")}
+ className="pl-10"
+ value={serverSearchTerm}
+ onChange={(e) => setServerSearchTerm(e.target.value)}
+ />
+ </div>
  <div className="space-y-1">
- {servers
+ {filteredServers
  .filter((s) => s.status === "online")
  .map((server) => (
  <div
@@ -787,13 +796,22 @@ export default function AutomationSchedulesPage() {
     {t("selectedServersCount", { selected: editTask.server_ids.length })}
     </span>
  <Button variant="ghost" size="sm" onClick={toggleEditSelectAll}>
- {editTask.server_ids.length === servers.filter((s) => s.status === "online").length
+ {editTask.server_ids.length === filteredServers.filter((s) => s.status === "online").length
  ? t("unselectAll")
  : t("selectAll")}
  </Button>
  </div>
+ <div className="relative mb-2">
+ <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+ <Input
+ placeholder={t("serverSearchPlaceholder")}
+ className="pl-10"
+ value={serverSearchTerm}
+ onChange={(e) => setServerSearchTerm(e.target.value)}
+ />
+ </div>
  <div className="space-y-1">
- {servers
+ {filteredServers
  .filter((s) => s.status === "online")
  .map((server) => (
  <div
