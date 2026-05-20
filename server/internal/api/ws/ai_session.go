@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"

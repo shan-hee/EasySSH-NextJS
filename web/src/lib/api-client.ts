@@ -1,7 +1,7 @@
 import { getApiUrl as getApiUrlFromConfig } from "@/lib/config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
 import { performRefreshToken } from "@/lib/session-refresh"
-import { ensureCSRFToken, updateCSRFTokenFromHeaders } from "@/lib/csrf"
+import { clearCSRFToken, ensureCSRFToken, updateCSRFTokenFromHeaders } from "@/lib/csrf"
 
 // 重新导出 getApiUrl 以便其他模块使用
 export function getApiUrl(path: string = ""): string {
@@ -159,6 +159,20 @@ function shouldIncludeCookies(url: string): boolean {
   )
 }
 
+function isCSRFTokenInvalid(error: unknown): boolean {
+  if (!isApiError(error) || error.status !== 403) {
+    return false
+  }
+
+  const detail = error.detail
+  return (
+    typeof detail === "object" &&
+    detail !== null &&
+    "error" in detail &&
+    (detail as { error?: string }).error === "csrf_token_invalid"
+  )
+}
+
 type ApiFetchOptions = {
   method?: HttpMethod
   headers?: HeadersInit
@@ -207,6 +221,17 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     try {
       return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
     } catch (error) {
+      const method = fetchOptions.method ?? "GET"
+      if (
+        typeof window !== "undefined" &&
+        method !== "GET" &&
+        shouldIncludeCookies(path) &&
+        isCSRFTokenInvalid(error)
+      ) {
+        clearCSRFToken()
+        return await apiFetchInternal<T>(path, { ...fetchOptions, timeout })
+      }
+
       // 401 处理：仅在浏览器端尝试用 Cookie 刷新并重放一次
       if (typeof window !== 'undefined' && isApiError(error) && error.status === 401) {
         try {
@@ -325,7 +350,7 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
 
   try {
     const res = await fetch(url, init)
-    updateCSRFTokenFromHeaders(res.headers)
+    updateCSRFTokenFromHeaders(res.headers, { trusted: credentials === "include" })
 
     // 清理超时定时器
     if (timeoutId) {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/notification"
 	"github.com/easyssh/server/internal/domain/security"
@@ -1187,6 +1188,16 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 	}
 
 	RespondSuccess(c, response)
+}
+
+// CSRFToken 返回当前请求可用的 CSRF token
+// GET /api/v1/auth/csrf
+func (h *AuthHandler) CSRFToken(c *gin.Context) {
+	token := middleware.GetCSRFToken(c.Request)
+	if token != "" {
+		c.Header(middleware.CSRFTokenHeader, token)
+	}
+	RespondSuccess(c, gin.H{"csrf_token": token})
 }
 
 // InitializeAdmin 初始化管理员账户

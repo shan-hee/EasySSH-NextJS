@@ -544,6 +544,7 @@ func main() {
 			authRoutes.POST("/logout", authHandler.Logout)
 			// 使用可选认证中间件，支持未登录和已登录状态
 			authRoutes.GET("/status", middleware.OptionalAuth(jwtService, ticketService, authRepo), authHandler.CheckStatus) // 检查系统和认证状态
+			authRoutes.GET("/csrf", authHandler.CSRFToken)                                                                   // 获取 CSRF token
 			// 一次性 Ticket（需认证，用于 WS/下载握手）
 			authRoutes.POST("/ticket", middleware.AuthMiddleware(jwtService, ticketService, authRepo), ticketHandler.CreateTicket)
 			// 初始化管理员接口应用速率限制（支持动态配置）

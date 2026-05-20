@@ -18,30 +18,43 @@ const CSRFTokenHeader = "X-CSRF-Token"
 
 func CSRFMiddleware(cfg *config.Config) gin.HandlerFunc {
 	key := sha256.Sum256([]byte(cfg.JWT.Secret + ":" + cfg.Server.EncryptionKey))
+	secure, domain, sameSite := csrfCookieConfig(cfg)
 	protect := csrf.Protect(
 		key[:],
 		csrf.CookieName("easyssh_csrf_token"),
 		csrf.RequestHeader(CSRFTokenHeader),
 		csrf.TrustedOrigins(csrfTrustedOrigins(cfg)),
 		csrf.Path("/api/v1"),
-		csrf.Secure(cfg.Server.Env == "production"),
-		csrf.SameSite(csrf.SameSiteLaxMode),
+		csrf.Secure(secure),
+		csrf.Domain(domain),
+		csrf.SameSite(sameSite),
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reason := ""
+			if err := csrf.FailureReason(r); err != nil {
+				reason = err.Error()
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
+			if reason != "" {
+				_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"csrf_token_invalid","message":"Invalid CSRF token","reason":%q}`, reason)))
+				return
+			}
 			_, _ = w.Write([]byte(`{"error":"csrf_token_invalid","message":"Invalid CSRF token"}`))
 		})),
 	)
 
 	return func(c *gin.Context) {
-		if shouldSkipCSRF(c.Request) {
+		if isPlaintextHTTPRequest(c.Request) {
+			c.Request = csrf.PlaintextHTTPRequest(c.Request)
+		}
+		if shouldSkipUnsafeCSRF(c.Request) {
 			c.Request = csrf.UnsafeSkipCheck(c.Request)
 		}
 
 		handler := protect(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c.Request = r
 			token := csrf.Token(r)
-			if token != "" {
+			if token != "" && shouldExposeCSRFToken(r) {
 				c.Header(CSRFTokenHeader, token)
 			}
 			c.Next()
@@ -52,6 +65,84 @@ func CSRFMiddleware(cfg *config.Config) gin.HandlerFunc {
 			c.Abort()
 		}
 	}
+}
+
+func isPlaintextHTTPRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return false
+	}
+
+	if proto := forwardedProto(r); proto != "" {
+		return proto == "http"
+	}
+
+	return true
+}
+
+func forwardedProto(r *http.Request) string {
+	if value := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); value != "" {
+		if idx := strings.IndexByte(value, ','); idx >= 0 {
+			value = value[:idx]
+		}
+		return strings.ToLower(strings.TrimSpace(value))
+	}
+
+	if value := strings.TrimSpace(r.Header.Get("Forwarded")); value != "" {
+		for _, item := range strings.Split(value, ";") {
+			parts := strings.SplitN(strings.TrimSpace(item), "=", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "proto") {
+				return strings.ToLower(strings.Trim(strings.TrimSpace(parts[1]), `"`))
+			}
+		}
+	}
+
+	return ""
+}
+
+func shouldExposeCSRFToken(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	if r.URL.Path == "/api/v1/auth/csrf" {
+		return true
+	}
+	if isSafeMethod(r.Method) {
+		return false
+	}
+	return !shouldSkipUnsafeCSRF(r)
+}
+
+func GetCSRFToken(r *http.Request) string {
+	return csrf.Token(r)
+}
+
+func csrfCookieConfig(cfg *config.Config) (bool, string, csrf.SameSiteMode) {
+	secure := cfg.Server.Env == "production"
+	if value := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE"))); value != "" {
+		switch value {
+		case "true", "1", "yes", "on":
+			secure = true
+		case "false", "0", "no", "off":
+			secure = false
+		}
+	}
+
+	sameSite := csrf.SameSiteLaxMode
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SAMESITE"))) {
+	case "none":
+		sameSite = csrf.SameSiteNoneMode
+	case "strict":
+		sameSite = csrf.SameSiteStrictMode
+	case "lax", "":
+		sameSite = csrf.SameSiteLaxMode
+	default:
+		sameSite = csrf.SameSiteLaxMode
+	}
+
+	return secure, strings.TrimSpace(os.Getenv("COOKIE_DOMAIN")), sameSite
 }
 
 func csrfTrustedOrigins(cfg *config.Config) []string {
@@ -80,12 +171,12 @@ func csrfTrustedOrigins(cfg *config.Config) []string {
 	return origins
 }
 
-func shouldSkipCSRF(r *http.Request) bool {
+func shouldSkipUnsafeCSRF(r *http.Request) bool {
 	if r == nil {
 		return true
 	}
-	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
-		return true
+	if isSafeMethod(r.Method) {
+		return false
 	}
 
 	path := r.URL.Path
@@ -98,4 +189,8 @@ func shouldSkipCSRF(r *http.Request) bool {
 	}
 
 	return true
+}
+
+func isSafeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
 }
