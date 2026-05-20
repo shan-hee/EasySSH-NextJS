@@ -287,8 +287,8 @@ export function LoginForm({
     setPassword("")
   }
 
-  // 启动基于重定向的 Google OAuth 登录
-  const handleGoogleRedirectLogin = () => {
+  // 启动基于重定向的 Google OIDC Authorization Code + PKCE 登录
+  const handleGoogleRedirectLogin = async () => {
     if (!config?.oauth_enabled || !config?.google_client_id) {
       toast.error(tAuth("loginGoogleNotEnabledTitle"), {
         description: tAuth("loginGoogleNotEnabledDesc"),
@@ -316,20 +316,23 @@ export function LoginForm({
         ts: Date.now(),
       }
 
-      // OpenID Connect 要求当 response_type 包含 id_token 时必须提供 nonce
-      const nonce = generateCodeVerifier(32)
-
       const state = btoa(
         encodeURIComponent(JSON.stringify(statePayload)),
       )
+      const codeVerifier = generateCodeVerifier()
+      const codeChallenge = await deriveCodeChallenge(codeVerifier)
+
+      window.sessionStorage.setItem("easyssh_google_pkce_verifier", codeVerifier)
+      window.sessionStorage.setItem("easyssh_google_oauth_state", state)
 
       const params = new URLSearchParams({
         client_id: config.google_client_id,
         redirect_uri: redirectUri,
-        response_type: "id_token",
+        response_type: "code",
         scope: "openid email profile",
         prompt: "select_account",
-        nonce,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
         state,
       })
 

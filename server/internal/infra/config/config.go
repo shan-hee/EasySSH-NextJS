@@ -23,10 +23,11 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Port          int
-	Env           string // development, production
-	EncryptionKey string // 加密密钥（Base64 编码的 32 字节 AES 密钥）
-	WebDevPort    int    // 前端开发端口（从 WEB_PORT 读取）
+	Port           int
+	Env            string   // development, production
+	EncryptionKey  string   // 加密密钥（Base64 编码的 32 字节 AES 密钥）
+	WebDevPort     int      // 前端开发端口（从 WEB_PORT 读取）
+	TrustedProxies []string // 可信反向代理 IP/CIDR，用于解析客户端真实 IP
 }
 
 // DatabaseConfig 数据库配置
@@ -83,6 +84,10 @@ func Load() (*Config, error) {
 			Env:           getEnv("ENV", "development"),
 			EncryptionKey: getEnv("ENCRYPTION_KEY", "ZWFzeXNzaC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE="), // Base64 编码的 32 字节（仅开发环境占位）
 			WebDevPort:    getEnvInt("WEB_PORT", 3000),
+			TrustedProxies: getEnvStringList("TRUSTED_PROXIES", []string{
+				"127.0.0.1",
+				"::1",
+			}),
 		},
 		Database: DatabaseConfig{
 			Driver:          getEnv("DB_DRIVER", "sqlite"),
@@ -461,6 +466,26 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+func getEnvStringList(key string, defaultValue []string) []string {
+	value := os.Getenv(key)
+	if strings.TrimSpace(value) == "" {
+		return defaultValue
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			result = append(result, part)
+		}
+	}
+	if len(result) == 0 {
+		return defaultValue
+	}
+	return result
 }
 
 // 辅助函数：获取环境变量（整数）

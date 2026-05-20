@@ -1,15 +1,13 @@
 package ws
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -58,6 +56,7 @@ type SFTPUploadHandler struct {
 	tasks           map[string]uploadTaskMeta
 	mu              sync.RWMutex
 	securityService security.Service // 安全配置服务（用于 CORS）
+	webDevPort      int
 }
 
 type uploadTaskMeta struct {
@@ -80,12 +79,16 @@ type uploadTaskMeta struct {
 }
 
 // NewSFTPUploadHandler 创建 SFTP 上传处理器
-func NewSFTPUploadHandler(securityService security.Service) *SFTPUploadHandler {
+func NewSFTPUploadHandler(securityService security.Service, webDevPort int) *SFTPUploadHandler {
+	if webDevPort <= 0 {
+		webDevPort = 3000
+	}
 	h := &SFTPUploadHandler{
 		connections:     make(map[string]*websocket.Conn),
 		cancelFuncs:     make(map[string]func()),
 		tasks:           make(map[string]uploadTaskMeta),
 		securityService: securityService,
+		webDevPort:      webDevPort,
 	}
 	go h.cleanupLoop()
 	return h
@@ -268,55 +271,11 @@ func (h *SFTPUploadHandler) getUpgrader() websocket.Upgrader {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				// 无 Origin 头：通常为同源升级，允许
-				return true
+			allowed := middleware.IsAllowedOrigin(r, h.securityService, h.webDevPort)
+			if !allowed {
+				log.Printf("[SFTPUploadWS] WebSocket connection rejected: origin %s not allowed (host=%s)", r.Header.Get("Origin"), r.Host)
 			}
-
-			// 1. 优先检查 Web UI 配置的 CORS 白名单
-			corsConfig, err := h.securityService.GetCORSConfig(context.Background())
-			if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
-				for _, allowedOrigin := range corsConfig.AllowedOrigins {
-					if origin == allowedOrigin {
-						log.Printf("[SFTPUploadWS] WebSocket allowed by CORS config: %s", origin)
-						return true
-					}
-				}
-			}
-
-			// 2. 兜底机制：动态允许同主机名的连接
-			// 当 Origin 的主机名与当前请求的 Host 或 X-Forwarded-Host 一致时放行
-			var originHost string
-			if u, err := url.Parse(origin); err == nil {
-				originHost = u.Hostname()
-			}
-			if originHost == "" {
-				log.Printf("[SFTPUploadWS] WebSocket origin parse failed: %s", origin)
-				return false
-			}
-
-			// 候选主机：请求的 Host
-			candidates := []string{strings.Split(r.Host, ":")[0]}
-			// 以及 X-Forwarded-Host（可能为逗号分隔）
-			if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
-				for _, h := range strings.Split(xfh, ",") {
-					h = strings.TrimSpace(h)
-					if h != "" {
-						candidates = append(candidates, strings.Split(h, ":")[0])
-					}
-				}
-			}
-
-			for _, h := range candidates {
-				if h != "" && strings.EqualFold(h, originHost) {
-					log.Printf("[SFTPUploadWS] WebSocket allowed by hostname match: %s", origin)
-					return true
-				}
-			}
-
-			log.Printf("[SFTPUploadWS] WebSocket connection rejected: origin %s not allowed (host=%s, x-forwarded-host=%s)", origin, r.Host, r.Header.Get("X-Forwarded-Host"))
-			return false
+			return allowed
 		},
 	}
 }

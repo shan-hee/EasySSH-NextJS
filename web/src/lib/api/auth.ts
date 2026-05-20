@@ -297,9 +297,13 @@ export const authApi = {
   },
 
   /**
-   * 验证 Google ID Token 并登录/注册
+   * 使用 Google Authorization Code + PKCE 登录/注册
    */
-  async verifyGoogleToken(idToken: string): Promise<{
+  async verifyGoogleCode(params: {
+    code: string
+    code_verifier: string
+    redirect_uri: string
+  }): Promise<{
     access_token: string
     token_type: string
     expires_in: number
@@ -313,7 +317,9 @@ export const authApi = {
     }>("/oauth/google/verify", {
       method: "POST",
       body: {
-        id_token: idToken,
+        code: params.code,
+        code_verifier: params.code_verifier,
+        redirect_uri: params.redirect_uri,
       },
     })
   },

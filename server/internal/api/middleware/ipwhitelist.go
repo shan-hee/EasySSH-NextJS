@@ -3,18 +3,17 @@ package middleware
 import (
 	"net"
 	"net/http"
-	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/easyssh/server/internal/domain/security"
+	"github.com/gin-gonic/gin"
 )
 
 // OptionalIPWhitelistMiddleware 可选的 IP 白名单验证中间件
 // 只有在配置了 IP 白名单时才进行验证
 func OptionalIPWhitelistMiddleware(securityService security.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 获取客户端真实 IP
-		clientIP := getClientIP(c)
+		// 由 Gin 根据 TrustedProxies 配置解析客户端 IP，避免无条件信任 X-Forwarded-*。
+		clientIP := c.ClientIP()
 
 		// 将客户端 IP 存入上下文
 		c.Set("client_ip", clientIP)
@@ -51,101 +50,27 @@ func OptionalIPWhitelistMiddleware(securityService security.Service) gin.Handler
 	}
 }
 
-// getClientIP 获取客户端真实 IP 地址
-func getClientIP(c *gin.Context) string {
-	// 1. 首先检查 X-Forwarded-For 头
-	// 这个头通常包含多个 IP，第一个是客户端真实 IP
-	xForwardedFor := c.GetHeader("X-Forwarded-For")
-	if xForwardedFor != "" {
-		// X-Forwarded-For 可能包含多个 IP，用逗号分隔
-		// 格式：client, proxy1, proxy2
-		ips := strings.Split(xForwardedFor, ",")
-		if len(ips) > 0 {
-			ip := strings.TrimSpace(ips[0])
-			if isValidIP(ip) {
-				return ip
-			}
-		}
-	}
-
-	// 2. 检查 X-Real-IP 头
-	xRealIP := c.GetHeader("X-Real-IP")
-	if xRealIP != "" {
-		if isValidIP(xRealIP) {
-			return xRealIP
-		}
-	}
-
-	// 3. 检查 X-Forwarded 头
-	xForwarded := c.GetHeader("X-Forwarded")
-	if xForwarded != "" {
-		if isValidIP(xForwarded) {
-			return xForwarded
-		}
-	}
-
-	// 4. 检查 CF-Connecting-IP 头（Cloudflare）
-	cfConnectingIP := c.GetHeader("CF-Connecting-IP")
-	if cfConnectingIP != "" {
-		if isValidIP(cfConnectingIP) {
-			return cfConnectingIP
-		}
-	}
-
-	// 5. 检查 True-Client-IP 头（Akamai 和其他 CDN）
-	trueClientIP := c.GetHeader("True-Client-IP")
-	if trueClientIP != "" {
-		if isValidIP(trueClientIP) {
-			return trueClientIP
-		}
-	}
-
-	// 6. 最后使用 RemoteAddr
-	// 格式可能是 "ip:port"，需要提取 IP 部分
-	ip, _, err := net.SplitHostPort(c.Request.RemoteAddr)
-	if err != nil {
-		// 如果解析失败，直接返回 RemoteAddr
-		return c.Request.RemoteAddr
-	}
-
-	return ip
-}
-
-// isValidIP 验证 IP 地址是否有效
-func isValidIP(ip string) bool {
-	if ip == "" {
-		return false
-	}
-
-	// 尝试解析为 IP 地址
-	if net.ParseIP(ip) != nil {
-		return true
-	}
-
-	return false
-}
-
 // IPWhitelistConfig IP 白名单配置
 type IPWhitelistConfig struct {
-	Enabled          bool     `json:"enabled"`
-	AllowedIPs       []string `json:"allowed_ips"`
-	BypassPaths      []string `json:"bypass_paths"`      // 跳过验证的路径
-	AlwaysAllowIPs   []string `json:"always_allow_ips"`   // 始终允许的 IP（本地地址等）
+	Enabled        bool     `json:"enabled"`
+	AllowedIPs     []string `json:"allowed_ips"`
+	BypassPaths    []string `json:"bypass_paths"`     // 跳过验证的路径
+	AlwaysAllowIPs []string `json:"always_allow_ips"` // 始终允许的 IP（本地地址等）
 }
 
 // DefaultIPWhitelistConfig 默认的 IP 白名单配置
 var DefaultIPWhitelistConfig = IPWhitelistConfig{
-	Enabled: false,
+	Enabled:    false,
 	AllowedIPs: []string{},
 	BypassPaths: []string{
 		"/api/v1/health",
 		"/api/v1/ping",
 	},
 	AlwaysAllowIPs: []string{
-		"127.0.0.1",    // IPv4 localhost
-		"::1",          // IPv6 localhost
-		"10.0.0.0/8",   // 私有网络 A
-		"172.16.0.0/12", // 私有网络 B
+		"127.0.0.1",      // IPv4 localhost
+		"::1",            // IPv6 localhost
+		"10.0.0.0/8",     // 私有网络 A
+		"172.16.0.0/12",  // 私有网络 B
 		"192.168.0.0/16", // 私有网络 C
 	},
 }

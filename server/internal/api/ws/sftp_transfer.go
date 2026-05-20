@@ -7,12 +7,12 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
@@ -61,12 +61,13 @@ type SFTPTransferHandler struct {
 	tasks map[string]*TransferTask
 	// 存储任务最新进度，用于 WS 迟到/重连补发
 	lastProgress map[string]TransferProgressMessage
-	mu    sync.RWMutex
+	mu           sync.RWMutex
 
 	serverService   server.Service
 	serverRepo      server.Repository
 	encryptor       *crypto.Encryptor
 	securityService security.Service
+	webDevPort      int
 	hostKeyCallback ssh.HostKeyCallback
 	defaultTaskTTL  time.Duration
 }
@@ -77,8 +78,12 @@ func NewSFTPTransferHandler(
 	serverRepo server.Repository,
 	encryptor *crypto.Encryptor,
 	securityService security.Service,
+	webDevPort int,
 	hostKeyCallback ssh.HostKeyCallback,
 ) *SFTPTransferHandler {
+	if webDevPort <= 0 {
+		webDevPort = 3000
+	}
 	return &SFTPTransferHandler{
 		connections:     make(map[string]*websocket.Conn),
 		tasks:           make(map[string]*TransferTask),
@@ -87,6 +92,7 @@ func NewSFTPTransferHandler(
 		serverRepo:      serverRepo,
 		encryptor:       encryptor,
 		securityService: securityService,
+		webDevPort:      webDevPort,
 		hostKeyCallback: hostKeyCallback,
 		defaultTaskTTL:  30 * time.Minute,
 	}
@@ -98,45 +104,7 @@ func (h *SFTPTransferHandler) getUpgrader() websocket.Upgrader {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				return true
-			}
-
-			corsConfig, err := h.securityService.GetCORSConfig(context.Background())
-			if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
-				for _, allowedOrigin := range corsConfig.AllowedOrigins {
-					if origin == allowedOrigin {
-						return true
-					}
-				}
-			}
-
-			var originHost string
-			if u, err := url.Parse(origin); err == nil {
-				originHost = u.Hostname()
-			}
-			if originHost == "" {
-				return false
-			}
-
-			candidates := []string{strings.Split(r.Host, ":")[0]}
-			if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
-				for _, hdr := range strings.Split(xfh, ",") {
-					hdr = strings.TrimSpace(hdr)
-					if hdr != "" {
-						candidates = append(candidates, strings.Split(hdr, ":")[0])
-					}
-				}
-			}
-
-			for _, candidate := range candidates {
-				if candidate != "" && strings.EqualFold(candidate, originHost) {
-					return true
-				}
-			}
-
-			return false
+			return middleware.IsAllowedOrigin(r, h.securityService, h.webDevPort)
 		},
 	}
 }

@@ -40,20 +40,11 @@ function GoogleAuthCallbackInner() {
   const { refreshConfig } = useSystemConfig()
 
   useEffect(() => {
-    // 从 URL hash 中解析 id_token（OAuth2 implicit flow）
-    const hash = window.location.hash.startsWith("#")
-      ? window.location.hash.substring(1)
-      : window.location.hash
-
-    const hashParams = new URLSearchParams(hash)
-    const idToken = hashParams.get("id_token")
-    const error = hashParams.get("error")
-    const stateFromHash = hashParams.get("state")
-    const stateFromQuery = searchParams.get("state")
-    const next =
-      parseNextFromState(stateFromHash) ||
-      parseNextFromState(stateFromQuery) ||
-      null
+    const queryParams = new URLSearchParams(window.location.search)
+    const code = queryParams.get("code")
+    const error = queryParams.get("error")
+    const state = queryParams.get("state") || searchParams.get("state")
+    const next = parseNextFromState(state)
 
     const redirectBackToLogin = () => {
       const nextQuery = next ? `?next=${encodeURIComponent(next)}` : ""
@@ -68,7 +59,7 @@ function GoogleAuthCallbackInner() {
       return
     }
 
-    if (!idToken) {
+    if (!code) {
       toast.error(t("loginGoogleFailedTitle"), {
         description: t("loginGoogleCredentialMissingDesc"),
       })
@@ -78,7 +69,21 @@ function GoogleAuthCallbackInner() {
 
     ;(async () => {
       try {
-        const response = await authApi.verifyGoogleToken(idToken)
+        const storedState = window.sessionStorage.getItem("easyssh_google_oauth_state")
+        const codeVerifier = window.sessionStorage.getItem("easyssh_google_pkce_verifier")
+        window.sessionStorage.removeItem("easyssh_google_oauth_state")
+        window.sessionStorage.removeItem("easyssh_google_pkce_verifier")
+
+        if (!state || !storedState || state !== storedState || !codeVerifier) {
+          throw new Error("Invalid Google OAuth state")
+        }
+
+        const redirectUri = `${window.location.origin}/auth/google/callback`
+        const response = await authApi.verifyGoogleCode({
+          code,
+          code_verifier: codeVerifier,
+          redirect_uri: redirectUri,
+        })
         if (!response.access_token) {
           throw new Error("Missing access_token in Google callback response")
         }

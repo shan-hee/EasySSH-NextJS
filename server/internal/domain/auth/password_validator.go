@@ -2,8 +2,11 @@ package auth
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"unicode"
+
+	zxcvbn "github.com/nbutton23/zxcvbn-go"
 )
 
 // PasswordPolicy 密码策略配置
@@ -26,42 +29,42 @@ var DefaultPasswordPolicy = PasswordPolicy{
 
 // CommonPasswords 常见弱密码黑名单（部分示例）
 var CommonPasswords = map[string]bool{
-	"password":   true,
-	"12345678":   true,
-	"123456789":  true,
-	"qwerty":     true,
-	"abc123":     true,
-	"password1":  true,
+	"password":    true,
+	"12345678":    true,
+	"123456789":   true,
+	"qwerty":      true,
+	"abc123":      true,
+	"password1":   true,
 	"password123": true,
-	"admin":      true,
-	"admin123":   true,
-	"root":       true,
-	"root123":    true,
-	"user":       true,
-	"user123":    true,
-	"test":       true,
-	"test123":    true,
-	"welcome":    true,
-	"welcome123": true,
-	"letmein":    true,
-	"monkey":     true,
-	"dragon":     true,
-	"master":     true,
-	"sunshine":   true,
-	"princess":   true,
-	"football":   true,
-	"baseball":   true,
-	"superman":   true,
-	"batman":     true,
-	"trustno1":   true,
-	"iloveyou":   true,
+	"admin":       true,
+	"admin123":    true,
+	"root":        true,
+	"root123":     true,
+	"user":        true,
+	"user123":     true,
+	"test":        true,
+	"test123":     true,
+	"welcome":     true,
+	"welcome123":  true,
+	"letmein":     true,
+	"monkey":      true,
+	"dragon":      true,
+	"master":      true,
+	"sunshine":    true,
+	"princess":    true,
+	"football":    true,
+	"baseball":    true,
+	"superman":    true,
+	"batman":      true,
+	"trustno1":    true,
+	"iloveyou":    true,
 }
 
 // ValidatePassword 验证密码是否符合策略
 func ValidatePassword(password string, policy PasswordPolicy) error {
 	// 检查长度
 	if len(password) < policy.MinLength {
-		return errors.New("密码长度至少需要 8 个字符")
+		return errors.New("密码长度至少需要 " + strconv.Itoa(policy.MinLength) + " 个字符")
 	}
 
 	// 检查常见弱密码
@@ -108,6 +111,17 @@ func ValidatePassword(password string, policy PasswordPolicy) error {
 	// 检查特殊字符
 	if policy.RequireSpecial && !hasSpecial {
 		return errors.New("密码必须包含至少一个特殊字符")
+	}
+
+	minScore := 2
+	if policy.RequireSpecial || policy.MinLength >= 10 {
+		minScore = 3
+	}
+	if zxcvbn.PasswordStrength(password, nil).Score < minScore {
+		return errors.New("密码强度不足，请避免常见词、连续字符或容易猜测的组合")
+	}
+	if err := validatePasswordNotPwned(password); err != nil {
+		return err
 	}
 
 	return nil

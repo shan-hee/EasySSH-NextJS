@@ -359,7 +359,7 @@ func main() {
 	sshKeyService := sshkey.NewService(sshKeyRepo, cfg.Server.EncryptionKey)
 
 	// SFTP 上传 WebSocket 处理器
-	sftpUploadWSHandler := ws.NewSFTPUploadHandler(securityService)
+	sftpUploadWSHandler := ws.NewSFTPUploadHandler(securityService, cfg.Server.WebDevPort)
 
 	// SFTP 跨服务器传输 WebSocket 处理器
 	sftpTransferWSHandler := ws.NewSFTPTransferHandler(
@@ -367,6 +367,7 @@ func main() {
 		serverRepo,
 		encryptor,
 		securityService,
+		cfg.Server.WebDevPort,
 		sshHostKeyService.GetHostKeyCallback(),
 	)
 
@@ -441,8 +442,8 @@ func main() {
 	})
 	trashCleaner.Start()
 
-	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), securityService, completionService, systemConfigService)
-	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService)
+	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService.GetHostKeyCallback(), securityService, cfg.Server.WebDevPort, completionService, systemConfigService)
+	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService, cfg.Server.WebDevPort)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService, authService)
 	ticketHandler := rest.NewTicketHandler(ticketService)
@@ -466,7 +467,7 @@ func main() {
 	aiRuntimeManager := aichat.NewRuntimeManager(aiConfigService, userAIConfigService, aiToolExecutor)
 	aiRuntimeManager.SetSessionStore(runtime.NewGormSessionStore(database))
 	aiSessionHandler := rest.NewAISessionHandler(aiRuntimeManager)
-	aiSessionWSHandler := ws.NewAISessionHandler(aiRuntimeManager, securityService)
+	aiSessionWSHandler := ws.NewAISessionHandler(aiRuntimeManager, securityService, cfg.Server.WebDevPort)
 	// Docker 处理器（复用监控连接池）
 	dockerHandler := rest.NewDockerHandler(serverService, serverRepo, encryptor, sshHostKeyService.GetHostKeyCallback(), monitorConnectionPool)
 	// 其他处理器
@@ -479,6 +480,9 @@ func main() {
 
 	// 创建 Gin 路由
 	r := gin.New()
+	if err := r.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
+		log.Fatalf("❌ Failed to configure trusted proxies: %v", err)
+	}
 
 	// 从系统配置加载最大上传大小
 	systemConfig, err := systemConfigService.Get(context.Background())
@@ -497,6 +501,7 @@ func main() {
 	r.Use(middleware.SecurityHeaders())                              // 安全响应头
 	r.Use(middleware.SecurityConfigCache(securityService))           // 安全配置缓存(避免重复查询)
 	r.Use(middleware.CORS(cfg, securityService))                     // 跨域（支持动态配置）
+	r.Use(middleware.CSRFMiddleware(cfg))                            // Cookie 凭证端点 CSRF 防护
 	r.Use(middleware.AuditLogMiddleware(auditLogService, nil))       // 审计日志（使用默认配置）
 	r.Use(middleware.OptionalIPWhitelistMiddleware(securityService)) // IP 访问控制验证（可选）
 

@@ -2,8 +2,16 @@ package password
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"unicode"
+
+	zxcvbn "github.com/nbutton23/zxcvbn-go"
+)
+
+const (
+	defaultMinZxcvbnScore = 2
+	strictMinZxcvbnScore  = 3
 )
 
 // ValidationError 密码验证错误
@@ -61,7 +69,7 @@ func Validate(password string, policy *Policy) error {
 	if length < policy.MinLength {
 		return &ValidationError{
 			Code:    "password_too_short",
-			Message: "密码长度至少需要 " + string(rune('0'+policy.MinLength)) + " 个字符",
+			Message: "密码长度至少需要 " + strconv.Itoa(policy.MinLength) + " 个字符",
 		}
 	}
 	if length > policy.MaxLength {
@@ -121,6 +129,20 @@ func Validate(password string, policy *Policy) error {
 			Code:    "password_too_common",
 			Message: "密码过于简单，请使用更复杂的密码",
 		}
+	}
+
+	minScore := defaultMinZxcvbnScore
+	if policy.RequireSpecial || policy.MinLength >= 10 {
+		minScore = strictMinZxcvbnScore
+	}
+	if zxcvbn.PasswordStrength(password, nil).Score < minScore {
+		return &ValidationError{
+			Code:    "password_too_weak",
+			Message: "密码强度不足，请避免常见词、连续字符或容易猜测的组合",
+		}
+	}
+	if err := ValidateNotPwned(password); err != nil {
+		return err
 	}
 
 	return nil
@@ -227,6 +249,21 @@ func isRepeatedPattern(password string) bool {
 // CheckStrength 检查密码强度并返回分数（0-4）
 // 0: 非常弱, 1: 弱, 2: 一般, 3: 强, 4: 非常强
 func CheckStrength(password string) int {
+	if strings.TrimSpace(password) == "" {
+		return 0
+	}
+
+	score := zxcvbn.PasswordStrength(password, nil).Score
+	if score < 0 {
+		return 0
+	}
+	if score > 4 {
+		return 4
+	}
+	return score
+}
+
+func checkStrengthByRules(password string) int {
 	score := 0
 
 	if len(password) >= 8 {

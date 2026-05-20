@@ -1,6 +1,7 @@
 import { getApiUrl as getApiUrlFromConfig } from "@/lib/config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
 import { performRefreshToken } from "@/lib/session-refresh"
+import { ensureCSRFToken, updateCSRFTokenFromHeaders } from "@/lib/csrf"
 
 // 重新导出 getApiUrl 以便其他模块使用
 export function getApiUrl(path: string = ""): string {
@@ -259,6 +260,12 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
     Accept: "application/json",
     ...options.headers,
   }
+  const method = options.method ?? "GET"
+
+  if (shouldIncludeCookies(url) && method !== "GET") {
+    const apiBase = getApiUrl()
+    ;(headers as Record<string, string>)["X-CSRF-Token"] = await ensureCSRFToken(apiBase)
+  }
 
   // 如有可用的 access_token，则自动附加 Bearer 认证头
   // 注意：登录建链与刷新端点不附加 Authorization，避免干扰 PKCE / Token 交换
@@ -301,7 +308,7 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
   }
 
   const init: RequestInit = {
-    method: options.method ?? "GET",
+    method,
     headers,
     credentials,
     signal,
@@ -318,6 +325,7 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
 
   try {
     const res = await fetch(url, init)
+    updateCSRFTokenFromHeaders(res.headers)
 
     // 清理超时定时器
     if (timeoutId) {

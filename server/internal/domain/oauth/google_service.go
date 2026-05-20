@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -53,6 +54,35 @@ func (s *GoogleService) GetOAuthConfig() *oauth2.Config {
 		},
 		Endpoint: google.Endpoint,
 	}
+}
+
+// ExchangeCode 使用授权码和 PKCE verifier 换取 Google ID Token，并返回已验证的用户信息。
+func (s *GoogleService) ExchangeCode(ctx context.Context, code, codeVerifier string) (*GoogleUserInfo, error) {
+	code = strings.TrimSpace(code)
+	codeVerifier = strings.TrimSpace(codeVerifier)
+	if code == "" {
+		return nil, fmt.Errorf("authorization code is required")
+	}
+	if codeVerifier == "" {
+		return nil, fmt.Errorf("code verifier is required")
+	}
+
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+
+	token, err := s.GetOAuthConfig().Exchange(ctx, code, oauth2.VerifierOption(codeVerifier))
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange authorization code: %w", err)
+	}
+
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok || rawIDToken == "" {
+		return nil, fmt.Errorf("missing id token in token response")
+	}
+
+	return s.VerifyIDToken(ctx, rawIDToken)
 }
 
 // VerifyIDToken 验证 Google ID Token 并获取用户信息

@@ -1,14 +1,13 @@
 package ws
 
 import (
-	"context"
 	"errors"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
+	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/domain/aichat/runtime"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/gin-gonic/gin"
@@ -19,12 +18,18 @@ import (
 type AISessionHandler struct {
 	manager         *runtime.Manager
 	securityService security.Service
+	webDevPort      int
 }
 
-func NewAISessionHandler(manager *runtime.Manager, securityService security.Service) *AISessionHandler {
+func NewAISessionHandler(manager *runtime.Manager, securityService security.Service, webDevPort ...int) *AISessionHandler {
+	port := 3000
+	if len(webDevPort) > 0 && webDevPort[0] > 0 {
+		port = webDevPort[0]
+	}
 	return &AISessionHandler{
 		manager:         manager,
 		securityService: securityService,
+		webDevPort:      port,
 	}
 }
 
@@ -43,45 +48,7 @@ func (h *AISessionHandler) getUpgrader() *websocket.Upgrader {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				return true
-			}
-
-			corsConfig, err := h.securityService.GetCORSConfig(context.Background())
-			if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
-				for _, allowedOrigin := range corsConfig.AllowedOrigins {
-					if origin == allowedOrigin {
-						return true
-					}
-				}
-			}
-
-			var originHost string
-			if u, err := url.Parse(origin); err == nil {
-				originHost = u.Hostname()
-			}
-			if originHost == "" {
-				return false
-			}
-
-			candidates := []string{strings.Split(r.Host, ":")[0]}
-			if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
-				for _, host := range strings.Split(xfh, ",") {
-					host = strings.TrimSpace(host)
-					if host != "" {
-						candidates = append(candidates, strings.Split(host, ":")[0])
-					}
-				}
-			}
-
-			for _, host := range candidates {
-				if host != "" && strings.EqualFold(host, originHost) {
-					return true
-				}
-			}
-
-			return false
+			return middleware.IsAllowedOrigin(r, h.securityService, h.webDevPort)
 		},
 	}
 }

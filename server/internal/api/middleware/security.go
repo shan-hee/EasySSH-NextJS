@@ -4,20 +4,30 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/unrolled/secure"
 )
 
 // SecurityHeaders 安全响应头中间件
 // 设置常见的安全 HTTP 响应头,防止 XSS、点击劫持等攻击
 func SecurityHeaders() gin.HandlerFunc {
+	secureMiddleware := secure.New(secure.Options{
+		BrowserXssFilter:          true,
+		ContentTypeNosniff:        true,
+		FrameDeny:                 true,
+		IsDevelopment:             os.Getenv("ENV") != "production",
+		STSSeconds:                31536000,
+		STSIncludeSubdomains:      true,
+		ReferrerPolicy:            "strict-origin-when-cross-origin",
+		PermissionsPolicy:         "geolocation=(), microphone=(), camera=()",
+		CrossOriginOpenerPolicy:   "unsafe-none",
+		CrossOriginEmbedderPolicy: "unsafe-none",
+	})
+
 	return func(c *gin.Context) {
-		// 防止 MIME 类型嗅探
-		c.Header("X-Content-Type-Options", "nosniff")
-
-		// 防止点击劫持攻击
-		c.Header("X-Frame-Options", "DENY")
-
-		// 启用浏览器 XSS 过滤器
-		c.Header("X-XSS-Protection", "1; mode=block")
+		if err := secureMiddleware.Process(c.Writer, c.Request); err != nil {
+			c.Abort()
+			return
+		}
 
 		// 内容安全策略 (CSP)
 		// 默认策略: 仅允许同源资源, 但为 Monaco Editor 放行 jsDelivr CDN
@@ -40,31 +50,6 @@ func SecurityHeaders() gin.HandlerFunc {
 				"frame-src 'self' https://accounts.google.com"
 		}
 		c.Header("Content-Security-Policy", csp)
-
-		// HSTS (HTTP Strict Transport Security)
-		// 仅在生产环境且使用 HTTPS 时启用
-		env := os.Getenv("ENV")
-		if env == "production" {
-			// 强制使用 HTTPS 1年,包含子域名
-			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-		}
-
-		// 引用来源策略
-		// strict-origin-when-cross-origin: 同源时发送完整 URL,跨域时仅发送源
-		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-
-		// 权限策略 (Permissions Policy)
-		// 限制浏览器功能访问
-		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-
-		// Cross-Origin-Opener-Policy (COOP)
-		// 设置为 unsafe-none 以支持 Google OAuth 登录
-		// 这允许跨域窗口通信，是 Google OAuth 所必需的
-		c.Header("Cross-Origin-Opener-Policy", "unsafe-none")
-
-		// Cross-Origin-Embedder-Policy (COEP)
-		// 设置为 unsafe-none 以支持 Google OAuth 和其他第三方资源
-		c.Header("Cross-Origin-Embedder-Policy", "unsafe-none")
 
 		c.Next()
 	}

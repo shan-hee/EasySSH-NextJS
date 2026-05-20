@@ -1,5 +1,6 @@
 import { useAuthStore } from "@/stores/auth-store"
 import { getApiUrl } from "@/lib/config"
+import { ensureCSRFToken, updateCSRFTokenFromHeaders } from "@/lib/csrf"
 
 export interface RefreshTokenResult {
   accessToken: string
@@ -24,16 +25,19 @@ export async function performRefreshToken(): Promise<RefreshTokenResult> {
   const url = `${apiBase}/oauth/token`
   // 为兼容开发环境跨端口直连，始终使用 include 携带 Cookie
   const credentials: RequestCredentials = "include"
+  const csrfToken = await ensureCSRFToken(apiBase)
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken,
     },
     body: JSON.stringify({ grant_type: "refresh_token" }),
     credentials,
   })
+  updateCSRFTokenFromHeaders(res.headers)
 
   if (!res.ok) {
     throw new Error(`Refresh failed: ${res.status}`)

@@ -3,6 +3,7 @@ package rest
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/oauth"
@@ -36,9 +37,11 @@ func NewOAuthHandler(
 	}
 }
 
-// GoogleVerifyRequest Google ID Token 验证请求
+// GoogleVerifyRequest Google 授权码验证请求
 type GoogleVerifyRequest struct {
-	IDToken string `json:"id_token" binding:"required"`
+	Code         string `json:"code" binding:"required"`
+	CodeVerifier string `json:"code_verifier" binding:"required"`
+	RedirectURI  string `json:"redirect_uri" binding:"required"`
 }
 
 // GoogleVerifyResponse Google 验证响应
@@ -49,7 +52,7 @@ type GoogleVerifyResponse struct {
 	User        interface{} `json:"user"`
 }
 
-// GoogleVerify 验证 Google ID Token 并登录/注册用户
+// GoogleVerify 使用 Google Authorization Code + PKCE 登录/注册用户
 // POST /api/v1/oauth/google/verify
 func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 	var req GoogleVerifyRequest
@@ -72,7 +75,7 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 	}
 
 	// 检查 Google Client ID 是否配置
-	if config.GoogleClientID == "" {
+	if strings.TrimSpace(config.GoogleClientID) == "" || strings.TrimSpace(config.GoogleClientSecret) == "" {
 		RespondError(c, http.StatusInternalServerError, "oauth_not_configured", "Google OAuth is not configured")
 		return
 	}
@@ -81,11 +84,11 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 	googleService := oauth.NewGoogleService(
 		config.GoogleClientID,
 		config.GoogleClientSecret,
-		"", // redirect URI 不需要用于 ID Token 验证
+		req.RedirectURI,
 	)
 
-	// 验证 ID Token
-	userInfo, err := googleService.VerifyIDToken(c.Request.Context(), req.IDToken)
+	// 用授权码和 PKCE verifier 换取并验证 ID Token
+	userInfo, err := googleService.ExchangeCode(c.Request.Context(), req.Code, req.CodeVerifier)
 	if err != nil {
 		RespondError(c, http.StatusUnauthorized, "invalid_token", "Failed to verify Google token: "+err.Error())
 		return

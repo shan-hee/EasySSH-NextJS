@@ -7,12 +7,12 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/domain/completion"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
@@ -32,55 +32,11 @@ func (h *TerminalHandler) getUpgrader() websocket.Upgrader {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				// 无 Origin 头：通常为同源升级，允许
-				return true
+			allowed := middleware.IsAllowedOrigin(r, h.securityService, h.webDevPort)
+			if !allowed {
+				log.Printf("WebSocket connection rejected: origin %s not allowed (host=%s)", r.Header.Get("Origin"), r.Host)
 			}
-
-			// 1. 优先检查 Web UI 配置的 CORS 白名单
-			corsConfig, err := h.securityService.GetCORSConfig(context.Background())
-			if err == nil && corsConfig != nil && len(corsConfig.AllowedOrigins) > 0 {
-				for _, allowedOrigin := range corsConfig.AllowedOrigins {
-					if origin == allowedOrigin {
-						log.Printf("WebSocket allowed by CORS config: %s", origin)
-						return true
-					}
-				}
-			}
-
-			// 2. 兜底机制：动态允许同主机名的连接
-			// 当 Origin 的主机名与当前请求的 Host 或 X-Forwarded-Host 一致时放行
-			var originHost string
-			if u, err := url.Parse(origin); err == nil {
-				originHost = u.Hostname()
-			}
-			if originHost == "" {
-				log.Printf("WebSocket origin parse failed: %s", origin)
-				return false
-			}
-
-			// 候选主机：请求的 Host
-			candidates := []string{strings.Split(r.Host, ":")[0]}
-			// 以及 X-Forwarded-Host（可能为逗号分隔）
-			if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
-				for _, h := range strings.Split(xfh, ",") {
-					h = strings.TrimSpace(h)
-					if h != "" {
-						candidates = append(candidates, strings.Split(h, ":")[0])
-					}
-				}
-			}
-
-			for _, h := range candidates {
-				if h != "" && strings.EqualFold(h, originHost) {
-					log.Printf("WebSocket allowed by hostname match: %s", origin)
-					return true
-				}
-			}
-
-			log.Printf("WebSocket connection rejected: origin %s not allowed (host=%s, x-forwarded-host=%s)", origin, r.Host, r.Header.Get("X-Forwarded-Host"))
-			return false
+			return allowed
 		},
 	}
 }
@@ -94,6 +50,7 @@ type TerminalHandler struct {
 	sshSessionService sshsession.Service
 	hostKeyCallback   ssh.HostKeyCallback  // SSH主机密钥验证回调
 	securityService   security.Service     // 安全配置服务（用于 CORS）
+	webDevPort        int                  // 前端开发端口，用于默认同源白名单
 	completionService completion.Service   // 补全服务
 	systemConfigSvc   systemconfig.Service // 系统配置（用于补全配置动态生效）
 	completionSubMu   sync.RWMutex
@@ -101,7 +58,7 @@ type TerminalHandler struct {
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, securityService security.Service, completionService completion.Service, systemConfigSvc systemconfig.Service) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, securityService security.Service, webDevPort int, completionService completion.Service, systemConfigSvc systemconfig.Service) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
@@ -110,6 +67,7 @@ func NewTerminalHandler(serverService server.Service, serverRepo server.Reposito
 		sshSessionService: sshSessionService,
 		hostKeyCallback:   hostKeyCallback,
 		securityService:   securityService,
+		webDevPort:        webDevPort,
 		completionService: completionService,
 		systemConfigSvc:   systemConfigSvc,
 		completionSubs:    make(map[completionBroadcastKey]map[*completionSubscriber]struct{}),
