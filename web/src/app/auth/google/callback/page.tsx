@@ -1,4 +1,4 @@
- "use client"
+"use client"
 
 import { Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -11,25 +11,25 @@ import { getErrorMessage } from "@/lib/error-utils"
 import { isApiError } from "@/lib/api-client"
 import { AuthI18nProvider } from "@/providers/auth-i18n-provider"
 
-// 解析 state 中携带的 next 信息
-function parseNextFromState(stateParam: string | null): string | null {
-  if (!stateParam) return null
+type GoogleOAuthState = {
+  mode?: "login" | "link"
+  next?: string | null
+  returnTo?: string | null
+}
+
+function isSafeInternalPath(value: string | null | undefined): value is string {
+  return !!value && value.startsWith("/") && !value.startsWith("//")
+}
+
+// 解析 state 中携带的 next / mode 信息
+function parseState(stateParam: string | null): GoogleOAuthState {
+  if (!stateParam) return {}
   try {
     const decoded = decodeURIComponent(atob(stateParam))
-    const data = JSON.parse(decoded) as { next?: string | null }
-    if (!data || typeof data.next !== "string") return null
-    const next = data.next
-    if (
-      !next ||
-      !next.startsWith("/") ||
-      next.startsWith("//") ||
-      next.startsWith("/login")
-    ) {
-      return null
-    }
-    return next
+    const data = JSON.parse(decoded) as GoogleOAuthState
+    return data && typeof data === "object" ? data : {}
   } catch {
-    return null
+    return {}
   }
 }
 
@@ -45,7 +45,15 @@ function GoogleAuthCallbackInner() {
     const code = queryParams.get("code")
     const error = queryParams.get("error")
     const state = queryParams.get("state") || searchParams.get("state")
-    const next = parseNextFromState(state)
+    const parsedState = parseState(state)
+    const mode = parsedState.mode === "link" ? "link" : "login"
+    const next =
+      isSafeInternalPath(parsedState.next) && !parsedState.next.startsWith("/login")
+        ? parsedState.next
+        : null
+    const returnTo = isSafeInternalPath(parsedState.returnTo)
+      ? parsedState.returnTo
+      : "/dashboard"
 
     const redirectBackToLogin = (params: Record<string, string> = {}) => {
       const query = new URLSearchParams()
@@ -61,19 +69,44 @@ function GoogleAuthCallbackInner() {
       router.replace(queryString ? `/login?${queryString}` : "/login")
     }
 
+    const redirectBackToSettings = (params: Record<string, string> = {}) => {
+      const url = new URL(returnTo, window.location.origin)
+      url.searchParams.set("account_settings", "security")
+      for (const [key, value] of Object.entries(params)) {
+        if (value) {
+          url.searchParams.set(key, value)
+        }
+      }
+      router.replace(`${url.pathname}${url.search}${url.hash}`)
+    }
+
     if (error) {
-      toast.error(t("loginGoogleFailedTitle"), {
-        description: t("loginGoogleFailedDesc"),
-      })
-      redirectBackToLogin()
+      if (mode === "link") {
+        redirectBackToSettings({
+          google_link: "failed",
+          google_message: t("loginGoogleFailedDesc"),
+        })
+      } else {
+        toast.error(t("loginGoogleFailedTitle"), {
+          description: t("loginGoogleFailedDesc"),
+        })
+        redirectBackToLogin()
+      }
       return
     }
 
     if (!code) {
-      toast.error(t("loginGoogleFailedTitle"), {
-        description: t("loginGoogleCredentialMissingDesc"),
-      })
-      redirectBackToLogin()
+      if (mode === "link") {
+        redirectBackToSettings({
+          google_link: "failed",
+          google_message: t("loginGoogleCredentialMissingDesc"),
+        })
+      } else {
+        toast.error(t("loginGoogleFailedTitle"), {
+          description: t("loginGoogleCredentialMissingDesc"),
+        })
+        redirectBackToLogin()
+      }
       return
     }
 
@@ -89,6 +122,19 @@ function GoogleAuthCallbackInner() {
         }
 
         const redirectUri = `${window.location.origin}/auth/google/callback`
+
+        if (mode === "link") {
+          await authApi.linkGoogleCode({
+            code,
+            code_verifier: codeVerifier,
+            redirect_uri: redirectUri,
+          })
+
+          await refreshConfig({ refreshAuth: true })
+          redirectBackToSettings({ google_link: "success" })
+          return
+        }
+
         const response = await authApi.verifyGoogleCode({
           code,
           code_verifier: codeVerifier,
@@ -116,16 +162,23 @@ function GoogleAuthCallbackInner() {
       } catch (err) {
         console.error("Google callback login error:", err)
         const message = getErrorMessage(err, t("loginGoogleRetryDesc"))
-        toast.error(t("loginGoogleFailedTitle"), {
-          description: message,
-        })
         const detail = isApiError(err) && typeof err.detail === "object" && err.detail !== null
           ? (err.detail as { error?: string; message?: string })
           : null
-        redirectBackToLogin({
-          google_error: detail?.error ?? "google_login_failed",
-          google_message: message,
-        })
+        if (mode === "link") {
+          redirectBackToSettings({
+            google_link: detail?.error ?? "failed",
+            google_message: message,
+          })
+        } else {
+          toast.error(t("loginGoogleFailedTitle"), {
+            description: message,
+          })
+          redirectBackToLogin({
+            google_error: detail?.error ?? "google_login_failed",
+            google_message: message,
+          })
+        }
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps

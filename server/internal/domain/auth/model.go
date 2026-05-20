@@ -119,6 +119,7 @@ func (u *User) ToPublic() map[string]interface{} {
 		"email":               u.Email,
 		"role":                u.Role,
 		"avatar":              u.Avatar,
+		"google_linked":       u.GoogleSub != nil && *u.GoogleSub != "",
 		"language":            u.Language,
 		"timezone":            u.Timezone,
 		"two_factor_enabled":  u.TwoFactorEnabled,

@@ -13,6 +13,7 @@ export interface User {
   language?: string
   timezone?: string
   two_factor_enabled?: boolean
+  google_linked?: boolean
   // 通知设置
   notify_email_login?: boolean
   notify_email_alert?: boolean
@@ -321,6 +322,33 @@ export const authApi = {
         code_verifier: params.code_verifier,
         redirect_uri: params.redirect_uri,
       },
+    })
+  },
+
+  /**
+   * 将当前已登录用户与 Google 账号绑定
+   */
+  async linkGoogleCode(params: {
+    code: string
+    code_verifier: string
+    redirect_uri: string
+  }): Promise<{ linked: boolean; user: User }> {
+    return apiFetch<{ linked: boolean; user: User }>("/users/me/oauth/google/link", {
+      method: "POST",
+      body: {
+        code: params.code,
+        code_verifier: params.code_verifier,
+        redirect_uri: params.redirect_uri,
+      },
+    })
+  },
+
+  /**
+   * 解除当前已登录用户的 Google 账号绑定
+   */
+  async unlinkGoogle(): Promise<{ linked: boolean; user: User }> {
+    return apiFetch<{ linked: boolean; user: User }>("/users/me/oauth/google/link", {
+      method: "DELETE",
     })
   },
 

@@ -17,6 +17,8 @@ import {
   Smartphone,
   Tablet,
   LogOut,
+  Link,
+  Unlink,
   Info,
   Paintbrush,
   Activity,
@@ -78,6 +80,7 @@ import { getEffectiveLocale, getEffectiveTimezone, formatInTimezone, saveLocaleT
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
+import { generateCodeVerifier, deriveCodeChallenge } from "@/lib/pkce"
 
 /**
  * 从错误对象安全提取错误消息
@@ -176,6 +179,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   const [disableCode, setDisableCode] = React.useState("")
   const [twoFactorLoading, setTwoFactorLoading] = React.useState(false)
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null)
+  const [googleLinkLoading, setGoogleLinkLoading] = React.useState(false)
 
   // 会话管理状态
   const [sessions, setSessions] = React.useState<Session[]>([])
@@ -292,6 +296,35 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, open])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const params = new URLSearchParams(window.location.search)
+    const requestedSection = params.get("account_settings")
+    const googleLinkResult = params.get("google_link")
+
+    if (requestedSection === "security" || googleLinkResult) {
+      setOpen(true)
+      setActiveSection("security")
+    }
+
+    if (googleLinkResult === "success") {
+      toast.success(tAccount("securityGoogleLinkedToast"))
+      void refreshUser()
+    } else if (googleLinkResult && googleLinkResult !== "success") {
+      toast.error(params.get("google_message") || tAccount("securityGoogleLinkFailed"))
+    }
+
+    if (requestedSection || googleLinkResult || params.has("google_message")) {
+      params.delete("account_settings")
+      params.delete("google_link")
+      params.delete("google_message")
+      const query = params.toString()
+      const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
+      window.history.replaceState(null, "", nextUrl)
+    }
+  }, [refreshUser, tAccount])
 
   // 当切换到SSH密钥标签时加载密钥数据
   React.useEffect(() => {
@@ -731,6 +764,67 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       tAccount("copyToastSuccess", { label: tAccount("security2faBackupAllCodesLabel") })
     )
   }, [backupCodes, tAccount])
+
+  const handleGoogleLink = React.useCallback(async () => {
+    if (!config?.oauth_enabled || !config?.google_client_id) {
+      toast.error(tAccount("securityGoogleNotConfigured"))
+      return
+    }
+
+    setGoogleLinkLoading(true)
+    try {
+      const redirectUri = `${window.location.origin}/auth/google/callback`
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      const statePayload = {
+        mode: "link",
+        returnTo,
+        ts: Date.now(),
+      }
+      const state = btoa(encodeURIComponent(JSON.stringify(statePayload)))
+      const codeVerifier = generateCodeVerifier()
+      const codeChallenge = await deriveCodeChallenge(codeVerifier)
+
+      window.sessionStorage.setItem("easyssh_google_pkce_verifier", codeVerifier)
+      window.sessionStorage.setItem("easyssh_google_oauth_state", state)
+
+      const params = new URLSearchParams({
+        client_id: config.google_client_id,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "openid email profile",
+        prompt: "select_account",
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+        state,
+      })
+
+      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+    } catch (error: unknown) {
+      setGoogleLinkLoading(false)
+      toast.error(getErrorMessage(error, tAccount("securityGoogleLinkFailed")))
+    }
+  }, [config, tAccount])
+
+  const handleGoogleUnlink = React.useCallback(async () => {
+    const confirmed = await requestConfirm({
+      title: tAccount("securityGoogleUnlinkConfirmTitle"),
+      description: tAccount("securityGoogleUnlinkConfirmDescription"),
+      confirmText: tAccount("securityGoogleUnlinkButton"),
+      variant: "destructive",
+    })
+    if (!confirmed) return
+
+    setGoogleLinkLoading(true)
+    try {
+      await authApi.unlinkGoogle()
+      await refreshUser()
+      toast.success(tAccount("securityGoogleUnlinkedToast"))
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, tAccount("securityGoogleUnlinkFailed")))
+    } finally {
+      setGoogleLinkLoading(false)
+    }
+  }, [refreshUser, requestConfirm, tAccount])
 
   // 加载会话列表
   const loadSessions = React.useCallback(async () => {
@@ -1406,6 +1500,60 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                           {tAccount("securitySavePasswordButton")}
                         </Button>
                       </form>
+                    </div>
+                    <div className="bg-muted/50 rounded-xl p-4">
+                      <h4 className="font-medium mb-2">
+                        {tAccount("securityGoogleTitle")}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {tAccount("securityGoogleDescription")}
+                      </p>
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <Label>
+                            {tAccount("securityGoogleStatusLabel")}
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            {user?.google_linked
+                              ? tAccount("securityGoogleStatusLinked")
+                              : tAccount("securityGoogleStatusUnlinked")}
+                          </p>
+                        </div>
+                        {user?.google_linked ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleGoogleUnlink}
+                            disabled={googleLinkLoading}
+                          >
+                            {googleLinkLoading ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Unlink className="mr-2 h-4 w-4" />
+                            )}
+                            {tAccount("securityGoogleUnlinkButton")}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleGoogleLink}
+                            disabled={googleLinkLoading || !config?.oauth_enabled || !config?.google_client_id}
+                          >
+                            {googleLinkLoading ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Link className="mr-2 h-4 w-4" />
+                            )}
+                            {tAccount("securityGoogleLinkButton")}
+                          </Button>
+                        )}
+                      </div>
+                      {(!config?.oauth_enabled || !config?.google_client_id) && (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {tAccount("securityGoogleDisabledHint")}
+                        </p>
+                      )}
                     </div>
                     <div className="bg-muted/50 rounded-xl p-4">
                       <h4 className="font-medium mb-2">

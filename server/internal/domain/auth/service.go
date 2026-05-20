@@ -67,6 +67,9 @@ type Service interface {
 	// BindGoogleSub 绑定 Google OIDC subject 到已有用户
 	BindGoogleSub(ctx context.Context, userID uuid.UUID, googleSub string) (*User, error)
 
+	// UnbindGoogleSub 解除当前用户的 Google OIDC 绑定
+	UnbindGoogleSub(ctx context.Context, userID uuid.UUID) (*User, error)
+
 	// RegisterOAuthUser 通过 OAuth 注册用户（不需要密码）
 	RegisterOAuthUser(ctx context.Context, username, email, avatar, googleSub string, role UserRole) (*User, error)
 
@@ -495,6 +498,24 @@ func (s *authService) BindGoogleSub(ctx context.Context, userID uuid.UUID, googl
 	}
 
 	user.GoogleSub = &googleSub
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *authService) UnbindGoogleSub(ctx context.Context, userID uuid.UUID) (*User, error) {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.Password == "" {
+		return nil, ErrLastLoginMethod
+	}
+
+	user.GoogleSub = nil
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, err
 	}

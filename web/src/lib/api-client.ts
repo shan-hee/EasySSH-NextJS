@@ -153,6 +153,7 @@ function shouldIncludeCookies(url: string): boolean {
     url.includes("/oauth/token") ||
     url.includes("/oauth/logout") ||
     url.includes("/oauth/google/verify") ||
+    url.includes("/users/me/oauth/google/link") ||
     url.includes("/auth/logout") ||
     url.includes("/auth/register") ||
     url.includes("/auth/initialize-admin")

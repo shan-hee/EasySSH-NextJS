@@ -203,6 +203,24 @@ const messages = {
     securityPasswordOldIncorrect: "当前密码错误，请检查后重试。",
     securityPasswordLengthInsufficient: "新密码长度不足，至少需要 6 位。",
 
+    // 安全 - Google 账号绑定
+    securityGoogleTitle: "Google 账号绑定",
+    securityGoogleDescription: "绑定后可使用 Google 账号登录当前账户。",
+    securityGoogleStatusLabel: "绑定状态",
+    securityGoogleStatusLinked: "已绑定 Google 账号。",
+    securityGoogleStatusUnlinked: "未绑定 Google 账号。",
+    securityGoogleLinkButton: "绑定 Google",
+    securityGoogleUnlinkButton: "解绑 Google",
+    securityGoogleDisabledHint: "Google 登录尚未启用，请联系管理员在系统设置中配置。",
+    securityGoogleNotConfigured: "Google 登录尚未配置。",
+    securityGoogleLinkedToast: "Google 账号已绑定。",
+    securityGoogleUnlinkedToast: "Google 账号已解绑。",
+    securityGoogleLinkFailed: "绑定 Google 账号失败。",
+    securityGoogleUnlinkFailed: "解绑 Google 账号失败。",
+    securityGoogleUnlinkConfirmTitle: "确认解绑 Google 账号",
+    securityGoogleUnlinkConfirmDescription:
+      "解绑后将无法继续使用该 Google 账号登录当前账户。请确认您仍可使用密码或其他方式登录。",
+
     // 安全 - 双因子认证（2FA）
     security2faTitle: "双因子认证",
     security2faDescription: "使用 TOTP 认证应用增强账户安全。",

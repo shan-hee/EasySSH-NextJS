@@ -10,6 +10,7 @@ import (
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // OAuthHandler OAuth 处理器
@@ -42,6 +43,11 @@ type GoogleVerifyRequest struct {
 	Code         string `json:"code" binding:"required"`
 	CodeVerifier string `json:"code_verifier" binding:"required"`
 	RedirectURI  string `json:"redirect_uri" binding:"required"`
+}
+
+type GoogleLinkResponse struct {
+	Linked bool        `json:"linked"`
+	User   interface{} `json:"user"`
 }
 
 // GoogleVerifyResponse Google 验证响应
@@ -208,4 +214,124 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 		ExpiresIn:   h.accessTokenTTL,
 		User:        user.ToPublic(),
 	})
+}
+
+// GoogleLink 将当前已登录用户与 Google 账号绑定
+// POST /api/v1/users/me/oauth/google/link
+func (h *OAuthHandler) GoogleLink(c *gin.Context) {
+	var req GoogleVerifyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	currentUserID, ok := currentUserIDFromContext(c)
+	if !ok {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+		return
+	}
+
+	userInfo, ok := h.exchangeGoogleCode(c, req)
+	if !ok {
+		return
+	}
+
+	user, err := h.authService.BindGoogleSub(c.Request.Context(), currentUserID, userInfo.ID)
+	if err != nil {
+		if errors.Is(err, auth.ErrUserAlreadyExists) {
+			RespondError(c, http.StatusConflict, "oauth_account_conflict", "This Google account is already linked to another user")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to bind Google account")
+		return
+	}
+
+	RespondSuccess(c, GoogleLinkResponse{
+		Linked: true,
+		User:   user.ToPublic(),
+	})
+}
+
+// GoogleUnlink 解除当前已登录用户的 Google 账号绑定
+// DELETE /api/v1/users/me/oauth/google/link
+func (h *OAuthHandler) GoogleUnlink(c *gin.Context) {
+	currentUserID, ok := currentUserIDFromContext(c)
+	if !ok {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+		return
+	}
+
+	user, err := h.authService.UnbindGoogleSub(c.Request.Context(), currentUserID)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrUserNotFound):
+			RespondError(c, http.StatusNotFound, "user_not_found", "User not found")
+		case errors.Is(err, auth.ErrLastLoginMethod):
+			RespondError(c, http.StatusBadRequest, "last_login_method", "Set a password before unlinking Google account")
+		default:
+			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to unlink Google account")
+		}
+		return
+	}
+
+	RespondSuccess(c, GoogleLinkResponse{
+		Linked: false,
+		User:   user.ToPublic(),
+	})
+}
+
+func (h *OAuthHandler) exchangeGoogleCode(c *gin.Context, req GoogleVerifyRequest) (*oauth.GoogleUserInfo, bool) {
+	config, err := h.systemConfigService.Get(c.Request.Context())
+	if err != nil || config == nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get system config")
+		return nil, false
+	}
+
+	if !config.OAuthEnabled {
+		RespondError(c, http.StatusForbidden, "oauth_disabled", "Google OAuth is disabled")
+		return nil, false
+	}
+
+	if strings.TrimSpace(config.GoogleClientID) == "" || strings.TrimSpace(config.GoogleClientSecret) == "" {
+		RespondError(c, http.StatusInternalServerError, "oauth_not_configured", "Google OAuth is not configured")
+		return nil, false
+	}
+
+	googleService := oauth.NewGoogleService(
+		config.GoogleClientID,
+		config.GoogleClientSecret,
+		req.RedirectURI,
+	)
+
+	userInfo, err := googleService.ExchangeCode(c.Request.Context(), req.Code, req.CodeVerifier)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "invalid_token", "Failed to verify Google token: "+err.Error())
+		return nil, false
+	}
+
+	if !userInfo.VerifiedEmail {
+		RespondError(c, http.StatusBadRequest, "email_not_verified", "Google email is not verified")
+		return nil, false
+	}
+
+	return userInfo, true
+}
+
+func currentUserIDFromContext(c *gin.Context) (uuid.UUID, bool) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		return uuid.Nil, false
+	}
+
+	uid, ok := userID.(string)
+	if !ok {
+		return uuid.Nil, false
+	}
+
+	parsedUID, err := uuid.Parse(uid)
+	if err != nil {
+		return uuid.Nil, false
+	}
+
+	return parsedUID, true
 }

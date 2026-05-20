@@ -18,6 +18,7 @@ var (
 	ErrSessionSyncFailed  = errors.New("session state sync failed")
 	ErrIPLocked           = errors.New("IP address is temporarily locked due to too many failed attempts")
 	ErrAccountLocked      = errors.New("account is temporarily locked due to too many failed attempts")
+	ErrLastLoginMethod    = errors.New("cannot unlink the only login method")
 )
 
 // Repository 用户数据访问接口

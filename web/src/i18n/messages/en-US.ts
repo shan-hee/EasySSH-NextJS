@@ -221,6 +221,26 @@ const messages = {
     securityPasswordLengthInsufficient:
       "New password is too short, it must be at least 6 characters.",
 
+    // Security - Google account link
+    securityGoogleTitle: "Google account",
+    securityGoogleDescription:
+      "Link Google so you can sign in to this account with Google.",
+    securityGoogleStatusLabel: "Link status",
+    securityGoogleStatusLinked: "Google account linked.",
+    securityGoogleStatusUnlinked: "No Google account linked.",
+    securityGoogleLinkButton: "Link Google",
+    securityGoogleUnlinkButton: "Unlink Google",
+    securityGoogleDisabledHint:
+      "Google sign-in is not enabled. Ask an administrator to configure it in system settings.",
+    securityGoogleNotConfigured: "Google sign-in is not configured.",
+    securityGoogleLinkedToast: "Google account linked.",
+    securityGoogleUnlinkedToast: "Google account unlinked.",
+    securityGoogleLinkFailed: "Failed to link Google account.",
+    securityGoogleUnlinkFailed: "Failed to unlink Google account.",
+    securityGoogleUnlinkConfirmTitle: "Unlink Google account?",
+    securityGoogleUnlinkConfirmDescription:
+      "After unlinking, you will no longer be able to sign in to this account with that Google account. Make sure you can still sign in with a password or another method.",
+
     // Security - two-factor authentication (2FA)
     security2faTitle: "Two-factor authentication",
     security2faDescription:

@@ -187,6 +187,9 @@ func shouldSkipUnsafeCSRF(r *http.Request) bool {
 	if path == "/api/v1/oauth/google/verify" && strings.EqualFold(r.Method, http.MethodPost) {
 		return false
 	}
+	if path == "/api/v1/users/me/oauth/google/link" && (strings.EqualFold(r.Method, http.MethodPost) || strings.EqualFold(r.Method, http.MethodDelete)) {
+		return false
+	}
 
 	return true
 }

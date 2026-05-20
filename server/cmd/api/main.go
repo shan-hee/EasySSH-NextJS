@@ -569,6 +569,8 @@ func main() {
 			userRoutes.GET("/me", authHandler.GetCurrentUser)
 			userRoutes.PUT("/me", authHandler.UpdateProfile)
 			userRoutes.PUT("/me/password", authHandler.ChangePassword)
+			userRoutes.POST("/me/oauth/google/link", oauthHandler.GoogleLink)
+			userRoutes.DELETE("/me/oauth/google/link", oauthHandler.GoogleUnlink)
 
 			// 2FA 相关路由
 			userRoutes.GET("/me/2fa/generate", authHandler.Generate2FASecret) // 生成 2FA secret
