@@ -99,10 +99,16 @@ const CONNECTION_LOADER_PHASES = new Set<TerminalConnectionPhase>([
 ])
 
 const shouldShowConnectionLoader = (session?: TerminalSession) => {
+  const isResolvingConnectionTarget = !!(
+    session?.serverId &&
+    !session.host &&
+    session.status === "reconnecting"
+  )
+
   return !!(
     session &&
     session.type !== "quick" &&
-    session.shouldConnect &&
+    (session.shouldConnect || isResolvingConnectionTarget) &&
     CONNECTION_LOADER_PHASES.has(session.connectionPhase)
   )
 }

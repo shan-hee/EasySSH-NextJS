@@ -205,6 +205,10 @@ export function TabTerminalContent({
       : pageTheme.background
   const hasBackgroundImage = settings.backgroundImage.trim().length > 0
   const enableTerminalWebgl = true
+  const connectionLoaderServerName =
+    session.username && session.host
+      ? `${session.username}@${session.host}`
+      : session.serverName || session.host || session.serverId
 
 	  useEffect(() => {
 	    let frame = 0
@@ -331,7 +335,7 @@ export function TabTerminalContent({
         {effectiveIsLoading && session.type !== 'quick' && (
           <div className="absolute inset-0 z-[60]">
             <ConnectionLoader
-              serverName={`${session.username}@${session.host}`}
+              serverName={connectionLoaderServerName}
               message={tTerminal(getConnectionLoaderMessageKey(session.connectionPhase))}
               exitMessage={tTerminal(getConnectionLoaderExitMessageKey(session.connectionPhase))}
               state={loaderState}
