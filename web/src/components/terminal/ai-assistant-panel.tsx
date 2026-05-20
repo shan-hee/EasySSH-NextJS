@@ -52,6 +52,7 @@ import {
   type CreateSessionResponse,
   type SessionListItem,
 } from "@/lib/api/ai-agent"
+import { getLatestRemoteOutputKindAfterLatestUserMessage } from "@/lib/ai-agent/timeline-utils"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { cn } from "@/lib/utils"
 
@@ -155,11 +156,17 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     (entry) => entry.kind === "message" && entry.data?.role === "assistant" && Boolean(entry.data.pending)
   )
   const isSessionRunning = session?.status === "running"
+  const latestRemoteOutputKind = getLatestRemoteOutputKindAfterLatestUserMessage(timeline)
   const shouldShowLoadingIndicator =
     isSessionRunning &&
     !hasPendingAssistantMessage &&
     runningTasks.length === 0 &&
     pendingConfirmationTasks.length === 0
+  const assistantLoadingState = shouldShowLoadingIndicator
+    ? latestRemoteOutputKind && latestRemoteOutputKind !== "assistant"
+      ? "thinking"
+      : "waiting"
+    : false
   const canSend =
     !!input.trim() &&
     isConfigured &&
@@ -877,7 +884,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
               entries={timeline}
               tText={tAI}
               onConfirmTask={confirmTask}
-              isAssistantLoading={shouldShowLoadingIndicator}
+              assistantLoadingState={assistantLoadingState}
             />
           </ConversationContent>
           <ConversationScrollButton className="bottom-3 size-8" />

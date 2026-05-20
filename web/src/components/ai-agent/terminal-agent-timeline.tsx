@@ -13,7 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { getTaskStatusLabel, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
+import { getTaskStatusLabel, type AssistantLoadingState, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
 import type { ResolvedTimelineItem, TimelineMessage } from "@/lib/ai-agent/session-state"
 import type { TaskView } from "@/lib/api/ai-agent"
 import { cn } from "@/lib/utils"
@@ -270,15 +270,18 @@ interface TerminalAgentTimelineProps {
   entries: ResolvedTimelineItem[]
   tText: TimelineTranslate
   onConfirmTask: (taskId: string, decision: "confirm" | "reject") => void
-  shouldShowLoadingIndicator?: boolean
+  assistantLoadingState?: AssistantLoadingState
 }
 
 export function TerminalAgentTimeline({
   entries,
   tText,
   onConfirmTask,
-  shouldShowLoadingIndicator = false,
+  assistantLoadingState = false,
 }: TerminalAgentTimelineProps) {
+  const shouldShowLoadingIndicator = assistantLoadingState !== false
+  const isThinking = assistantLoadingState === "thinking"
+
   return (
     <>
       <AgentTimeline
@@ -325,9 +328,12 @@ export function TerminalAgentTimeline({
           <div className="h-7 w-7 shrink-0 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
             <Bot className="h-3.5 w-3.5" />
           </div>
-          <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
+          <div
+            className="flex min-h-9 min-w-9 items-center justify-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-foreground"
+            aria-label={isThinking ? tText("panelThinking") : tText("loading")}
+          >
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span>{tText("panelThinking")}</span>
+            {isThinking && <span>{tText("panelThinking")}</span>}
           </div>
         </div>
       )}

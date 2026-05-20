@@ -62,6 +62,7 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { serversApi, type Server as ManagedServer } from "@/lib/api"
 import { deleteAISession, listAISessions, renameAISession, type CreateSessionResponse, type PermissionMode, type SessionListItem } from "@/lib/api/ai-agent"
+import { getLatestRemoteOutputKindAfterLatestUserMessage } from "@/lib/ai-agent/timeline-utils"
 import { getServerDisplayName } from "@/lib/server-utils"
 import { cn } from "@/lib/utils"
 import { useTranslations } from "next-intl"
@@ -207,6 +208,21 @@ export default function AIAssistantPage() {
 
   const hasTimeline = visibleTimeline.length > 0
   const isSessionRunning = session?.status === "running"
+  const runningTasks = agentSession.tasks.filter((task) => task.status === "running" || task.status === "queued")
+  const hasPendingAssistantMessage = visibleTimeline.some(
+    (entry) => entry.kind === "message" && entry.data?.role === "assistant" && Boolean(entry.data.pending)
+  )
+  const latestRemoteOutputKind = getLatestRemoteOutputKindAfterLatestUserMessage(visibleTimeline)
+  const shouldShowLoadingIndicator =
+    isSessionRunning &&
+    !hasPendingAssistantMessage &&
+    runningTasks.length === 0 &&
+    pendingConfirmationTasks.length === 0
+  const assistantLoadingState = shouldShowLoadingIndicator
+    ? latestRemoteOutputKind && latestRemoteOutputKind !== "assistant"
+      ? "thinking"
+      : "waiting"
+    : false
   const isCurrentSessionBlank = Boolean(
     session &&
     session.status !== "closed" &&
@@ -717,7 +733,12 @@ export default function AIAssistantPage() {
                     className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6"
                     scrollClassName="h-full w-full overflow-y-auto scrollbar-custom"
                   >
-                    <DashboardAgentTimeline entries={visibleTimeline} tText={t} />
+                    <DashboardAgentTimeline
+                      entries={visibleTimeline}
+                      tText={t}
+                      onConfirmTask={confirmTask}
+                      assistantLoadingState={assistantLoadingState}
+                    />
                   </ConversationContent>
                   <ConversationScrollButton />
                 </Conversation>

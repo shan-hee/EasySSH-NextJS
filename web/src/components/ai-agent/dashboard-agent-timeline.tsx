@@ -8,7 +8,7 @@ import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-no
 import { Button } from "@/components/ui/button"
 import { Response } from "@/components/ui/shadcn-io/ai/response"
 import type { ResolvedTimelineItem } from "@/lib/ai-agent/session-state"
-import { getTaskStatusLabel, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
+import { getTaskStatusLabel, type AssistantLoadingState, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
 import type { TaskView } from "@/lib/api/ai-agent"
 import { cn } from "@/lib/utils"
 
@@ -681,17 +681,19 @@ function TimelineTaskGroup({
 interface DashboardAgentTimelineProps {
   entries: ResolvedTimelineItem[]
   tText: TimelineTranslate
-  isAssistantLoading?: boolean
+  assistantLoadingState?: AssistantLoadingState
   onConfirmTask?: (taskId: string, decision: "confirm" | "reject") => void
 }
 
 export function DashboardAgentTimeline({
   entries,
   tText,
-  isAssistantLoading = false,
+  assistantLoadingState = false,
   onConfirmTask,
 }: DashboardAgentTimelineProps) {
   const blocks = useMemo(() => groupTimelineBlocks(entries), [entries])
+  const isAssistantLoading = assistantLoadingState !== false
+  const isThinking = assistantLoadingState === "thinking"
 
   if (blocks.length === 0 && !isAssistantLoading) {
     return (
@@ -737,9 +739,12 @@ export function DashboardAgentTimeline({
 
       {isAssistantLoading && (
         <div className="flex justify-start">
-          <div className="inline-flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+          <div
+            className="inline-flex min-h-9 min-w-9 items-center justify-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground"
+            aria-label={isThinking ? tText("panelThinking") : tText("loading")}
+          >
             <Loader2 className="size-3.5 animate-spin" />
-            <span>{tText("panelThinking")}</span>
+            {isThinking && <span>{tText("panelThinking")}</span>}
           </div>
         </div>
       )}
