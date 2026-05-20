@@ -55,6 +55,7 @@ import {
   Copy,
   Server
 } from "lucide-react"
+import { toast } from "sonner"
 
 // 模拟定时任务数据
 const mockSchedules = [
@@ -420,7 +421,7 @@ export default function AutomationSchedulesPage() {
 
   const handleCreateSchedule = () => {
     if (!newSchedule.name || !newSchedule.cron || !newSchedule.command) {
-      alert("请填写任务名称、调度规则和命令")
+      toast.error("请填写任务名称、调度规则和命令")
       return
     }
 
@@ -458,7 +459,7 @@ export default function AutomationSchedulesPage() {
 
   const handleUpdateSchedule = () => {
     if (!editSchedule.name || !editSchedule.cron || !editSchedule.command) {
-      alert("请填写任务名称、调度规则和命令")
+      toast.error("请填写任务名称、调度规则和命令")
       return
     }
 

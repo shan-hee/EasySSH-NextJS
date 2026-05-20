@@ -52,6 +52,7 @@ import {
   type CreateSessionResponse,
   type SessionListItem,
 } from "@/lib/api/ai-agent"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { cn } from "@/lib/utils"
 
 const ANIMATION_DELAY = 160
@@ -95,6 +96,7 @@ function formatSessionTime(value: string) {
 
 export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   const tAI = useTranslations("aiAssistant")
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const { isConfigured, isLoading: isConfigLoading, models, model: defaultModel } = useAIConfig()
   const {
     session,
@@ -482,7 +484,10 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       return
     }
 
-    const confirmed = window.confirm(tAI("deleteSessionConfirm"))
+    const confirmed = await requestConfirm({
+      description: tAI("deleteSessionConfirm"),
+      variant: "destructive",
+    })
     if (!confirmed) {
       return
     }
@@ -506,6 +511,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     cancelRenameSession,
     closeSession,
     renamingSessionId,
+    requestConfirm,
     sessionActionLoadingId,
     sessionId,
     tAI,
@@ -579,6 +585,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
         "--terminal-ai-panel-width": `${panelWidth}px`,
       } as CSSProperties}
     >
+      {confirmDialog}
       <div
         className={cn(
           "absolute inset-y-0 right-0 flex h-full min-h-0 w-full flex-col overflow-hidden border-l shadow-2xl backdrop-blur-xl",

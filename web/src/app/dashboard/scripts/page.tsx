@@ -33,12 +33,14 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useRouter } from "next/navigation"
 import { createScriptColumns } from "./components/script-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 
 export default function ScriptsPage() {
  const t = useTranslations("scripts")
  const tCommon = useTranslations("common")
  const router = useRouter()
  const { ready } = useAuthReady()
+ const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
  const [scripts, setScripts] = useState<Script[]>([])
  const [loading, setLoading] = useState(true)
  const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -325,7 +327,11 @@ const handleCloseExecuteDialog = useCallback((open: boolean) => {
  }, [scripts])
 
  const handleDelete = useCallback(async (scriptId: string) => {
- if (!confirm(t("toastDeleteConfirm"))) {
+ const confirmed = await requestConfirm({
+ description: t("toastDeleteConfirm"),
+ variant: "destructive",
+ })
+ if (!confirmed) {
  return
  }
 
@@ -337,7 +343,7 @@ const handleCloseExecuteDialog = useCallback((open: boolean) => {
  console.error("删除脚本失败:", error)
  toast.error(getErrorMessage(error, t("toastDeleteFailed")))
  }
- }, [loadScripts, t])
+ }, [loadScripts, requestConfirm, t])
 
 // DataTable 列定义与可见列
 const columns = useMemo(() => createScriptColumns({
@@ -585,6 +591,7 @@ const filterOptions = useMemo(() => {
 
  return (
  <>
+ {confirmDialog}
  <PageHeader title={t("pageTitle")} />
 
 <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">

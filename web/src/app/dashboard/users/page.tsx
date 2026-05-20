@@ -40,11 +40,13 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { useUserColumns } from "./components/user-columns"
 import { usePermissionColumns, staticPermissions } from "./components/permission-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { Server, FolderKey, Terminal, FileText, Settings } from "lucide-react"
 
 export default function UsersPage() {
   const t = useTranslations("users")
   const { ready } = useAuthReady()
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
 
   // Tab 状态
   const [activeTab, setActiveTab] = useState<"users" | "permissions">("users")
@@ -245,7 +247,11 @@ export default function UsersPage() {
 
   // 删除用户
   const handleDelete = async (userId: string, username: string) => {
-    if (!confirm(t("confirmDeleteSingle", { username }))) {
+    const confirmed = await requestConfirm({
+      description: t("confirmDeleteSingle", { username }),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -261,7 +267,11 @@ export default function UsersPage() {
 
   // 批量删除用户
   const handleBatchDelete = async (userIds: string[]) => {
-    if (!confirm(t("confirmDeleteBatch", { count: userIds.length }))) {
+    const confirmed = await requestConfirm({
+      description: t("confirmDeleteBatch", { count: userIds.length }),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -304,7 +314,10 @@ export default function UsersPage() {
 
   // 解锁用户
   const handleUnlock = async (userId: string, username: string) => {
-    if (!confirm(t("confirmUnlock", { username }))) {
+    const confirmed = await requestConfirm({
+      description: t("confirmUnlock", { username }),
+    })
+    if (!confirmed) {
       return
     }
 
@@ -462,7 +475,11 @@ export default function UsersPage() {
 
   // 删除权限
   const handleDeletePermission = async (permissionId: string, name: string) => {
-    if (!confirm(t("permConfirmDelete", { name }))) {
+    const confirmed = await requestConfirm({
+      description: t("permConfirmDelete", { name }),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -478,7 +495,11 @@ export default function UsersPage() {
 
   // 批量删除权限
   const handleBatchDeletePermissions = async (permissionIds: string[]) => {
-    if (!confirm(t("permConfirmDeleteBatch", { count: permissionIds.length }))) {
+    const confirmed = await requestConfirm({
+      description: t("permConfirmDeleteBatch", { count: permissionIds.length }),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -549,6 +570,7 @@ export default function UsersPage() {
 
   return (
     <>
+      {confirmDialog}
       <PageHeader title={t("pageTitle")} />
 
       {loading ? (

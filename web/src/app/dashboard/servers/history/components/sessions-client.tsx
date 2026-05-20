@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { createSessionColumns } from "./session-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 
 // 格式化数据传输量
 function formatBytes(bytes: number): string {
@@ -55,6 +56,7 @@ interface SessionsClientProps {
 export function SessionsClient({ initialData }: SessionsClientProps) {
   const t = useTranslations("connectionHistory")
   const { ready } = useAuthReady()
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const [isPending, startTransition] = useTransition()
   const [sessions, setSessions] = useState<SSHSessionDetail[]>(initialData?.sessions || [])
   const [statistics, setStatistics] = useState<SSHSessionStatistics>(initialData?.statistics || {
@@ -176,7 +178,11 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
 
   // 删除会话记录（使用 API + 乐观更新）
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm(t("toastDeleteConfirm"))) {
+    const confirmed = await requestConfirm({
+      description: t("toastDeleteConfirm"),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -203,6 +209,7 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
     loadStatistics,
     page,
     pageSize,
+    requestConfirm,
     setOptimisticSessions,
     startTransition,
     t,
@@ -294,6 +301,7 @@ export function SessionsClient({ initialData }: SessionsClientProps) {
 
   return (
     <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
+      {confirmDialog}
       {/* 统计卡片 - 加载时显示骨架屏 */}
       {initialLoading ? (
         <div className="grid gap-4 md:grid-cols-4 shrink-0">

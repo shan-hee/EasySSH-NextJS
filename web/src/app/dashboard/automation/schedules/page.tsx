@@ -47,6 +47,7 @@ import {
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/hooks/use-system-config"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 import { useTranslations } from "next-intl"
 import { SkeletonStatsCard } from "@/components/ui/loading"
@@ -59,6 +60,7 @@ export default function AutomationSchedulesPage() {
  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
  const effectiveTimezone = getEffectiveTimezone(user, systemConfig || null)
  const t = useTranslations("automationSchedules")
+ const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
  // 数据状态
  const [tasks, setTasks] = useState<ScheduledTask[]>([])
  const [servers, setServers] = useState<Server[]>([])
@@ -365,7 +367,11 @@ export default function AutomationSchedulesPage() {
 
  // 删除任务
  const handleDelete = async (taskId: string) => {
- if (!confirm(t("toastDeleteConfirm"))) {
+ const confirmed = await requestConfirm({
+ description: t("toastDeleteConfirm"),
+ variant: "destructive",
+ })
+ if (!confirmed) {
  return
  }
 
@@ -431,6 +437,7 @@ export default function AutomationSchedulesPage() {
 
  return (
  <>
+ {confirmDialog}
  <PageHeader title={t("pageTitle")} />
 
  <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

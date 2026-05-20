@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { getApiUrl } from "@/lib/config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
 
@@ -83,6 +84,7 @@ const conflictOptions: Array<{
 
 export function BackupRestoreTab() {
   const t = useTranslations("settingsManagementBackup")
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const restoreFileInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState<"export" | "restore" | null>(null)
   const [exportContent, setExportContent] = useState<Record<BackupContent, boolean>>({
@@ -163,13 +165,18 @@ export function BackupRestoreTab() {
     }
   }
 
-  const handleRestoreClick = () => {
+  const handleRestoreClick = async () => {
     if (!restoreSelected) {
       toast.error(t("toastSelectRestoreContent"))
       return
     }
-    if (conflictStrategy === "overwrite" && !window.confirm(t("confirmOverwriteRestore"))) {
-      return
+    if (conflictStrategy === "overwrite") {
+      const confirmed = await requestConfirm({
+        description: t("confirmOverwriteRestore"),
+      })
+      if (!confirmed) {
+        return
+      }
     }
     restoreFileInputRef.current?.click()
   }
@@ -210,6 +217,7 @@ export function BackupRestoreTab() {
 
   return (
     <div className="flex flex-1 h-full min-h-0 overflow-auto px-4 pb-6 pt-0 md:px-6">
+      {confirmDialog}
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
         <Alert className="py-3">
           <AlertTriangle className="h-4 w-4" />

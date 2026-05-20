@@ -32,6 +32,7 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { createTransferColumns } from "./transfer-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { useTranslations } from "next-intl"
 
 // 定义页面数据类型
@@ -84,6 +85,7 @@ const getRemoteUploadPath = (remoteDir: string, fileName: string): string => {
  */
 export function TransfersClient({ initialData }: TransfersClientProps) {
   const { ready } = useAuthReady()
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const [isPending, startTransition] = useTransition()
   const [transfers, setTransfers] = useState<FileTransfer[]>(initialData?.transfers || [])
   const [statistics, setStatistics] = useState<FileTransferStatistics>(initialData?.statistics || {
@@ -212,7 +214,11 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
   // 删除传输任务（使用 API + 乐观更新）
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm(t("confirmDelete"))) {
+    const confirmed = await requestConfirm({
+      description: t("confirmDelete"),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -231,7 +237,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
         await loadData(page, pageSize)
       }
     })
-  }, [loadData, page, pageSize, setOptimisticTransfers, startTransition, t])
+  }, [loadData, page, pageSize, requestConfirm, setOptimisticTransfers, startTransition, t])
 
   const resetTaskForm = useCallback(() => {
     setTaskMode("legacy-upload")
@@ -400,6 +406,7 @@ export function TransfersClient({ initialData }: TransfersClientProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
+      {confirmDialog}
       <div className="flex items-center justify-end shrink-0">
         <Button
           type="button"

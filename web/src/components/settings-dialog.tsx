@@ -75,6 +75,7 @@ import { notificationsApi } from "@/lib/api/notifications"
 import * as sshKeysApi from "@/lib/api/ssh-keys"
 import { userAIConfigApi, type UserAIConfig, type SaveUserAIConfigRequest } from "@/lib/api/settings"
 import { getEffectiveLocale, getEffectiveTimezone, formatInTimezone, saveLocaleToStorage } from "@/utils/datetime"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
@@ -120,6 +121,7 @@ const settingsNavItems: { id: SettingsSection; icon: typeof User }[] = [
 
 export const SettingsDialog = React.memo(function SettingsDialog({ children }: { children: React.ReactNode }) {
   const tAccount = useTranslations("accountSettings")
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const [open, setOpen] = React.useState(false)
   const [activeSection, setActiveSection] = React.useState<SettingsSection>("profile")
 
@@ -857,7 +859,11 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   // 删除SSH密钥
   const handleDeleteKey = React.useCallback(async (keyId: number, keyName: string) => {
-    if (!confirm(tAccount("sshKeyConfirmDelete", { name: keyName }))) {
+    const confirmed = await requestConfirm({
+      description: tAccount("sshKeyConfirmDelete", { name: keyName }),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -868,7 +874,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, tAccount("sshKeyToastDeleteFailed")))
     }
-  }, [loadSSHKeys, tAccount])
+  }, [loadSSHKeys, requestConfirm, tAccount])
 
   // 复制到剪贴板
   const handleCopyToClipboard = React.useCallback(async (text: string, label: string) => {
@@ -1034,6 +1040,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
+      {confirmDialog}
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>

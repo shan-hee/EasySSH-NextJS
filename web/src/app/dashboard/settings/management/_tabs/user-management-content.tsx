@@ -35,6 +35,7 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { useUserColumns } from "@/app/dashboard/users/components/user-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { useTranslations } from "next-intl"
 
 // 提取自 /dashboard/users/page.tsx 的用户管理内容
@@ -42,6 +43,7 @@ import { useTranslations } from "next-intl"
 export function UserManagementContent() {
   const t = useTranslations("users")
   const { ready } = useAuthReady()
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   // 数据状态
   const [users, setUsers] = useState<UserDetail[]>([])
   const [loading, setLoading] = useState(true)
@@ -199,7 +201,11 @@ export function UserManagementContent() {
 
   // 删除用户
   const handleDeleteUser = async (userId: string, username: string) => {
-    if (!confirm(t("confirmDeleteSingle", { username }))) {
+    const confirmed = await requestConfirm({
+      description: t("confirmDeleteSingle", { username }),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -214,7 +220,11 @@ export function UserManagementContent() {
 
   // 批量删除
   const handleBatchDelete = async (userIds: string[]) => {
-    if (!confirm(t("confirmDeleteBatch", { count: userIds.length }))) {
+    const confirmed = await requestConfirm({
+      description: t("confirmDeleteBatch", { count: userIds.length }),
+      variant: "destructive",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -251,6 +261,7 @@ export function UserManagementContent() {
     </div>
   ) : (
     <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
+      {confirmDialog}
       {/* 统计卡片 */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

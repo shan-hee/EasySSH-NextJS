@@ -59,6 +59,7 @@ import { AgentNoticeCard } from "@/components/ai-agent/agent-notice"
 import { useAgentSession } from "@/hooks/use-agent-session"
 import { useAIConfig } from "@/hooks/use-ai-config"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { serversApi, type Server as ManagedServer } from "@/lib/api"
 import { deleteAISession, listAISessions, renameAISession, type CreateSessionResponse, type PermissionMode, type SessionListItem } from "@/lib/api/ai-agent"
 import { getServerDisplayName } from "@/lib/server-utils"
@@ -85,6 +86,7 @@ function createSessionListItem(response: CreateSessionResponse): SessionListItem
 export default function AIAssistantPage() {
   const t = useTranslations("aiAssistant")
   const { ready } = useAuthReady()
+  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const { isLoading, isConfigured, models } = useAIConfig()
   const agentSession = useAgentSession()
   const { session, sessionId, pendingConfirmationTasks, error, restoreLatestSession, restoreSession, startNewSession, sendMessage, confirmTask, cancelSession, closeSession } = agentSession
@@ -385,7 +387,10 @@ export default function AIAssistantPage() {
   }
 
   const handleDeleteSession = async (targetSessionId: string) => {
-    const confirmed = window.confirm("确定删除该会话吗？删除后不可在列表中恢复。")
+    const confirmed = await requestConfirm({
+      description: t("deleteSessionConfirm"),
+      variant: "destructive",
+    })
     if (!confirmed) {
       return
     }
@@ -460,6 +465,7 @@ export default function AIAssistantPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {confirmDialog}
       <PageHeader title={t("pageTitle")} />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
