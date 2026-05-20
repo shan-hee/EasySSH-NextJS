@@ -97,42 +97,78 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 		return
 	}
 
-	// 查找或创建用户
-	user, err := h.authService.GetUserByEmail(c.Request.Context(), userInfo.Email)
+	// 查找或创建用户：Google 账户以 OIDC subject 为稳定标识，邮箱仅用于首次绑定和展示。
+	user, err := h.authService.GetUserByGoogleSub(c.Request.Context(), userInfo.ID)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			// 用户不存在，检查是否允许注册
-			if !config.AllowRegistration {
-				RespondError(c, http.StatusForbidden, "registration_disabled", "User registration is disabled. Please contact administrator.")
-				return
-			}
-
-			// 自动创建用户
-			// 使用 Google 邮箱的本地部分作为用户名，如果冲突则添加随机后缀
-			username := userInfo.Email
-			if atIndex := len(userInfo.Email); atIndex > 0 {
-				for i, ch := range userInfo.Email {
-					if ch == '@' {
-						username = userInfo.Email[:i]
-						break
-					}
-				}
-			}
-
-			// 注册用户（使用随机密码，因为通过 OAuth 登录不需要密码）
-			user, err = h.authService.RegisterOAuthUser(
-				c.Request.Context(),
-				username,
-				userInfo.Email,
-				userInfo.Picture,
-				auth.RoleUser,
-			)
+			user, err = h.authService.GetUserByEmail(c.Request.Context(), userInfo.Email)
 			if err != nil {
-				RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to create user: "+err.Error())
-				return
+				if errors.Is(err, auth.ErrUserNotFound) {
+					// 用户不存在，检查是否允许注册
+					if !config.AllowRegistration {
+						RespondError(c, http.StatusForbidden, "registration_disabled", "User registration is disabled. Please contact administrator.")
+						return
+					}
+
+					// 自动创建用户
+					// 使用 Google 邮箱的本地部分作为用户名，如果冲突则添加随机后缀
+					username := userInfo.Email
+					if atIndex := len(userInfo.Email); atIndex > 0 {
+						for i, ch := range userInfo.Email {
+							if ch == '@' {
+								username = userInfo.Email[:i]
+								break
+							}
+						}
+					}
+
+					// 注册用户（使用随机密码，因为通过 OAuth 登录不需要密码）
+					user, err = h.authService.RegisterOAuthUser(
+						c.Request.Context(),
+						username,
+						userInfo.Email,
+						userInfo.Picture,
+						userInfo.ID,
+						auth.RoleUser,
+					)
+					if err != nil {
+						RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to create user: "+err.Error())
+						return
+					}
+				} else {
+					RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get user")
+					return
+				}
+			} else {
+				user, err = h.authService.BindGoogleSub(c.Request.Context(), user.ID, userInfo.ID)
+				if err != nil {
+					if errors.Is(err, auth.ErrUserAlreadyExists) {
+						RespondError(c, http.StatusConflict, "oauth_account_conflict", "This Google account is already linked to another user")
+						return
+					}
+					RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to bind Google account")
+					return
+				}
 			}
 		} else {
 			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get user")
+			return
+		}
+	}
+
+	if user == nil {
+		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get user")
+		return
+	}
+
+	if user.GoogleSub == nil || *user.GoogleSub == "" {
+		user, err = h.authService.BindGoogleSub(c.Request.Context(), user.ID, userInfo.ID)
+		if err != nil {
+			if errors.Is(err, auth.ErrUserAlreadyExists) {
+				RespondError(c, http.StatusConflict, "oauth_account_conflict", "This Google account is already linked to another user")
+				return
+			}
+			RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to bind Google account")
 			return
 		}
 	}

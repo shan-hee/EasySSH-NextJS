@@ -34,6 +34,9 @@ type Repository interface {
 	// FindByEmail 根据邮箱查找用户
 	FindByEmail(ctx context.Context, email string) (*User, error)
 
+	// FindByGoogleSub 根据 Google OIDC subject 查找用户
+	FindByGoogleSub(ctx context.Context, googleSub string) (*User, error)
+
 	// Update 更新用户信息
 	Update(ctx context.Context, user *User) error
 
@@ -98,6 +101,17 @@ func (r *gormRepository) Create(ctx context.Context, user *User) error {
 		return ErrUserAlreadyExists
 	}
 
+	if user.GoogleSub != nil && *user.GoogleSub != "" {
+		if err := r.db.WithContext(ctx).Model(&User{}).
+			Where("google_sub = ?", *user.GoogleSub).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrUserAlreadyExists
+		}
+	}
+
 	return r.db.WithContext(ctx).Create(user).Error
 }
 
@@ -126,6 +140,17 @@ func (r *gormRepository) FindByUsername(ctx context.Context, username string) (*
 func (r *gormRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
 	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *gormRepository) FindByGoogleSub(ctx context.Context, googleSub string) (*User, error) {
+	var user User
+	if err := r.db.WithContext(ctx).Where("google_sub = ?", googleSub).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}

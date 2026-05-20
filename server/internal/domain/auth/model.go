@@ -28,12 +28,13 @@ const (
 
 // User 用户模型
 type User struct {
-	ID       uuid.UUID `gorm:"type:char(36);primary_key" json:"id"`
-	Username string    `gorm:"not null;size:50" json:"username"` // 允许重复，用户可修改
-	Email    string    `gorm:"uniqueIndex;not null;size:100" json:"email"`
-	Password string    `gorm:"not null;size:255" json:"-"` // bcrypt hash，不在 JSON 中返回
-	Role     UserRole  `gorm:"type:varchar(20);default:'user'" json:"role"`
-	Avatar   string    `gorm:"type:text" json:"avatar"`
+	ID        uuid.UUID `gorm:"type:char(36);primary_key" json:"id"`
+	Username  string    `gorm:"not null;size:50" json:"username"` // 允许重复，用户可修改
+	Email     string    `gorm:"uniqueIndex;not null;size:100" json:"email"`
+	Password  string    `gorm:"not null;size:255" json:"-"` // bcrypt hash，不在 JSON 中返回
+	Role      UserRole  `gorm:"type:varchar(20);default:'user'" json:"role"`
+	Avatar    string    `gorm:"type:text" json:"avatar"`
+	GoogleSub *string   `gorm:"uniqueIndex;size:255" json:"-"` // Google OIDC subject，OAuth 账户稳定标识
 	// 个性化偏好
 	Language         string `gorm:"size:20;default:''" json:"language"` // 用户界面语言偏好，如 zh-CN、en-US
 	Timezone         string `gorm:"size:50;default:''" json:"timezone"` // 用户时区偏好，如 Asia/Shanghai

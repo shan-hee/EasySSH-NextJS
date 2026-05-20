@@ -2,13 +2,12 @@ package oauth
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -48,6 +47,7 @@ func (s *GoogleService) GetOAuthConfig() *oauth2.Config {
 		ClientSecret: s.clientSecret,
 		RedirectURL:  s.redirectURI,
 		Scopes: []string{
+			"openid",
 			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",
 		},
@@ -57,34 +57,29 @@ func (s *GoogleService) GetOAuthConfig() *oauth2.Config {
 
 // VerifyIDToken 验证 Google ID Token 并获取用户信息
 func (s *GoogleService) VerifyIDToken(ctx context.Context, idToken string) (*GoogleUserInfo, error) {
-	// 使用 Google 的 tokeninfo 端点验证 ID Token
-	url := fmt.Sprintf("https://oauth2.googleapis.com/tokeninfo?id_token=%s", idToken)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	client := &http.Client{
+	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 	}
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 
-	resp, err := client.Do(req)
+	provider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
 	if err != nil {
-		return nil, fmt.Errorf("failed to verify token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("token verification failed: %s", string(body))
+		return nil, fmt.Errorf("failed to create oidc provider: %w", err)
 	}
 
-	var tokenInfo struct {
-		Aud           string `json:"aud"`
+	verifier := provider.Verifier(&oidc.Config{
+		ClientID: s.clientID,
+	})
+
+	verifiedToken, err := verifier.Verify(ctx, idToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify id token: %w", err)
+	}
+
+	var claims struct {
 		Sub           string `json:"sub"`
 		Email         string `json:"email"`
-		EmailVerified string `json:"email_verified"`
+		EmailVerified bool   `json:"email_verified"`
 		Name          string `json:"name"`
 		Picture       string `json:"picture"`
 		GivenName     string `json:"given_name"`
@@ -92,27 +87,26 @@ func (s *GoogleService) VerifyIDToken(ctx context.Context, idToken string) (*Goo
 		Locale        string `json:"locale"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil {
-		return nil, fmt.Errorf("failed to decode token info: %w", err)
+	if err := verifiedToken.Claims(&claims); err != nil {
+		return nil, fmt.Errorf("failed to decode id token claims: %w", err)
 	}
 
-	// 验证 audience (client ID)
-	if tokenInfo.Aud != s.clientID {
-		return nil, errors.New("invalid token audience")
+	if claims.Sub == "" {
+		return nil, fmt.Errorf("id token missing subject")
 	}
-
-	// 验证邮箱是否已验证
-	emailVerified := tokenInfo.EmailVerified == "true"
+	if claims.Email == "" {
+		return nil, fmt.Errorf("id token missing email")
+	}
 
 	return &GoogleUserInfo{
-		ID:            tokenInfo.Sub,
-		Email:         tokenInfo.Email,
-		VerifiedEmail: emailVerified,
-		Name:          tokenInfo.Name,
-		GivenName:     tokenInfo.GivenName,
-		FamilyName:    tokenInfo.FamilyName,
-		Picture:       tokenInfo.Picture,
-		Locale:        tokenInfo.Locale,
+		ID:            claims.Sub,
+		Email:         claims.Email,
+		VerifiedEmail: claims.EmailVerified,
+		Name:          claims.Name,
+		GivenName:     claims.GivenName,
+		FamilyName:    claims.FamilyName,
+		Picture:       claims.Picture,
+		Locale:        claims.Locale,
 	}, nil
 }
 

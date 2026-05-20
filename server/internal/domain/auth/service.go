@@ -61,8 +61,14 @@ type Service interface {
 	// GetUserByEmail 根据邮箱获取用户
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 
+	// GetUserByGoogleSub 根据 Google OIDC subject 获取用户
+	GetUserByGoogleSub(ctx context.Context, googleSub string) (*User, error)
+
+	// BindGoogleSub 绑定 Google OIDC subject 到已有用户
+	BindGoogleSub(ctx context.Context, userID uuid.UUID, googleSub string) (*User, error)
+
 	// RegisterOAuthUser 通过 OAuth 注册用户（不需要密码）
-	RegisterOAuthUser(ctx context.Context, username, email, avatar string, role UserRole) (*User, error)
+	RegisterOAuthUser(ctx context.Context, username, email, avatar, googleSub string, role UserRole) (*User, error)
 
 	// RefreshAccessToken 刷新访问令牌（返回新的访问令牌和刷新令牌）
 	RefreshAccessToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
@@ -462,16 +468,65 @@ func (s *authService) GetUserByEmail(ctx context.Context, email string) (*User, 
 	return s.repo.FindByEmail(ctx, email)
 }
 
-func (s *authService) RegisterOAuthUser(ctx context.Context, username, email, avatar string, role UserRole) (*User, error) {
+func (s *authService) GetUserByGoogleSub(ctx context.Context, googleSub string) (*User, error) {
+	return s.repo.FindByGoogleSub(ctx, googleSub)
+}
+
+func (s *authService) BindGoogleSub(ctx context.Context, userID uuid.UUID, googleSub string) (*User, error) {
+	if googleSub == "" {
+		return nil, errors.New("google sub is required")
+	}
+
+	existingUser, err := s.repo.FindByGoogleSub(ctx, googleSub)
+	if err == nil && existingUser != nil && existingUser.ID != userID {
+		return nil, ErrUserAlreadyExists
+	}
+	if err != nil && !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.GoogleSub != nil && *user.GoogleSub != "" && *user.GoogleSub != googleSub {
+		return nil, ErrUserAlreadyExists
+	}
+
+	user.GoogleSub = &googleSub
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *authService) RegisterOAuthUser(ctx context.Context, username, email, avatar, googleSub string, role UserRole) (*User, error) {
 	// 参数验证
 	if email == "" {
 		return nil, errors.New("email is required")
+	}
+	if googleSub == "" {
+		return nil, errors.New("google sub is required")
 	}
 
 	// 检查邮箱是否已存在
 	existingUser, err := s.repo.FindByEmail(ctx, email)
 	if err == nil && existingUser != nil {
 		return nil, ErrUserAlreadyExists
+	}
+	if err != nil && !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	// 检查 Google subject 是否已存在
+	existingUser, err = s.repo.FindByGoogleSub(ctx, googleSub)
+	if err == nil && existingUser != nil {
+		return nil, ErrUserAlreadyExists
+	}
+	if err != nil && !errors.Is(err, ErrUserNotFound) {
+		return nil, err
 	}
 
 	// 如果没有提供用户名，使用邮箱前缀生成
@@ -489,12 +544,13 @@ func (s *authService) RegisterOAuthUser(ctx context.Context, username, email, av
 
 	// 创建用户（OAuth 用户不需要密码）
 	user := &User{
-		ID:       uuid.New(),
-		Username: username,
-		Email:    email,
-		Password: "", // OAuth 用户不设置密码
-		Role:     role,
-		Avatar:   avatar,
+		ID:        uuid.New(),
+		Username:  username,
+		Email:     email,
+		Password:  "", // OAuth 用户不设置密码
+		Role:      role,
+		Avatar:    avatar,
+		GoogleSub: &googleSub,
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {
