@@ -141,7 +141,11 @@ function TerminalPageContent() {
 
     if (pendingServerId) {
       const now = Date.now()
-      const sessionId = `auto-${pendingServerId}-${now}`
+      const reusableQuickSession = sessions.find(
+        (session) => session.type === "quick" && session.id === activeSessionId
+      ) ?? sessions.find((session) => session.type === "quick")
+      const reusableQuickSessionId = reusableQuickSession?.id
+      const sessionId = reusableQuickSessionId ?? `auto-${pendingServerId}-${now}`
       const pendingSession: TerminalSession = {
         id: sessionId,
         serverId: pendingServerId,
@@ -157,7 +161,23 @@ function TerminalPageContent() {
         pinned: false,
       }
 
-      setSessions((prev) => [...prev, pendingSession])
+      setSessions((prev) => {
+        if (!reusableQuickSessionId) {
+          return [...prev, pendingSession]
+        }
+
+        let replaced = false
+        const next = prev.map((session) => {
+          if (session.id !== reusableQuickSessionId) {
+            return session
+          }
+
+          replaced = true
+          return pendingSession
+        })
+
+        return replaced ? next : [...prev, pendingSession]
+      })
       setActiveSessionId(sessionId)
       updateSessionActivity(sessionId, now)
       return
@@ -241,8 +261,7 @@ function TerminalPageContent() {
         if (
           session.type !== "terminal" ||
           !session.serverId ||
-          session.host ||
-          !session.id.startsWith("auto-")
+          session.host
         ) {
           return session
         }

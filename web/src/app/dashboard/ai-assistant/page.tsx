@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import Link from "next/link"
-import { Check, History, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, RefreshCw, Search, Send, Server as ServerIcon, Shield, Square, SquarePen, Trash2, X } from "lucide-react"
+import { Check, History, Loader2, Pencil, Plus, RefreshCw, Search, Send, Server as ServerIcon, Shield, Square, SquarePen, Trash2, X } from "lucide-react"
 
 import { DashboardAgentTimeline } from "@/components/ai-agent/dashboard-agent-timeline"
 import {
@@ -32,12 +32,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   PromptInput,
   PromptInputModelSelect,
@@ -67,21 +62,30 @@ import { getServerDisplayName } from "@/lib/server-utils"
 import { cn } from "@/lib/utils"
 import { useTranslations } from "next-intl"
 
-const SESSION_SIDEBAR_COLLAPSED_STORAGE_KEY = "easyssh:ai-assistant:session-sidebar-collapsed"
+const SESSION_LIST_LIMIT = 30
 
-function createSessionListItem(response: CreateSessionResponse): SessionListItem {
+function createSessionListItem(response: CreateSessionResponse, title: string): SessionListItem {
   return {
     id: response.session_id,
     model: response.session.model,
     permission_mode: response.session.permission_mode,
     status: response.session.status,
-    title: "新会话",
+    title,
     custom_title: false,
     message_count: response.session.messages.length,
     task_count: response.session.tasks.length,
     created_at: response.session.created_at,
     updated_at: response.session.updated_at,
   }
+}
+
+function formatSessionTime(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export default function AIAssistantPage() {
@@ -102,14 +106,15 @@ export default function AIAssistantPage() {
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
   const [sessionList, setSessionList] = useState<SessionListItem[]>([])
   const [sessionListLoading, setSessionListLoading] = useState(false)
+  const [sessionListError, setSessionListError] = useState("")
   const [sessionSearch, setSessionSearch] = useState("")
-  const [sessionSidebarCollapsed, setSessionSidebarCollapsed] = useState(true)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [sessionCreating, setSessionCreating] = useState(false)
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState("")
+  const [sessionActionLoadingId, setSessionActionLoadingId] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const sessionSidebarStorageReadyRef = useRef(false)
   const sessionCreatingRef = useRef(false)
 
   useEffect(() => {
@@ -138,34 +143,6 @@ export default function AIAssistantPage() {
   useEffect(() => {
     void loadServers()
   }, [loadServers])
-
-  useEffect(() => {
-    try {
-      const storedValue = window.localStorage.getItem(SESSION_SIDEBAR_COLLAPSED_STORAGE_KEY)
-      if (storedValue !== null) {
-        setSessionSidebarCollapsed(storedValue === "true")
-      }
-    } catch {
-      // ignore unavailable storage
-    } finally {
-      sessionSidebarStorageReadyRef.current = true
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!sessionSidebarStorageReadyRef.current) {
-      return
-    }
-
-    try {
-      window.localStorage.setItem(
-        SESSION_SIDEBAR_COLLAPSED_STORAGE_KEY,
-        String(sessionSidebarCollapsed)
-      )
-    } catch {
-      // ignore unavailable storage
-    }
-  }, [sessionSidebarCollapsed])
 
   useEffect(() => {
     if (!ready || isLoading || !isConfigured || session || agentSession.transport !== "idle") {
@@ -250,10 +227,10 @@ export default function AIAssistantPage() {
     }
 
     setSessionList((current) => [
-      createSessionListItem(response),
+      createSessionListItem(response, t("newSession")),
       ...current.filter((item) => item.id !== response.session_id),
-    ].slice(0, 30))
-  }, [sessionSearch])
+    ].slice(0, SESSION_LIST_LIMIT))
+  }, [sessionSearch, t])
 
   const submit = async () => {
     const normalizedDraft = draft.trim()
@@ -310,6 +287,7 @@ export default function AIAssistantPage() {
     }
 
     if (isCurrentSessionBlank) {
+      setHistoryOpen(false)
       requestAnimationFrame(() => {
         inputRef.current?.focus()
       })
@@ -333,6 +311,7 @@ export default function AIAssistantPage() {
       setSessionCreating(false)
     }
 
+    setHistoryOpen(false)
     requestAnimationFrame(() => {
       inputRef.current?.focus()
     })
@@ -345,26 +324,38 @@ export default function AIAssistantPage() {
 
     setSessionListLoading(true)
     try {
-      const response = await listAISessions({ limit: 30, q: sessionSearch })
+      setSessionListError("")
+      const response = await listAISessions({ limit: SESSION_LIST_LIMIT, q: sessionSearch })
       setSessionList(response.items)
     } catch {
-      toast.error("加载会话列表失败")
+      setSessionListError(t("sessionListLoadFailed"))
     } finally {
       setSessionListLoading(false)
     }
-  }, [isConfigured, isLoading, ready, sessionSearch])
+  }, [isConfigured, isLoading, ready, sessionSearch, t])
 
   useEffect(() => {
-    void loadSessionList()
-  }, [loadSessionList])
+    if (historyOpen) {
+      void loadSessionList()
+    }
+  }, [historyOpen, loadSessionList])
 
   const handleRestoreSession = async (targetSessionId: string) => {
-    if (renamingSessionId) {
+    if (!targetSessionId || sessionCreatingRef.current || renamingSessionId) {
+      return
+    }
+
+    if (targetSessionId === sessionId) {
+      setHistoryOpen(false)
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+      })
       return
     }
 
     const restored = await restoreSession(targetSessionId)
     if (restored) {
+      setHistoryOpen(false)
       requestAnimationFrame(() => {
         inputRef.current?.focus()
       })
@@ -383,11 +374,16 @@ export default function AIAssistantPage() {
 
   const submitRenameSession = async (targetSessionId: string) => {
     const title = renameDraft.trim()
+    if (sessionActionLoadingId) {
+      return
+    }
+
     if (!title) {
       toast.error("会话名称不能为空")
       return
     }
 
+    setSessionActionLoadingId(targetSessionId)
     try {
       await renameAISession(targetSessionId, title)
       cancelRenameSession()
@@ -398,11 +394,17 @@ export default function AIAssistantPage() {
       )))
       toast.success("会话已重命名")
     } catch {
-      toast.error("重命名会话失败")
+      toast.error(t("renameSessionFailed"))
+    } finally {
+      setSessionActionLoadingId(null)
     }
   }
 
   const handleDeleteSession = async (targetSessionId: string) => {
+    if (!targetSessionId || sessionActionLoadingId) {
+      return
+    }
+
     const confirmed = await requestConfirm({
       description: t("deleteSessionConfirm"),
       variant: "destructive",
@@ -411,15 +413,21 @@ export default function AIAssistantPage() {
       return
     }
 
+    setSessionActionLoadingId(targetSessionId)
     try {
       await deleteAISession(targetSessionId)
       setSessionList((current) => current.filter((item) => item.id !== targetSessionId))
       if (targetSessionId === sessionId) {
         await closeSession()
       }
+      if (renamingSessionId === targetSessionId) {
+        cancelRenameSession()
+      }
       toast.success("会话已删除")
     } catch {
-      toast.error("删除会话失败")
+      toast.error(t("deleteSessionFailed"))
+    } finally {
+      setSessionActionLoadingId(null)
     }
   }
 
@@ -482,155 +490,96 @@ export default function AIAssistantPage() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {confirmDialog}
-      <PageHeader title={t("pageTitle")} />
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-        <aside
-          className={cn(
-            "relative order-2 flex shrink-0 flex-col text-foreground transition-[width] duration-200 md:max-h-none",
-            sessionSidebarCollapsed ? "max-h-[280px] w-full md:w-14" : "max-h-[280px] w-full md:w-[320px]"
-          )}
-        >
-          {sessionSidebarCollapsed ? (
-            <div className="flex min-h-0 flex-1 flex-row items-center gap-2 overflow-x-auto px-3 py-2 md:flex-col md:overflow-x-visible md:overflow-y-auto md:px-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-9 shrink-0 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
-                onClick={() => setSessionSidebarCollapsed(false)}
-                aria-label="展开会话列表"
-                title="展开会话列表"
-              >
-                <PanelRightOpen className="size-4" />
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-9 shrink-0 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-accent/50"
-                disabled={createSessionDisabled}
-                onClick={() => void handleCreateNewSession()}
-                aria-label={t("newSession")}
-                title={t("newSession")}
-              >
-                <SquarePen className="size-4" />
-              </Button>
-
-              {sessionListLoading ? (
-                <div className="flex size-9 shrink-0 items-center justify-center text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                </div>
-              ) : (
-                sessionList.slice(0, 12).map((item) => {
-                  const isActive = item.id === sessionId
-
-                  return (
-                    <Button
-                      key={item.id}
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "size-9 shrink-0 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50",
-                        isActive && "bg-accent text-foreground dark:bg-accent/50"
-                      )}
-                      onClick={() => void handleRestoreSession(item.id)}
-                      aria-label={`恢复会话：${item.title}`}
-                      title={item.title}
-                    >
-                      <History className="size-4" />
-                    </Button>
-                  )
-                })
-              )}
-            </div>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute left-3 top-3 z-10 size-9 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
-                onClick={() => setSessionSidebarCollapsed(true)}
-                aria-label="折叠会话列表"
-                title="折叠会话列表"
-              >
-                <PanelRightClose className="size-4" />
-              </Button>
-
-              <div className="space-y-2 px-3 pb-3 pt-16">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 w-full justify-start gap-2 rounded-md px-2 text-sm font-medium text-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-accent/50"
-                  disabled={createSessionDisabled}
-                  onClick={() => void handleCreateNewSession()}
-                >
-                  <SquarePen className="size-4" />
-                  {t("newSession")}
-                </Button>
-
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={sessionSearch}
-                    onChange={(event) => setSessionSearch(event.target.value)}
-                    placeholder="搜索会话标题或消息"
-                    className="h-8 border-transparent bg-transparent pl-9 pr-9 text-sm text-foreground shadow-none placeholder:text-muted-foreground dark:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                  />
-                  {sessionSearch && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
-                      onClick={() => setSessionSearch("")}
-                      aria-label="清空搜索"
-                    >
-                      <X className="size-4" />
-                    </Button>
-                  )}
-                </div>
+      <PageHeader title={t("pageTitle")}>
+        <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-zinc-900"
+              aria-label={t("sidebarTitle")}
+              title={t("sidebarTitle")}
+            >
+              <History className="size-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={8}
+            className="w-[330px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border-zinc-200/80 p-0 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            <div className="border-b border-border/60 p-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={sessionSearch}
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                  placeholder={t("searchPlaceholder")}
+                  className="h-8 border-transparent bg-muted/50 pl-8 pr-8 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+                {sessionSearch && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 size-6 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                    onClick={() => setSessionSearch("")}
+                    aria-label={t("cancel")}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                )}
               </div>
+            </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 scrollbar-custom">
+            <ScrollArea className="h-[360px]">
+              <div className="p-2">
                 {sessionListLoading ? (
-                  <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                    加载中
+                  <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    <span>{t("loading")}</span>
+                  </div>
+                ) : sessionListError ? (
+                  <div className="px-3 py-10 text-center text-sm text-destructive">
+                    {sessionListError}
                   </div>
                 ) : sessionList.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    暂无会话
+                  <div className="px-3 py-10 text-center text-sm text-muted-foreground">
+                    {t("sessionListEmpty")}
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     {sessionList.map((item) => {
                       const isActive = item.id === sessionId
+                      const isRenaming = renamingSessionId === item.id
+                      const isActionLoading = sessionActionLoadingId === item.id
+
                       return (
                         <div
                           key={item.id}
-                          role="button"
-                          tabIndex={0}
                           className={cn(
                             "w-full rounded-md px-2 py-2 text-left transition-colors",
                             isActive
-                              ? "bg-accent text-foreground dark:bg-accent/50"
-                              : "text-foreground hover:bg-accent dark:hover:bg-accent/50"
+                              ? "bg-accent text-foreground dark:bg-zinc-900"
+                              : "text-foreground hover:bg-accent dark:hover:bg-zinc-900"
                           )}
                           onClick={() => void handleRestoreSession(item.id)}
+                          role="button"
+                          tabIndex={0}
                           onKeyDown={(event) => {
+                            if (isRenaming) {
+                              return
+                            }
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault()
                               void handleRestoreSession(item.id)
                             }
                           }}
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              {renamingSessionId === item.id ? (
+                              {isRenaming ? (
                                 <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
                                   <Input
                                     autoFocus
@@ -646,73 +595,90 @@ export default function AIAssistantPage() {
                                         cancelRenameSession()
                                       }
                                     }}
-                                    className="h-8"
+                                    className="h-7 min-w-0 text-xs"
+                                    disabled={isActionLoading}
                                   />
                                   <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-8 shrink-0"
-                                    onClick={() => void submitRenameSession(item.id)}
-                                    aria-label="保存会话名称"
+                                    className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+                                    disabled={isActionLoading}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      void submitRenameSession(item.id)
+                                    }}
+                                    aria-label={t("saveSessionTitle")}
+                                    title={t("saveSessionTitle")}
                                   >
-                                    <Check className="size-4" />
+                                    {isActionLoading ? (
+                                      <Loader2 className="size-3.5 animate-spin" />
+                                    ) : (
+                                      <Check className="size-3.5" />
+                                    )}
                                   </Button>
                                   <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-8 shrink-0"
-                                    onClick={cancelRenameSession}
-                                    aria-label="取消重命名"
+                                    className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+                                    disabled={isActionLoading}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      cancelRenameSession()
+                                    }}
+                                    aria-label={t("cancel")}
+                                    title={t("cancel")}
                                   >
-                                    <X className="size-4" />
+                                    <X className="size-3.5" />
                                   </Button>
                                 </div>
                               ) : (
-                                <div className="truncate text-sm font-medium">{item.title}</div>
+                                <div className="truncate text-sm font-medium">
+                                  {item.title}
+                                </div>
                               )}
                             </div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <Badge variant="outline" className="border-0 bg-transparent px-1 text-[10px] text-muted-foreground shadow-none">
-                                {item.status}
-                              </Badge>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-7 text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent/50"
-                                    onClick={(event) => event.stopPropagation()}
-                                    aria-label="会话操作"
-                                  >
-                                    <MoreHorizontal className="size-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      beginRenameSession(item)
-                                    }}
-                                  >
-                                    <Pencil className="size-4" />
-                                    重命名
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      void handleDeleteSession(item.id)
-                                    }}
-                                  >
-                                    <Trash2 className="size-4" />
-                                    删除
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
+
+                            {!isRenaming && (
+                              <div
+                                className="flex shrink-0 items-center gap-0.5 opacity-80"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7 text-muted-foreground hover:text-foreground"
+                                  disabled={Boolean(sessionActionLoadingId)}
+                                  onClick={() => beginRenameSession(item)}
+                                  aria-label={t("rename")}
+                                  title={t("rename")}
+                                >
+                                  <Pencil className="size-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7 text-muted-foreground hover:text-destructive"
+                                  disabled={Boolean(sessionActionLoadingId)}
+                                  onClick={() => void handleDeleteSession(item.id)}
+                                  aria-label={t("delete")}
+                                  title={t("delete")}
+                                >
+                                  {isActionLoading ? (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="size-3.5" />
+                                  )}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <span>{t("sidebarMessageCount", { count: item.message_count })}</span>
+                            <span className="shrink-0">{formatSessionTime(item.updated_at)}</span>
                           </div>
                         </div>
                       )
@@ -720,11 +686,30 @@ export default function AIAssistantPage() {
                   </div>
                 )}
               </div>
-            </>
-          )}
-        </aside>
+            </ScrollArea>
+          </PopoverContent>
+        </Popover>
 
-        <div className="order-1 min-w-0 flex-1 overflow-y-auto pb-4 md:pb-6 lg:overflow-hidden">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-zinc-900"
+          disabled={createSessionDisabled}
+          onClick={() => void handleCreateNewSession()}
+          aria-label={t("newSession")}
+          title={t("newSession")}
+        >
+          {sessionCreating ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <SquarePen className="size-4" />
+          )}
+        </Button>
+      </PageHeader>
+
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="h-full min-w-0 overflow-y-auto pb-4 md:pb-6 lg:overflow-hidden">
           <div className="flex h-full min-h-0 flex-col">
             <div className="min-h-0 flex-1 overflow-hidden">
               {hasTimeline ? (

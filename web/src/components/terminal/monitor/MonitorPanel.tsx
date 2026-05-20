@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatBytes } from '@/lib/format-utils';
-import { WSStatus, type MonitorMetrics } from './hooks/useMonitorWebSocket';
+import type { MonitorMetrics } from './hooks/useMonitorWebSocket';
 import { useMonitoringData } from './contexts/MonitorWebSocketContext';
 import { SystemInfo } from './components/SystemInfo';
 import { CPUChart } from './components/CPUChart';
@@ -54,14 +54,12 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
   isLive = true,
 }) => {
   // 【性能优化】只订阅监控数据，不订阅延迟数据
-  const { metrics, status, getMetricsHistory } = useMonitoringData();
+  const { metrics, getMetricsHistory } = useMonitoringData();
   const [frozenSnapshot, setFrozenSnapshot] = useState<{
     metrics: typeof metrics;
-    status: typeof status;
     history: ReturnType<typeof getMetricsHistory>;
   }>(() => ({
     metrics: null,
-    status: WSStatus.DISCONNECTED,
     history: [],
   }));
   const liveHistory = isLive ? getMetricsHistory() : EMPTY_METRICS_HISTORY;
@@ -72,16 +70,14 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
     const frame = window.requestAnimationFrame(() => {
       setFrozenSnapshot({
         metrics,
-        status,
         history: liveHistory,
       });
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [isLive, metrics, status, liveHistory]);
+  }, [isLive, metrics, liveHistory]);
 
   const displayMetrics = isLive ? metrics : frozenSnapshot.metrics;
-  const displayStatus = isLive ? status : frozenSnapshot.status;
   const displayHistory = isLive ? liveHistory : frozenSnapshot.history;
 
   // 转换数据格式以适配现有组件
@@ -165,7 +161,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
   }, [displayMetrics, displayHistory]);
 
   const panelContent = useMemo(() => {
-    if (!formattedMetrics || displayStatus !== WSStatus.CONNECTED) {
+    if (!formattedMetrics) {
       return <MonitorSkeleton />;
     }
 
@@ -201,7 +197,7 @@ export const MonitorPanel: React.FC<MonitorPanelProps> = ({
         </div>
       </>
     );
-  }, [formattedMetrics, displayStatus]);
+  }, [formattedMetrics]);
 
   return (
     <div

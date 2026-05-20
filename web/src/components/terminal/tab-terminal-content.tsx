@@ -182,12 +182,13 @@ export function TabTerminalContent({
     '/root'
   )
 
-  // 计算监控参数：后台页签保持终端连接，但不启用监控；当前页签保持轻量监控数据源供工具栏使用
+  // 监控数据源跟随已就绪的终端页签保持订阅。
+  // 桌面端监控面板也保持实时模式，和终端一样只切换可见性，避免切回时图表从冻结快照重绘而闪一下。
   const connectedServerId =
-    canUseHeavyPanels && session.serverId
+    hasReadyServer && session.serverId
       ? session.serverId
       : ''
-  const monitorEnabled = canUseHeavyPanels
+  const monitorEnabled = hasReadyServer
   const tTerminal = useTranslations("terminal")
   const { theme: appTheme, resolvedTheme } = useTheme()
   const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
@@ -437,9 +438,7 @@ export function TabTerminalContent({
                     : 'w-0 opacity-0 -translate-x-4 border-r-0'
                 )}
               >
-                {shouldReserveInlineMonitor && (
-                  <MonitorPanel isLive={isActive} />
-                )}
+                {shouldReserveInlineMonitor && <MonitorPanel />}
               </div>
             )}
 
