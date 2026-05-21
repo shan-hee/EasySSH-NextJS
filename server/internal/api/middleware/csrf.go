@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
+	csrf "filippo.io/csrf/gorilla"
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/csrf"
 )
 
 const CSRFTokenHeader = "X-CSRF-Token"
@@ -147,28 +147,47 @@ func csrfCookieConfig(cfg *config.Config) (bool, string, csrf.SameSiteMode) {
 
 func csrfTrustedOrigins(cfg *config.Config) []string {
 	origins := []string{
-		fmt.Sprintf("localhost:%d", cfg.Server.WebDevPort),
-		fmt.Sprintf("127.0.0.1:%d", cfg.Server.WebDevPort),
-		net.JoinHostPort("::1", fmt.Sprintf("%d", cfg.Server.WebDevPort)),
+		fmt.Sprintf("http://localhost:%d", cfg.Server.WebDevPort),
+		fmt.Sprintf("http://127.0.0.1:%d", cfg.Server.WebDevPort),
+		"http://" + net.JoinHostPort("::1", fmt.Sprintf("%d", cfg.Server.WebDevPort)),
 	}
 
 	for _, item := range strings.Split(os.Getenv("CSRF_TRUSTED_ORIGINS"), ",") {
-		item = strings.TrimSpace(item)
-		if item == "" {
+		origin := csrfTrustedOrigin(item)
+		if origin == "" {
 			continue
 		}
-		if parsed, err := url.Parse(item); err == nil && parsed.Host != "" {
-			origins = append(origins, parsed.Host)
-			continue
-		}
-		if host, port, err := net.SplitHostPort(item); err == nil && host != "" && port != "" {
-			origins = append(origins, net.JoinHostPort(host, port))
-			continue
-		}
-		origins = append(origins, item)
+		origins = append(origins, origin)
 	}
 
 	return origins
+}
+
+func csrfTrustedOrigin(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	if strings.Contains(raw, "://") {
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return ""
+		}
+		if parsed.Path != "" && parsed.Path != "/" {
+			return ""
+		}
+		if parsed.RawQuery != "" || parsed.Fragment != "" {
+			return ""
+		}
+		return strings.ToLower(parsed.Scheme) + "://" + parsed.Host
+	}
+
+	parsed, err := url.Parse("https://" + raw)
+	if err != nil || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return ""
+	}
+	return "https://" + parsed.Host
 }
 
 func shouldSkipUnsafeCSRF(r *http.Request) bool {

@@ -9,7 +9,7 @@
 提供直观的 Web 界面进行远程服务器管理，支持终端模拟、文件传输、系统监控等功能
 
 [![Version](https://img.shields.io/badge/version-1.0.31-blue)](https://github.com/shan-hee/EasySSH-NextJS/releases)
-[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.1-61DAFB?logo=react)](https://react.dev/)
 [![i18n](https://img.shields.io/badge/i18n-ready-green)](https://github.com/shan-hee/EasySSH-NextJS)
@@ -49,8 +49,8 @@
 - **国际化**：next-intl 4.4.0
 
 ### 后端
-- **语言**：Go 1.24
-- **框架**：Gin 1.10.0 + GORM 1.30.0
+- **语言**：Go 1.25
+- **框架**：Gin 1.12.0 + GORM 1.30.0
 - **数据库**：SQLite（默认）/ PostgreSQL / MySQL
 - **SSH/SFTP**：golang.org/x/crypto + pkg/sftp 1.13.6
 - **AI 集成**：go-anthropic v2.16.3 + go-openai v1.41.2
@@ -123,8 +123,8 @@ docker run -d \
 ### 方式二：本地开发
 
 **前置要求**：
-- Node.js 20+ / pnpm 9+
-- Go 1.24+
+- Node.js 24+ / pnpm 11+
+- Go 1.25+
 - 默认无需单独数据库服务；如需外部数据库，可使用 PostgreSQL 或 MySQL
 
 **一键启动**：

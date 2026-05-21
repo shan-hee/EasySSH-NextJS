@@ -29,7 +29,7 @@ EasySSH 后端服务采用 Go 语言开发，提供完整的 SSH 服务器管理
 
 ### 1. 环境要求
 
-- Go 1.24+
+- Go 1.25+
 - 默认 SQLite，无需单独数据库服务
 - 可选 PostgreSQL 12+ 或 MySQL 8+
 
@@ -200,7 +200,7 @@ server/
 ## 📚 技术栈
 
 ### 核心框架
-- **Web 框架**: Gin v1.10.0
+- **Web 框架**: Gin v1.12.0
 - **ORM**: GORM v1.30.0
 - **数据库**: SQLite（默认）、PostgreSQL、MySQL
 

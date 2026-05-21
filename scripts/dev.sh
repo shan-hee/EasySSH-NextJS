@@ -62,13 +62,37 @@ command_exists() {
 
 # 检查必需的工具
 if ! command_exists go; then
-    echo -e "${RED}❌ 错误: Go 未安装，请先安装 Go 1.24+${NC}"
+    echo -e "${RED}❌ 错误: Go 未安装，请先安装 Go 1.25+${NC}"
+    exit 1
+fi
+
+GO_MINOR=$(go env GOVERSION 2>/dev/null | sed -E 's/^go[0-9]+\.([0-9]+).*/\1/')
+if [[ -z "$GO_MINOR" || "$GO_MINOR" -lt 25 ]]; then
+    echo -e "${RED}❌ 错误: 当前 Go 版本过低，请升级到 Go 1.25+${NC}"
+    exit 1
+fi
+
+if ! command_exists node; then
+    echo -e "${RED}❌ 错误: Node.js 未安装，请先安装 Node.js 24+${NC}"
+    exit 1
+fi
+
+NODE_MAJOR=$(node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)
+if [[ "$NODE_MAJOR" -lt 24 ]]; then
+    echo -e "${RED}❌ 错误: 当前 Node.js 版本过低，请升级到 Node.js 24+${NC}"
     exit 1
 fi
 
 if ! command_exists pnpm; then
-    echo -e "${RED}❌ 错误: pnpm 未安装，请先安装 pnpm${NC}"
-    echo -e "${YELLOW}   运行: npm install -g pnpm${NC}"
+    echo -e "${RED}❌ 错误: pnpm 未安装，请先安装 pnpm 11+${NC}"
+    echo -e "${YELLOW}   建议运行: corepack enable && corepack prepare pnpm@11.1.3 --activate${NC}"
+    exit 1
+fi
+
+PNPM_MAJOR=$(pnpm -v 2>/dev/null | sed -E 's/^([0-9]+).*/\1/')
+if [[ -z "$PNPM_MAJOR" || "$PNPM_MAJOR" -lt 11 ]]; then
+    echo -e "${RED}❌ 错误: 当前 pnpm 版本过低，请升级到 pnpm 11+${NC}"
+    echo -e "${YELLOW}   建议运行: corepack enable && corepack prepare pnpm@11.1.3 --activate${NC}"
     exit 1
 fi
 

@@ -4,12 +4,12 @@
 # ============================================
 
 # Stage 1: 构建前端（Next.js）
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/web
 
 # 使用固定 pnpm 版本，保证构建一致性
-RUN corepack enable && corepack prepare pnpm@10.26.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.1.3 --activate
 
 # 先安装依赖（利用 Docker 层缓存）
 COPY VERSION /app/VERSION
