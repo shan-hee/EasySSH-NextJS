@@ -1,4 +1,4 @@
-.PHONY: dev dev-simple build test clean deps mock migrate-up migrate-down help
+.PHONY: dev dev-simple build desktop-build desktop-run test clean deps mock migrate-up migrate-down help
 
 # 默认目标 - 显示帮助
 .DEFAULT_GOAL := help
@@ -10,6 +10,8 @@ help:
 	@echo "  make dev         - 开发模式运行 (支持热重载)"
 	@echo "  make dev-simple  - 开发模式运行 (无热重载)"
 	@echo "  make build       - 构建二进制文件"
+	@echo "  make desktop-build - 构建 Wails v3 桌面端二进制"
+	@echo "  make desktop-run - 运行 Wails v3 桌面端"
 	@echo "  make test        - 运行测试"
 	@echo "  make clean       - 清理构建文件"
 	@echo "  make deps        - 安装依赖"
@@ -35,6 +37,15 @@ dev-simple:
 # 构建
 build:
 	go build -o bin/easyssh-api cmd/api/main.go
+
+# 构建桌面端
+desktop-build:
+	mkdir -p bin
+	go build -tags production -ldflags="-s -w" -o bin/easyssh-desktop ./cmd/desktop
+
+# 运行桌面端
+desktop-run:
+	go run ./cmd/desktop
 
 # 运行测试
 test:

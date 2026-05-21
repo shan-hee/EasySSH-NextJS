@@ -1,0 +1,32 @@
+version: '3'
+
+vars:
+  DESKTOP_MAIN: ./cmd/desktop
+
+tasks:
+  desktop:prepare:
+    summary: 构建前端静态资源并复制到 Wails v3 桌面入口
+    cmds:
+      - ./scripts/desktop-prepare.sh
+
+  desktop:run:
+    summary: 运行 EasySSH Wails v3 桌面端
+    dir: server
+    cmds:
+      - go run {{.DESKTOP_MAIN}}
+
+  desktop:build:
+    summary: 构建 EasySSH Wails v3 桌面端二进制
+    deps:
+      - desktop:prepare
+    dir: server
+    cmds:
+      - mkdir -p bin
+      - go build -tags production -ldflags="-s -w" -o bin/easyssh-desktop {{.DESKTOP_MAIN}}
+
+  desktop:dev:
+    summary: 准备静态资源并运行桌面端
+    deps:
+      - desktop:prepare
+    cmds:
+      - task desktop:run

@@ -37,6 +37,7 @@ web/.env*.local
 # 后端相关
 server/tmp
 server/vendor
+server/cmd/desktop/assets/export
 server/*.exe
 server/*.dll
 server/*.so

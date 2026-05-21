@@ -70,6 +70,9 @@ go run cmd/api/main.go
 
 # 或使用 air 热重载（需安装 air）
 air
+
+# 桌面端（需先从项目根目录运行 scripts/desktop-prepare.sh）
+go run ./cmd/desktop
 ```
 
 服务将在 `http://localhost:8520` 启动
@@ -99,9 +102,12 @@ curl http://localhost:8520/api/v1/health
 ```
 server/
 ├── cmd/
-│   └── api/
-│       └── main.go              # 应用入口
+│   ├── api/
+│   │   └── main.go              # Web/API 服务入口
+│   └── desktop/
+│       └── main.go              # Wails v3 桌面端入口
 ├── internal/
+│   ├── app/                     # 可复用运行时（HTTP 服务、静态资源、后台任务）
 │   ├── api/                     # API 层
 │   │   ├── middleware/          # 中间件
 │   │   │   ├── auth.go          # JWT 认证

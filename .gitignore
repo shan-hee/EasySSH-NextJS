@@ -29,6 +29,7 @@
 
 # Next.js 静态导出产物（由前端构建生成）
 /server/static/
+/server/cmd/desktop/assets/export/
 
 # typescript
 *.tsbuildinfo

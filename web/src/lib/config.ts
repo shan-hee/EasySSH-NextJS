@@ -17,10 +17,10 @@ const DEV_BACKEND_BASE_URL =
  * 获取 API URL (带 /api/v1 路径)
  *
  * 开发模式：使用完整 URL 指向后端服务器
- * 生产模式：使用相对路径（前端由后端托管，同域）
+ * 生产/桌面模式：使用相对路径（前端由后端托管，同域）
  */
 export function getApiUrl(): string {
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && !isHostedByBackend()) {
     return `${DEV_BACKEND_BASE_URL}/api/v1`
   }
   return '/api/v1'
@@ -42,8 +42,8 @@ export function getWsHost(): string {
     return envWsHost.trim()
   }
 
-  // 开发环境：优先使用 DEV_BACKEND_BASE_URL 的 host
-  if (process.env.NODE_ENV !== 'production') {
+  // 开发环境：优先使用 DEV_BACKEND_BASE_URL 的 host；桌面壳同源加载后端时使用当前 host
+  if (process.env.NODE_ENV !== 'production' && !isHostedByBackend()) {
     try {
       const url = new URL(DEV_BACKEND_BASE_URL)
       return url.host
@@ -54,6 +54,18 @@ export function getWsHost(): string {
 
   // 生产环境：使用当前页面的 host
   return window.location.host
+}
+
+function isHostedByBackend(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  try {
+    return window.location.origin === new URL(DEV_BACKEND_BASE_URL).origin
+  } catch {
+    return false
+  }
 }
 
 /**

@@ -12,6 +12,7 @@
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.1-61DAFB?logo=react)](https://react.dev/)
+[![Wails](https://img.shields.io/badge/Wails-v3%20alpha-DF0000)](https://wails.io/)
 [![i18n](https://img.shields.io/badge/i18n-ready-green)](https://github.com/shan-hee/EasySSH-NextJS)
 
 [![Docker Image Version](https://img.shields.io/docker/v/shanheee/easyssh?label=Docker&logo=docker&sort=semver)](https://hub.docker.com/r/shanheee/easyssh)
@@ -36,6 +37,7 @@
 - ⚙️ **自动化任务**：定时任务（Cron）、批量执行、脚本管理、通知集成（邮件/钉钉/企业微信/Webhook）
 - 🔐 **安全认证**：OAuth 2.0 + PKCE 授权流程，支持双因素认证（2FA）、账户锁定、登录检测
 - 🎨 **现代 UI**：基于 Radix UI + Tailwind CSS 4 的响应式界面，支持国际化（next-intl）
+- 🧩 **跨平台桌面端**：基于 Wails v3，复用同一套 Go 后端与 Next.js 静态前端
 
 ## 技术栈
 
@@ -57,9 +59,14 @@
 - **WebSocket**：Gorilla WebSocket 1.5.3
 - **任务调度**：robfig/cron v3.0.1
 
+### 桌面端
+- **框架**：Wails v3（当前使用 v3.0.0-alpha.95）
+- **运行方式**：桌面进程启动本机 loopback Go 服务，窗口加载同源 Web UI
+- **本地数据**：默认使用用户数据目录中的 SQLite 与备份目录
+
 ### 架构设计
 
-**纯 CSR 架构**：前端静态文件由 Go 后端托管，单容器部署
+**纯 CSR 架构**：前端静态文件由 Go 后端托管，可单容器部署，也可由桌面端嵌入运行
 
 ```
 ┌─────────────────────────────────────┐
@@ -74,6 +81,21 @@
 │  ┌──────────────────────────┐       │
 │  │ SQLite 数据文件 / 外部 DB │       │
 │  └──────────────────────────┘       │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│         Wails v3 桌面端              │
+│  ┌──────────────────────────────┐  │
+│  │   WebView 窗口                │  │
+│  │   加载 127.0.0.1 随机端口     │  │
+│  └───────────────┬──────────────┘  │
+│                  ↓                  │
+│  ┌──────────────────────────────┐  │
+│  │   同一套 Go 后端/API/WS       │  │
+│  │   托管嵌入式 Next.js 静态资源 │  │
+│  └───────────────┬──────────────┘  │
+│                  ↓                  │
+│      用户数据目录 SQLite/备份        │
 └─────────────────────────────────────┘
 ```
 
@@ -148,6 +170,41 @@ cd web && pnpm dev
 
 访问 http://localhost:3000
 
+### 方式三：桌面端（Wails v3）
+
+**前置要求**：
+- Node.js 24+ / pnpm 11+
+- Go 1.25+
+- Wails v3 对应平台的 WebView 运行依赖
+  - Windows：WebView2 Runtime
+  - macOS：系统 WebKit
+  - Linux：GTK/WebKitGTK 开发库（不同发行版包名略有差异）
+
+**准备静态资源并运行**：
+
+```bash
+# 在项目根目录运行
+./scripts/desktop-prepare.sh
+cd server && make desktop-run
+```
+
+**构建桌面二进制**：
+
+```bash
+# 在项目根目录运行
+./scripts/desktop-prepare.sh
+cd server && make desktop-build
+```
+
+也可以使用 Wails v3/Taskfile 风格命令：
+
+```bash
+task desktop:dev
+task desktop:build
+```
+
+桌面端默认把 SQLite 数据、备份和本地运行密钥写入系统用户数据目录下的 `EasySSH/`，并绑定到 `127.0.0.1` 的随机端口，不占用默认 Web 服务端口。
+
 ### Docker 常用命令
 
 ```bash
@@ -180,8 +237,10 @@ EasySSH-NextJS/
 │   └── public/            # 静态资源
 │
 ├── server/                 # Go 后端服务
-│   ├── cmd/api/           # 应用入口
+│   ├── cmd/api/           # Web/API 服务入口
+│   ├── cmd/desktop/       # Wails v3 桌面端入口
 │   ├── internal/
+│   │   ├── app/           # 可复用运行时（HTTP 服务、静态资源、后台任务）
 │   │   ├── api/           # HTTP/WebSocket 处理器
 │   │   ├── domain/        # 业务领域（server/ssh/auth）
 │   │   └── infra/         # 基础设施（db/config）
@@ -207,7 +266,12 @@ pnpm lint         # 代码检查
 cd server
 make dev          # 开发服务器（热重载）
 make build        # 构建二进制
+make desktop-run  # 运行 Wails v3 桌面端
+make desktop-build # 构建 Wails v3 桌面端二进制
 make test         # 运行测试
+
+# 桌面端资源
+./scripts/desktop-prepare.sh # 构建 web/out 并复制到桌面端嵌入目录
 
 # API 类型同步（修改 OpenAPI 后）
 ./scripts/gen-types.sh
