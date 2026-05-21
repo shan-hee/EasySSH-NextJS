@@ -21,6 +21,7 @@ interface UseSettingsFormOptions<T extends FieldValues> {
   onSuccess?: () => void
   onError?: (error: Error) => void
   defaultValues?: Partial<T>
+  enabled?: boolean
 }
 
 interface UseSettingsFormReturn<T extends FieldValues> {
@@ -51,6 +52,7 @@ export function useSettingsForm<T extends FieldValues>({
   onSuccess,
   onError,
   defaultValues,
+  enabled = true,
 }: UseSettingsFormOptions<T>): UseSettingsFormReturn<T> {
   const { ready } = useAuthReady()
   const t = useTranslations("settingsCommon")
@@ -86,10 +88,10 @@ export function useSettingsForm<T extends FieldValues>({
 
   // 初始加载（仅在已认证且全局状态就绪时触发）
   useEffect(() => {
-    if (!ready) return
+    if (!ready || !enabled) return
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready])
+  }, [ready, enabled])
 
   // 保存配置
   const handleSave = async () => {

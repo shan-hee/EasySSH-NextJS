@@ -8,7 +8,9 @@ RESOURCE_DIR="$SERVER_DIR/cmd/desktop/resources"
 ICON_SOURCE="$ROOT_DIR/web/public/favicon.ico"
 RC_FILE="$SERVER_DIR/cmd/desktop/windows.rc"
 SYSO_FILE="$SERVER_DIR/cmd/desktop/windows.syso"
-OUTPUT_FILE="${1:-$SERVER_DIR/bin/easyssh-desktop-windows-amd64.exe}"
+VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
+OUTPUT_FILE="${1:-$SERVER_DIR/bin/easyssh-desktop-v${VERSION}-windows-amd64.exe}"
+ZIP_FILE="${OUTPUT_FILE%.exe}.zip"
 
 if ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
   echo "错误: 未找到 x86_64-w64-mingw32-gcc，无法交叉编译 Windows 版本"
@@ -44,7 +46,18 @@ RC
 (
   cd "$SERVER_DIR"
   GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
-    go build -tags production -ldflags="-s -w -H windowsgui" -o "$OUTPUT_FILE" ./cmd/desktop
+    go build -tags production -ldflags="-s -w -H windowsgui -X main.version=${VERSION}" -o "$OUTPUT_FILE" ./cmd/desktop
 )
+
+if command -v zip >/dev/null 2>&1; then
+  (
+    cd "$(dirname "$OUTPUT_FILE")"
+    rm -f "$(basename "$ZIP_FILE")"
+    zip -q "$(basename "$ZIP_FILE")" "$(basename "$OUTPUT_FILE")"
+  )
+  echo "Windows 桌面端压缩包已生成: $ZIP_FILE"
+else
+  echo "提示: 未找到 zip，跳过压缩包生成"
+fi
 
 echo "Windows 桌面端已构建: $OUTPUT_FILE"

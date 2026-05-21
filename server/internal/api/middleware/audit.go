@@ -13,6 +13,8 @@ import (
 
 // AuditConfig 审计日志配置
 type AuditConfig struct {
+	// 是否记录审计日志
+	Enabled bool
 	// 是否启用调试日志 (生产环境应设置为 false)
 	EnableDebugLog bool
 	// 异步日志记录超时时间
@@ -26,6 +28,7 @@ func DefaultAuditConfig() *AuditConfig {
 	enableDebug := env == "development" || env == "dev"
 
 	return &AuditConfig{
+		Enabled:        true,
 		EnableDebugLog: enableDebug,
 		AsyncTimeout:   3 * time.Second,
 	}
@@ -44,6 +47,11 @@ func AuditLogMiddleware(auditService auditlog.Service, cfg *AuditConfig) gin.Han
 	}
 
 	return func(c *gin.Context) {
+		if !cfg.Enabled {
+			c.Next()
+			return
+		}
+
 		// 记录开始时间
 		startTime := time.Now()
 

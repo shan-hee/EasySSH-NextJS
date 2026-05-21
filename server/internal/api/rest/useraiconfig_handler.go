@@ -2,6 +2,7 @@ package rest
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/easyssh/server/internal/domain/useraiconfig"
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,12 @@ type SaveUserAIConfigRequest struct {
 	CustomAPIKey    string `json:"custom_api_key"`
 	CustomEndpoint  string `json:"custom_endpoint"`
 	CustomModels    string `json:"custom_models"`
+}
+
+type ProbeUserAIModelsRequest struct {
+	CustomProvider string `json:"custom_provider"`
+	CustomAPIKey   string `json:"custom_api_key,omitempty"`
+	CustomEndpoint string `json:"custom_endpoint,omitempty"`
 }
 
 // GetUserAIConfig 获取当前用户的AI配置
@@ -157,4 +164,73 @@ func (h *UserAIConfigHandler) DeleteUserAIConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "AI configuration deleted successfully",
 	})
+}
+
+func (h *UserAIConfigHandler) ProbeUserAIModels(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "User not authenticated")
+		return
+	}
+
+	var req ProbeUserAIModelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
+		return
+	}
+
+	provider := strings.ToLower(strings.TrimSpace(req.CustomProvider))
+	apiKey := strings.TrimSpace(req.CustomAPIKey)
+	endpoint := strings.TrimSpace(req.CustomEndpoint)
+
+	if provider == "" || apiKey == "" || endpoint == "" {
+		existing, err := h.service.GetUserConfig(c.Request.Context(), userID)
+		if err == nil && existing != nil {
+			if provider == "" {
+				provider = strings.ToLower(strings.TrimSpace(existing.CustomProvider))
+			}
+			if apiKey == "" {
+				apiKey = strings.TrimSpace(existing.CustomAPIKey)
+			}
+			if endpoint == "" {
+				endpoint = strings.TrimSpace(existing.CustomEndpoint)
+			}
+		}
+	}
+
+	if provider == "" {
+		provider = "openai"
+	}
+
+	switch provider {
+	case "openai", "openai-response", "gemini":
+		if apiKey == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "API key is required to probe models"})
+			return
+		}
+
+		models, err := fetchOpenAICompatibleModels(provider, apiKey, endpoint)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"available": false,
+				"models":    []string{},
+				"error":     err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, AIModelsProbeResponseDTO{
+			Available: true,
+			Models:    models,
+			Message:   "Model list fetched successfully",
+		})
+	case "anthropic":
+		c.JSON(http.StatusOK, AIModelsProbeResponseDTO{
+			Available: false,
+			Models:    []string{},
+			Message:   "Anthropic model auto-fetch is not supported yet, please input models manually",
+		})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported provider"})
+	}
 }

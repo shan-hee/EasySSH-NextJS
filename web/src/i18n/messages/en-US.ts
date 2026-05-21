@@ -68,12 +68,38 @@ const messages = {
     quickAccessActionAiAssistantDesc:
       "Ask AI to generate plans and help you execute tasks",
   },
+  desktopWorkbench: {
+    title: "Local workbench",
+    quickConnectTitle: "Quick connect",
+    quickConnectDescription: "Pick a frequent server and open a terminal immediately.",
+    addServer: "Add server",
+    addFirstServer: "Add first server",
+    loading: "Loading workbench...",
+    retry: "Retry",
+    loadFailed: "Failed to load local workbench",
+    emptyTitle: "No servers yet",
+    emptyDescription: "Add a server and it will be ready for one-click connections here.",
+    workspaceTitle: "Workspace",
+    totalServers: "Servers",
+    onlineServers: "Online",
+    shortcutsTitle: "Shortcuts",
+    terminal: "Terminal",
+    files: "Files",
+    aiAssistant: "AI Assistant",
+    importData: "Import",
+    settings: "Settings",
+    recentSessionsTitle: "Recent sessions",
+    noRecentSessions: "No recent sessions",
+  },
   nav: {
     workbench: "Workbench",
+    localWorkspace: "Local workspace",
     coreServers: "Server Management",
     observeAudit: "Monitoring & Audit",
     settings: "System Settings",
+    settingsPlain: "Settings",
     console: "Console",
+    servers: "Servers",
     connections: "Connections",
     connectionConfigs: "Connection Configs",
     connectionHistory: "Connection History",
@@ -93,10 +119,12 @@ const messages = {
     logsOperations: "Operation Logs",
     logsLogin: "Login Logs",
     terminal: "Terminal",
+    aiAssistant: "AI Assistant",
     userManagement: "User Management",
     systemSettings: "System Settings",
     systemOrg: "System & Organization",
     planPro: "Pro",
+    planDesktop: "Desktop",
     openSidebar: "Open navigation menu",
   },
   settingsManagement: {
@@ -1613,6 +1641,8 @@ const messages = {
     toastOnlyOnlineServers: "Only online servers can be selected.",
     toastExecuteStarted: "Script execution started.",
     toastExecuteFailed: "Failed to execute script.",
+    desktopExecuteUnavailable:
+      "Batch script execution is not available in desktop mode yet. Run the script manually in Terminal.",
 
     // Execute dialog
     executeDialogTitle: "Run Script",
@@ -2123,11 +2153,13 @@ const messages = {
   },
   settingsMain: {
     pageTitle: "System settings",
+    pageTitleDesktop: "Settings",
     itemBasic: "Basic info",
     itemFileTransfer: "File transfer",
     itemCompletion: "Completion",
     itemAccessControl: "Access control",
     itemSessionManagement: "Session management",
+    itemTerminalSession: "Terminal sessions",
     itemNetworkSecurity: "Network security",
     itemAIConfig: "AI config",
     itemNotificationConfig: "Notification config",
@@ -2152,21 +2184,36 @@ const messages = {
   settingsSecuritySession: {
     sectionTitle: "Session management",
     sectionDescription: "Configure user sessions and tab management policies",
+    desktopSectionTitle: "Terminal sessions",
+    desktopSectionDescription:
+      "Configure terminal tabs and idle behavior for this local workspace",
     fieldSessionTimeout: "Session timeout (minutes)",
     fieldSessionTimeoutDesc:
       "Auto logout time after user inactivity (5-1440 minutes)",
+    desktopFieldSessionTimeout: "Local session timeout (minutes)",
+    desktopFieldSessionTimeoutDesc:
+      "Local workspace protection timeout after inactivity (5-1440 minutes)",
     fieldMaxTabs: "Maximum tabs",
     fieldMaxTabsDesc:
       "Maximum number of tabs a single user can open (1-200)",
+    desktopFieldMaxTabs: "Maximum terminal tabs",
+    desktopFieldMaxTabsDesc:
+      "Maximum number of terminal tabs that can be open at the same time (1-200)",
     fieldInactiveMinutes: "Inactive disconnect reminder (minutes)",
     fieldInactiveMinutesDesc:
       "Reminder time when a tab is inactive (5-1440 minutes)",
+    desktopFieldInactiveMinutes: "Idle reminder (minutes)",
+    desktopFieldInactiveMinutesDesc:
+      "Reminder time when a terminal tab has been inactive (5-1440 minutes)",
     fieldRememberLogin: "Remember login state",
     fieldRememberLoginDesc:
       "Allow users to remember login and sign in automatically next time",
     fieldHibernate: "Background tab hibernation",
     fieldHibernateDesc:
       "When enabled, background tabs will hibernate automatically to save resources",
+    desktopFieldHibernate: "Background tab hibernation",
+    desktopFieldHibernateDesc:
+      "When enabled, background terminal tabs hibernate automatically to save resources",
     jwtSectionTitle: "Token expiry and refresh",
     jwtSectionDescription:
       "Configure access token lifetime and login persistence. JWT secret is still read from .env.",
@@ -2186,14 +2233,20 @@ const messages = {
     fieldJWTRefreshReuseDetectionDesc:
       "Detect abnormal reuse of old refresh tokens. Recommended.",
     previewTitle: "Current configuration preview:",
+    desktopPreviewTitle: "Current terminal policy:",
     previewSessionTimeoutPrefix: "• User will be logged out after ",
     previewSessionTimeoutSuffix: " minutes of inactivity",
+    desktopPreviewSessionTimeoutPrefix: "• Local session enters timeout protection after ",
+    desktopPreviewSessionTimeoutSuffix: " minutes of inactivity",
     previewMaxTabsPrefix: "• Each user can open up to ",
     previewMaxTabsSuffix: " tabs at the same time",
+    desktopPreviewMaxTabsPrefix: "• Terminal page can open up to ",
+    desktopPreviewMaxTabsSuffix: " tabs at the same time",
     previewRememberLoginPrefix: "• Remember login: ",
     previewEnabled: "Enabled",
     previewDisabled: "Disabled",
     previewHibernatePrefix: "• Background hibernation: ",
+    desktopPreviewHibernatePrefix: "• Background terminal hibernation: ",
     jwtPreviewTitle: "Token configuration preview:",
     previewJWTAccessPrefix: "• Access token expires after ",
     previewJWTAccessSuffix: " minutes",
@@ -2205,6 +2258,8 @@ const messages = {
     previewJWTReuseDetectionPrefix: "• Reuse detection: ",
     alertContent:
       "Session settings affect login experience for all users. Set timeout values based on real usage to balance security and usability.",
+    desktopAlertContent:
+      "These settings only apply to the current desktop data directory. They do not affect Web deployments or other devices.",
     jwtAlertContent:
       "These settings take effect after the backend service restarts. Already issued token expiry times are not rewritten immediately.",
   },
@@ -2410,9 +2465,14 @@ const messages = {
   settingsIntegrationsAI: {
     sectionTitle: "System AI config",
     sectionDescription: "Configure global AI service for all users",
+    desktopSectionTitle: "AI config",
+    desktopSectionDescription: "Configure the AI service used by this local workspace",
     fieldSystemEnabledLabel: "Enable system AI service",
     fieldSystemEnabledDesc:
       "When enabled, all users can use the system-level AI service",
+    desktopEnabledLabel: "Enable AI service",
+    desktopEnabledDesc:
+      "When enabled, Terminal and AI Assistant use this configuration",
     fieldProviderLabel: "Provider type",
     providerOpenAI: "OpenAI",
     providerOpenAIResponse: "OpenAI-Response",
@@ -2441,6 +2501,8 @@ const messages = {
     noDetectedModels: "No models detected, please input manually",
     alertDescription:
       "After configuration, all users can use the system AI service. Make sure the API key has enough quota and permissions.",
+    desktopAlertDescription:
+      "AI config is stored in the current local data directory. Make sure the API key has enough quota and keep the data directory safe.",
     fieldProviderPlaceholder: "Choose provider",
 
     // Model parameters tab
@@ -2663,6 +2725,12 @@ const messages = {
     restoreTitle: "Restore",
     restoreDescription:
       "Restore from a unified backup file with content and conflict controls.",
+    desktopDataDirTitle: "Local data directory",
+    desktopDataDirDescription:
+      "Desktop data is stored in the EasySSH-data directory next to the executable.",
+    desktopDataDirUnavailable: "Data directory unavailable",
+    desktopSecurityWarning:
+      "easyssh.db stores application data and desktop.env stores the decryption key. Keep them together when backing up or moving data; encrypted server credentials cannot be decrypted if desktop.env is lost.",
     contentConfigTitle: "Config",
     contentConfigDescription:
       "System settings, security policy, notifications, and system AI config",
@@ -2673,6 +2741,8 @@ const messages = {
     btnExportLoading: "Exporting...",
     btnRestore: "Choose file and restore",
     btnRestoreLoading: "Restoring...",
+    btnOpenDataDir: "Open data directory",
+    btnResetData: "Reset local data",
     exportHintFormat: "• Export format: EasySSH unified backup JSON",
     exportHintContent: "• Export config only, database only, or both",
     restoreHintFormat: "• Supported format: EasySSH unified backup JSON",
@@ -2692,6 +2762,8 @@ const messages = {
       "Stop restoring as soon as any existing record is found.",
     confirmOverwriteRestore:
       "Overwrite will update current records with the same primary key. Continue?",
+    confirmResetData:
+      "Reset will move the current EasySSH-data directory aside on the next start and create a fresh workspace. Export a backup first. Continue?",
     toastSelectExportContent: "Select at least one export content type",
     toastSelectRestoreContent: "Select at least one restore content type",
     toastExportLoading: "Exporting backup...",
@@ -2700,6 +2772,9 @@ const messages = {
     toastRestoreLoading: "Restoring backup...",
     toastRestoreSuccess: "Backup restored",
     toastRestoreFailed: "Failed to restore backup",
+    toastOpenDataDirFailed: "Failed to open data directory",
+    toastResetDataScheduled: "Local data reset is scheduled for next start",
+    toastResetDataFailed: "Failed to schedule local data reset",
   },
   terminalMonitor: {
     cpuLabel: "CPU",

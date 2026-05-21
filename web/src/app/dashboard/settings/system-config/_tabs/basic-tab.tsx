@@ -17,10 +17,13 @@ import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { basicInfoSchema } from "@/schemas/settings/system-config.schema"
 import { settingsApi } from "@/lib/api/settings"
 import { SettingsLoading } from "@/components/settings/settings-loading"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 export function BasicTab() {
   const t = useTranslations("settingsSystemBasic")
   const tCommon = useTranslations("common")
+  const { data: runtime } = useRuntimeInfo()
+  const isDesktop = isDesktopRuntime(runtime)
 
   const languageOptions = [
     { label: t("languageZhCN"), value: "zh-CN" },
@@ -205,106 +208,110 @@ export function BasicTab() {
             )}
           </SettingsSection>
 
-          {/* 注册配置 */}
-          <SettingsSection
-            title={t("registerSectionTitle")}
-            description={t("registerSectionDescription")}
-            icon={<UserPlus className="h-5 w-5" />}
-          >
-            <FormSwitch
-              form={form}
-              name="allow_registration"
-              label={t("fieldAllowRegistration")}
-              description={t("fieldAllowRegistrationDesc")}
-            />
-
-            {form.watch("allow_registration") && (
-              <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label className="text-base">{t("fieldDefaultRole")}</Label>
-                  <p className="text-sm text-muted-foreground">{t("fieldDefaultRoleDesc")}</p>
-                </div>
-                <Select
-                  value={form.watch("default_role")}
-                  onValueChange={(val) => form.setValue("default_role", val as "user" | "viewer")}
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">{t("roleUser")}</SelectItem>
-                    <SelectItem value="viewer">{t("roleViewer")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </SettingsSection>
-
-          {/* OAuth 配置 */}
-          <SettingsSection
-            title={t("oauthSectionTitle")}
-            description={t("oauthSectionDescription")}
-            icon={<Key className="h-5 w-5" />}
-          >
-            <FormSwitch
-              form={form}
-              name="oauth_enabled"
-              label={t("fieldOAuthEnabled")}
-              description={t("fieldOAuthEnabledDesc")}
-            />
-
-            {form.watch("oauth_enabled") && (
-              <>
-                <FormInput
+          {!isDesktop && (
+            <>
+              {/* 注册配置 */}
+              <SettingsSection
+                title={t("registerSectionTitle")}
+                description={t("registerSectionDescription")}
+                icon={<UserPlus className="h-5 w-5" />}
+              >
+                <FormSwitch
                   form={form}
-                  name="google_client_id"
-                  label={t("fieldGoogleClientId")}
-                  description={t("fieldGoogleClientIdDesc")}
-                  placeholder="your-client-id.apps.googleusercontent.com"
+                  name="allow_registration"
+                  label={t("fieldAllowRegistration")}
+                  description={t("fieldAllowRegistrationDesc")}
                 />
 
-                <FormInput
+                {form.watch("allow_registration") && (
+                  <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">{t("fieldDefaultRole")}</Label>
+                      <p className="text-sm text-muted-foreground">{t("fieldDefaultRoleDesc")}</p>
+                    </div>
+                    <Select
+                      value={form.watch("default_role")}
+                      onValueChange={(val) => form.setValue("default_role", val as "user" | "viewer")}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">{t("roleUser")}</SelectItem>
+                        <SelectItem value="viewer">{t("roleViewer")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </SettingsSection>
+
+              {/* OAuth 配置 */}
+              <SettingsSection
+                title={t("oauthSectionTitle")}
+                description={t("oauthSectionDescription")}
+                icon={<Key className="h-5 w-5" />}
+              >
+                <FormSwitch
                   form={form}
-                  name="google_client_secret"
-                  label={t("fieldGoogleClientSecret")}
-                  description={t("fieldGoogleClientSecretDesc")}
-                  type="password"
-                  placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxx"
+                  name="oauth_enabled"
+                  label={t("fieldOAuthEnabled")}
+                  description={t("fieldOAuthEnabledDesc")}
                 />
 
-                <div className="rounded-lg border p-4 bg-blue-50 dark:bg-blue-950/20">
-                  <p className="text-sm font-medium mb-2 text-blue-900 dark:text-blue-100">
-                    {t("oauthHelpTitle")}
-                  </p>
-                  <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
-                    <li>
-                      {t("oauthHelpStep1Prefix")}{" "}
-                      <a
-                        href="https://console.cloud.google.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        Google Cloud Console
-                      </a>
-                    </li>
-                    <li>{t("oauthHelpStep2")}</li>
-                    <li>{t("oauthHelpStep3")}</li>
-                    <li>{t("oauthHelpStep4")}</li>
-                    <li>
-                      {t("oauthHelpStep5Prefix")}：
-                      <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
-                        {typeof window !== "undefined"
-                          ? `${window.location.origin}/auth/google/callback`
-                          : "https://your-domain.com/auth/google/callback"}
-                      </code>
-                    </li>
-                    <li>{t("oauthHelpStep6")}</li>
-                  </ol>
-                </div>
-              </>
-            )}
-          </SettingsSection>
+                {form.watch("oauth_enabled") && (
+                  <>
+                    <FormInput
+                      form={form}
+                      name="google_client_id"
+                      label={t("fieldGoogleClientId")}
+                      description={t("fieldGoogleClientIdDesc")}
+                      placeholder="your-client-id.apps.googleusercontent.com"
+                    />
+
+                    <FormInput
+                      form={form}
+                      name="google_client_secret"
+                      label={t("fieldGoogleClientSecret")}
+                      description={t("fieldGoogleClientSecretDesc")}
+                      type="password"
+                      placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxx"
+                    />
+
+                    <div className="rounded-lg border p-4 bg-blue-50 dark:bg-blue-950/20">
+                      <p className="text-sm font-medium mb-2 text-blue-900 dark:text-blue-100">
+                        {t("oauthHelpTitle")}
+                      </p>
+                      <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
+                        <li>
+                          {t("oauthHelpStep1Prefix")}{" "}
+                          <a
+                            href="https://console.cloud.google.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline"
+                          >
+                            Google Cloud Console
+                          </a>
+                        </li>
+                        <li>{t("oauthHelpStep2")}</li>
+                        <li>{t("oauthHelpStep3")}</li>
+                        <li>{t("oauthHelpStep4")}</li>
+                        <li>
+                          {t("oauthHelpStep5Prefix")}：
+                          <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
+                            {typeof window !== "undefined"
+                              ? `${window.location.origin}/auth/google/callback`
+                              : "https://your-domain.com/auth/google/callback"}
+                          </code>
+                        </li>
+                        <li>{t("oauthHelpStep6")}</li>
+                      </ol>
+                    </div>
+                  </>
+                )}
+              </SettingsSection>
+            </>
+          )}
         </div>
       </div>
 

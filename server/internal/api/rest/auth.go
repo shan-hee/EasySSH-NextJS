@@ -16,6 +16,7 @@ import (
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/domain/verification"
 	"github.com/easyssh/server/internal/pkg/password"
+	"github.com/easyssh/server/internal/platform"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -177,6 +178,8 @@ type AuthHandler struct {
 	systemConfigService    systemconfig.Service      // 系统配置服务（用于在 /auth/status 中返回公共配置）
 	verificationService    verification.Service      // 验证码服务
 	emailService           notification.EmailService // 邮件服务
+	runtimeInfo            platform.RuntimeInfo
+	localOwner             *auth.User
 }
 
 // NewAuthHandler 创建认证处理器
@@ -188,6 +191,8 @@ func NewAuthHandler(
 	systemConfigService systemconfig.Service,
 	verificationService verification.Service,
 	emailService notification.EmailService,
+	runtimeInfo platform.RuntimeInfo,
+	localOwner *auth.User,
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:            authService,
@@ -198,6 +203,8 @@ func NewAuthHandler(
 		systemConfigService:    systemConfigService,
 		verificationService:    verificationService,
 		emailService:           emailService,
+		runtimeInfo:            runtimeInfo,
+		localOwner:             localOwner,
 	}
 }
 
@@ -1072,6 +1079,165 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	RespondSuccessWithMessage(c, nil, "Profile updated successfully")
 }
 
+func (h *AuthHandler) authenticatedUserFromContext(c *gin.Context) (*auth.User, int, bool) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		return nil, 0, false
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok || strings.TrimSpace(userIDStr) == "" {
+		return nil, 0, false
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return nil, 0, false
+	}
+
+	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
+	if err != nil || user == nil {
+		return nil, 0, false
+	}
+
+	accessTokenExpiresIn := 0
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		parts := strings.Fields(authHeader)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			tokenString := strings.TrimSpace(parts[1])
+			if claims, err := h.jwtService.ValidateToken(tokenString); err == nil && claims.ExpiresAt != nil {
+				remaining := claims.ExpiresAt.Time.Sub(time.Now()).Seconds()
+				if remaining < 0 {
+					remaining = 0
+				}
+				accessTokenExpiresIn = int(remaining)
+			}
+		}
+	}
+
+	return user, accessTokenExpiresIn, true
+}
+
+func (h *AuthHandler) applyPublicSystemConfig(c *gin.Context, response gin.H) {
+	if h.systemConfigService == nil {
+		return
+	}
+
+	cfg, err := h.systemConfigService.Get(c.Request.Context())
+	if err != nil || cfg == nil {
+		return
+	}
+
+	completionProviders := systemconfig.DefaultCompletionProviders()
+	if cfg.CompletionProviders != "" {
+		var parsed systemconfig.CompletionProvidersConfig
+		if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionProviders), &parsed); unmarshalErr == nil {
+			completionProviders = &parsed
+		}
+	}
+
+	completionQuotas := systemconfig.DefaultCompletionQuotas()
+	if cfg.CompletionQuotas != "" {
+		var parsed systemconfig.CompletionQuotasConfig
+		if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionQuotas), &parsed); unmarshalErr == nil {
+			completionQuotas = &parsed
+		}
+	}
+
+	completionCache := systemconfig.DefaultCompletionCache()
+	if cfg.CompletionCache != "" {
+		var parsed systemconfig.CompletionCacheConfig
+		if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionCache), &parsed); unmarshalErr == nil {
+			completionCache = &parsed
+		}
+	}
+
+	response["system_config"] = gin.H{
+		"system_name":               cfg.SystemName,
+		"system_logo":               cfg.SystemLogo,
+		"system_favicon":            cfg.SystemFavicon,
+		"default_language":          cfg.DefaultLanguage,
+		"default_timezone":          cfg.DefaultTimezone,
+		"date_format":               cfg.DateFormat,
+		"download_exclude_patterns": cfg.DownloadExcludePatterns,
+		"default_download_mode":     cfg.DefaultDownloadMode,
+		"skip_excluded_on_upload":   cfg.SkipExcludedOnUpload,
+		"max_file_upload_size":      cfg.MaxFileUploadSize,
+		"completion_enabled":        cfg.CompletionEnabled,
+		"completion_providers":      completionProviders,
+		"completion_quotas":         completionQuotas,
+		"completion_cache":          completionCache,
+		"allow_registration":        cfg.AllowRegistration,
+		"oauth_enabled":             cfg.OAuthEnabled,
+		"google_client_id":          cfg.GoogleClientID,
+	}
+
+	if h.securityService != nil {
+		if securityCfg, err := h.securityService.Get(c.Request.Context()); err == nil && securityCfg != nil {
+			response["system_config"].(gin.H)["tab_session"] = gin.H{
+				"max_tabs":         securityCfg.MaxTabs,
+				"inactive_minutes": securityCfg.InactiveMinutes,
+				"hibernate":        securityCfg.Hibernate,
+				"session_timeout":  securityCfg.SessionTimeout,
+				"remember_login":   securityCfg.RememberLogin,
+			}
+		}
+	}
+}
+
+func (h *AuthHandler) applyDesktopLocalOwnerStatus(c *gin.Context, response gin.H) bool {
+	if h.runtimeInfo.Profile != platform.RuntimeProfileDesktop || h.localOwner == nil {
+		return false
+	}
+
+	response["need_init"] = false
+	principal := platform.NewDesktopLocalOwner(h.localOwner.ID.String())
+	c.Set("principal", principal)
+	response["principal"] = principal
+
+	if user, expiresIn, ok := h.authenticatedUserFromContext(c); ok && user.ID == h.localOwner.ID {
+		response["is_authenticated"] = true
+		response["user"] = user.ToPublic()
+		if expiresIn > 0 {
+			response["access_token_expires_in"] = expiresIn
+		}
+		return true
+	}
+
+	user, err := h.authService.GetUserByID(c.Request.Context(), h.localOwner.ID)
+	if err != nil || user == nil {
+		RespondError(c, http.StatusInternalServerError, "local_owner_missing", "Desktop local owner is missing")
+		return true
+	}
+
+	deviceType, deviceName, ipAddress, userAgent := extractDeviceInfo(c)
+	sessionInfo := &auth.SessionInfo{
+		DeviceType: deviceType,
+		DeviceName: deviceName,
+		IPAddress:  ipAddress,
+		UserAgent:  userAgent,
+	}
+
+	accessToken, refreshToken, err := h.authService.CreateSessionWithTokens(c.Request.Context(), user, sessionInfo)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "desktop_session_failed", "Failed to create desktop session")
+		return true
+	}
+
+	if strings.TrimSpace(refreshToken) != "" {
+		setAuthCookies(c, refreshToken, h.securityService, h.refreshTokenTTLSeconds)
+	}
+	clearAccessTokenCookie(c, h.securityService)
+
+	response["is_authenticated"] = true
+	response["user"] = user.ToPublic()
+	response["access_token"] = accessToken
+	response["token_type"] = "Bearer"
+	response["access_token_expires_in"] = h.accessTokenTTLSeconds
+
+	return true
+}
+
 // CheckStatus 检查系统和认证状态
 // GET /api/v1/auth/status
 func (h *AuthHandler) CheckStatus(c *gin.Context) {
@@ -1099,105 +1265,32 @@ func (h *AuthHandler) CheckStatus(c *gin.Context) {
 		}
 	}
 
+	if h.applyDesktopLocalOwnerStatus(c, response) {
+		if c.Writer.Written() {
+			return
+		}
+		h.applyPublicSystemConfig(c, response)
+		RespondSuccess(c, response)
+		return
+	}
+
 	// 如果已有管理员，检查当前用户是否已认证
 	if hasAdmin {
-		// 1. 使用 OptionalAuth 中间件在上下文中解析的用户信息（Authorization: Bearer）
-		userIDStr, exists := c.Get("user_id")
-		if exists && userIDStr != "" {
-			// 解析 UUID
-			userID, err := uuid.Parse(userIDStr.(string))
-			if err == nil {
-				// 用户已认证，获取用户信息
-				user, err := h.authService.GetUserByID(c.Request.Context(), userID)
-				if err == nil && user != nil {
-					response["is_authenticated"] = true
-					// 与 /users/me 保持一致，返回公开用户信息
-					response["user"] = user.ToPublic()
-
-					// 尝试根据 Authorization 头中的 Bearer Token 计算剩余有效期
-					if authHeader := c.GetHeader("Authorization"); authHeader != "" {
-						parts := strings.Fields(authHeader)
-						if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-							tokenString := strings.TrimSpace(parts[1])
-							if claims, err := h.jwtService.ValidateToken(tokenString); err == nil && claims.ExpiresAt != nil {
-								now := time.Now()
-								remaining := claims.ExpiresAt.Time.Sub(now).Seconds()
-								if remaining < 0 {
-									remaining = 0
-								}
-								response["access_token_expires_in"] = int(remaining)
-							}
-						}
-					}
-				}
+		if user, expiresIn, ok := h.authenticatedUserFromContext(c); ok {
+			response["is_authenticated"] = true
+			// 与 /users/me 保持一致，返回公开用户信息
+			response["user"] = user.ToPublic()
+			if expiresIn > 0 {
+				response["access_token_expires_in"] = expiresIn
 			}
 		}
-
 		// 刷新逻辑由前端 apiFetch 统一处理:
 		// 收到 401 时自动调用 /api/v1/oauth/token (grant_type=refresh_token) 并重放原请求，
 		// 因此此处不再直接读取 refresh_token Cookie。
 	}
 
 	// 附带公共系统配置（未登录场景下也可使用）
-	if h.systemConfigService != nil {
-		if cfg, err := h.systemConfigService.Get(c.Request.Context()); err == nil && cfg != nil {
-			completionProviders := systemconfig.DefaultCompletionProviders()
-			if cfg.CompletionProviders != "" {
-				var parsed systemconfig.CompletionProvidersConfig
-				if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionProviders), &parsed); unmarshalErr == nil {
-					completionProviders = &parsed
-				}
-			}
-
-			completionQuotas := systemconfig.DefaultCompletionQuotas()
-			if cfg.CompletionQuotas != "" {
-				var parsed systemconfig.CompletionQuotasConfig
-				if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionQuotas), &parsed); unmarshalErr == nil {
-					completionQuotas = &parsed
-				}
-			}
-
-			completionCache := systemconfig.DefaultCompletionCache()
-			if cfg.CompletionCache != "" {
-				var parsed systemconfig.CompletionCacheConfig
-				if unmarshalErr := json.Unmarshal([]byte(cfg.CompletionCache), &parsed); unmarshalErr == nil {
-					completionCache = &parsed
-				}
-			}
-
-			response["system_config"] = gin.H{
-				"system_name":               cfg.SystemName,
-				"system_logo":               cfg.SystemLogo,
-				"system_favicon":            cfg.SystemFavicon,
-				"default_language":          cfg.DefaultLanguage,
-				"default_timezone":          cfg.DefaultTimezone,
-				"date_format":               cfg.DateFormat,
-				"download_exclude_patterns": cfg.DownloadExcludePatterns,
-				"default_download_mode":     cfg.DefaultDownloadMode,
-				"skip_excluded_on_upload":   cfg.SkipExcludedOnUpload,
-				"max_file_upload_size":      cfg.MaxFileUploadSize,
-				"completion_enabled":        cfg.CompletionEnabled,
-				"completion_providers":      completionProviders,
-				"completion_quotas":         completionQuotas,
-				"completion_cache":          completionCache,
-				"allow_registration":        cfg.AllowRegistration,
-				"oauth_enabled":             cfg.OAuthEnabled,
-				"google_client_id":          cfg.GoogleClientID,
-			}
-
-			if h.securityService != nil {
-				if securityCfg, err := h.securityService.Get(c.Request.Context()); err == nil && securityCfg != nil {
-					response["system_config"].(gin.H)["tab_session"] = gin.H{
-						"max_tabs":         securityCfg.MaxTabs,
-						"inactive_minutes": securityCfg.InactiveMinutes,
-						"hibernate":        securityCfg.Hibernate,
-						"session_timeout":  securityCfg.SessionTimeout,
-						"remember_login":   securityCfg.RememberLogin,
-					}
-				}
-			}
-		}
-	}
+	h.applyPublicSystemConfig(c, response)
 
 	RespondSuccess(c, response)
 }

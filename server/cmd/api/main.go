@@ -5,10 +5,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	easysshapp "github.com/easyssh/server/internal/app"
+	"github.com/easyssh/server/internal/platform"
 	"github.com/joho/godotenv"
 )
 
@@ -18,7 +20,10 @@ func main() {
 		log.Printf("⚠️ Warning: .env file not found, using environment variables")
 	}
 
-	runtime, err := easysshapp.New(easysshapp.Options{})
+	runtime, err := easysshapp.New(easysshapp.Options{
+		Profile: platform.RuntimeProfileWeb,
+		Version: readVersion(),
+	})
 	if err != nil {
 		log.Fatalf("❌ Failed to initialize server: %v", err)
 	}
@@ -37,4 +42,16 @@ func main() {
 	if err := runtime.Shutdown(ctx); err != nil {
 		log.Fatal("❌ Server forced to shutdown:", err)
 	}
+}
+
+func readVersion() string {
+	data, err := os.ReadFile("../VERSION")
+	if err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	data, err = os.ReadFile("VERSION")
+	if err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	return platform.Version
 }

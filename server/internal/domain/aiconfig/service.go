@@ -32,6 +32,16 @@ func (s *service) GetSystemConfig(ctx context.Context) (*AIConfig, error) {
 
 // SaveSystemConfig 保存系统级AI配置
 func (s *service) SaveSystemConfig(ctx context.Context, config *AIConfig) error {
+	if config != nil && config.SystemEnabled && strings.TrimSpace(config.SystemAPIKey) == "" {
+		existing, err := s.repo.GetSystemConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if existing != nil && strings.TrimSpace(existing.SystemAPIKey) != "" {
+			config.SystemAPIKey = existing.SystemAPIKey
+		}
+	}
+
 	// 验证配置
 	if err := s.validateSystemConfig(config); err != nil {
 		return err

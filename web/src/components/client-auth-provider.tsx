@@ -7,6 +7,8 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { useAuthStore } from "@/stores/auth-store"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { isApiError } from "@/lib/api-client"
+import { getDefaultDashboardPath } from "@/shell/routes"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 interface ClientAuthContextType {
   user: User | null
@@ -34,6 +36,8 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
   const [user, setUser] = useState<User | null>(initialUser)
   const router = useRouter()
   const { markLoggedOut } = useSystemConfig()
+  const { data: runtime } = useRuntimeInfo()
+  const isDesktop = isDesktopRuntime(runtime)
   const clearToken = useAuthStore((state) => state.clearToken)
   const resetTerminals = useTerminalStore((state) => state.resetAll)
 
@@ -83,8 +87,8 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
     clearToken()
     resetTerminals()
     markLoggedOut()
-    router.replace("/login")
-  }, [clearToken, markLoggedOut, resetTerminals, router])
+    router.replace(isDesktop ? getDefaultDashboardPath(runtime) : "/login")
+  }, [clearToken, isDesktop, markLoggedOut, resetTerminals, router, runtime])
 
   return (
     <ClientAuthContext.Provider

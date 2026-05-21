@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/easyssh/server/internal/platform"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,6 +17,21 @@ type PermissionService interface {
 // RequirePermission 需要具备指定权限（按角色映射）
 func RequirePermission(permissionService PermissionService, code string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if principalValue, exists := c.Get("principal"); exists {
+			if principal, ok := principalValue.(platform.Principal); ok &&
+				principal.Kind == platform.PrincipalKindLocalOwner &&
+				principal.Role == platform.PrincipalRoleOwner {
+				c.Next()
+				return
+			}
+		}
+		if emailValue, exists := c.Get("email"); exists {
+			if email, ok := emailValue.(string); ok && email == platform.DesktopLocalOwnerEmail {
+				c.Next()
+				return
+			}
+		}
+
 		if permissionService == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "permission_service_unavailable",

@@ -1,21 +1,12 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useCallback, useEffect, useMemo, useState, Suspense, type ComponentType } from "react"
 import { useTranslations } from "next-intl"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
-import {
-  Settings,
-  Globe,
-  HardDrive,
-  Command,
-  Shield,
-  Clock,
-  Archive,
-  Bot,
-  Mail,
-} from "lucide-react"
 import { cn } from "@/lib/utils"
+import { buildSettingsTabs } from "@/shell/settings"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 // 导入所有配置子页签组件
 import { BasicTab } from "./system-config/_tabs/basic-tab"
@@ -31,25 +22,17 @@ import { BackupRestoreTab } from "./management/_tabs/backup-restore-tab"
 import { NotificationConfigWrapper } from "./integrations/_tabs/notification-config-wrapper"
 import { AIConfigWrapper } from "./integrations/_tabs/ai-config-wrapper"
 
-// 所有页签平铺为一级
-interface TabItem {
-  id: string
-  nameKey: string
-  icon: React.ElementType
-  component: React.ComponentType
+const settingsComponents: Record<string, ComponentType> = {
+  basic: BasicTab,
+  "file-transfer": FileTransferTab,
+  completion: CompletionTab,
+  "access-control": AccessControlTab,
+  session: SessionManagementTab,
+  network: NetworkSecurityTab,
+  "ai-config": AIConfigWrapper,
+  "notification-config": NotificationConfigWrapper,
+  backup: BackupRestoreTab,
 }
-
-const tabs: TabItem[] = [
-  { id: "basic", nameKey: "itemBasic", icon: Settings, component: BasicTab },
-  { id: "file-transfer", nameKey: "itemFileTransfer", icon: HardDrive, component: FileTransferTab },
-  { id: "completion", nameKey: "itemCompletion", icon: Command, component: CompletionTab },
-  { id: "access-control", nameKey: "itemAccessControl", icon: Shield, component: AccessControlTab },
-  { id: "session", nameKey: "itemSessionManagement", icon: Clock, component: SessionManagementTab },
-  { id: "network", nameKey: "itemNetworkSecurity", icon: Globe, component: NetworkSecurityTab },
-  { id: "ai-config", nameKey: "itemAIConfig", icon: Bot, component: AIConfigWrapper },
-  { id: "notification-config", nameKey: "itemNotificationConfig", icon: Mail, component: NotificationConfigWrapper },
-  { id: "backup", nameKey: "itemBackup", icon: Archive, component: BackupRestoreTab },
-]
 
 // 内部组件，使用 useSearchParams
 function SettingsContent() {
@@ -57,24 +40,39 @@ function SettingsContent() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { data: runtime } = useRuntimeInfo()
+  const isDesktop = isDesktopRuntime(runtime)
+  const tabs = useMemo(() => buildSettingsTabs({ runtime, t }), [runtime, t])
 
-  const initialSection = searchParams.get("section") || "basic"
+  const initialSection = searchParams.get("section") || tabs[0]?.id || "basic"
   const [activeSection, setActiveSection] = useState(initialSection)
 
-  const activeTab = tabs.find((tab) => tab.id === activeSection)
-  const ActiveComponent = activeTab?.component
+  const activeTab = tabs.find((tab) => tab.id === activeSection) ?? tabs[0]
+  const ActiveComponent = activeTab ? settingsComponents[activeTab.id] : undefined
 
-  const handleSectionChange = (section: string) => {
+  const handleSectionChange = useCallback((section: string) => {
     setActiveSection(section)
     if (!pathname) return
     const nextSearchParams = new URLSearchParams(searchParams.toString())
     nextSearchParams.set("section", section)
     router.replace(`${pathname}?${nextSearchParams.toString()}`, { scroll: false })
-  }
+  }, [pathname, router, searchParams])
+
+  useEffect(() => {
+    if (tabs.length === 0) return
+    const requestedSection = searchParams.get("section")
+    if (requestedSection && tabs.some((tab) => tab.id === requestedSection) && requestedSection !== activeSection) {
+      setActiveSection(requestedSection)
+      return
+    }
+    if (!tabs.some((tab) => tab.id === activeSection) && tabs[0]) {
+      handleSectionChange(tabs[0].id)
+    }
+  }, [activeSection, handleSectionChange, searchParams, tabs])
 
   return (
     <>
-      <PageHeader title={t("pageTitle")} />
+      <PageHeader title={isDesktop ? t("pageTitleDesktop") : t("pageTitle")} />
       <div className="flex flex-1 flex-col min-h-0 px-4 pt-2">
         {/* 页签栏 */}
         <div className="flex items-center gap-1 border-b pb-0 mb-0 overflow-x-auto overflow-y-hidden scrollbar-none shrink-0">
@@ -92,7 +90,7 @@ function SettingsContent() {
                 )}
               >
                 <tab.icon className="h-4 w-4" />
-                {t(tab.nameKey)}
+                {tab.name}
               </button>
             )
           })}

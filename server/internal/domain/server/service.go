@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/easyssh/server/internal/pkg/crypto"
@@ -323,7 +324,7 @@ func (s *serverService) ReorderServers(ctx context.Context, userID uuid.UUID, se
 
 // Helper function to check TCP connectivity
 func checkTCPConnection(host string, port int, timeout time.Duration) error {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
 		return err

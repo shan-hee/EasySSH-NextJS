@@ -12,6 +12,8 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { DashboardI18nProvider } from "@/providers/dashboard-i18n-provider"
 import type { User } from "@/lib/api/auth"
 import { cn } from "@/lib/utils"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
+import { evaluateRoutePolicy, getDefaultDashboardPath } from "@/shell/routes"
 
 function MobileSidebarRouteCloser() {
   const pathname = usePathname()
@@ -45,6 +47,7 @@ export default function DashboardLayout({
   const router = useRouter()
   const pathname = usePathname()
   const { authStatus, isLoading } = useSystemConfig()
+  const { data: runtime } = useRuntimeInfo()
   const disableOuterScroll = pathname?.startsWith("/dashboard/ai-assistant")
 
   useEffect(() => {
@@ -81,7 +84,17 @@ export default function DashboardLayout({
       router.replace("/login")
       return
     }
-  }, [authStatus, isLoading, router])
+
+    if (runtime && pathname === "/dashboard" && isDesktopRuntime(runtime)) {
+      router.replace(getDefaultDashboardPath(runtime))
+      return
+    }
+
+    const routePolicy = evaluateRoutePolicy(pathname, runtime)
+    if (!routePolicy.allowed) {
+      router.replace(routePolicy.fallback)
+    }
+  }, [authStatus, isLoading, pathname, router, runtime])
 
   const initialUser: User | null =
     authStatus && authStatus.is_authenticated && authStatus.user

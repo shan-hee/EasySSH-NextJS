@@ -961,7 +961,7 @@ export default function AIAssistantPage() {
                           size="sm"
                           className="h-9 px-2.5 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground sm:text-sm"
                         >
-                          <Link href="/dashboard/settings">{t("configureAI")}</Link>
+                          <Link href="/dashboard/settings?section=ai-config">{t("configureAI")}</Link>
                         </Button>
                       )}
                     </PromptInputTools>

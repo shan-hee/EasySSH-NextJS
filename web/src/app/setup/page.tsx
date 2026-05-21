@@ -12,6 +12,8 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { User, Mail, Lock, Check, Loader2, Settings, Rocket, Play, Code, Server } from "lucide-react"
 import LightRays from "@/components/LightRays"
 import { AuthI18nProvider } from "@/providers/auth-i18n-provider"
+import { getDefaultDashboardPath } from "@/shell/routes"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 type RunMode = "demo" | "development" | "production"
 
@@ -19,6 +21,7 @@ function SetupPageInner() {
   const tSetup = useTranslations("setup")
   const router = useRouter()
   const { authStatus, isLoading, refreshConfig } = useSystemConfig()
+  const { data: runtime } = useRuntimeInfo()
   const [step, setStep] = useState<"checking" | "welcome" | "mode-selection" | "create-admin" | "completed">("checking")
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
@@ -41,6 +44,11 @@ function SetupPageInner() {
       return
     }
 
+    if (isDesktopRuntime(runtime)) {
+      router.replace(getDefaultDashboardPath(runtime))
+      return
+    }
+
     if (!authStatus.need_init) {
       // 无需初始化（已有管理员），重定向到登录页
       router.replace("/login")
@@ -48,7 +56,7 @@ function SetupPageInner() {
       // 需要初始化，显示欢迎页面
       setStep("welcome")
     }
-  }, [authStatus, isLoading, router, step, tSetup])
+  }, [authStatus, isLoading, router, runtime, step, tSetup])
 
   const handleStartSetup = () => {
     setStep("mode-selection")

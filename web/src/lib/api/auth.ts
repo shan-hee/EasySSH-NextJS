@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api-client"
 import { performRefreshToken } from "@/lib/session-refresh"
+import type { PrincipalKind, PrincipalRole, RuntimeProfile } from "@/shell/runtime"
 
 /**
  * 用户基础信息
@@ -97,6 +98,12 @@ export interface AuthStatusResponse {
   need_init: boolean        // 是否需要初始化（无管理员）
   is_authenticated: boolean // 是否已登录
   user?: User               // 已登录时返回用户信息
+  principal?: {
+    id?: string
+    kind: PrincipalKind
+    role: PrincipalRole
+    profile: RuntimeProfile
+  }
   system_config?: import("@/lib/api/settings").SystemConfig // 系统公共配置（可选）
   access_token?: string     // 可选：后端通过 refresh_token 自动续期时返回新的 access_token
   access_token_ttl_seconds?: number // Access Token 统一配置的有效期(秒)

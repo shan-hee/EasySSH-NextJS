@@ -33,6 +33,9 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     // 仪表盘：显示系统名称 + 当前页面标题（Dashboard/仪表盘）
     showTitle: true,
   },
+  '/dashboard/desktop': {
+    showTitle: true,
+  },
 
   // ===================
   // 连接管理

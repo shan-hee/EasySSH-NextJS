@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import {
   ChevronsUpDown,
   LogOut,
@@ -25,20 +26,25 @@ import {
 } from "@/components/ui/sidebar"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { useClientAuth } from "@/components/client-auth-provider"
+import { isDesktopRuntime, type RuntimeInfo } from "@/shell/runtime"
 
 export const NavUser = React.memo(function NavUser({
   user,
+  runtime,
 }: {
   user: {
     name: string
     email: string
     avatar?: string
   }
+  runtime?: RuntimeInfo | null
 }) {
   const { isMobile } = useSidebar()
+  const router = useRouter()
   const { logout } = useClientAuth()
   const tCommon = useTranslations("common")
   const tAccount = useTranslations("accountSettings")
+  const isDesktop = isDesktopRuntime(runtime)
 
   const handleSettingsSelect = React.useCallback((e: Event) => {
     e.preventDefault()
@@ -51,6 +57,10 @@ export const NavUser = React.memo(function NavUser({
       console.error("Logout failed:", error)
     }
   }, [logout])
+
+  const handleDesktopSettings = React.useCallback(() => {
+    router.push("/dashboard/settings")
+  }, [router])
 
   
   return (
@@ -98,17 +108,28 @@ export const NavUser = React.memo(function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <SettingsDialog>
-              <DropdownMenuItem onSelect={handleSettingsSelect}>
+            {isDesktop ? (
+              <DropdownMenuItem onClick={handleDesktopSettings}>
                 <Settings />
                 {tAccount("dialogTitle")}
               </DropdownMenuItem>
-            </SettingsDialog>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
-              <LogOut />
-              {tCommon("logout")}
-            </DropdownMenuItem>
+            ) : (
+              <SettingsDialog>
+                <DropdownMenuItem onSelect={handleSettingsSelect}>
+                  <Settings />
+                  {tAccount("dialogTitle")}
+                </DropdownMenuItem>
+              </SettingsDialog>
+            )}
+            {!isDesktop && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut />
+                  {tCommon("logout")}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

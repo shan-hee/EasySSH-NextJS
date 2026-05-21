@@ -34,12 +34,15 @@ import { useRouter } from "next/navigation"
 import { createScriptColumns } from "./components/script-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 export default function ScriptsPage() {
  const t = useTranslations("scripts")
  const tCommon = useTranslations("common")
  const router = useRouter()
  const { ready } = useAuthReady()
+ const { data: runtime } = useRuntimeInfo()
+ const isDesktop = isDesktopRuntime(runtime)
  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
  const [scripts, setScripts] = useState<Script[]>([])
  const [loading, setLoading] = useState(true)
@@ -213,6 +216,11 @@ const selectedOnlineCount = useMemo(() => {
 
 // 事件处理函数 - 使用 useCallback 避免闭包陷阱
 const handleExecute = useCallback((scriptId: string) => {
+  if (isDesktop) {
+    toast.info(t("desktopExecuteUnavailable"))
+    return
+  }
+
   const script = scripts.find((s) => s.id === scriptId)
   if (script) {
     setExecutingScript(script)
@@ -222,7 +230,7 @@ const handleExecute = useCallback((scriptId: string) => {
     setIsExecuteDialogOpen(true)
     loadServers()
   }
-}, [scripts, loadServers])
+}, [isDesktop, loadServers, scripts, t])
 
 // 执行脚本
 const handleExecuteScript = useCallback(async () => {

@@ -1171,7 +1171,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
                   size="sm"
                   className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
                 >
-                  <Link href="/dashboard/settings?tab=ai">
+                  <Link href="/dashboard/settings?section=ai-config">
                     <Settings2 className="size-3.5" />
                     <span>{tAI("configureAI")}</span>
                   </Link>

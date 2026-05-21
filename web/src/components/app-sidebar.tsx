@@ -1,15 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  Settings2,
-  Server,
-  Monitor,
-  Terminal,
-  FileText,
-  FolderOpen,
-  Users,
-} from "lucide-react"
+import { Server } from "lucide-react"
 import { useTranslations } from "next-intl"
 
 import { NavMain } from "@/components/nav-main"
@@ -29,113 +21,50 @@ import {
 } from "@/components/ui/sidebar"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { buildNavigationItems } from "@/shell/navigation"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user } = useClientAuth()
   const { config } = useSystemConfig()
+  const { data: runtime } = useRuntimeInfo()
   const tNav = useTranslations("nav")
+  const isDesktop = isDesktopRuntime(runtime)
 
   // 检查用户是否为管理员
   const isAdmin = user?.role === "admin"
 
-  // 导航数据 - 根据当前语言和用户角色动态构建
+  // 导航数据 - 根据当前语言、用户角色和运行形态动态构建
   const navMainData = React.useMemo(
-    () => {
-      const baseItems = [
-        {
-          title: tNav("console"),
-          url: "/dashboard",
-          icon: Monitor,
-          isActive: true,
-        },
-        {
-          title: tNav("connections"),
-          url: "#",
-          icon: Server,
-          items: [
-            { title: tNav("connectionConfigs"), url: "/dashboard/servers" },
-            { title: tNav("connectionHistory"), url: "/dashboard/servers/history" },
-          ],
-        },
-        {
-          title: tNav("automation"),
-          url: "#",
-          icon: Terminal,
-          items: [
-            { title: tNav("scripts"), url: "/dashboard/scripts" },
-            { title: tNav("schedules"), url: "/dashboard/automation/schedules" },
-            { title: tNav("executions"), url: "/dashboard/automation/history" },
-          ],
-        },
-        {
-          title: tNav("file"),
-          url: "#",
-          icon: FolderOpen,
-          items: [
-            { title: tNav("fileManager"), url: "/dashboard/sftp" },
-            { title: tNav("transferHistory"), url: "/dashboard/transfers/history" },
-            { title: tNav("trash"), url: "/dashboard/storage" },
-          ],
-        },
-        {
-          title: tNav("logs"),
-          url: "#",
-          icon: FileText,
-          items: [
-            { title: tNav("logsOperations"), url: "/dashboard/logs" },
-            { title: tNav("logsLogin"), url: "/dashboard/logs/login" },
-          ],
-        },
-      ]
-
-      // 仅管理员可见的菜单项
-      if (isAdmin) {
-        baseItems.push(
-          {
-            title: tNav("userManagement"),
-            url: "/dashboard/users",
-            icon: Users,
-            isActive: false,
-          },
-          {
-            title: tNav("systemSettings"),
-            url: "/dashboard/settings",
-            icon: Settings2,
-            isActive: false,
-          },
-        )
-      }
-
-      return baseItems
-    },
-    [tNav, isAdmin],
+    () => buildNavigationItems({ runtime, isAdmin, t: tNav }),
+    [runtime, tNav, isAdmin],
   )
 
   // 动态构建 teams 数据
   const teamsData = React.useMemo(() => [{
     name: config?.system_name || "EasySSH",
     logo: Server,
-    plan: tNav("planPro"),
-  }], [config?.system_name, tNav])
+    plan: isDesktop ? tNav("planDesktop") : tNav("planPro"),
+  }], [config?.system_name, isDesktop, tNav])
 
   const all = navMainData
 
-  // 基于标题分组：工作台 / 核心功能 / 可观测与审计 / 平台设置
+  // 基于注册表 group 分组：工作台 / 核心功能 / 可观测与审计 / 设置
   const groupWorkbench = React.useMemo(
-    () => all.filter((i) => i.url === "/dashboard"),
+    () => all.filter((i) => i.group === "workbench"),
     [all],
   )
   const groupCore = React.useMemo(
-    () => all.filter((i) => [tNav("connections"), tNav("automation"), tNav("file")].includes(i.title)),
-    [all, tNav]
+    () => all.filter((i) => i.group === "core"),
+    [all]
   )
   const groupObserveAudit = React.useMemo(
-    () => all.filter((i) => [tNav("logs")].includes(i.title)),
-    [all, tNav]
+    () => all.filter((i) => i.group === "observeAudit"),
+    [all]
   )
   const groupSettings = React.useMemo(
-    () => all.filter((i) => [tNav("userManagement"), tNav("systemSettings")].includes(i.title)),
-    [all, tNav],
+    () => all.filter((i) => i.group === "settings"),
+    [all],
   )
 
   // 构建真实用户数据
@@ -144,11 +73,11 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       return null
     }
     return {
-      name: user.username,
-      email: user.email,
+      name: isDesktop ? tNav("localWorkspace") : user.username,
+      email: isDesktop ? (runtime?.data_dir || tNav("planDesktop")) : user.email,
       avatar: user.avatar,
     }
-  }, [user])
+  }, [isDesktop, runtime?.data_dir, tNav, user])
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -156,17 +85,17 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
         <TeamSwitcher teams={teamsData} />
       </SidebarHeader>
       <SidebarContent>
-        <QuickAccess />
-        {groupWorkbench.length > 0 && <NavMain label={tNav("workbench")} items={groupWorkbench} />}
+        <QuickAccess runtime={runtime} />
+        {groupWorkbench.length > 0 && <NavMain label={isDesktop ? tNav("localWorkspace") : tNav("workbench")} items={groupWorkbench} />}
         {groupCore.length > 0 && <NavMain label={tNav("coreServers")} items={groupCore} />}
         {groupObserveAudit.length > 0 && <NavMain label={tNav("observeAudit")} items={groupObserveAudit} />}
-        {groupSettings.length > 0 && <NavMain label={tNav("settings")} items={groupSettings} />}
+        {groupSettings.length > 0 && <NavMain label={isDesktop ? tNav("settingsPlain") : tNav("settings")} items={groupSettings} />}
       </SidebarContent>
       <SidebarFooter>
         <NavExtra />
         {/* 用户信息区域：加载时显示占位，加载完成后显示真实内容 */}
         {userData ? (
-          <NavUser user={userData} />
+          <NavUser user={userData} runtime={runtime} />
         ) : (
           <SidebarMenu>
             <SidebarMenuItem>

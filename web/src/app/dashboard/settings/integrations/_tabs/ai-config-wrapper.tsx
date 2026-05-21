@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { useSettingsForm } from "@/hooks/settings/use-settings-form"
 import { aiSystemConfigSchema } from "@/schemas/settings/integrations.schema"
-import { settingsApi, type AISystemProvider } from "@/lib/api/settings"
+import { settingsApi, userAIConfigApi, type AISystemConfig, type AISystemProvider } from "@/lib/api/settings"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { SettingsLoading } from "@/components/settings/settings-loading"
 import { FormInput, FormSwitch } from "@/components/settings/form-field"
@@ -17,10 +17,13 @@ import { Bot, Save, Loader2, RotateCcw, Plus, X, Search, Trash2 } from "lucide-r
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InfoIcon } from "lucide-react"
 import { toast } from "sonner"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 export function AIConfigWrapper() {
   const t = useTranslations("settingsIntegrationsAI")
   const tCommon = useTranslations("common")
+  const { data: runtime, isLoading: isRuntimeLoading } = useRuntimeInfo()
+  const isDesktop = isDesktopRuntime(runtime)
   const [modelInput, setModelInput] = useState("")
   const [isProbingModels, setIsProbingModels] = useState(false)
 
@@ -34,10 +37,39 @@ export function AIConfigWrapper() {
   const { form, isLoading, isSaving, handleSave, reload } = useSettingsForm({
     schema: aiSystemConfigSchema,
     loadFn: async () => {
+      if (isDesktop) {
+        const profileConfig = await userAIConfigApi.getUserAIConfig()
+        if (profileConfig.use_system_config) {
+          const systemConfig = await settingsApi.getAISystemConfig()
+          return systemConfig
+        }
+
+        return {
+          system_enabled: !profileConfig.use_system_config && profileConfig.custom_enabled,
+          system_provider: normalizeProvider(profileConfig.custom_provider),
+          system_api_key: "",
+          system_api_endpoint: profileConfig.custom_endpoint ?? "",
+          system_models: profileConfig.custom_models ?? "",
+          has_api_key: profileConfig.has_api_key ?? false,
+        } satisfies AISystemConfig
+      }
+
       const systemConfig = await settingsApi.getAISystemConfig()
       return systemConfig
     },
     saveFn: async (data) => {
+      if (isDesktop) {
+        await userAIConfigApi.saveUserAIConfig({
+          use_system_config: false,
+          custom_enabled: data.system_enabled ?? false,
+          custom_provider: data.system_provider ?? "openai",
+          custom_api_key: data.system_api_key ?? "",
+          custom_endpoint: data.system_api_endpoint ?? "",
+          custom_models: data.system_models ?? "",
+        })
+        return
+      }
+
       await settingsApi.saveAISystemConfig({
         system_enabled: data.system_enabled,
         system_provider: data.system_provider,
@@ -46,6 +78,7 @@ export function AIConfigWrapper() {
         system_models: data.system_models,
       })
     },
+    enabled: !isRuntimeLoading,
   })
 
   // 将逗号分隔字符串解析为数组
@@ -77,11 +110,17 @@ export function AIConfigWrapper() {
   const handleProbeModels = async () => {
     setIsProbingModels(true)
     try {
-      const response = await settingsApi.probeAISystemModels({
-        system_provider: form.getValues("system_provider"),
-        system_api_key: form.getValues("system_api_key")?.trim() || "",
-        system_api_endpoint: form.getValues("system_api_endpoint")?.trim() || "",
-      })
+      const response = isDesktop
+        ? await userAIConfigApi.probeUserAIModels({
+            custom_provider: form.getValues("system_provider"),
+            custom_api_key: form.getValues("system_api_key")?.trim() || "",
+            custom_endpoint: form.getValues("system_api_endpoint")?.trim() || "",
+          })
+        : await settingsApi.probeAISystemModels({
+            system_provider: form.getValues("system_provider"),
+            system_api_key: form.getValues("system_api_key")?.trim() || "",
+            system_api_endpoint: form.getValues("system_api_endpoint")?.trim() || "",
+          })
       const probed = Array.from(
         new Set(
           (response.models || []).map((m) => m.trim()).filter((m) => m.length > 0),
@@ -104,7 +143,7 @@ export function AIConfigWrapper() {
     }
   }
 
-  if (isLoading) {
+  if (isRuntimeLoading || isLoading) {
     return <SettingsLoading />
   }
 
@@ -113,15 +152,15 @@ export function AIConfigWrapper() {
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-4">
         <div className="space-y-4">
           <SettingsSection
-            title={t("sectionTitle")}
-            description={t("sectionDescription")}
+            title={isDesktop ? t("desktopSectionTitle") : t("sectionTitle")}
+            description={isDesktop ? t("desktopSectionDescription") : t("sectionDescription")}
             icon={<Bot className="h-5 w-5" />}
           >
             <FormSwitch
               form={form}
               name="system_enabled"
-              label={t("fieldSystemEnabledLabel")}
-              description={t("fieldSystemEnabledDesc")}
+              label={isDesktop ? t("desktopEnabledLabel") : t("fieldSystemEnabledLabel")}
+              description={isDesktop ? t("desktopEnabledDesc") : t("fieldSystemEnabledDesc")}
             />
 
             {form.watch("system_enabled") && (
@@ -241,7 +280,7 @@ export function AIConfigWrapper() {
             <Alert>
               <InfoIcon className="h-4 w-4" />
               <AlertDescription>
-                {t("alertDescription")}
+                {isDesktop ? t("desktopAlertDescription") : t("alertDescription")}
               </AlertDescription>
             </Alert>
           </SettingsSection>
@@ -269,4 +308,17 @@ export function AIConfigWrapper() {
       </div>
     </div>
   )
+}
+
+function normalizeProvider(provider: string | undefined): AISystemProvider {
+  switch ((provider || "").toLowerCase().trim()) {
+    case "openai-response":
+      return "openai-response"
+    case "gemini":
+      return "gemini"
+    case "anthropic":
+      return "anthropic"
+    default:
+      return "openai"
+  }
 }

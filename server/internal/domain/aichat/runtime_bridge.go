@@ -15,13 +15,23 @@ func NewRuntimeManager(
 	userAIConfigService useraiconfig.Service,
 	toolExecutor *ToolExecutorService,
 ) *runtime.Manager {
+	return NewRuntimeManagerWithResolver(
+		NewConfigResolver(aiConfigService, userAIConfigService),
+		toolExecutor,
+	)
+}
+
+func NewRuntimeManagerWithResolver(
+	resolver ConfigResolver,
+	toolExecutor *ToolExecutorService,
+) *runtime.Manager {
 	toolRegistry := registry.NewToolRegistry(nil)
 	if toolExecutor != nil {
 		toolRegistry = toolExecutor.BuildToolRegistry()
 	}
 
 	return runtime.NewManager(
-		NewConfigResolver(aiConfigService, userAIConfigService),
+		resolver,
 		provider.NewFactory(),
 		toolRegistry,
 		30*time.Minute,

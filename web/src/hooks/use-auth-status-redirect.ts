@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { getDefaultDashboardPath } from "@/shell/routes"
+import { useRuntimeInfo } from "@/shell/runtime"
 
 type EntryPage = "home" | "login"
 
@@ -23,6 +25,7 @@ interface UseAuthStatusRedirectResult {
 export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectResult {
   const router = useRouter()
   const { authStatus, isLoading } = useSystemConfig()
+  const { data: runtime } = useRuntimeInfo()
   const [isChecking, setIsChecking] = useState(true)
   const hasSettledRef = useRef(false)
 
@@ -49,7 +52,7 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
     if (page === "login" && hasSettledRef.current) {
       // 仅在 authStatus 表示已认证时重定向到 dashboard
       if (!isLoading && authStatus && authStatus.is_authenticated) {
-        router.replace("/dashboard")
+        router.replace(getDefaultDashboardPath(runtime))
       }
       return
     }
@@ -99,7 +102,7 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
 
     // 已认证 → 统一跳转到 /dashboard
     if (status.is_authenticated) {
-      router.replace("/dashboard")
+      router.replace(getDefaultDashboardPath(runtime))
       return
     }
 
@@ -109,7 +112,7 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
     } else {
       settleChecking(false)
     }
-  }, [authStatus, isLoading, page, router, settleChecking])
+  }, [authStatus, isLoading, page, router, runtime, settleChecking])
 
   return { isChecking }
 }

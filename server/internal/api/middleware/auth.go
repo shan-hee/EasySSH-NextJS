@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/easyssh/server/internal/platform"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -78,8 +79,45 @@ func applyTicketToContext(c *gin.Context, t *auth.Ticket) {
 	c.Set(ticketContextKey, t)
 }
 
+func applyRuntimePrincipalToContext(c *gin.Context, runtimeInfos []platform.RuntimeInfo) {
+	if len(runtimeInfos) == 0 {
+		return
+	}
+
+	runtimeInfo := runtimeInfos[0]
+	c.Set("runtime_profile", runtimeInfo.Profile)
+
+	userIDValue, ok := c.Get("user_id")
+	if !ok {
+		return
+	}
+	userID, ok := userIDValue.(string)
+	if !ok || strings.TrimSpace(userID) == "" {
+		return
+	}
+
+	if runtimeInfo.Profile == platform.RuntimeProfileDesktop {
+		c.Set("principal", platform.NewDesktopLocalOwner(userID))
+		return
+	}
+
+	role := platform.PrincipalRoleUser
+	if roleValue, ok := c.Get("role"); ok {
+		if roleString, ok := roleValue.(string); ok && auth.UserRole(roleString) == auth.RoleAdmin {
+			role = platform.PrincipalRoleAdmin
+		}
+	}
+
+	c.Set("principal", platform.NewPrincipal(
+		userID,
+		platform.PrincipalKindUser,
+		role,
+		runtimeInfo.Profile,
+	))
+}
+
 // AuthMiddleware 认证中间件（支持 Authorization Bearer / 一次性 Ticket）
-func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService, userRepo auth.Repository) gin.HandlerFunc {
+func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService, userRepo auth.Repository, runtimeInfos ...platform.RuntimeInfo) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 1) 优先 Bearer（用于常规 API 调用）
 		tokenString := extractBearerToken(c)
@@ -129,6 +167,7 @@ func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService
 			}
 
 			applyClaimsToContext(c, claims)
+			applyRuntimePrincipalToContext(c, runtimeInfos)
 			c.Next()
 			return
 		}
@@ -166,6 +205,7 @@ func AuthMiddleware(jwtService auth.JWTService, ticketService auth.TicketService
 				}
 
 				applyTicketToContext(c, t)
+				applyRuntimePrincipalToContext(c, runtimeInfos)
 				c.Next()
 				return
 			}
@@ -224,7 +264,7 @@ func RequireAdmin() gin.HandlerFunc {
 }
 
 // OptionalAuth 可选认证中间件（不强制要求认证）
-func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService, userRepo auth.Repository) gin.HandlerFunc {
+func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService, userRepo auth.Repository, runtimeInfos ...platform.RuntimeInfo) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractBearerToken(c)
 
@@ -236,6 +276,7 @@ func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService, 
 					if expect, ok := ticketExpectationForRequest(c); ok {
 						if t, err := ticketService.Consume(ticket, expect); err == nil {
 							applyTicketToContext(c, t)
+							applyRuntimePrincipalToContext(c, runtimeInfos)
 						}
 					}
 				}
@@ -269,6 +310,7 @@ func OptionalAuth(jwtService auth.JWTService, ticketService auth.TicketService, 
 		}
 
 		applyClaimsToContext(c, claims)
+		applyRuntimePrincipalToContext(c, runtimeInfos)
 
 		c.Next()
 	}

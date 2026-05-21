@@ -2,97 +2,58 @@ package aichat
 
 import (
 	"context"
-	"errors"
-	"strings"
 
 	"github.com/easyssh/server/internal/domain/aichat/provider"
 	"github.com/easyssh/server/internal/domain/aiconfig"
 	"github.com/easyssh/server/internal/domain/useraiconfig"
+	"github.com/easyssh/server/internal/platform"
+	settingsresolver "github.com/easyssh/server/internal/settings"
 	"github.com/google/uuid"
 )
 
-var (
-	ErrAINotConfigured = errors.New("AI service is not configured")
-)
+var ErrAINotConfigured = settingsresolver.ErrAINotConfigured
 
 type ConfigResolver interface {
 	Resolve(ctx context.Context, userID uuid.UUID) (provider.Config, error)
 }
 
 type effectiveConfigResolver struct {
-	aiConfigService     aiconfig.Service
-	userAIConfigService useraiconfig.Service
+	resolver settingsresolver.SettingsResolver
+	profile  platform.RuntimeProfile
 }
 
 func NewConfigResolver(
 	aiConfigService aiconfig.Service,
 	userAIConfigService useraiconfig.Service,
 ) ConfigResolver {
+	return NewConfigResolverWithSettings(
+		settingsresolver.NewResolver(platform.RuntimeProfileWeb, aiConfigService, userAIConfigService),
+		platform.RuntimeProfileWeb,
+	)
+}
+
+func NewConfigResolverWithSettings(
+	resolver settingsresolver.SettingsResolver,
+	profile platform.RuntimeProfile,
+) ConfigResolver {
 	return &effectiveConfigResolver{
-		aiConfigService:     aiConfigService,
-		userAIConfigService: userAIConfigService,
+		resolver: resolver,
+		profile:  platform.NormalizeProfile(profile),
 	}
 }
 
 func (r *effectiveConfigResolver) Resolve(ctx context.Context, userID uuid.UUID) (provider.Config, error) {
-	userConfig, err := r.userAIConfigService.GetUserConfig(ctx, userID)
-	if err == nil && userConfig != nil && !userConfig.UseSystemConfig && userConfig.CustomEnabled {
-		models := parseConfiguredModels(userConfig.CustomModels)
-
-		return provider.Config{
-			Provider: normalizeConfiguredProviderName(userConfig.CustomProvider),
-			APIKey:   userConfig.CustomAPIKey,
-			Endpoint: userConfig.CustomEndpoint,
-			Model:    firstConfiguredModel(models),
-			Models:   models,
-		}, nil
-	}
-
-	systemConfig, err := r.aiConfigService.GetSystemConfig(ctx)
-	if err != nil {
-		return provider.Config{}, errors.Join(errors.New("failed to get system AI config"), err)
-	}
-
-	if !systemConfig.SystemEnabled {
+	if r.resolver == nil {
 		return provider.Config{}, ErrAINotConfigured
 	}
 
-	models := parseConfiguredModels(systemConfig.SystemModels)
-	return provider.Config{
-		Provider: normalizeConfiguredProviderName(systemConfig.SystemProvider),
-		APIKey:   systemConfig.SystemAPIKey,
-		Endpoint: systemConfig.SystemAPIEndpoint,
-		Model:    firstConfiguredModel(models),
-		Models:   models,
-	}, nil
-}
-
-func parseConfiguredModels(models string) []string {
-	if strings.TrimSpace(models) == "" {
-		return []string{}
+	profile := platform.NormalizeProfile(r.profile)
+	kind := platform.PrincipalKindUser
+	role := platform.PrincipalRoleUser
+	if profile == platform.RuntimeProfileDesktop {
+		kind = platform.PrincipalKindLocalOwner
+		role = platform.PrincipalRoleOwner
 	}
 
-	parts := strings.Split(models, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
-
-func firstConfiguredModel(models []string) string {
-	if len(models) == 0 {
-		return ""
-	}
-	return models[0]
-}
-
-func normalizeConfiguredProviderName(providerName string) string {
-	normalized := strings.ToLower(strings.TrimSpace(providerName))
-	if normalized == "" {
-		return "openai"
-	}
-	return normalized
+	return r.resolver.ResolveAIConfig(ctx, platform.NewPrincipal(userID.String(), kind, role, profile))
 }

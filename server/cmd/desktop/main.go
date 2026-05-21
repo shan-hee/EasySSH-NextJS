@@ -16,6 +16,7 @@ import (
 
 	easysshapp "github.com/easyssh/server/internal/app"
 	"github.com/easyssh/server/internal/infra/config"
+	"github.com/easyssh/server/internal/platform"
 	"github.com/joho/godotenv"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -25,9 +26,19 @@ var embeddedAssets embed.FS
 
 const desktopDataDirName = "EasySSH-data"
 
+var version = "dev"
+
 func main() {
+	if strings.TrimSpace(version) == "" || version == "dev" {
+		version = readVersion()
+	}
+
 	if err := prepareDesktopEnvironment(); err != nil {
 		log.Fatalf("❌ Failed to prepare desktop environment: %v", err)
+	}
+	dataDir, err := desktopDataDir()
+	if err != nil {
+		log.Fatalf("❌ Failed to resolve desktop data directory: %v", err)
 	}
 
 	cfg, err := config.Load()
@@ -43,6 +54,9 @@ func main() {
 
 	runtime, err := easysshapp.New(easysshapp.Options{
 		Config:     cfg,
+		Profile:    platform.RuntimeProfileDesktop,
+		DataDir:    dataDir,
+		Version:    version,
 		ListenHost: "127.0.0.1",
 		StaticFS:   staticFS,
 	})
@@ -97,6 +111,9 @@ func prepareDesktopEnvironment() error {
 	if err != nil {
 		return err
 	}
+	if err := applyScheduledDataReset(dataDir); err != nil {
+		return err
+	}
 	backupDir := filepath.Join(dataDir, "backups")
 	dbPath := filepath.Join(dataDir, "easyssh.db")
 	envPath := filepath.Join(dataDir, "desktop.env")
@@ -145,6 +162,35 @@ func desktopDataDir() (string, error) {
 	}
 
 	return filepath.Join(filepath.Dir(exePath), desktopDataDirName), nil
+}
+
+func readVersion() string {
+	data, err := os.ReadFile("../VERSION")
+	if err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	data, err = os.ReadFile("VERSION")
+	if err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	return platform.Version
+}
+
+func applyScheduledDataReset(dataDir string) error {
+	markerPath := filepath.Join(dataDir, ".reset-on-next-start")
+	if _, err := os.Stat(markerPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat reset marker: %w", err)
+	}
+
+	backupPath := dataDir + "-reset-" + time.Now().Format("20060102-150405")
+	if err := os.Rename(dataDir, backupPath); err != nil {
+		return fmt.Errorf("move old desktop data directory to %s: %w", backupPath, err)
+	}
+	log.Printf("⚠️ Desktop data reset applied; old data moved to %s", backupPath)
+	return nil
 }
 
 func desktopStaticFS() (fs.FS, error) {

@@ -30,6 +30,8 @@ import { generateCodeVerifier, deriveCodeChallenge } from "@/lib/pkce"
 import { useAuthStore } from "@/stores/auth-store"
 import { resetUnauthorizedRedirectFlag, resetAccountLockedRedirectFlag } from "@/lib/api-client"
 import { useTranslations } from "next-intl"
+import { getDefaultDashboardPath } from "@/shell/routes"
+import { useRuntimeInfo } from "@/shell/runtime"
 
 export function LoginForm({
   className,
@@ -38,6 +40,7 @@ export function LoginForm({
   const router = useRouter()
   const searchParams = useSearchParams()
   const { config, refreshConfig } = useSystemConfig()
+  const { data: runtime } = useRuntimeInfo()
   const setToken = useAuthStore((state) => state.setToken)
 
   // 为避免预取到“未登录”的缓存结果，删除预取 dashboard 的逻辑
@@ -77,8 +80,8 @@ export function LoginForm({
     ) {
       return rawNext
     }
-    return "/dashboard"
-  }, [searchParams])
+    return getDefaultDashboardPath(runtime)
+  }, [runtime, searchParams])
 
   // 进入登录表单时，重置全局重定向标记，开始新的认证周期
   useEffect(() => {

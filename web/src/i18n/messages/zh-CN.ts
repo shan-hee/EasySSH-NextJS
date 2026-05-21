@@ -59,12 +59,38 @@ const messages = {
     quickAccessActionAiAssistant: "AI 助手",
     quickAccessActionAiAssistantDesc: "把需求交给 AI，生成计划并协助执行",
   },
+  desktopWorkbench: {
+    title: "本地工作台",
+    quickConnectTitle: "快速连接",
+    quickConnectDescription: "选择常用服务器并立即打开终端",
+    addServer: "添加服务器",
+    addFirstServer: "添加第一台服务器",
+    loading: "正在加载工作台...",
+    retry: "重试",
+    loadFailed: "加载本地工作台失败",
+    emptyTitle: "还没有服务器",
+    emptyDescription: "添加服务器后即可在这里一键连接。",
+    workspaceTitle: "工作区概览",
+    totalServers: "服务器",
+    onlineServers: "在线",
+    shortcutsTitle: "常用入口",
+    terminal: "终端",
+    files: "文件",
+    aiAssistant: "AI 助手",
+    importData: "导入",
+    settings: "设置",
+    recentSessionsTitle: "最近会话",
+    noRecentSessions: "暂无会话记录",
+  },
   nav: {
     workbench: "工作台",
+    localWorkspace: "本地工作区",
     coreServers: "服务器管理",
     observeAudit: "监控与审计",
     settings: "系统设置",
+    settingsPlain: "设置",
     console: "控制台",
+    servers: "服务器",
     connections: "连接管理",
     connectionConfigs: "连接配置",
     connectionHistory: "历史连接",
@@ -84,10 +110,12 @@ const messages = {
     logsOperations: "操作日志",
     logsLogin: "登录日志",
     terminal: "终端",
+    aiAssistant: "AI 助手",
     userManagement: "用户管理",
     systemSettings: "系统设置",
     systemOrg: "系统与组织",
     planPro: "专业版",
+    planDesktop: "桌面版",
     openSidebar: "打开导航菜单",
   },
   settingsManagement: {
@@ -1499,6 +1527,7 @@ const messages = {
     toastOnlyOnlineServers: "只能选择在线的服务器",
     toastExecuteStarted: "脚本执行已启动",
     toastExecuteFailed: "执行脚本失败",
+    desktopExecuteUnavailable: "桌面端暂不提供批量脚本执行，请在终端中手动运行脚本内容",
 
     // 执行对话框
     executeDialogTitle: "执行脚本",
@@ -2048,11 +2077,13 @@ const messages = {
   },
   settingsMain: {
     pageTitle: "系统设置",
+    pageTitleDesktop: "设置",
     itemBasic: "基本信息",
     itemFileTransfer: "文件传输",
     itemCompletion: "补全设置",
     itemAccessControl: "访问控制",
     itemSessionManagement: "会话管理",
+    itemTerminalSession: "终端会话",
     itemNetworkSecurity: "网络安全",
     itemAIConfig: "AI 配置",
     itemNotificationConfig: "通知配置",
@@ -2077,18 +2108,32 @@ const messages = {
   settingsSecuritySession: {
     sectionTitle: "会话管理",
     sectionDescription: "配置用户会话和标签页管理策略",
+    desktopSectionTitle: "终端会话",
+    desktopSectionDescription: "配置当前本地工作区的终端标签页和空闲策略",
     fieldSessionTimeout: "会话超时时间（分钟）",
     fieldSessionTimeoutDesc: "用户无操作后自动退出的时间（5-1440 分钟）",
+    desktopFieldSessionTimeout: "本地会话超时（分钟）",
+    desktopFieldSessionTimeoutDesc:
+      "本地工作台长时间无操作后的会话保护时间（5-1440 分钟）",
     fieldMaxTabs: "最大标签页数",
     fieldMaxTabsDesc: "同一用户允许打开的最大标签页数量（1-200）",
+    desktopFieldMaxTabs: "最大终端标签页数",
+    desktopFieldMaxTabsDesc:
+      "终端页可同时打开的最大标签页数量（1-200）",
     fieldInactiveMinutes: "非活动断开提醒（分钟）",
     fieldInactiveMinutesDesc:
       "用户在标签页非活动状态下的提醒时间（5-1440 分钟）",
+    desktopFieldInactiveMinutes: "空闲提醒（分钟）",
+    desktopFieldInactiveMinutesDesc:
+      "终端标签页长时间未活动时的提醒时间（5-1440 分钟）",
     fieldRememberLogin: "记住登录状态",
     fieldRememberLoginDesc: "允许用户选择记住登录状态，下次访问自动登录",
     fieldHibernate: "后台标签页休眠",
     fieldHibernateDesc:
       "启用后，后台标签页将自动休眠以节省资源",
+    desktopFieldHibernate: "后台标签页休眠",
+    desktopFieldHibernateDesc:
+      "启用后，后台终端标签页将自动休眠以节省资源",
     jwtSectionTitle: "令牌过期与刷新",
     jwtSectionDescription:
       "配置访问令牌有效期和登录保持策略。JWT 密钥仍从 .env 读取。",
@@ -2108,14 +2153,20 @@ const messages = {
     fieldJWTRefreshReuseDetectionDesc:
       "检测旧刷新令牌被异常复用的情况，建议保持开启。",
     previewTitle: "当前配置预览：",
+    desktopPreviewTitle: "当前终端策略：",
     previewSessionTimeoutPrefix: "• 用户在 ",
     previewSessionTimeoutSuffix: " 分钟无操作后将自动退出",
+    desktopPreviewSessionTimeoutPrefix: "• 本地会话在 ",
+    desktopPreviewSessionTimeoutSuffix: " 分钟无操作后进入超时保护",
     previewMaxTabsPrefix: "• 每个用户最多可同时打开 ",
     previewMaxTabsSuffix: " 个标签页",
+    desktopPreviewMaxTabsPrefix: "• 终端页最多同时打开 ",
+    desktopPreviewMaxTabsSuffix: " 个标签页",
     previewRememberLoginPrefix: "• 记住登录状态：",
     previewEnabled: "已启用",
     previewDisabled: "已禁用",
     previewHibernatePrefix: "• 后台休眠：",
+    desktopPreviewHibernatePrefix: "• 后台终端休眠：",
     jwtPreviewTitle: "令牌配置预览：",
     previewJWTAccessPrefix: "• 访问令牌 ",
     previewJWTAccessSuffix: " 分钟后过期",
@@ -2127,6 +2178,8 @@ const messages = {
     previewJWTReuseDetectionPrefix: "• 复用检测：",
     alertContent:
       "会话管理配置会影响所有用户的登录体验。建议根据实际使用场景合理设置超时时间，既要保证安全性，也要兼顾用户体验。",
+    desktopAlertContent:
+      "这些设置只作用于当前桌面应用的数据目录，不影响 Web 部署或其他设备。",
     jwtAlertContent:
       "这些配置保存后会在后端服务重启后生效；已签发令牌的过期时间不会被立即改写。",
   },
@@ -2309,8 +2362,12 @@ const messages = {
   settingsIntegrationsAI: {
     sectionTitle: "系统配置",
     sectionDescription: "配置全局 AI 服务，供所有用户使用",
+    desktopSectionTitle: "AI 配置",
+    desktopSectionDescription: "配置当前本地工作区使用的 AI 服务",
     fieldSystemEnabledLabel: "启用系统 AI 服务",
     fieldSystemEnabledDesc: "开启后，所有用户可使用系统配置的 AI 服务",
+    desktopEnabledLabel: "启用 AI 服务",
+    desktopEnabledDesc: "开启后，终端和 AI 助手会使用当前配置",
     fieldProviderLabel: "服务商类型",
     providerOpenAI: "OpenAI",
     providerOpenAIResponse: "OpenAI-Response",
@@ -2339,6 +2396,8 @@ const messages = {
     noDetectedModels: "未探测到可用模型，请手动输入",
     alertDescription:
       "系统 AI 服务配置后，所有用户都可以使用。请确保 API 密钥有足够的配额和权限。",
+    desktopAlertDescription:
+      "AI 配置会保存在当前本地数据目录中。请确认 API 密钥有足够的配额，并妥善保管数据目录。",
     fieldProviderPlaceholder: "选择提供商",
 
     // 模型参数 Tab
@@ -2534,6 +2593,11 @@ const messages = {
     exportDescription: "生成一个统一备份文件，并控制要包含的内容",
     restoreTitle: "恢复",
     restoreDescription: "从统一备份文件恢复，并控制内容和冲突处理方式",
+    desktopDataDirTitle: "本地数据目录",
+    desktopDataDirDescription: "桌面端数据保存在 exe 同级的 EasySSH-data 目录中",
+    desktopDataDirUnavailable: "数据目录不可用",
+    desktopSecurityWarning:
+      "easyssh.db 保存业务数据，desktop.env 保存解密密钥。备份或迁移时需要一起保管；如果丢失 desktop.env，已加密的服务器凭据将无法解密。",
     contentConfigTitle: "配置",
     contentConfigDescription: "系统设置、安全策略、通知配置、AI 系统配置",
     contentDatabaseTitle: "数据库",
@@ -2542,6 +2606,8 @@ const messages = {
     btnExportLoading: "导出中...",
     btnRestore: "选择文件并恢复",
     btnRestoreLoading: "恢复中...",
+    btnOpenDataDir: "打开数据目录",
+    btnResetData: "重置本地数据",
     exportHintFormat: "• 导出格式：EasySSH 统一备份 JSON",
     exportHintContent: "• 可只导出配置、只导出数据库，或两者都导出",
     restoreHintFormat: "• 支持格式：EasySSH 统一备份 JSON",
@@ -2555,6 +2621,8 @@ const messages = {
     conflictErrorTitle: "冲突时报错",
     conflictErrorDescription: "遇到任何已存在记录就停止恢复",
     confirmOverwriteRestore: "覆盖现有项会更新当前同主键数据，确定继续恢复吗？",
+    confirmResetData:
+      "重置会在下次启动时把当前 EasySSH-data 移到备份目录并创建全新工作区。请先导出备份，确定继续吗？",
     toastSelectExportContent: "请至少选择一项导出内容",
     toastSelectRestoreContent: "请至少选择一项恢复内容",
     toastExportLoading: "正在导出备份...",
@@ -2563,6 +2631,9 @@ const messages = {
     toastRestoreLoading: "正在恢复备份...",
     toastRestoreSuccess: "备份恢复成功",
     toastRestoreFailed: "恢复备份失败",
+    toastOpenDataDirFailed: "打开数据目录失败",
+    toastResetDataScheduled: "已安排下次启动时重置本地数据",
+    toastResetDataFailed: "安排重置本地数据失败",
   },
   terminalMonitor: {
     cpuLabel: "CPU",

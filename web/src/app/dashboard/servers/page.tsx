@@ -259,6 +259,12 @@ export default function ServersPage() {
    loadServers()
  }, [ready, loadServers])
 
+ useEffect(() => {
+   if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("new") === "1") {
+     setIsAddDialogOpen(true)
+   }
+ }, [])
+
  const handleConnect = (serverId: string) => {
  // 查找服务器以获取名称
  const server = servers.find(s => s.id === serverId)

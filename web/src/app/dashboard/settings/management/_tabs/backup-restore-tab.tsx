@@ -8,7 +8,9 @@ import {
   Database,
   Download,
   FileCog,
+  FolderOpen,
   Loader2,
+  RotateCcw,
   Upload,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -21,7 +23,9 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { getApiUrl } from "@/lib/config"
+import { desktopApi } from "@/lib/api/settings"
 import { getCurrentAccessToken } from "@/stores/auth-store"
+import { isDesktopRuntime, useRuntimeInfo } from "@/shell/runtime"
 
 type BackupContent = "config" | "database"
 type ConflictStrategy = "skip" | "overwrite" | "error"
@@ -85,8 +89,11 @@ const conflictOptions: Array<{
 export function BackupRestoreTab() {
   const t = useTranslations("settingsManagementBackup")
   const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
+  const { data: runtime } = useRuntimeInfo()
+  const isDesktop = isDesktopRuntime(runtime)
   const restoreFileInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState<"export" | "restore" | null>(null)
+  const [desktopAction, setDesktopAction] = useState<"open-dir" | "reset-data" | null>(null)
   const [exportContent, setExportContent] = useState<Record<BackupContent, boolean>>({
     config: true,
     database: true,
@@ -99,6 +106,7 @@ export function BackupRestoreTab() {
 
   const exportSelected = exportContent.config || exportContent.database
   const restoreSelected = restoreContent.config || restoreContent.database
+  const dataDir = runtime?.data_dir || ""
 
   const authHeaders = () => {
     const headers: HeadersInit = {}
@@ -215,6 +223,38 @@ export function BackupRestoreTab() {
     }
   }
 
+  const handleOpenDataDir = async () => {
+    try {
+      setDesktopAction("open-dir")
+      await desktopApi.openDataDir()
+    } catch (error) {
+      console.error("Failed to open data directory:", error)
+      toast.error(error instanceof Error ? error.message : t("toastOpenDataDirFailed"))
+    } finally {
+      setDesktopAction(null)
+    }
+  }
+
+  const handleResetData = async () => {
+    const confirmed = await requestConfirm({
+      description: t("confirmResetData"),
+    })
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setDesktopAction("reset-data")
+      await desktopApi.resetDataOnNextStart()
+      toast.success(t("toastResetDataScheduled"))
+    } catch (error) {
+      console.error("Failed to schedule data reset:", error)
+      toast.error(error instanceof Error ? error.message : t("toastResetDataFailed"))
+    } finally {
+      setDesktopAction(null)
+    }
+  }
+
   return (
     <div className="flex flex-1 h-full min-h-0 overflow-auto px-4 pb-6 pt-0 md:px-6">
       {confirmDialog}
@@ -229,6 +269,53 @@ export function BackupRestoreTab() {
             <span className="text-muted-foreground">{t("alertItemSensitive")}</span>
           </AlertDescription>
         </Alert>
+
+        {isDesktop && (
+          <Card className="overflow-hidden">
+            <CardHeader className="space-y-1 pb-3">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="h-5 w-5 text-amber-500" />
+                <CardTitle className="text-base">{t("desktopDataDirTitle")}</CardTitle>
+              </div>
+              <CardDescription>{t("desktopDataDirDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
+                {dataDir || t("desktopDataDirUnavailable")}
+              </div>
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{t("desktopSecurityWarning")}</AlertDescription>
+              </Alert>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={handleOpenDataDir}
+                  disabled={desktopAction !== null || !dataDir}
+                >
+                  {desktopAction === "open-dir" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                  )}
+                  {t("btnOpenDataDir")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleResetData}
+                  disabled={desktopAction !== null || !dataDir}
+                >
+                  {desktopAction === "reset-data" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                  )}
+                  {t("btnResetData")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid items-start gap-4 lg:grid-cols-2">
           <Card className="overflow-hidden">

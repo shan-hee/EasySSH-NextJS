@@ -50,6 +50,9 @@ type Service interface {
 	// CreateSessionWithTokens 为已认证用户创建会话并生成访问令牌/刷新令牌
 	CreateSessionWithTokens(ctx context.Context, user *User, sessionInfo *SessionInfo) (accessToken, refreshToken string, err error)
 
+	// EnsureLocalOwner 确保单用户本地运行形态存在一个 owner 用户
+	EnsureLocalOwner(ctx context.Context, username, email string) (*User, error)
+
 	// Logout 用户登出
 	Logout(ctx context.Context, accessToken string) error
 
@@ -422,6 +425,64 @@ func (s *authService) CreateSessionWithTokens(ctx context.Context, user *User, s
 	}
 
 	return accessToken, refreshToken, nil
+}
+
+func (s *authService) EnsureLocalOwner(ctx context.Context, username, email string) (*User, error) {
+	username = strings.TrimSpace(username)
+	email = strings.TrimSpace(email)
+	if username == "" || email == "" {
+		return nil, errors.New("local owner username and email are required")
+	}
+
+	existing, err := s.repo.FindByEmail(ctx, email)
+	if err == nil && existing != nil {
+		changed := false
+		if existing.Username == "" {
+			existing.Username = username
+			changed = true
+		}
+		if existing.Role != RoleAdmin {
+			existing.Role = RoleAdmin
+			changed = true
+		}
+		if existing.LockedUntil != nil || existing.LockReason != "" || existing.FailedLoginAttempts != 0 || existing.LastFailedLogin != nil {
+			existing.LockedUntil = nil
+			existing.LockReason = ""
+			existing.FailedLoginAttempts = 0
+			existing.LastFailedLogin = nil
+			changed = true
+		}
+		if changed {
+			if err := s.repo.Update(ctx, existing); err != nil {
+				return nil, fmt.Errorf("failed to update local owner: %w", err)
+			}
+		}
+		return existing, nil
+	}
+	if err != nil && !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	user := &User{
+		Username:          username,
+		Email:             email,
+		Role:              RoleAdmin,
+		Avatar:            "",
+		NotifyEmailLogin:  false,
+		NotifyEmailAlert:  false,
+		NotifyBrowser:     false,
+		NotifyNewDevice:   false,
+		NotifyNewLocation: false,
+		NotifySuspicious:  false,
+	}
+	if err := user.SetPassword(uuid.NewString() + uuid.NewString()); err != nil {
+		return nil, fmt.Errorf("failed to hash local owner password: %w", err)
+	}
+	if err := s.repo.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to create local owner: %w", err)
+	}
+
+	return user, nil
 }
 
 // hashToken 对 token 进行哈希处理

@@ -37,6 +37,16 @@ func (s *service) GetUserConfig(ctx context.Context, userID uuid.UUID) (*UserAIC
 
 // SaveUserConfig 保存用户AI配置
 func (s *service) SaveUserConfig(ctx context.Context, config *UserAIConfig) error {
+	if config != nil && !config.UseSystemConfig && config.CustomEnabled && strings.TrimSpace(config.CustomAPIKey) == "" {
+		existing, err := s.repo.GetByUserID(ctx, config.UserID)
+		if err != nil {
+			return err
+		}
+		if existing != nil && strings.TrimSpace(existing.CustomAPIKey) != "" {
+			config.CustomAPIKey = existing.CustomAPIKey
+		}
+	}
+
 	// 验证配置
 	if err := s.validateUserConfig(config); err != nil {
 		return err

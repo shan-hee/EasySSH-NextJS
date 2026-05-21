@@ -618,4 +618,44 @@ export const userAIConfigApi = {
       method: "DELETE",
     })
   },
+
+  async probeUserAIModels(payload: {
+    custom_provider?: string
+    custom_api_key?: string
+    custom_endpoint?: string
+  }): Promise<ProbeAISystemModelsResponse> {
+    return apiFetch<ProbeAISystemModelsResponse>("/users/me/ai-config/models", {
+      method: "POST",
+      body: payload,
+    })
+  },
+}
+
+export interface DesktopDataDirInfo {
+  profile: "desktop"
+  portable: boolean
+  data_dir: string
+}
+
+export const desktopApi = {
+  async getDataDir(): Promise<DesktopDataDirInfo> {
+    return apiFetch<DesktopDataDirInfo>("/desktop/data-dir", {
+      method: "GET",
+      retry: false,
+    })
+  },
+
+  async openDataDir(): Promise<void> {
+    return apiFetch<void>("/desktop/open-data-dir", {
+      method: "POST",
+      retry: false,
+    })
+  },
+
+  async resetDataOnNextStart(): Promise<void> {
+    return apiFetch<void>("/desktop/reset-data", {
+      method: "POST",
+      retry: false,
+    })
+  },
 }

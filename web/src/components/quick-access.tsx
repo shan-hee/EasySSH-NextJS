@@ -15,8 +15,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import type { AppCapability, RuntimeInfo } from "@/shell/runtime"
+import { hasAllCapabilities } from "@/shell/runtime"
 
-export function QuickAccess() {
+export function QuickAccess({ runtime }: { runtime?: RuntimeInfo | null }) {
   const [searchQuery, setSearchQuery] = React.useState("")
   const pathname = usePathname()
   const tDashboard = useTranslations("dashboard")
@@ -26,6 +28,7 @@ export function QuickAccess() {
     icon: React.ComponentType<{ className?: string }>
     description: string
     href?: string
+    requiredCapabilities?: AppCapability[]
     action?: () => void
   }> = [
     {
@@ -33,20 +36,26 @@ export function QuickAccess() {
       icon: Zap,
       description: tDashboard("quickAccessActionQuickConnectDesc"),
       href: "/dashboard/terminal",
+      requiredCapabilities: ["terminal"],
     },
     {
       title: tDashboard("quickAccessActionAddServer"),
       icon: Plus,
       description: tDashboard("quickAccessActionAddServerDesc"),
       href: "/dashboard/servers",
+      requiredCapabilities: ["servers"],
     },
     {
       title: tDashboard("quickAccessActionAiAssistant"),
       icon: Bot,
       description: tDashboard("quickAccessActionAiAssistantDesc"),
       href: "/dashboard/ai-assistant",
+      requiredCapabilities: ["ai"],
     },
   ]
+  const visibleQuickActions = quickActions.filter((action) =>
+    runtime ? hasAllCapabilities(runtime, action.requiredCapabilities) : true,
+  )
 
   return (
     <SidebarGroup>
@@ -69,7 +78,7 @@ export function QuickAccess() {
 
         {/* 快速操作按钮 */}
         <SidebarMenu>
-          {quickActions.map((qa) => {
+          {visibleQuickActions.map((qa) => {
             const baseHref = qa.href?.split("?")[0]
             // 精确匹配当前路径,避免前缀匹配导致误判
             const isActive = !!baseHref && pathname === baseHref
