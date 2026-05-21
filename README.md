@@ -62,7 +62,7 @@
 ### 桌面端
 - **框架**：Wails v3（当前使用 v3.0.0-alpha.95）
 - **运行方式**：桌面进程启动本机 loopback Go 服务，窗口加载同源 Web UI
-- **本地数据**：默认使用用户数据目录中的 SQLite 与备份目录
+- **本地数据**：默认使用 exe 同级 `EasySSH-data/` 目录中的 SQLite 与备份目录
 
 ### 架构设计
 
@@ -95,7 +95,7 @@
 │  │   托管嵌入式 Next.js 静态资源 │  │
 │  └───────────────┬──────────────┘  │
 │                  ↓                  │
-│      用户数据目录 SQLite/备份        │
+│      exe 同级 EasySSH-data/ 数据目录 │
 └─────────────────────────────────────┘
 ```
 
@@ -203,7 +203,7 @@ task desktop:dev
 task desktop:build
 ```
 
-桌面端默认把 SQLite 数据、备份和本地运行密钥写入系统用户数据目录下的 `EasySSH/`，并绑定到 `127.0.0.1` 的随机端口，不占用默认 Web 服务端口。
+桌面端默认把 SQLite 数据、备份和本地运行密钥写入 exe 同级的 `EasySSH-data/` 目录，并绑定到 `127.0.0.1` 的随机端口，不占用默认 Web 服务端口。
 
 ### Docker 常用命令
 
@@ -272,6 +272,7 @@ make test         # 运行测试
 
 # 桌面端资源
 ./scripts/desktop-prepare.sh # 构建 web/out 并复制到桌面端嵌入目录
+./scripts/build-windows-desktop.sh # 交叉构建 Windows amd64 GUI 版，并嵌入默认图标
 
 # API 类型同步（修改 OpenAPI 后）
 ./scripts/gen-types.sh

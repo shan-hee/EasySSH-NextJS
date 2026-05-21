@@ -75,7 +75,7 @@ air
 go run ./cmd/desktop
 ```
 
-服务将在 `http://localhost:8520` 启动
+Web/API 服务将在 `http://localhost:8520` 启动。桌面端会绑定到 `127.0.0.1` 随机端口，并把 SQLite、备份和本地运行密钥写入 exe 同级的 `EasySSH-data/` 目录。
 
 ### 5. 验证运行
 

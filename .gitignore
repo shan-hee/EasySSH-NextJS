@@ -30,6 +30,9 @@
 # Next.js 静态导出产物（由前端构建生成）
 /server/static/
 /server/cmd/desktop/assets/export/
+/server/cmd/desktop/resources/easyssh.ico
+/server/cmd/desktop/windows.rc
+/server/cmd/desktop/windows.syso
 
 # typescript
 *.tsbuildinfo

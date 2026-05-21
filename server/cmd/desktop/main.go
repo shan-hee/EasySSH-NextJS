@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrg/xdg"
 	easysshapp "github.com/easyssh/server/internal/app"
 	"github.com/easyssh/server/internal/infra/config"
 	"github.com/joho/godotenv"
@@ -24,7 +23,7 @@ import (
 //go:embed all:assets
 var embeddedAssets embed.FS
 
-const desktopAppDir = "EasySSH"
+const desktopDataDirName = "EasySSH-data"
 
 func main() {
 	if err := prepareDesktopEnvironment(); err != nil {
@@ -40,6 +39,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("❌ Failed to load embedded static files: %v", err)
 	}
+	desktopIcon := desktopIcon(staticFS)
 
 	runtime, err := easysshapp.New(easysshapp.Options{
 		Config:     cfg,
@@ -64,6 +64,7 @@ func main() {
 	wailsApp := application.New(application.Options{
 		Name:        "EasySSH",
 		Description: "EasySSH desktop application",
+		Icon:        desktopIcon,
 		Assets: application.AssetOptions{
 			Handler: http.NotFoundHandler(),
 		},
@@ -92,7 +93,10 @@ func main() {
 }
 
 func prepareDesktopEnvironment() error {
-	dataDir := filepath.Join(xdg.DataHome, desktopAppDir)
+	dataDir, err := desktopDataDir()
+	if err != nil {
+		return err
+	}
 	backupDir := filepath.Join(dataDir, "backups")
 	dbPath := filepath.Join(dataDir, "easyssh.db")
 	envPath := filepath.Join(dataDir, "desktop.env")
@@ -129,6 +133,20 @@ func prepareDesktopEnvironment() error {
 	return nil
 }
 
+func desktopDataDir() (string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("resolve executable path: %w", err)
+	}
+
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve executable symlink: %w", err)
+	}
+
+	return filepath.Join(filepath.Dir(exePath), desktopDataDirName), nil
+}
+
 func desktopStaticFS() (fs.FS, error) {
 	for _, dir := range []string{"assets/export", "assets/placeholder"} {
 		staticFS, err := fs.Sub(embeddedAssets, dir)
@@ -141,6 +159,14 @@ func desktopStaticFS() (fs.FS, error) {
 	}
 
 	return nil, fmt.Errorf("desktop static index.html not found")
+}
+
+func desktopIcon(staticFS fs.FS) []byte {
+	icon, err := fs.ReadFile(staticFS, "favicon.ico")
+	if err != nil {
+		return nil
+	}
+	return icon
 }
 
 func setDefaultEnv(key, value string) {
