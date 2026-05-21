@@ -45,7 +45,7 @@ export interface TaskView {
   error?: string
   created_at: string
   updated_at: string
-  custom_title: boolean
+  custom_title?: boolean
 }
 
 export interface AssistantEventData {
@@ -79,10 +79,21 @@ export interface SessionListItem {
   updated_at: string
 }
 
+export interface AgentSessionScope {
+  kind?: "global" | "terminal"
+  terminal_session_id?: string
+  server_id?: string
+  server_name?: string
+  host?: string
+  port?: number
+  username?: string
+}
+
 export interface SessionView {
   id: string
   model: string
   permission_mode: PermissionMode
+  scope?: AgentSessionScope
   status: AgentSessionStatus
   created_at: string
   updated_at: string
@@ -107,6 +118,7 @@ export interface AIEvent {
 export interface CreateSessionInput {
   model?: string
   permission_mode?: PermissionMode
+  scope?: AgentSessionScope
 }
 
 export interface CreateSessionResponse {
@@ -125,13 +137,19 @@ export interface SendSessionMessageInput {
   context?: string
   model?: string
   permission_mode?: PermissionMode
+  scope?: AgentSessionScope
 }
 
 export interface ConfirmTaskInput {
   decision: "confirm" | "reject"
 }
 
-export async function listAISessions(input: { page?: number; limit?: number; q?: string } = {}): Promise<ListSessionsResponse> {
+export async function listAISessions(input: {
+  page?: number
+  limit?: number
+  q?: string
+  scope?: AgentSessionScope
+} = {}): Promise<ListSessionsResponse> {
   const params = new URLSearchParams()
   if (input.page) {
     params.set("page", String(input.page))
@@ -142,12 +160,21 @@ export async function listAISessions(input: { page?: number; limit?: number; q?:
   if (input.q?.trim()) {
     params.set("q", input.q.trim())
   }
+  if (input.scope?.kind) {
+    params.set("scope_kind", input.scope.kind)
+  }
+  if (input.scope?.terminal_session_id?.trim()) {
+    params.set("terminal_session_id", input.scope.terminal_session_id.trim())
+  }
+  if (input.scope?.server_id?.trim()) {
+    params.set("server_id", input.scope.server_id.trim())
+  }
   const query = params.toString()
   return apiFetch<ListSessionsResponse>(`/ai/sessions${query ? `?${query}` : ""}`)
 }
 
-export async function getLatestAISession(): Promise<CreateSessionResponse | null> {
-  const sessions = await listAISessions({ limit: 1 })
+export async function getLatestAISession(scope?: AgentSessionScope): Promise<CreateSessionResponse | null> {
+  const sessions = await listAISessions({ limit: 1, scope })
   const latest = sessions.items[0]
   if (!latest) {
     return null
@@ -335,6 +362,7 @@ export async function connectAISessionWebSocket(
               context: input.context,
               model: input.model,
               permission_mode: input.permission_mode,
+              scope: input.scope,
             })
           )
         },

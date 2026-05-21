@@ -111,10 +111,21 @@ type SessionListItem struct {
 	UpdatedAt      time.Time     `json:"updated_at"`
 }
 
+type SessionScope struct {
+	Kind              string `json:"kind,omitempty"`
+	TerminalSessionID string `json:"terminal_session_id,omitempty"`
+	ServerID          string `json:"server_id,omitempty"`
+	ServerName        string `json:"server_name,omitempty"`
+	Host              string `json:"host,omitempty"`
+	Port              int    `json:"port,omitempty"`
+	Username          string `json:"username,omitempty"`
+}
+
 type SessionView struct {
 	ID               string        `json:"id"`
 	Model            string        `json:"model"`
 	PermissionMode   string        `json:"permission_mode"`
+	Scope            SessionScope  `json:"scope,omitempty"`
 	Status           SessionStatus `json:"status"`
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`
@@ -139,10 +150,12 @@ type Event struct {
 type CreateSessionInput struct {
 	Model          string
 	PermissionMode string
+	Scope          SessionScope
 }
 
 type SendUserMessageInput struct {
 	Content        string
 	Model          string
 	PermissionMode string
+	Scope          SessionScope
 }

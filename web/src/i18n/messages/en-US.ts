@@ -1706,6 +1706,13 @@ const messages = {
       'I received your message: "{content}". This is a mock reply; please connect the backend AI API for real responses.',
     panelThinking: "Thinking...",
     panelInputPlaceholder: "Ask the AI assistant...",
+    terminalPanelTitle: "Terminal AI Assistant",
+    terminalPanelInputPlaceholder: "Ask about the current terminal session...",
+    terminalEmptyDescription:
+      "I will focus on the current terminal session and use this tab's server when commands are needed.",
+    terminalContextHeader: "[Current Terminal Session] Default target for this request:",
+    terminalContextRule:
+      "Focus analysis and actions on the current terminal session. Unless the user explicitly switches targets, tool calls should prioritize this server.",
     panelHintSend: "Send",
     panelHintNewline: "New line",
     panelHintClose: "Close",

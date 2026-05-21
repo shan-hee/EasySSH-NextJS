@@ -435,6 +435,27 @@ components:
         message:
           type: string
 
+    AISessionScope:
+      type: object
+      description: AI 会话作用域。terminal 表示助手默认面向当前终端页签和服务器。
+      properties:
+        kind:
+          type: string
+          enum: [global, terminal]
+        terminal_session_id:
+          type: string
+        server_id:
+          type: string
+          format: uuid
+        server_name:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+
     AISessionView:
       type: object
       required:
@@ -456,6 +477,8 @@ components:
           type: string
         permission_mode:
           $ref: '#/components/schemas/AIPermissionMode'
+        scope:
+          $ref: '#/components/schemas/AISessionScope'
         status:
           $ref: '#/components/schemas/AISessionStatus'
         created_at:
@@ -521,6 +544,8 @@ components:
           type: string
         permission_mode:
           $ref: '#/components/schemas/AIPermissionMode'
+        scope:
+          $ref: '#/components/schemas/AISessionScope'
 
     CreateAISessionResponse:
       type: object
@@ -593,6 +618,12 @@ components:
           type: string
         context:
           type: string
+        model:
+          type: string
+        permission_mode:
+          $ref: '#/components/schemas/AIPermissionMode'
+        scope:
+          $ref: '#/components/schemas/AISessionScope'
 
     ConfirmAISessionTaskRequest:
       type: object
@@ -1100,6 +1131,22 @@ paths:
         - name: q
           in: query
           description: 按会话标题或消息快照文本搜索。
+          schema:
+            type: string
+        - name: scope_kind
+          in: query
+          description: 按 AI 会话作用域过滤，例如 terminal 表示终端页签范围。
+          schema:
+            type: string
+            enum: [global, terminal]
+        - name: terminal_session_id
+          in: query
+          description: 终端页签会话 ID，用于恢复当前终端的 AI 会话。
+          schema:
+            type: string
+        - name: server_id
+          in: query
+          description: 当前终端连接的服务器 ID，用于限定终端 AI 会话。
           schema:
             type: string
       responses:

@@ -59,6 +59,7 @@ type session struct {
 	model          string
 	title          string
 	permissionMode string
+	scope          SessionScope
 	status         SessionStatus
 	createdAt      time.Time
 	updatedAt      time.Time
@@ -119,6 +120,7 @@ func (m *Manager) CreateSession(ctx context.Context, userID uuid.UUID, input Cre
 		userID:         userID,
 		model:          strings.TrimSpace(input.Model),
 		permissionMode: normalizePermissionMode(input.PermissionMode),
+		scope:          normalizeSessionScope(input.Scope),
 		status:         SessionStatusIdle,
 		createdAt:      now,
 		updatedAt:      now,
@@ -146,8 +148,9 @@ func (m *Manager) GetSession(userID uuid.UUID, sessionID string) (*SessionView, 
 	return &view, nil
 }
 
-func (m *Manager) ListSessions(ctx context.Context, userID uuid.UUID, query string, limit, offset int) ([]SessionListItem, int64, error) {
-	if m.store != nil {
+func (m *Manager) ListSessions(ctx context.Context, userID uuid.UUID, query string, limit, offset int, scope ...SessionScope) ([]SessionListItem, int64, error) {
+	filterScope := normalizeSessionScopeFromVariadic(scope)
+	if m.store != nil && filterScope.Kind == "" {
 		snapshots, total, err := m.store.List(ctx, userID, strings.TrimSpace(query), limit, offset)
 		if err != nil {
 			return nil, 0, err
@@ -167,6 +170,9 @@ func (m *Manager) ListSessions(ctx context.Context, userID uuid.UUID, query stri
 	query = strings.ToLower(strings.TrimSpace(query))
 	for _, s := range m.sessions {
 		if s.userID != userID {
+			continue
+		}
+		if !sessionMatchesScope(s, filterScope) {
 			continue
 		}
 		item := sessionListItemFromSnapshot(m.snapshotForPersistenceLocked(s))
@@ -206,9 +212,13 @@ func (m *Manager) RenameSession(ctx context.Context, userID uuid.UUID, sessionID
 		title = string([]rune(title)[:80])
 	}
 
+	storeMissing := false
 	if m.store != nil {
 		if err := m.store.Rename(ctx, userID, sessionID, title); err != nil {
-			return err
+			if !errors.Is(err, ErrSessionNotFound) {
+				return err
+			}
+			storeMissing = true
 		}
 	}
 
@@ -223,16 +233,20 @@ func (m *Manager) RenameSession(ctx context.Context, userID uuid.UUID, sessionID
 	}
 	m.mu.Unlock()
 
-	if m.store == nil {
+	if m.store == nil || storeMissing {
 		return ErrSessionNotFound
 	}
 	return nil
 }
 
 func (m *Manager) DeleteSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
+	storeMissing := false
 	if m.store != nil {
 		if err := m.store.Delete(ctx, userID, sessionID); err != nil {
-			return err
+			if !errors.Is(err, ErrSessionNotFound) {
+				return err
+			}
+			storeMissing = true
 		}
 	}
 
@@ -257,7 +271,7 @@ func (m *Manager) DeleteSession(ctx context.Context, userID uuid.UUID, sessionID
 	}
 	m.mu.Unlock()
 
-	if m.store == nil {
+	if m.store == nil || storeMissing {
 		return ErrSessionNotFound
 	}
 	return nil
@@ -333,6 +347,7 @@ func (m *Manager) SendUserMessageWithOptions(ctx context.Context, userID uuid.UU
 	}
 	model := strings.TrimSpace(input.Model)
 	permissionMode := strings.TrimSpace(input.PermissionMode)
+	scope := normalizeSessionScope(input.Scope)
 
 	s, err := m.getOrRestoreSession(ctx, userID, sessionID)
 	if err != nil {
@@ -359,6 +374,9 @@ func (m *Manager) SendUserMessageWithOptions(ctx context.Context, userID uuid.UU
 	}
 	if permissionMode != "" {
 		s.permissionMode = normalizePermissionMode(permissionMode)
+	}
+	if scope.Kind != "" {
+		s.scope = scope
 	}
 	s.messages = append(s.messages, provider.Message{
 		Role:    "user",
@@ -552,8 +570,8 @@ func (m *Manager) runSession(sessionID string) {
 	}
 
 	for round := 0; round < m.maxRounds; round++ {
-		tools := m.registry.VisibleForMode(s.permissionMode)
-		systemPrompt := buildToolSystemPrompt(s.permissionMode, tools)
+		tools := m.visibleToolsForSession(s)
+		systemPrompt := buildToolSystemPrompt(s.permissionMode, tools, s.scope)
 
 		m.mu.RLock()
 		if s.closed {
@@ -756,6 +774,7 @@ func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([
 	pendingConfirm := false
 
 	for _, tc := range toolCalls {
+		tc = scopeToolCall(s.scope, tc)
 		spec, ok := m.registry.Get(tc.Name)
 		taskID := uuid.NewString()
 		args := decodeArguments(tc.Arguments)
@@ -948,12 +967,13 @@ func (m *Manager) snapshotSessionLocked(s *session) SessionView {
 		ID:               s.id,
 		Model:            s.model,
 		PermissionMode:   s.permissionMode,
+		Scope:            s.scope,
 		Status:           s.status,
 		CreatedAt:        s.createdAt,
 		UpdatedAt:        s.updatedAt,
 		Messages:         messages,
 		Tasks:            tasks,
-		AvailableTools:   buildToolViews(m.registry.VisibleForMode(s.permissionMode)),
+		AvailableTools:   buildToolViews(m.visibleToolsForSessionLocked(s)),
 		DefaultTransport: TransportWS,
 	}
 }
@@ -1085,6 +1105,7 @@ func (m *Manager) restoreSnapshot(snapshot *SessionSnapshot) (*session, error) {
 		model:          snapshot.Model,
 		title:          snapshot.Title,
 		permissionMode: normalizePermissionMode(snapshot.PermissionMode),
+		scope:          normalizeSessionScope(snapshot.Scope),
 		status:         snapshot.Status,
 		createdAt:      snapshot.CreatedAt,
 		updatedAt:      snapshot.UpdatedAt,
@@ -1125,6 +1146,7 @@ func (m *Manager) snapshotForPersistenceLocked(s *session) SessionSnapshot {
 		Model:          s.model,
 		Title:          s.title,
 		PermissionMode: s.permissionMode,
+		Scope:          s.scope,
 		Status:         s.status,
 		CreatedAt:      s.createdAt,
 		UpdatedAt:      s.updatedAt,
@@ -1137,6 +1159,9 @@ func (m *Manager) snapshotForPersistenceLocked(s *session) SessionSnapshot {
 
 func (m *Manager) saveSnapshot(ctx context.Context, snapshot SessionSnapshot) {
 	if m.store == nil {
+		return
+	}
+	if normalizeSessionScope(snapshot.Scope).Kind == "terminal" {
 		return
 	}
 	_ = m.store.Save(ctx, snapshot)
@@ -1261,7 +1286,7 @@ func requiresUserConfirmation(permissionMode string, spec registry.ToolSpec) boo
 	return normalizePermissionMode(permissionMode) != "privileged" && spec.ConfirmStrategy == registry.ConfirmUser
 }
 
-func buildToolSystemPrompt(permissionMode string, allowedTools []registry.ToolSpec) string {
+func buildToolSystemPrompt(permissionMode string, allowedTools []registry.ToolSpec, scope SessionScope) string {
 	var sb strings.Builder
 	sb.WriteString("你是一个服务器管理助手，可以帮助用户管理和操作他们的服务器。\n\n")
 	sb.WriteString("重要规则：\n")
@@ -1273,7 +1298,23 @@ func buildToolSystemPrompt(permissionMode string, allowedTools []registry.ToolSp
 	sb.WriteString("6. 不要重复粘贴大段原始输出，优先提炼关键发现与下一步行动。\n")
 	sb.WriteString("7. 当前权限规则：")
 	sb.WriteString(permissionRule(permissionMode))
+	if scope.Kind == "terminal" {
+		sb.WriteString("\n")
+		sb.WriteString("8. 当前会话范围：你正在嵌入一个终端页签中，默认面向当前终端连接的服务器。")
+		if scope.ServerID != "" {
+			sb.WriteString("除非用户明确要求切换目标，否则工具调用必须使用当前服务器 server_id=")
+			sb.WriteString(scope.ServerID)
+			sb.WriteString("。")
+		} else {
+			sb.WriteString("如果缺少当前服务器 ID，请先说明无法定位目标服务器。")
+		}
+	}
 	sb.WriteString("\n\n")
+	if scope.Kind == "terminal" {
+		sb.WriteString("当前终端上下文：\n")
+		sb.WriteString(formatTerminalScope(scope))
+		sb.WriteString("\n\n")
+	}
 	sb.WriteString("本会话可用工具：\n")
 	for _, tool := range allowedTools {
 		sb.WriteString("- ")
@@ -1284,6 +1325,172 @@ func buildToolSystemPrompt(permissionMode string, allowedTools []registry.ToolSp
 	}
 
 	return sb.String()
+}
+
+func (m *Manager) visibleToolsForSession(s *session) []registry.ToolSpec {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.visibleToolsForSessionLocked(s)
+}
+
+func (m *Manager) visibleToolsForSessionLocked(s *session) []registry.ToolSpec {
+	tools := m.registry.VisibleForMode(s.permissionMode)
+	scope := normalizeSessionScope(s.scope)
+	if scope.Kind != "terminal" || scope.ServerID == "" {
+		return tools
+	}
+
+	filtered := make([]registry.ToolSpec, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Name == "list_servers" {
+			continue
+		}
+		if hasServerIDParameter(tool) {
+			tool.Parameters = pinServerIDParameter(tool.Parameters, scope.ServerID)
+		}
+		filtered = append(filtered, tool)
+	}
+	return filtered
+}
+
+func hasServerIDParameter(tool registry.ToolSpec) bool {
+	properties, ok := tool.Parameters["properties"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	_, ok = properties["server_id"]
+	return ok
+}
+
+func pinServerIDParameter(parameters map[string]interface{}, serverID string) map[string]interface{} {
+	next := shallowCopyMap(parameters)
+	properties, ok := next["properties"].(map[string]interface{})
+	if !ok {
+		return next
+	}
+
+	nextProperties := shallowCopyMap(properties)
+	serverIDParam, _ := nextProperties["server_id"].(map[string]interface{})
+	nextServerIDParam := shallowCopyMap(serverIDParam)
+	nextServerIDParam["const"] = serverID
+	nextServerIDParam["default"] = serverID
+	nextServerIDParam["description"] = "当前终端会话服务器 ID。必须使用该值，除非用户明确要求切换目标。"
+	nextProperties["server_id"] = nextServerIDParam
+	next["properties"] = nextProperties
+	return next
+}
+
+func shallowCopyMap(input map[string]interface{}) map[string]interface{} {
+	next := make(map[string]interface{}, len(input))
+	for key, value := range input {
+		next[key] = value
+	}
+	return next
+}
+
+func scopeToolCall(scope SessionScope, toolCall registry.ToolCall) registry.ToolCall {
+	scope = normalizeSessionScope(scope)
+	if scope.Kind != "terminal" || scope.ServerID == "" {
+		return toolCall
+	}
+
+	args := decodeArguments(toolCall.Arguments)
+	if _, ok := args["server_id"]; !ok {
+		return toolCall
+	}
+
+	args["server_id"] = scope.ServerID
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		return toolCall
+	}
+	toolCall.Arguments = encoded
+	return toolCall
+}
+
+func normalizeSessionScope(scope SessionScope) SessionScope {
+	normalized := SessionScope{
+		Kind:              strings.ToLower(strings.TrimSpace(scope.Kind)),
+		TerminalSessionID: strings.TrimSpace(scope.TerminalSessionID),
+		ServerID:          strings.TrimSpace(scope.ServerID),
+		ServerName:        strings.TrimSpace(scope.ServerName),
+		Host:              strings.TrimSpace(scope.Host),
+		Port:              scope.Port,
+		Username:          strings.TrimSpace(scope.Username),
+	}
+
+	switch normalized.Kind {
+	case "terminal":
+		return normalized
+	default:
+		if normalized.TerminalSessionID != "" || normalized.ServerID != "" {
+			normalized.Kind = "terminal"
+			return normalized
+		}
+		return SessionScope{}
+	}
+}
+
+func normalizeSessionScopeFromVariadic(scopes []SessionScope) SessionScope {
+	if len(scopes) == 0 {
+		return SessionScope{}
+	}
+	return normalizeSessionScope(scopes[0])
+}
+
+func sessionMatchesScope(s *session, scope SessionScope) bool {
+	if scope.Kind == "" {
+		return true
+	}
+	return scopeMatches(s.scope, scope)
+}
+
+func scopeMatches(target, filter SessionScope) bool {
+	target = normalizeSessionScope(target)
+	filter = normalizeSessionScope(filter)
+	if filter.Kind == "" {
+		return true
+	}
+	if target.Kind != filter.Kind {
+		return false
+	}
+	if filter.TerminalSessionID != "" && target.TerminalSessionID != filter.TerminalSessionID {
+		return false
+	}
+	if filter.ServerID != "" && target.ServerID != filter.ServerID {
+		return false
+	}
+	return true
+}
+
+func formatTerminalScope(scope SessionScope) string {
+	var lines []string
+	if scope.TerminalSessionID != "" {
+		lines = append(lines, "- terminal_session_id: "+scope.TerminalSessionID)
+	}
+	if scope.ServerID != "" {
+		lines = append(lines, "- server_id: "+scope.ServerID)
+	}
+	if scope.ServerName != "" {
+		lines = append(lines, "- server_name: "+scope.ServerName)
+	}
+	if scope.Username != "" || scope.Host != "" || scope.Port > 0 {
+		target := scope.Username
+		if scope.Host != "" {
+			if target != "" {
+				target += "@"
+			}
+			target += scope.Host
+		}
+		if scope.Port > 0 {
+			target += fmt.Sprintf(":%d", scope.Port)
+		}
+		lines = append(lines, "- connection: "+target)
+	}
+	if len(lines) == 0 {
+		return "- 未提供当前终端目标信息"
+	}
+	return strings.Join(lines, "\n")
 }
 
 func permissionRule(mode string) string {

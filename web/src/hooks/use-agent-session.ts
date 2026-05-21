@@ -9,6 +9,7 @@ import {
   getLatestAISession,
   openAISessionEventStream,
   sendAISessionMessage,
+  type AgentSessionScope,
   type CreateSessionResponse,
   type PermissionMode,
   type SessionView,
@@ -204,7 +205,7 @@ export function useAgentSession() {
     [cleanupTransport, connectTransport]
   )
 
-  const restoreLatestSession = useCallback(async () => {
+  const restoreLatestSession = useCallback(async (scope?: AgentSessionScope) => {
     if (latestRestoreAttemptedRef.current || currentSessionIdRef.current || stateRef.current.transport !== "idle") {
       return false
     }
@@ -213,7 +214,7 @@ export function useAgentSession() {
     dispatch({ type: "transport", transport: "connecting_ws" })
 
     try {
-      const response = await getLatestAISession()
+      const response = await getLatestAISession(scope)
       if (!response) {
         dispatch({ type: "transport", transport: "idle" })
         return false
@@ -228,7 +229,7 @@ export function useAgentSession() {
   }, [applyRestoredSession, pushLocalError])
 
   const restoreSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, input: { silent?: boolean } = {}) => {
       if (!sessionId) {
         return false
       }
@@ -240,7 +241,9 @@ export function useAgentSession() {
         return await applyRestoredSession(response)
       } catch (error) {
         dispatch({ type: "transport", transport: "idle" })
-        pushLocalError(error instanceof Error ? error.message : String(error), "restore_session_failed")
+        if (!input.silent) {
+          pushLocalError(error instanceof Error ? error.message : String(error), "restore_session_failed")
+        }
         return false
       }
     },
@@ -248,7 +251,7 @@ export function useAgentSession() {
   )
 
   const startNewSession = useCallback(
-    async (input: { model?: string; permissionMode?: PermissionMode }) => {
+    async (input: { model?: string; permissionMode?: PermissionMode; scope?: AgentSessionScope }) => {
       await detachCurrentSession()
 
       latestRestoreAttemptedRef.current = true
@@ -259,6 +262,7 @@ export function useAgentSession() {
         const response = await createAISession({
           model: input.model,
           permission_mode: input.permissionMode,
+          scope: input.scope,
         })
 
         currentSessionIdRef.current = response.session_id
@@ -285,7 +289,13 @@ export function useAgentSession() {
   )
 
   const sendMessage = useCallback(
-    async (content: string, contextText?: string, model?: string, permissionMode?: PermissionMode) => {
+    async (
+      content: string,
+      contextText?: string,
+      model?: string,
+      permissionMode?: PermissionMode,
+      scope?: AgentSessionScope
+    ) => {
       const sessionId = currentSessionIdRef.current
       if (!sessionId) {
         return false
@@ -314,6 +324,7 @@ export function useAgentSession() {
             context: contextText,
             model,
             permission_mode: permissionMode,
+            scope,
           })
           return true
         }
@@ -323,6 +334,7 @@ export function useAgentSession() {
           context: contextText,
           model,
           permission_mode: permissionMode,
+          scope,
         })
         return true
       } catch (error) {

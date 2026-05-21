@@ -93,6 +93,7 @@ type SessionSnapshot struct {
 	Model          string             `json:"model"`
 	Title          string             `json:"title"`
 	PermissionMode string             `json:"permission_mode"`
+	Scope          SessionScope       `json:"scope,omitempty"`
 	Status         SessionStatus      `json:"status"`
 	CreatedAt      time.Time          `json:"created_at"`
 	UpdatedAt      time.Time          `json:"updated_at"`

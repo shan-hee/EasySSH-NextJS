@@ -495,6 +495,7 @@ export function TabTerminalContent({
               <AiAssistantPanel
                 isOpen={canUseAi}
                 onClose={() => setTabState(session.id, { isAiInputOpen: false })}
+                terminalSession={session}
               />
             )}
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, type CSSProperties, type PointerEvent } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type PointerEvent } from "react"
 import Link from "next/link"
 import {
   Check,
@@ -9,6 +9,7 @@ import {
   Pencil,
   Search,
   Settings2,
+  Shield,
   Sparkles,
   Square,
   SquarePen,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 
-import { DashboardAgentTimeline } from "@/components/ai-agent/dashboard-agent-timeline"
+import { TerminalAgentTimeline } from "@/components/ai-agent/terminal-agent-timeline"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -49,12 +50,15 @@ import {
   deleteAISession,
   listAISessions,
   renameAISession,
+  type AgentSessionScope,
   type CreateSessionResponse,
+  type PermissionMode,
   type SessionListItem,
 } from "@/lib/api/ai-agent"
 import { getLatestRemoteOutputKindAfterLatestUserMessage } from "@/lib/ai-agent/timeline-utils"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { cn } from "@/lib/utils"
+import type { TerminalSession } from "./types"
 
 const ANIMATION_DELAY = 160
 const SESSION_LIST_LIMIT = 30
@@ -66,6 +70,63 @@ const MAX_PANEL_WIDTH = 720
 interface AiAssistantPanelProps {
   isOpen: boolean
   onClose: () => void
+  terminalSession: TerminalSession
+}
+
+const TERMINAL_AI_SESSION_STORAGE_KEY = "easyssh:terminal-ai-assistant:sessions"
+
+function readTerminalAISessionMap() {
+  if (typeof window === "undefined") {
+    return {} as Record<string, string>
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(TERMINAL_AI_SESSION_STORAGE_KEY)
+    if (!storedValue) {
+      return {} as Record<string, string>
+    }
+
+    const parsed = JSON.parse(storedValue)
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, string>
+      : {}
+  } catch {
+    return {} as Record<string, string>
+  }
+}
+
+function getStoredTerminalAISessionId(terminalSessionId: string) {
+  return readTerminalAISessionMap()[terminalSessionId] || null
+}
+
+function storeTerminalAISessionId(terminalSessionId: string, aiSessionId: string) {
+  if (typeof window === "undefined" || !terminalSessionId || !aiSessionId) {
+    return
+  }
+
+  try {
+    const nextMap = readTerminalAISessionMap()
+    nextMap[terminalSessionId] = aiSessionId
+    window.localStorage.setItem(TERMINAL_AI_SESSION_STORAGE_KEY, JSON.stringify(nextMap))
+  } catch {
+    // ignore unavailable storage
+  }
+}
+
+function removeStoredTerminalAISessionId(terminalSessionId: string, aiSessionId?: string) {
+  if (typeof window === "undefined" || !terminalSessionId) {
+    return
+  }
+
+  try {
+    const nextMap = readTerminalAISessionMap()
+    if (!aiSessionId || nextMap[terminalSessionId] === aiSessionId) {
+      delete nextMap[terminalSessionId]
+      window.localStorage.setItem(TERMINAL_AI_SESSION_STORAGE_KEY, JSON.stringify(nextMap))
+    }
+  } catch {
+    // ignore unavailable storage
+  }
 }
 
 function createSessionListItem(
@@ -95,7 +156,7 @@ function formatSessionTime(value: string) {
   })
 }
 
-export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
+export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssistantPanelProps) {
   const tAI = useTranslations("aiAssistant")
   const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const { isConfigured, isLoading: isConfigLoading, models, model: defaultModel } = useAIConfig()
@@ -107,7 +168,6 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     tasks,
     error,
     canSend: canSendToSession,
-    restoreLatestSession,
     restoreSession,
     startNewSession,
     sendMessage,
@@ -118,6 +178,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
 
   const [input, setInput] = useState("")
   const [model, setModel] = useState("auto")
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("balanced")
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState("")
   const [sessionList, setSessionList] = useState<SessionListItem[]>([])
@@ -138,6 +199,77 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
   const panelWidthStorageReadyRef = useRef(false)
   const resizeFrameRef = useRef<number | null>(null)
   const pendingPanelWidthRef = useRef(DEFAULT_PANEL_WIDTH)
+  const restoreAttemptKeyRef = useRef<string | null>(null)
+
+  const terminalScope = useMemo<AgentSessionScope>(() => ({
+    kind: "terminal",
+    terminal_session_id: terminalSession.id,
+    server_id: terminalSession.serverId,
+    server_name: terminalSession.serverName,
+    host: terminalSession.host,
+    port: terminalSession.port,
+    username: terminalSession.username,
+  }), [
+    terminalSession.host,
+    terminalSession.id,
+    terminalSession.port,
+    terminalSession.serverId,
+    terminalSession.serverName,
+    terminalSession.username,
+  ])
+
+  const permissionOptions = useMemo(
+    () => [
+      {
+        value: "readonly" as const,
+        label: tAI("permissionModeReadonly"),
+        description: tAI("permissionModeReadonlyDesc"),
+      },
+      {
+        value: "balanced" as const,
+        label: tAI("permissionModeBalanced"),
+        description: tAI("permissionModeBalancedDesc"),
+      },
+      {
+        value: "privileged" as const,
+        label: tAI("permissionModePrivileged"),
+        description: tAI("permissionModePrivilegedDesc"),
+      },
+    ],
+    [tAI]
+  )
+
+  const activePermissionOption = permissionOptions.find((option) => option.value === permissionMode) || permissionOptions[1]
+  const terminalContextText = useMemo(() => {
+    const lines = [
+      tAI("terminalContextHeader"),
+      `- terminal_session_id: ${terminalSession.id}`,
+    ]
+
+    if (terminalSession.serverId) {
+      lines.push(`- server_id: ${terminalSession.serverId}`)
+    }
+    if (terminalSession.serverName) {
+      lines.push(`- server_name: ${terminalSession.serverName}`)
+    }
+    if (terminalSession.username || terminalSession.host || terminalSession.port) {
+      const target = `${terminalSession.username ? `${terminalSession.username}@` : ""}${terminalSession.host || ""}${terminalSession.port ? `:${terminalSession.port}` : ""}`
+      if (target) {
+        lines.push(`- connection: ${target}`)
+      }
+    }
+
+    lines.push(tAI("terminalContextRule"))
+    return lines.join("\n")
+  }, [
+    tAI,
+    terminalSession.host,
+    terminalSession.id,
+    terminalSession.port,
+    terminalSession.serverId,
+    terminalSession.serverName,
+    terminalSession.username,
+  ])
 
   const modelOptions = models.length > 0 ? models : ["auto"]
   const resolvedModel =
@@ -180,11 +312,11 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     timeline.length === 0 &&
     tasks.length === 0
   )
-  const configStatusText = isConfigLoading
-    ? tAI("checkingConfig")
-    : !isConfigured
-      ? tAI("aiNotConfigured")
-      : `${resolvedModel} · ${transport === "ws" ? tAI("transportWs") : transport === "sse" ? tAI("transportSse") : transport === "connecting_ws" ? tAI("transportConnecting") : tAI("transportIdle")}`
+  useEffect(() => {
+    if (session?.permission_mode) {
+      setPermissionMode(session.permission_mode)
+    }
+  }, [session?.permission_mode])
 
   useEffect(() => {
     if (!isOpen) {
@@ -204,26 +336,74 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       return
     }
 
-    void restoreLatestSession().then((restored) => {
-      if (restored) {
-        return
-      }
+    if (restoreAttemptKeyRef.current === terminalSession.id) {
+      return
+    }
+    restoreAttemptKeyRef.current = terminalSession.id
 
-      void startNewSession({
-        model: activeModel,
-        permissionMode: "balanced",
+    const storedSessionId = getStoredTerminalAISessionId(terminalSession.id)
+    if (storedSessionId) {
+      void restoreSession(storedSessionId, { silent: true }).then((restored) => {
+        if (restored) {
+          return
+        }
+
+        removeStoredTerminalAISessionId(terminalSession.id, storedSessionId)
+        void startNewSession({
+          model: activeModel,
+          permissionMode,
+          scope: terminalScope,
+        }).then((response) => {
+          if (response) {
+            storeTerminalAISessionId(terminalSession.id, response.session_id)
+          }
+        })
       })
-    })
+      return
+    }
+
+    void listAISessions({ limit: 1, scope: terminalScope })
+      .then(async (response) => {
+        const latestSessionId = response.items[0]?.id
+        if (!latestSessionId) {
+          return false
+        }
+
+        const restored = await restoreSession(latestSessionId, { silent: true })
+        if (restored) {
+          storeTerminalAISessionId(terminalSession.id, latestSessionId)
+        }
+        return restored
+      })
+      .catch(() => false)
+      .then((restored) => {
+        if (restored) {
+          return
+        }
+
+        void startNewSession({
+          model: activeModel,
+          permissionMode,
+          scope: terminalScope,
+        }).then((response) => {
+          if (response) {
+            storeTerminalAISessionId(terminalSession.id, response.session_id)
+          }
+        })
+      })
   }, [
+    activeModel,
+    error,
     isOpen,
     isConfigured,
     isConfigLoading,
+    permissionMode,
+    restoreSession,
     session,
-    transport,
-    error,
-    restoreLatestSession,
     startNewSession,
-    activeModel,
+    terminalScope,
+    terminalSession.id,
+    transport,
   ])
 
   useEffect(() => {
@@ -363,6 +543,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       const response = await listAISessions({
         limit: SESSION_LIST_LIMIT,
         q: sessionSearch,
+        scope: terminalScope,
       })
       setSessionList(response.items)
     } catch {
@@ -370,7 +551,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     } finally {
       setSessionListLoading(false)
     }
-  }, [isConfigured, isConfigLoading, sessionSearch, tAI])
+  }, [isConfigured, isConfigLoading, sessionSearch, tAI, terminalScope])
 
   useEffect(() => {
     if (historyOpen) {
@@ -414,10 +595,12 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     try {
       const response = await startNewSession({
         model: activeModel,
-        permissionMode: "balanced",
+        permissionMode,
+        scope: terminalScope,
       })
 
       if (response) {
+        storeTerminalAISessionId(terminalSession.id, response.session_id)
         prependSessionListItem(response)
       }
     } finally {
@@ -432,8 +615,11 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     createSessionDisabled,
     focusComposer,
     isCurrentSessionBlank,
+    permissionMode,
     prependSessionListItem,
     startNewSession,
+    terminalScope,
+    terminalSession.id,
   ])
 
   const handleRestoreSession = useCallback(async (targetSessionId: string) => {
@@ -449,10 +635,11 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
 
     const restored = await restoreSession(targetSessionId)
     if (restored) {
+      storeTerminalAISessionId(terminalSession.id, targetSessionId)
       setHistoryOpen(false)
       focusComposer()
     }
-  }, [focusComposer, renamingSessionId, restoreSession, sessionId])
+  }, [focusComposer, renamingSessionId, restoreSession, sessionId, terminalSession.id])
 
   const beginRenameSession = useCallback((item: SessionListItem) => {
     setRenamingSessionId(item.id)
@@ -503,6 +690,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     try {
       await deleteAISession(targetSessionId)
       setSessionList((current) => current.filter((item) => item.id !== targetSessionId))
+      removeStoredTerminalAISessionId(terminalSession.id, targetSessionId)
       if (targetSessionId === sessionId) {
         await closeSession()
       }
@@ -522,6 +710,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     sessionActionLoadingId,
     sessionId,
     tAI,
+    terminalSession.id,
   ])
 
   const handleSubmit = useCallback(async (event: React.FormEvent) => {
@@ -544,7 +733,8 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
       try {
         response = await startNewSession({
           model: activeModel,
-          permissionMode: "balanced",
+          permissionMode,
+          scope: terminalScope,
         })
       } finally {
         sessionCreatingRef.current = false
@@ -555,10 +745,17 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
         return
       }
 
+      storeTerminalAISessionId(terminalSession.id, response.session_id)
       prependSessionListItem(response)
     }
 
-    const sent = await sendMessage(normalizedInput, undefined, activeModel, "balanced")
+    const sent = await sendMessage(
+      normalizedInput,
+      terminalContextText,
+      activeModel,
+      permissionMode,
+      terminalScope
+    )
     if (sent) {
       setInput("")
     }
@@ -569,9 +766,13 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
     isConfigLoading,
     isConfigured,
     prependSessionListItem,
+    permissionMode,
     sendMessage,
     session,
     startNewSession,
+    terminalContextText,
+    terminalScope,
+    terminalSession.id,
   ])
 
   return (
@@ -623,23 +824,10 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
           onPointerCancel={handleResizeEnd}
         />
 
-        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200/70 px-3 dark:border-zinc-800/70">
+        <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-zinc-200/70 px-3 dark:border-zinc-800/70">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">{tAI("pageTitle")}</span>
-          </div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                isConfigLoading
-                  ? "bg-amber-500"
-                  : isConfigured
-                    ? "bg-emerald-500"
-                    : "bg-zinc-500"
-              )}
-            />
-            <span className="truncate">{configStatusText}</span>
+            <span className="truncate text-sm font-medium">{tAI("terminalPanelTitle")}</span>
           </div>
         </div>
 
@@ -730,7 +918,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
                               }
                             }}
                           >
-                            <div className="flex min-w-0 items-start justify-between gap-2">
+                            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
                               <div className="min-w-0 flex-1">
                                 {isRenaming ? (
                                   <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
@@ -795,14 +983,14 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
 
                               {!isRenaming && (
                                 <div
-                                  className="flex shrink-0 items-center gap-0.5 opacity-80"
+                                  className="flex shrink-0 items-center gap-0.5 opacity-100"
                                   onClick={(event) => event.stopPropagation()}
                                 >
                                   <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-7 text-muted-foreground hover:text-foreground"
+                                    className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground dark:hover:bg-zinc-800"
                                     disabled={Boolean(sessionActionLoadingId)}
                                     onClick={() => beginRenameSession(item)}
                                     aria-label={tAI("rename")}
@@ -814,7 +1002,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-7 text-muted-foreground hover:text-destructive"
+                                    className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-destructive dark:hover:bg-zinc-800"
                                     disabled={Boolean(sessionActionLoadingId)}
                                     onClick={() => void handleDeleteSession(item.id)}
                                     aria-label={tAI("delete")}
@@ -880,17 +1068,18 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
             className="min-h-full px-4 py-4"
             scrollClassName="h-full w-full overflow-y-auto scrollbar-custom"
           >
-            <DashboardAgentTimeline
+            <TerminalAgentTimeline
               entries={timeline}
               tText={tAI}
               onConfirmTask={confirmTask}
               assistantLoadingState={assistantLoadingState}
+              emptyDescription={tAI("terminalEmptyDescription")}
             />
           </ConversationContent>
           <ConversationScrollButton className="bottom-3 size-8" />
         </Conversation>
 
-        <div className="shrink-0 border-t border-zinc-200/70 p-3 dark:border-zinc-800/70">
+        <div className="shrink-0 p-3">
           {error && (
             <div
               role="alert"
@@ -914,7 +1103,7 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
                 ? tAI("checkingConfig")
                 : !isConfigured
                   ? tAI("aiNotConfiguredPlaceholder")
-                  : tAI("panelInputPlaceholder")
+                  : tAI("terminalPanelInputPlaceholder")
             }
             minHeight={74}
             maxHeight={176}
@@ -929,24 +1118,46 @@ export function AiAssistantPanel({ isOpen, onClose }: AiAssistantPanelProps) {
           />
 
           <PromptInputToolbar className="gap-2 px-2 py-1.5">
-            <PromptInputTools>
+            <PromptInputTools className="flex flex-wrap items-center gap-1.5">
               {isConfigured ? (
-                <PromptInputModelSelect
-                  value={resolvedModel}
-                  onValueChange={setModel}
-                >
-                  <PromptInputModelSelectTrigger className="h-8 max-w-[180px] gap-1.5 rounded-md px-2 text-xs">
-                    <Sparkles className="size-3.5 shrink-0" />
-                    <PromptInputModelSelectValue />
-                  </PromptInputModelSelectTrigger>
-                  <PromptInputModelSelectContent>
-                    {modelOptions.map((option) => (
-                      <PromptInputModelSelectItem key={option} value={option}>
-                        {option}
-                      </PromptInputModelSelectItem>
-                    ))}
-                  </PromptInputModelSelectContent>
-                </PromptInputModelSelect>
+                <>
+                  <PromptInputModelSelect
+                    value={resolvedModel}
+                    onValueChange={setModel}
+                  >
+                    <PromptInputModelSelectTrigger className="h-8 max-w-[150px] gap-1.5 rounded-md px-2 text-xs">
+                      <Sparkles className="size-3.5 shrink-0" />
+                      <PromptInputModelSelectValue />
+                    </PromptInputModelSelectTrigger>
+                    <PromptInputModelSelectContent>
+                      {modelOptions.map((option) => (
+                        <PromptInputModelSelectItem key={option} value={option}>
+                          {option}
+                        </PromptInputModelSelectItem>
+                      ))}
+                    </PromptInputModelSelectContent>
+                  </PromptInputModelSelect>
+
+                  <PromptInputModelSelect
+                    value={permissionMode}
+                    onValueChange={(value) => setPermissionMode(value as PermissionMode)}
+                  >
+                    <PromptInputModelSelectTrigger
+                      className="h-8 max-w-[150px] gap-1.5 rounded-md px-2 text-xs"
+                      title={activePermissionOption.description}
+                    >
+                      <Shield className="size-3.5 shrink-0" />
+                      <PromptInputModelSelectValue />
+                    </PromptInputModelSelectTrigger>
+                    <PromptInputModelSelectContent>
+                      {permissionOptions.map((option) => (
+                        <PromptInputModelSelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </PromptInputModelSelectItem>
+                      ))}
+                    </PromptInputModelSelectContent>
+                  </PromptInputModelSelect>
+                </>
               ) : isConfigLoading ? (
                 <div className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground">
                   <Loader2 className="size-3.5 animate-spin" />

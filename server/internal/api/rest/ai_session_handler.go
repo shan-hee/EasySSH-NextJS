@@ -20,8 +20,9 @@ func NewAISessionHandler(manager *runtime.Manager) *AISessionHandler {
 }
 
 type CreateAISessionRequest struct {
-	Model          string `json:"model,omitempty"`
-	PermissionMode string `json:"permission_mode,omitempty" binding:"omitempty,oneof=readonly balanced privileged"`
+	Model          string               `json:"model,omitempty"`
+	PermissionMode string               `json:"permission_mode,omitempty" binding:"omitempty,oneof=readonly balanced privileged"`
+	Scope          runtime.SessionScope `json:"scope,omitempty"`
 }
 
 type CreateAISessionResponse struct {
@@ -36,10 +37,11 @@ type ListAISessionsResponse struct {
 }
 
 type AISessionMessageRequest struct {
-	Content        string `json:"content" binding:"required"`
-	Context        string `json:"context,omitempty"`
-	Model          string `json:"model,omitempty"`
-	PermissionMode string `json:"permission_mode,omitempty" binding:"omitempty,oneof=readonly balanced privileged"`
+	Content        string               `json:"content" binding:"required"`
+	Context        string               `json:"context,omitempty"`
+	Model          string               `json:"model,omitempty"`
+	PermissionMode string               `json:"permission_mode,omitempty" binding:"omitempty,oneof=readonly balanced privileged"`
+	Scope          runtime.SessionScope `json:"scope,omitempty"`
 }
 
 type ConfirmAISessionTaskRequest struct {
@@ -58,7 +60,18 @@ func (h *AISessionHandler) ListSessions(c *gin.Context) {
 	}
 
 	limit, offset := GetPaginationParams(c)
-	items, total, err := h.manager.ListSessions(c.Request.Context(), userID, strings.TrimSpace(c.Query("q")), limit, offset)
+	items, total, err := h.manager.ListSessions(
+		c.Request.Context(),
+		userID,
+		strings.TrimSpace(c.Query("q")),
+		limit,
+		offset,
+		runtime.SessionScope{
+			Kind:              strings.TrimSpace(c.Query("scope_kind")),
+			TerminalSessionID: strings.TrimSpace(c.Query("terminal_session_id")),
+			ServerID:          strings.TrimSpace(c.Query("server_id")),
+		},
+	)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "list_sessions_failed", err.Error())
 		return
@@ -132,6 +145,7 @@ func (h *AISessionHandler) CreateSession(c *gin.Context) {
 	view, err := h.manager.CreateSession(c.Request.Context(), userID, runtime.CreateSessionInput{
 		Model:          req.Model,
 		PermissionMode: req.PermissionMode,
+		Scope:          req.Scope,
 	})
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "create_session_failed", err.Error())
@@ -172,6 +186,7 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 			Content:        buildAISessionMessageContent(req.Content, req.Context),
 			Model:          req.Model,
 			PermissionMode: req.PermissionMode,
+			Scope:          req.Scope,
 		},
 	); err != nil {
 		h.respondRuntimeError(c, err)

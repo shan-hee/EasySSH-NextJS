@@ -271,6 +271,7 @@ interface TerminalAgentTimelineProps {
   tText: TimelineTranslate
   onConfirmTask: (taskId: string, decision: "confirm" | "reject") => void
   assistantLoadingState?: AssistantLoadingState
+  emptyDescription?: string
 }
 
 export function TerminalAgentTimeline({
@@ -278,6 +279,7 @@ export function TerminalAgentTimeline({
   tText,
   onConfirmTask,
   assistantLoadingState = false,
+  emptyDescription,
 }: TerminalAgentTimelineProps) {
   const shouldShowLoadingIndicator = assistantLoadingState !== false
   const isThinking = assistantLoadingState === "thinking"
@@ -290,7 +292,7 @@ export function TerminalAgentTimeline({
         emptyState={
           !shouldShowLoadingIndicator ? (
             <AgentEmptyState className="min-h-[120px] justify-start border-none bg-transparent px-1 py-2 text-xs">
-              {tText("emptyDescriptionIntro")}
+              {emptyDescription || tText("emptyDescriptionIntro")}
             </AgentEmptyState>
           ) : null
         }

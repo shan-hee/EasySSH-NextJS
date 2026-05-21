@@ -5,8 +5,17 @@ import {
   agentSessionReducer,
   initialAgentSessionState,
   resolveTimelineItems,
+  type ResolvedTimelineItem,
 } from "@/lib/ai-agent/session-state"
 import type { AIEvent, SessionView, TaskView } from "@/lib/api/ai-agent"
+
+type MessageTimelineItem = Extract<ResolvedTimelineItem, { kind: "message" }> & {
+  data: NonNullable<Extract<ResolvedTimelineItem, { kind: "message" }>["data"]>
+}
+
+function hasMessageData(item: ResolvedTimelineItem): item is MessageTimelineItem {
+  return item.kind === "message" && Boolean(item.data)
+}
 
 function buildSessionSnapshot(overrides: Partial<SessionView> = {}): SessionView {
   return {
@@ -197,8 +206,8 @@ test("session.completed 会合并最终快照但不重复灌入旧用户消息",
 
   const timeline = resolveTimelineItems(completed)
   const messageIds = timeline
-    .filter((item) => item.kind === "message" && item.data)
-    .map((item) => item.data!.id)
+    .filter(hasMessageData)
+    .map((item) => item.data.id)
 
   assert.deepEqual(messageIds, ["msg-user-local", "msg-assistant-final"])
 })
@@ -297,8 +306,8 @@ test("本地用户消息要保持在随后到达的 assistant 事件之前，不
   })
 
   const messageIds = resolveTimelineItems(afterAssistant)
-    .filter((item) => item.kind === "message" && item.data)
-    .map((item) => item.data!.id)
+    .filter(hasMessageData)
+    .map((item) => item.data.id)
 
   assert.deepEqual(messageIds, ["msg-user-local", "msg-assistant-1"])
 })
