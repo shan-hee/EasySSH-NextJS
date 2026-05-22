@@ -1,9 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useCallback, useLayoutEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "next-themes"
 import { useTranslations } from "next-intl"
 import { toast } from "@/components/ui/sonner"
+import { Loader2, ShieldAlert } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { ConnectionLoader } from "./connection-loader"
 import { TerminalAuthChallengeDialog } from "./terminal-auth-challenge-dialog"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from "./terminal-themes"
@@ -34,6 +37,8 @@ import type {
   TerminalAuthMethod,
   TerminalConnectionPhase,
   TerminalConnectionError,
+  TerminalHostKeyPrompt,
+  TerminalHostKeyResponder,
   TerminalAuthPrompt,
   TerminalAuthPromptResponder,
 } from "@/lib/websocket-terminal"
@@ -155,6 +160,12 @@ export function WebTerminal({
     prompt: TerminalAuthPrompt
     respond: TerminalAuthPromptResponder
   } | null>(null)
+  const [hostKeyWarning, setHostKeyWarning] = useState<{
+    prompt: TerminalHostKeyPrompt
+    respond: TerminalHostKeyResponder
+  } | null>(null)
+  const [hostKeyTrusting, setHostKeyTrusting] = useState(false)
+  const hostKeyResponseSentRef = useRef(false)
   const successfulCredentialRef = useRef<{
     authMethod: TerminalAuthMethod
     secret: string
@@ -191,6 +202,13 @@ export function WebTerminal({
       rawMessage.includes("websocket")
     ) {
       return tTerminal("terminalErrorWebSocket")
+    }
+
+    if (
+      error.code === "host_key_changed" ||
+      rawMessage.includes("host key verification failed")
+    ) {
+      return tTerminal("terminalErrorHostKeyChanged")
     }
 
     if (
@@ -236,8 +254,14 @@ export function WebTerminal({
     onAuthPrompt: (prompt, respond) => {
       setAuthChallenge({ prompt, respond })
     },
+    onHostKeyPrompt: (prompt, respond) => {
+      hostKeyResponseSentRef.current = false
+      setHostKeyWarning({ prompt, respond })
+    },
     onConnectionEnd: () => {
       setAuthChallenge(null)
+      setHostKeyWarning(null)
+      setHostKeyTrusting(false)
       successfulCredentialRef.current = null
     },
     onConnectionPhase: onConnectionPhaseChange,
@@ -887,6 +911,46 @@ export function WebTerminal({
     onAuthCancelled?.()
   }, [authChallenge, onAuthCancelled])
 
+  const handleTrustHostKey = useCallback(() => {
+    if (!hostKeyWarning || hostKeyResponseSentRef.current) {
+      return
+    }
+
+    setHostKeyTrusting(true)
+    try {
+      hostKeyResponseSentRef.current = true
+      hostKeyWarning.respond(true, hostKeyWarning.prompt.received_key)
+      toast.success(tTerminal("hostKeyChangedSuccess"))
+      setHostKeyWarning(null)
+    } finally {
+      setHostKeyTrusting(false)
+    }
+  }, [hostKeyWarning, tTerminal])
+
+  const handleCancelHostKey = useCallback(() => {
+    if (!hostKeyWarning || hostKeyResponseSentRef.current) {
+      return
+    }
+
+    hostKeyResponseSentRef.current = true
+    hostKeyWarning.respond(false)
+    setHostKeyWarning(null)
+  }, [hostKeyWarning])
+
+  useEffect(() => {
+    if (!hostKeyWarning) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        handleCancelHostKey()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleCancelHostKey, hostKeyWarning])
+
   useEffect(() => {
     if (connectionPhase !== "ready" || !serverId || !successfulCredentialRef.current) {
       return
@@ -1135,6 +1199,87 @@ export function WebTerminal({
         onSubmit={handleAuthChallengeSubmit}
         onCancel={handleAuthChallengeCancel}
       />
+
+      {hostKeyWarning && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-lg border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300">
+                <ShieldAlert className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
+                  {tTerminal("hostKeyChangedTitle")}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  {tTerminal("hostKeyChangedDescription", { server: serverName })}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/70">
+                <div className="mb-3 font-medium text-zinc-700 dark:text-zinc-300">
+                  {hostKeyWarning.prompt.host}:{hostKeyWarning.prompt.port}
+                </div>
+                <div className="grid gap-3">
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      {tTerminal("hostKeyChangedExpected")}
+                    </div>
+                    <div className="break-all rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                      {hostKeyWarning.prompt.expected_key}
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+                      {hostKeyWarning.prompt.expected_key_type}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      {tTerminal("hostKeyChangedReceived")}
+                    </div>
+                    <div className="break-all rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                      {hostKeyWarning.prompt.received_key}
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+                      {hostKeyWarning.prompt.received_key_type}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="text-zinc-600 dark:text-zinc-400">
+                {tTerminal("hostKeyChangedRisk")}
+              </p>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={hostKeyTrusting}
+                onClick={handleCancelHostKey}
+              >
+                {tTerminal("hostKeyChangedCancel")}
+              </Button>
+              <Button
+                type="button"
+                disabled={hostKeyTrusting}
+                onClick={handleTrustHostKey}
+              >
+                {hostKeyTrusting ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    {tTerminal("hostKeyChangedTrusting")}
+                  </>
+                ) : (
+                  tTerminal("hostKeyChangedTrust")
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       <style jsx global>{`
         .terminal-container {

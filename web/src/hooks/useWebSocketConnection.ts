@@ -12,6 +12,8 @@ import {
   type TerminalConnectionError,
   type TerminalAuthPrompt,
   type TerminalAuthPromptResponder,
+  type TerminalHostKeyPrompt,
+  type TerminalHostKeyResponder,
 } from '@/lib/websocket-terminal'
 import { useTerminalStore } from '@/stores/terminal-store'
 import type { Terminal } from '@xterm/xterm'
@@ -29,6 +31,8 @@ export interface WebSocketConnectionConfig {
   onCompletionData?: (data: CompletionDataResponse) => void
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void
   onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void
+  onHostKeyPrompt?: (prompt: TerminalHostKeyPrompt, respond: TerminalHostKeyResponder) => void
+  onHostKeyChanged?: (error: TerminalConnectionError) => void
   onConnectionEnd?: () => void
   onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   formatErrorMessage?: (error: TerminalConnectionError) => string
@@ -50,6 +54,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     onCompletionData,
     onCompletionUpdate,
     onAuthPrompt,
+    onHostKeyPrompt,
+    onHostKeyChanged,
     onConnectionEnd,
     onConnectionPhase,
     formatErrorMessage,
@@ -64,6 +70,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const outputFrameRef = useRef<number | null>(null)
   const outputTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [connectionPhase, setConnectionPhase] = useState<TerminalConnectionPhase>('idle')
+  const [connectionNonce, setConnectionNonce] = useState(0)
   const getTerminal = useTerminalStore(state => state.getTerminal)
   const updateWebSocket = useTerminalStore(state => state.updateWebSocket)
   const updateLatency = useTerminalStore(state => state.updateLatency)
@@ -72,6 +79,8 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   const onCompletionDataRef = useRef(onCompletionData)
   const onCompletionUpdateRef = useRef(onCompletionUpdate)
   const onAuthPromptRef = useRef(onAuthPrompt)
+  const onHostKeyPromptRef = useRef(onHostKeyPrompt)
+  const onHostKeyChangedRef = useRef(onHostKeyChanged)
   const onConnectionEndRef = useRef(onConnectionEnd)
   const onConnectionPhaseRef = useRef(onConnectionPhase)
   const formatErrorMessageRef = useRef(formatErrorMessage)
@@ -93,6 +102,14 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
   useEffect(() => {
     onAuthPromptRef.current = onAuthPrompt
   }, [onAuthPrompt])
+
+  useEffect(() => {
+    onHostKeyPromptRef.current = onHostKeyPrompt
+  }, [onHostKeyPrompt])
+
+  useEffect(() => {
+    onHostKeyChangedRef.current = onHostKeyChanged
+  }, [onHostKeyChanged])
 
   useEffect(() => {
     onConnectionEndRef.current = onConnectionEnd
@@ -293,6 +310,10 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           onConnectionEndRef.current?.()
           errorShownRef.current = true
           console.error('[useWebSocketConnection] WebSocket 错误:', error)
+          if (error.code === "host_key_changed" && onHostKeyChangedRef.current) {
+            onHostKeyChangedRef.current(error)
+            return
+          }
           const inst = getTerminal(sessionId)
           if (inst?.terminal) {
             flushTerminalOutput()
@@ -311,6 +332,13 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
             onAuthPromptRef.current(prompt, respond)
           } else {
             respond([], true)
+          }
+        },
+        onHostKeyPrompt: (prompt, respond) => {
+          if (onHostKeyPromptRef.current) {
+            onHostKeyPromptRef.current(prompt, respond)
+          } else {
+            respond(false)
           }
         },
         onLatency: (data) => {
@@ -352,7 +380,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     // - shouldConnect: 连接意图变化时需要处理
     // - terminalReady: 终端实例创建完成时触发连接（关键修复！）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, serverId, shouldConnect, terminalReady, queueTerminalOutput, flushTerminalOutput])
+  }, [sessionId, serverId, shouldConnect, terminalReady, connectionNonce, queueTerminalOutput, flushTerminalOutput])
 
   // 动态同步补全拉取开关，避免切换配置时必须重建连接
   useEffect(() => {
@@ -381,11 +409,23 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     }
   }, [])
 
+  const reconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.disconnect()
+      wsRef.current = null
+      updateWebSocket(sessionId, null)
+    }
+    reportConnectionPhase('idle')
+    errorShownRef.current = false
+    setConnectionNonce((value) => value + 1)
+  }, [reportConnectionPhase, sessionId, updateWebSocket])
+
   // 返回当前连接引用
   return {
     ws: wsRef.current,
     connectionPhase,
     sendInput,
     resize,
+    reconnect,
   }
 }

@@ -15,13 +15,13 @@ type SSHHostKey struct {
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 	Host        string         `gorm:"type:varchar(255);not null;uniqueIndex:idx_host_port" json:"host"`
 	Port        int            `gorm:"not null;uniqueIndex:idx_host_port" json:"port"`
-	KeyType     string         `gorm:"type:varchar(50);not null" json:"key_type"` // ssh-rsa, ecdsa-sha2-nistp256, ssh-ed25519
-	PublicKey   string         `gorm:"type:text;not null" json:"public_key"`      // Base64编码的公钥
+	KeyType     string         `gorm:"type:varchar(50);not null" json:"key_type"`           // ssh-rsa, ecdsa-sha2-nistp256, ssh-ed25519
+	PublicKey   string         `gorm:"type:text;not null" json:"public_key"`                // Base64编码的公钥
 	Fingerprint string         `gorm:"type:varchar(100);not null;index" json:"fingerprint"` // SHA256指纹（同一服务器多地址可共享）
 	FirstSeen   time.Time      `gorm:"not null" json:"first_seen"`
 	LastSeen    time.Time      `gorm:"not null" json:"last_seen"`
 	TrustStatus string         `gorm:"type:varchar(20);not null;default:'trusted'" json:"trust_status"` // trusted, changed, revoked
-	UserID      *uint          `gorm:"index" json:"user_id,omitempty"` // 可选：记录是哪个用户首次信任的
+	UserID      *uint          `gorm:"index" json:"user_id,omitempty"`                                  // 可选：记录是哪个用户首次信任的
 }
 
 // TableName specifies the table name for SSHHostKey model
@@ -42,13 +42,6 @@ type HostKeyVerificationError struct {
 
 func (e *HostKeyVerificationError) Error() string {
 	return e.Message
-}
-
-// TrustHostKeyRequest represents a request to manually trust a host key
-type TrustHostKeyRequest struct {
-	Host        string `json:"host" binding:"required"`
-	Port        int    `json:"port" binding:"required,min=1,max=65535"`
-	Fingerprint string `json:"fingerprint" binding:"required"`
 }
 
 // HostKeyInfo represents host key information for API responses

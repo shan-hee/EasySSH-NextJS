@@ -17,6 +17,7 @@ import (
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
+	"github.com/easyssh/server/internal/domain/sshhostkey"
 	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/pkg/crypto"
@@ -48,7 +49,7 @@ type TerminalHandler struct {
 	sessionManager    *sshDomain.SessionManager
 	encryptor         *crypto.Encryptor
 	sshSessionService sshsession.Service
-	hostKeyCallback   ssh.HostKeyCallback  // SSH主机密钥验证回调
+	hostKeyService    *sshhostkey.Service  // SSH主机密钥验证服务
 	securityService   security.Service     // 安全配置服务（用于 CORS）
 	webDevPort        int                  // 前端开发端口，用于默认同源白名单
 	completionService completion.Service   // 补全服务
@@ -58,14 +59,14 @@ type TerminalHandler struct {
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyCallback ssh.HostKeyCallback, securityService security.Service, webDevPort int, completionService completion.Service, systemConfigSvc systemconfig.Service) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyService *sshhostkey.Service, securityService security.Service, webDevPort int, completionService completion.Service, systemConfigSvc systemconfig.Service) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
 		sessionManager:    sessionManager,
 		encryptor:         encryptor,
 		sshSessionService: sshSessionService,
-		hostKeyCallback:   hostKeyCallback,
+		hostKeyService:    hostKeyService,
 		securityService:   securityService,
 		webDevPort:        webDevPort,
 		completionService: completionService,
@@ -134,6 +135,13 @@ type AuthResponseMessage struct {
 	AuthMethod server.AuthMethod `json:"auth_method,omitempty"`
 }
 
+// HostKeyResponseMessage SSH 主机密钥变更确认响应
+type HostKeyResponseMessage struct {
+	RequestID   string `json:"request_id"`
+	Accepted    bool   `json:"accepted"`
+	Fingerprint string `json:"fingerprint"`
+}
+
 // OutputMessage 输出消息
 type OutputMessage struct {
 	Type string `json:"type"` // stdout, stderr
@@ -142,8 +150,9 @@ type OutputMessage struct {
 
 // ErrorMessage 错误消息
 type ErrorMessage struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
+	Error   string      `json:"error"`
+	Message string      `json:"message"`
+	Details interface{} `json:"details,omitempty"`
 }
 
 // FetchCompletionDataMessage 获取补全数据请求
@@ -364,6 +373,79 @@ func newTerminalCredentialRetryPrompt(conn *websocket.Conn, writeJSON func(inter
 	}, nil
 }
 
+func readTerminalHostKeyResponse(conn *websocket.Conn, requestID string) (HostKeyResponseMessage, error) {
+	defer func() {
+		_ = conn.SetReadDeadline(time.Time{})
+	}()
+
+	for {
+		if err := conn.SetReadDeadline(time.Now().Add(terminalSSHAuthChallengeTimeout)); err != nil {
+			return HostKeyResponseMessage{}, fmt.Errorf("failed to set host key response timeout: %w", err)
+		}
+
+		messageType, message, err := conn.ReadMessage()
+		if err != nil {
+			return HostKeyResponseMessage{}, fmt.Errorf("failed to read host key response: %w", err)
+		}
+		if messageType != websocket.TextMessage {
+			continue
+		}
+
+		var msg Message
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("Error parsing host key response message: %v", err)
+			continue
+		}
+		if msg.Type != "host_key_response" {
+			continue
+		}
+
+		var response HostKeyResponseMessage
+		if err := json.Unmarshal(msg.Data, &response); err != nil {
+			log.Printf("Error parsing host key response payload: %v", err)
+			continue
+		}
+		if response.RequestID != requestID {
+			continue
+		}
+
+		return response, nil
+	}
+}
+
+func newTerminalHostKeyPrompt(conn *websocket.Conn, writeJSON func(interface{}) error, details *sshhostkey.HostKeyVerificationError) (bool, error) {
+	requestID := uuid.NewString()
+
+	payload := struct {
+		RequestID string `json:"request_id"`
+		*sshhostkey.HostKeyVerificationError
+	}{
+		RequestID:                requestID,
+		HostKeyVerificationError: details,
+	}
+	payloadData, _ := json.Marshal(payload)
+	if err := writeJSON(Message{Type: "host_key_prompt", Data: payloadData}); err != nil {
+		return false, fmt.Errorf("failed to send host key prompt: %w", err)
+	}
+
+	response, err := readTerminalHostKeyResponse(conn, requestID)
+	if err != nil {
+		return false, err
+	}
+	if !response.Accepted {
+		return false, nil
+	}
+	if response.Fingerprint != "" && response.Fingerprint != details.ReceivedKey {
+		return false, fmt.Errorf(
+			"host key response fingerprint mismatch: approved %s, expected %s",
+			response.Fingerprint,
+			details.ReceivedKey,
+		)
+	}
+
+	return true, nil
+}
+
 // HandleSSH 处理 SSH WebSocket 连接
 // WS /api/v1/ssh/terminal/:server_id
 func (h *TerminalHandler) HandleSSH(c *gin.Context) {
@@ -421,10 +503,11 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		defer wsMutex.Unlock()
 		return wsConn.WriteJSON(v)
 	}
-	sendError := func(errorCode, message string) {
+	sendError := func(errorCode, message string, details interface{}) {
 		errMsg := ErrorMessage{
 			Error:   errorCode,
 			Message: message,
+			Details: details,
 		}
 		errData, _ := json.Marshal(errMsg)
 
@@ -456,6 +539,8 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		stdout    io.Reader
 		stderr    io.Reader
 		err       error
+		errCode   string
+		errDetail interface{}
 	}
 	initCtx, cancelInit := context.WithTimeout(c.Request.Context(), terminalSSHInitTimeout)
 	defer cancelInit()
@@ -496,6 +581,11 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		}
 
 		keyboardInteractive := newTerminalKeyboardInteractiveChallenge(wsConn, safeWriteJSON)
+		hostKeyCallback := h.hostKeyService.GetTrustOnChangeHostKeyCallback(
+			func(details *sshhostkey.HostKeyVerificationError) (bool, error) {
+				return newTerminalHostKeyPrompt(wsConn, safeWriteJSON, details)
+			},
+		)
 		connectWithCredential := func(credential *terminalCredentialRetry) (*sshDomain.Client, error) {
 			opts := []sshDomain.ClientOption{
 				sshDomain.WithKeyboardInteractive(keyboardInteractive),
@@ -511,7 +601,7 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			nextClient, createErr := sshDomain.NewClient(
 				srv,
 				h.encryptor,
-				h.hostKeyCallback,
+				hostKeyCallback,
 				opts...,
 			)
 			if createErr != nil {
@@ -663,12 +753,16 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	select {
 	case result = <-resultChan:
 		if result.err != nil {
-			sendError("initialization_failed", result.err.Error())
+			errorCode := result.errCode
+			if errorCode == "" {
+				errorCode = "initialization_failed"
+			}
+			sendError(errorCode, result.err.Error(), result.errDetail)
 			return
 		}
 	case <-initCtx.Done():
 		if initCtx.Err() == context.DeadlineExceeded {
-			sendError("initialization_timeout", "SSH connection timeout")
+			sendError("initialization_timeout", "SSH connection timeout", nil)
 		}
 		return
 	}

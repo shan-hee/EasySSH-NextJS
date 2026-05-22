@@ -25,7 +25,27 @@ export interface TerminalConnectionError extends Error {
   code?: string
   rawMessage?: string
   retryable?: boolean
+  details?: unknown
 }
+
+export interface TerminalHostKeyDetails {
+  host: string
+  port: number
+  expected_key: string
+  received_key: string
+  expected_key_type: string
+  received_key_type: string
+  message?: string
+}
+
+export interface TerminalHostKeyPrompt extends TerminalHostKeyDetails {
+  request_id: string
+}
+
+export type TerminalHostKeyResponder = (
+  accepted: boolean,
+  fingerprint?: string
+) => void
 
 export interface TerminalWebSocketOptions {
   serverId: string
@@ -41,6 +61,7 @@ export interface TerminalWebSocketOptions {
   onCompletionUpdate?: (data: CompletionUpdateResponse) => void // 补全增量更新回调
   onLatency?: (data: TerminalLatencyData) => void // 终端链路延迟回调
   onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void // SSH交互式认证回调
+  onHostKeyPrompt?: (prompt: TerminalHostKeyPrompt, respond: TerminalHostKeyResponder) => void // SSH主机密钥变更确认回调
   onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   enableCompletionFetch?: boolean // 是否在连接成功后自动拉取补全数据
 }
@@ -93,16 +114,18 @@ interface PongMessageData {
 function createTerminalConnectionError(
   message: string,
   code?: string,
-  retryable: boolean = false
+  retryable: boolean = false,
+  details?: unknown
 ): TerminalConnectionError {
   const error = new Error(message) as TerminalConnectionError
   error.code = code
   error.rawMessage = message
   error.retryable = retryable
+  error.details = details
   return error
 }
 
-function getErrorPayload(data: unknown): { code?: string; message: string } {
+function getErrorPayload(data: unknown): { code?: string; message: string; details?: unknown } {
   if (!data || typeof data !== "object") {
     return { message: "服务器错误" }
   }
@@ -113,8 +136,9 @@ function getErrorPayload(data: unknown): { code?: string; message: string } {
     typeof payload.message === "string" && payload.message.trim()
       ? payload.message
       : "服务器错误"
+  const details = "details" in payload ? payload.details : undefined
 
-  return { code, message }
+  return { code, message, details }
 }
 
 // 补全数据响应接口
@@ -151,6 +175,7 @@ export class TerminalWebSocket {
   private onCompletionUpdate?: (data: CompletionUpdateResponse) => void
   private onLatency?: (data: TerminalLatencyData) => void
   private onAuthPrompt?: (prompt: TerminalAuthPrompt, respond: TerminalAuthPromptResponder) => void
+  private onHostKeyPrompt?: (prompt: TerminalHostKeyPrompt, respond: TerminalHostKeyResponder) => void
   private onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   private enableCompletionFetch: boolean
   private reconnectAttempts = 0
@@ -188,6 +213,7 @@ export class TerminalWebSocket {
     this.onCompletionUpdate = options.onCompletionUpdate
     this.onLatency = options.onLatency
     this.onAuthPrompt = options.onAuthPrompt
+    this.onHostKeyPrompt = options.onHostKeyPrompt
     this.onConnectionPhase = options.onConnectionPhase
     this.enableCompletionFetch = options.enableCompletionFetch ?? true
   }
@@ -482,6 +508,41 @@ export class TerminalWebSocket {
   }
 
   /**
+   * 响应 SSH 主机密钥变更确认
+   */
+  sendHostKeyResponse(
+    requestId: string,
+    accepted: boolean,
+    fingerprint?: string
+  ): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn("[TerminalWS] WebSocket 未连接，无法发送主机密钥确认")
+      return
+    }
+
+    try {
+      const message = {
+        type: "host_key_response",
+        data: {
+          request_id: requestId,
+          accepted,
+          fingerprint,
+        },
+      }
+      this.ws.send(JSON.stringify(message))
+    } catch (error) {
+      console.error("[TerminalWS] 发送主机密钥确认失败:", error)
+      this.notifyError(
+        createTerminalConnectionError(
+          error instanceof Error ? error.message : "发送主机密钥确认失败",
+          "host_key_response_failed",
+          false
+        )
+      )
+    }
+  }
+
+  /**
    * 动态更新补全拉取开关
    */
   setCompletionFetchEnabled(enabled: boolean): void {
@@ -589,12 +650,32 @@ export class TerminalWebSocket {
           }
         }
         break
+      case "host_key_prompt":
+        if (message.data && typeof message.data === "object") {
+          this.setPhase("authenticating")
+          const prompt = message.data as TerminalHostKeyPrompt
+          const respond: TerminalHostKeyResponder = (accepted, fingerprint) => {
+            this.sendHostKeyResponse(prompt.request_id, accepted, fingerprint)
+          }
+
+          if (this.onHostKeyPrompt) {
+            this.onHostKeyPrompt(prompt, respond)
+          } else {
+            respond(false)
+          }
+        }
+        break
       case "error":
         console.error("[TerminalWS] 服务器错误:", message.data)
-        const { code: errorCode, message: errorMessage } = getErrorPayload(message.data)
+        const {
+          code: errorCode,
+          message: errorMessage,
+          details: errorDetails,
+        } = getErrorPayload(message.data)
         if (
           errorCode === "initialization_failed" ||
-          errorCode === "initialization_timeout"
+          errorCode === "initialization_timeout" ||
+          errorCode === "host_key_changed"
         ) {
           this.isManualClose = true
           this.setPhase("failed")
@@ -603,7 +684,7 @@ export class TerminalWebSocket {
           break
         }
         this.notifyError(
-          createTerminalConnectionError(errorMessage, errorCode, false)
+          createTerminalConnectionError(errorMessage, errorCode, false, errorDetails)
         )
         break
       case "closed":

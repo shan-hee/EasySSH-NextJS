@@ -3,6 +3,7 @@ package sshhostkey
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,11 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
+)
+
+var (
+	ErrHostKeyRecordNotFound = errors.New("host key record not found")
+	ErrHostKeyRevoked        = errors.New("host key trust has been revoked")
 )
 
 // Service handles SSH host key verification and management
@@ -75,6 +81,10 @@ func (s *Service) VerifyHostKey(hostname string, remote net.Addr, key ssh.Public
 		return nil
 	}
 
+	if existingKey.TrustStatus == "revoked" {
+		return fmt.Errorf("%w for %s:%d", ErrHostKeyRevoked, host, port)
+	}
+
 	// 验证密钥是否匹配
 	if existingKey.Fingerprint != fingerprint {
 		// 主机密钥已更改！可能是中间人攻击
@@ -106,7 +116,13 @@ func (s *Service) VerifyHostKey(hostname string, remote net.Addr, key ssh.Public
 	}
 
 	// 密钥匹配，更新最后见到时间
-	s.db.Model(&existingKey).Update("last_seen", time.Now())
+	updates := map[string]interface{}{
+		"last_seen": time.Now(),
+	}
+	if existingKey.TrustStatus == "changed" {
+		updates["trust_status"] = "trusted"
+	}
+	s.db.Model(&existingKey).Updates(updates)
 
 	return nil
 }
@@ -116,29 +132,61 @@ func (s *Service) GetHostKeyCallback() ssh.HostKeyCallback {
 	return s.VerifyHostKey
 }
 
+// GetTrustOnChangeHostKeyCallback returns a callback that asks the caller
+// whether a changed key should replace the stored key before continuing.
+func (s *Service) GetTrustOnChangeHostKeyCallback(
+	approve func(*HostKeyVerificationError) (bool, error),
+) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		err := s.VerifyHostKey(hostname, remote, key)
+		if err == nil {
+			return nil
+		}
+
+		var hostKeyErr *HostKeyVerificationError
+		if !errors.As(err, &hostKeyErr) {
+			return err
+		}
+
+		approved, approveErr := approve(hostKeyErr)
+		if approveErr != nil {
+			return approveErr
+		}
+		if !approved {
+			return err
+		}
+
+		return s.trustVerifiedHostKey(hostKeyErr.Host, hostKeyErr.Port, key, nil)
+	}
+}
+
 // calculateFingerprint computes SHA256 fingerprint of a public key
 func (s *Service) calculateFingerprint(key ssh.PublicKey) string {
 	hash := sha256.Sum256(key.Marshal())
 	return fmt.Sprintf("SHA256:%s", base64.RawStdEncoding.EncodeToString(hash[:]))
 }
 
-// TrustHostKey manually trusts a host key (for resolving key change warnings)
-func (s *Service) TrustHostKey(host string, port int, fingerprint string, userID *uint) error {
+func (s *Service) trustVerifiedHostKey(host string, port int, key ssh.PublicKey, userID *uint) error {
 	var existingKey SSHHostKey
 	result := s.db.Where("host = ? AND port = ?", host, port).First(&existingKey)
 
 	if result.Error == gorm.ErrRecordNotFound {
-		return fmt.Errorf("no host key record found for %s:%d", host, port)
+		return fmt.Errorf("%w for %s:%d", ErrHostKeyRecordNotFound, host, port)
 	}
 
 	if result.Error != nil {
 		return fmt.Errorf("failed to query host key: %w", result.Error)
 	}
 
-	// 更新信任状态
+	now := time.Now()
+	publicKeyBytes := key.Marshal()
 	updates := map[string]interface{}{
+		"key_type":     key.Type(),
+		"public_key":   base64.StdEncoding.EncodeToString(publicKeyBytes),
+		"fingerprint":  s.calculateFingerprint(key),
+		"last_seen":    now,
 		"trust_status": "trusted",
-		"updated_at":   time.Now(),
+		"updated_at":   now,
 	}
 
 	if userID != nil {
@@ -149,7 +197,6 @@ func (s *Service) TrustHostKey(host string, port int, fingerprint string, userID
 		return fmt.Errorf("failed to update trust status: %w", err)
 	}
 
-	log.Printf("✅ Host key manually trusted for %s:%d by user %v", host, port, userID)
 	return nil
 }
 
