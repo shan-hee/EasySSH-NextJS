@@ -60,11 +60,10 @@ const (
 )
 
 type restoreSectionSummary struct {
-	Tables      int `json:"tables"`
-	Inserted    int `json:"inserted"`
-	Updated     int `json:"updated"`
-	Skipped     int `json:"skipped"`
-	ConfigReset int `json:"config_reset,omitempty"`
+	Tables   int `json:"tables"`
+	Inserted int `json:"inserted"`
+	Updated  int `json:"updated"`
+	Skipped  int `json:"skipped"`
 }
 
 type restoreConflictKey struct {
@@ -441,24 +440,15 @@ func (h *BackupHandler) restoreConfigSection(tx *gorm.DB, section *BackupDataSec
 			return nil, err
 		}
 
-		hasRows, err := h.tableHasRows(tx, table.Name)
+		if len(table.PrimaryKey) == 0 {
+			table.PrimaryKey = fallbackPrimaryKey(table.Columns)
+		}
+		conflictKeys, err := h.getRestoreConflictKeys(tx, table.Name, table.PrimaryKey)
 		if err != nil {
 			return nil, err
 		}
-
-		if hasRows {
-			switch strategy {
-			case RestoreConflictSkip:
-				summary.Skipped += len(table.Rows)
-				continue
-			case RestoreConflictError:
-				return nil, fmt.Errorf("config table %s already has data", table.Name)
-			case RestoreConflictOverwrite:
-				if err := tx.Exec(fmt.Sprintf("DELETE FROM %s", quoteIdentifier(tx.Dialector.Name(), table.Name))).Error; err != nil {
-					return nil, fmt.Errorf("failed to clear config table %s: %w", table.Name, err)
-				}
-				summary.ConfigReset++
-			}
+		if len(conflictKeys) == 0 {
+			return nil, fmt.Errorf("config table %s has no primary or unique key, cannot restore safely", table.Name)
 		}
 
 		for _, rawRow := range table.Rows {
@@ -466,6 +456,26 @@ func (h *BackupHandler) restoreConfigSection(tx *gorm.DB, section *BackupDataSec
 			if err != nil {
 				return nil, err
 			}
+
+			conflictKey, err := h.findBackupConflictKey(tx, table.Name, conflictKeys, row)
+			if err != nil {
+				return nil, err
+			}
+			if conflictKey == nil {
+				conflictKey, err = h.findExistingConfigRowKey(tx, table.Name, table.PrimaryKey, row)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if conflictKey != nil {
+				if err := h.updateBackupRow(tx, table.Name, *conflictKey, table.PrimaryKey, row); err != nil {
+					return nil, err
+				}
+				summary.Updated++
+				restoredTables = append(restoredTables, table)
+				continue
+			}
+
 			if err := tx.Table(table.Name).Create(row).Error; err != nil {
 				return nil, fmt.Errorf("failed to restore config table %s: %w", table.Name, err)
 			}
@@ -711,12 +721,48 @@ func isTimeColumn(columnType string) bool {
 		strings.Contains(columnType, "date")
 }
 
-func (h *BackupHandler) tableHasRows(tx *gorm.DB, table string) (bool, error) {
-	var count int64
-	if err := tx.Table(table).Count(&count).Error; err != nil {
-		return false, fmt.Errorf("failed to count table %s: %w", table, err)
+func (h *BackupHandler) findExistingConfigRowKey(tx *gorm.DB, table string, primaryKey []string, row map[string]interface{}) (*restoreConflictKey, error) {
+	if len(primaryKey) == 0 {
+		return nil, nil
 	}
-	return count > 0, nil
+
+	driver := tx.Dialector.Name()
+	selectColumns := make([]string, len(primaryKey))
+	for i, column := range primaryKey {
+		selectColumns[i] = quoteIdentifier(driver, column)
+	}
+
+	rows, err := tx.Table(table).Select(strings.Join(selectColumns, ", ")).Limit(1).Rows()
+	if err != nil {
+		return nil, fmt.Errorf("failed to find existing config row in %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, nil
+	}
+
+	values := make([]interface{}, len(primaryKey))
+	scanTargets := make([]interface{}, len(primaryKey))
+	for i := range values {
+		scanTargets[i] = &values[i]
+	}
+	if err := rows.Scan(scanTargets...); err != nil {
+		return nil, fmt.Errorf("failed to scan existing config key in %s: %w", table, err)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read existing config key in %s: %w", table, err)
+	}
+
+	for i, column := range primaryKey {
+		row[column] = normalizeBackupValue(values[i])
+	}
+
+	return &restoreConflictKey{
+		Name:     "existing config row",
+		Columns:  append([]string(nil), primaryKey...),
+		Required: true,
+	}, nil
 }
 
 func (h *BackupHandler) getRestoreConflictKeys(tx *gorm.DB, table string, primaryKey []string) ([]restoreConflictKey, error) {

@@ -2702,10 +2702,10 @@ const messages = {
       "• Overwrite updates records with the same primary key. Only restore trusted backups.",
     conflictStrategyLabel: "Conflict handling",
     conflictStrategyDescription:
-      "Choose what happens when a backup record already exists.",
+      "Config is restored to the backup values; existing database records use this strategy.",
     conflictSkipTitle: "Skip existing items",
     conflictSkipDescription:
-      "Keep current data and import only records that do not exist.",
+      "Keep current database data and import only records that do not exist.",
     conflictOverwriteTitle: "Overwrite existing items",
     conflictOverwriteDescription:
       "Update current records with backup records that share the same primary key.",

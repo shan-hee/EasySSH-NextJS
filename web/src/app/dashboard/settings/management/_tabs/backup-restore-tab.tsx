@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { useSystemConfig } from "@/contexts/system-config-context"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { getApiUrl } from "@/lib/config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
@@ -85,6 +86,7 @@ const conflictOptions: Array<{
 export function BackupRestoreTab() {
   const t = useTranslations("settingsManagementBackup")
   const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
+  const { refreshConfig } = useSystemConfig()
   const restoreFileInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState<"export" | "restore" | null>(null)
   const [exportContent, setExportContent] = useState<Record<BackupContent, boolean>>({
@@ -201,6 +203,10 @@ export function BackupRestoreTab() {
       if (!response.ok) {
         const detail = await readErrorMessage(response)
         throw new Error(detail || "Restore failed")
+      }
+
+      if (restoreContent.config) {
+        await refreshConfig({ refreshAuth: false })
       }
 
       toast.success(t("toastRestoreSuccess"))
