@@ -577,7 +577,7 @@ export default function AIAssistantPage() {
                             }
                           }}
                         >
-                          <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
                             <div className="min-w-0 flex-1">
                               {isRenaming ? (
                                 <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
@@ -642,14 +642,14 @@ export default function AIAssistantPage() {
 
                             {!isRenaming && (
                               <div
-                                className="flex shrink-0 items-center gap-0.5 opacity-80"
+                                className="flex shrink-0 items-center gap-0.5 opacity-100"
                                 onClick={(event) => event.stopPropagation()}
                               >
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="size-7 text-muted-foreground hover:text-foreground"
+                                  className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground dark:hover:bg-zinc-800"
                                   disabled={Boolean(sessionActionLoadingId)}
                                   onClick={() => beginRenameSession(item)}
                                   aria-label={t("rename")}
@@ -661,7 +661,7 @@ export default function AIAssistantPage() {
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="size-7 text-muted-foreground hover:text-destructive"
+                                  className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-destructive dark:hover:bg-zinc-800"
                                   disabled={Boolean(sessionActionLoadingId)}
                                   onClick={() => void handleDeleteSession(item.id)}
                                   aria-label={t("delete")}
