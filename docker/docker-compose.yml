@@ -26,12 +26,10 @@ services:
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
 
-      BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
       CONTENT_SECURITY_POLICY: ${CONTENT_SECURITY_POLICY:-}
       NEXT_PUBLIC_WS_HOST: ${NEXT_PUBLIC_WS_HOST:-}
     volumes:
       - ./data:/app/data
-      - ./backups:/app/backups
     networks:
       - easyssh-network
     healthcheck:

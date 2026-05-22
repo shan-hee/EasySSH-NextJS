@@ -56,16 +56,15 @@ ARG APP_UID=1001
 ARG APP_GID=1001
 RUN addgroup -S -g ${APP_GID} appuser \
     && adduser -S -u ${APP_UID} appuser -G appuser \
-    && mkdir -p /app/backups /app/data \
-    && chown -R appuser:appuser /app/backups /app/data
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app/data
 
 # 默认环境（可在运行容器时覆盖）
 ENV TZ=Asia/Shanghai \
     NEXT_PUBLIC_BACKEND_URL=http://localhost:8520 \
     WEB_PORT=3000 \
     DB_DRIVER=sqlite \
-    DB_DSN=/app/data/easyssh.db \
-    BACKUP_DIR=/app/backups
+    DB_DSN=/app/data/easyssh.db
 
 # 复制后端二进制与前端静态资源
 COPY --from=backend-builder --chown=appuser:appuser /app/server/easyssh-api ./

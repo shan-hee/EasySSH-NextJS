@@ -39,7 +39,6 @@ http://localhost:8520
 默认持久化目录：
 
 - `docker/data/`：SQLite 数据库文件
-- `docker/backups/`：数据库导出、导入临时文件
 
 ## 环境变量
 
@@ -99,16 +98,16 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 ## 数据备份
 
-SQLite 默认部署下，最直接的备份方式是停止容器后复制 `docker/data/easyssh.db`。也可以使用系统内置的数据库导出功能导出 SQL 文件。
+SQLite 默认部署下，最直接的文件级备份方式是停止容器后复制 `docker/data/easyssh.db`。也可以在系统管理页面使用统一备份导出 JSON 文件。
 
 ```bash
 # 文件级备份
 docker compose stop easyssh
-tar -czf easyssh-data-$(date +%Y%m%d).tar.gz data backups
+tar -czf easyssh-data-$(date +%Y%m%d).tar.gz data
 docker compose start easyssh
 ```
 
-使用 PostgreSQL/MySQL 时，建议优先使用数据库自身的备份工具；EasySSH 的内置 SQL 导出可作为轻量迁移与恢复入口。
+使用 PostgreSQL/MySQL 时，建议优先使用数据库自身的备份工具；EasySSH 的统一备份导出可作为轻量迁移与恢复入口。
 
 ## 故障排查
 

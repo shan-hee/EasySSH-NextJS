@@ -108,7 +108,6 @@ docker run -d \
   --name easyssh \
   -p 8520:8520 \
   -v easyssh-data:/app/data \
-  -v easyssh-backups:/app/backups \
   -e DB_DRIVER=sqlite \
   -e DB_DSN=/app/data/easyssh.db \
   -e JWT_SECRET=$(openssl rand -base64 48) \

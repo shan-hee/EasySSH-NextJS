@@ -478,10 +478,7 @@ func main() {
 	// 其他处理器
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 	avatarHandler := rest.NewAvatarHandler()
-	backupHandler := rest.NewBackupHandler(
-		database,
-		&cfg.Database,
-	)
+	backupHandler := rest.NewBackupHandler(database)
 
 	// 创建 Gin 路由
 	r := gin.New()
@@ -971,12 +968,8 @@ func main() {
 		backupRoutes := v1.Group("/backup")
 		backupRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		{
-			backupRoutes.GET("/export", backupHandler.ExportBackup)             // 导出统一备份
-			backupRoutes.POST("/restore", backupHandler.RestoreBackup)          // 恢复统一备份
-			backupRoutes.GET("/export-config", backupHandler.ExportConfig)      // 导出配置
-			backupRoutes.POST("/import-config", backupHandler.ImportConfig)     // 导入配置
-			backupRoutes.GET("/export-database", backupHandler.ExportDatabase)  // 导出数据库
-			backupRoutes.POST("/import-database", backupHandler.ImportDatabase) // 导入数据库
+			backupRoutes.GET("/export", backupHandler.ExportBackup)    // 导出统一备份
+			backupRoutes.POST("/restore", backupHandler.RestoreBackup) // 恢复统一备份
 		}
 
 		// SSH密钥路由（需要认证）
