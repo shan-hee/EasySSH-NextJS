@@ -173,8 +173,14 @@ type CompletionUpdateMessage struct {
 }
 
 type terminalCredentialRetry struct {
-	AuthMethod server.AuthMethod
-	Secret     string
+	AuthMethod           server.AuthMethod
+	Secret               string
+	PrivateKeyPassphrase string
+}
+
+type terminalErrorInfo struct {
+	Code    string
+	Message string
 }
 
 type completionBroadcastKey struct {
@@ -217,48 +223,17 @@ func newTerminalKeyboardInteractiveChallenge(conn *websocket.Conn, writeJSON fun
 			return nil, fmt.Errorf("failed to send authentication prompt: %w", err)
 		}
 
-		defer func() {
-			_ = conn.SetReadDeadline(time.Time{})
-		}()
-
-		for {
-			if err := conn.SetReadDeadline(time.Now().Add(terminalSSHAuthChallengeTimeout)); err != nil {
-				return nil, fmt.Errorf("failed to set authentication response timeout: %w", err)
-			}
-
-			messageType, message, err := conn.ReadMessage()
-			if err != nil {
-				return nil, fmt.Errorf("failed to read authentication response: %w", err)
-			}
-			if messageType != websocket.TextMessage {
-				continue
-			}
-
-			var msg Message
-			if err := json.Unmarshal(message, &msg); err != nil {
-				log.Printf("Error parsing authentication response message: %v", err)
-				continue
-			}
-			if msg.Type != "auth_response" {
-				continue
-			}
-
-			var response AuthResponseMessage
-			if err := json.Unmarshal(msg.Data, &response); err != nil {
-				log.Printf("Error parsing authentication response payload: %v", err)
-				continue
-			}
-			if response.RequestID != requestID {
-				continue
-			}
-			if response.Cancelled {
-				return nil, fmt.Errorf("authentication cancelled by user")
-			}
-
-			answers := make([]string, len(questions))
-			copy(answers, response.Answers)
-			return answers, nil
+		response, err := readTerminalAuthResponse(conn, writeJSON, requestID)
+		if err != nil {
+			return nil, err
 		}
+		if response.Cancelled {
+			return nil, fmt.Errorf("authentication cancelled by user")
+		}
+
+		answers := make([]string, len(questions))
+		copy(answers, response.Answers)
+		return answers, nil
 	}
 }
 
@@ -287,7 +262,88 @@ func isTerminalSSHAuthError(err error) bool {
 	return false
 }
 
-func readTerminalAuthResponse(conn *websocket.Conn, requestID string) (AuthResponseMessage, error) {
+func isTerminalPrivateKeyPassphraseError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "private_key_passphrase_required") ||
+		strings.Contains(message, "private_key_passphrase_invalid")
+}
+
+func classifyTerminalInitError(err error) terminalErrorInfo {
+	if err == nil {
+		return terminalErrorInfo{}
+	}
+
+	raw := err.Error()
+	message := strings.ToLower(raw)
+	info := terminalErrorInfo{
+		Code:    "initialization_failed",
+		Message: raw,
+	}
+
+	switch {
+	case strings.Contains(message, "authentication cancelled") ||
+		strings.Contains(message, "private key passphrase cancelled"):
+		info.Code = "auth_cancelled"
+	case strings.Contains(message, "private_key_passphrase_required"):
+		info.Code = "private_key_passphrase_required"
+	case strings.Contains(message, "private_key_passphrase_invalid"):
+		info.Code = "private_key_passphrase_invalid"
+	case strings.Contains(message, "failed to parse private key"):
+		info.Code = "private_key_invalid"
+	case strings.Contains(message, "failed to decrypt private key"):
+		info.Code = "private_key_decrypt_failed"
+	case strings.Contains(message, "failed to decrypt password"):
+		info.Code = "password_decrypt_failed"
+	case strings.Contains(message, "unable to authenticate") ||
+		strings.Contains(message, "permission denied") ||
+		strings.Contains(message, "authentication failed"):
+		info.Code = "auth_failed"
+	case strings.Contains(message, "connection refused"):
+		info.Code = "connection_refused"
+	case strings.Contains(message, "no route to host"):
+		info.Code = "no_route_to_host"
+	case strings.Contains(message, "network is unreachable"):
+		info.Code = "network_unreachable"
+	case strings.Contains(message, "i/o timeout") ||
+		strings.Contains(message, "deadline exceeded"):
+		info.Code = "connection_timeout"
+	case strings.Contains(message, "host key verification failed"):
+		info.Code = "host_key_changed"
+	case strings.Contains(message, "host key trust has been revoked"):
+		info.Code = "host_key_revoked"
+	case strings.Contains(message, "no common algorithm"):
+		info.Code = "ssh_algorithm_mismatch"
+	}
+
+	return info
+}
+
+func writeTerminalPong(writeJSON func(interface{}) error, data json.RawMessage) {
+	var ping PingMessage
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &ping); err != nil {
+			log.Printf("Error parsing ping: %v", err)
+		}
+	}
+
+	now := time.Now().UnixMilli()
+	resp := map[string]any{
+		"id":           ping.ID,
+		"ts":           ping.Ts,
+		"serverRecvTs": now,
+		"serverSendTs": time.Now().UnixMilli(),
+	}
+	respData, _ := json.Marshal(resp)
+	if err := writeJSON(Message{Type: "pong", Data: json.RawMessage(respData)}); err != nil {
+		log.Printf("Error sending pong during SSH initialization: %v", err)
+	}
+}
+
+func readTerminalAuthResponse(conn *websocket.Conn, writeJSON func(interface{}) error, requestID string) (AuthResponseMessage, error) {
 	defer func() {
 		_ = conn.SetReadDeadline(time.Time{})
 	}()
@@ -308,6 +364,10 @@ func readTerminalAuthResponse(conn *websocket.Conn, requestID string) (AuthRespo
 		var msg Message
 		if err := json.Unmarshal(message, &msg); err != nil {
 			log.Printf("Error parsing authentication response message: %v", err)
+			continue
+		}
+		if msg.Type == "ping" {
+			writeTerminalPong(writeJSON, msg.Data)
 			continue
 		}
 		if msg.Type != "auth_response" {
@@ -348,7 +408,7 @@ func newTerminalCredentialRetryPrompt(conn *websocket.Conn, writeJSON func(inter
 		return nil, fmt.Errorf("failed to send credential retry prompt: %w", err)
 	}
 
-	response, err := readTerminalAuthResponse(conn, requestID)
+	response, err := readTerminalAuthResponse(conn, writeJSON, requestID)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +433,37 @@ func newTerminalCredentialRetryPrompt(conn *websocket.Conn, writeJSON func(inter
 	}, nil
 }
 
-func readTerminalHostKeyResponse(conn *websocket.Conn, requestID string) (HostKeyResponseMessage, error) {
+func newTerminalPrivateKeyPassphrasePrompt(conn *websocket.Conn, writeJSON func(interface{}) error, attempt, maxAttempts int) (string, error) {
+	requestID := uuid.NewString()
+
+	payload, _ := json.Marshal(AuthPromptMessage{
+		RequestID:         requestID,
+		Kind:              "private_key_passphrase",
+		Prompts:           []AuthPromptItem{{Text: "Private key passphrase", Echo: false}},
+		AuthMethod:        server.AuthMethodKey,
+		Attempt:           attempt,
+		MaxAttempts:       maxAttempts,
+		AttemptsRemaining: maxAttempts - attempt,
+	})
+	if err := writeJSON(Message{Type: "auth_prompt", Data: payload}); err != nil {
+		return "", fmt.Errorf("failed to send private key passphrase prompt: %w", err)
+	}
+
+	response, err := readTerminalAuthResponse(conn, writeJSON, requestID)
+	if err != nil {
+		return "", err
+	}
+	if response.Cancelled {
+		return "", fmt.Errorf("private key passphrase cancelled by user")
+	}
+	if len(response.Answers) == 0 || response.Answers[0] == "" {
+		return "", fmt.Errorf("private key passphrase is required")
+	}
+
+	return response.Answers[0], nil
+}
+
+func readTerminalHostKeyResponse(conn *websocket.Conn, writeJSON func(interface{}) error, requestID string) (HostKeyResponseMessage, error) {
 	defer func() {
 		_ = conn.SetReadDeadline(time.Time{})
 	}()
@@ -394,6 +484,10 @@ func readTerminalHostKeyResponse(conn *websocket.Conn, requestID string) (HostKe
 		var msg Message
 		if err := json.Unmarshal(message, &msg); err != nil {
 			log.Printf("Error parsing host key response message: %v", err)
+			continue
+		}
+		if msg.Type == "ping" {
+			writeTerminalPong(writeJSON, msg.Data)
 			continue
 		}
 		if msg.Type != "host_key_response" {
@@ -428,7 +522,7 @@ func newTerminalHostKeyPrompt(conn *websocket.Conn, writeJSON func(interface{}) 
 		return false, fmt.Errorf("failed to send host key prompt: %w", err)
 	}
 
-	response, err := readTerminalHostKeyResponse(conn, requestID)
+	response, err := readTerminalHostKeyResponse(conn, writeJSON, requestID)
 	if err != nil {
 		return false, err
 	}
@@ -596,6 +690,9 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 				} else {
 					opts = append(opts, sshDomain.WithPasswordAuth(credential.Secret))
 				}
+				if credential.PrivateKeyPassphrase != "" {
+					opts = append(opts, sshDomain.WithPrivateKeyPassphrase(credential.PrivateKeyPassphrase))
+				}
 			}
 
 			nextClient, createErr := sshDomain.NewClient(
@@ -616,10 +713,37 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			return nextClient, nil
 		}
 
+		var credential *terminalCredentialRetry
 		client, err = connectWithCredential(nil)
+		if err != nil && isTerminalPrivateKeyPassphraseError(err) && srv.AuthMethod == server.AuthMethodKey {
+			for attempt := 1; attempt <= terminalSSHAuthRetryMaxAttempts; attempt++ {
+				passphrase, promptErr := newTerminalPrivateKeyPassphrasePrompt(
+					wsConn,
+					safeWriteJSON,
+					attempt,
+					terminalSSHAuthRetryMaxAttempts,
+				)
+				if promptErr != nil {
+					sendResult(initResult{err: fmt.Errorf("connection_failed: %w", promptErr)})
+					return
+				}
+
+				credential = &terminalCredentialRetry{
+					AuthMethod:           server.AuthMethodKey,
+					PrivateKeyPassphrase: passphrase,
+				}
+				client, err = connectWithCredential(credential)
+				if err == nil {
+					break
+				}
+				if !isTerminalPrivateKeyPassphraseError(err) {
+					break
+				}
+			}
+		}
 		if err != nil && isTerminalSSHAuthError(err) {
 			for attempt := 1; attempt <= terminalSSHAuthRetryMaxAttempts; attempt++ {
-				credential, promptErr := newTerminalCredentialRetryPrompt(
+				nextCredential, promptErr := newTerminalCredentialRetryPrompt(
 					wsConn,
 					safeWriteJSON,
 					srv,
@@ -631,7 +755,31 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 					return
 				}
 
+				credential = nextCredential
 				client, err = connectWithCredential(credential)
+				if err != nil && isTerminalPrivateKeyPassphraseError(err) && credential.AuthMethod == server.AuthMethodKey {
+					for passphraseAttempt := 1; passphraseAttempt <= terminalSSHAuthRetryMaxAttempts; passphraseAttempt++ {
+						passphrase, passphraseErr := newTerminalPrivateKeyPassphrasePrompt(
+							wsConn,
+							safeWriteJSON,
+							passphraseAttempt,
+							terminalSSHAuthRetryMaxAttempts,
+						)
+						if passphraseErr != nil {
+							sendResult(initResult{err: fmt.Errorf("connection_failed: %w", passphraseErr)})
+							return
+						}
+
+						credential.PrivateKeyPassphrase = passphrase
+						client, err = connectWithCredential(credential)
+						if err == nil {
+							break
+						}
+						if !isTerminalPrivateKeyPassphraseError(err) {
+							break
+						}
+					}
+				}
 				if err == nil {
 					break
 				}
@@ -753,11 +901,17 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	select {
 	case result = <-resultChan:
 		if result.err != nil {
-			errorCode := result.errCode
-			if errorCode == "" {
-				errorCode = "initialization_failed"
+			errorInfo := classifyTerminalInitError(result.err)
+			if result.errCode != "" {
+				errorInfo.Code = result.errCode
 			}
-			sendError(errorCode, result.err.Error(), result.errDetail)
+			if errorInfo.Code == "" {
+				errorInfo.Code = "initialization_failed"
+			}
+			if errorInfo.Message == "" {
+				errorInfo.Message = result.err.Error()
+			}
+			sendError(errorInfo.Code, errorInfo.Message, result.errDetail)
 			return
 		}
 	case <-initCtx.Done():

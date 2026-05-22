@@ -75,7 +75,7 @@ export type TerminalAuthMethod = "password" | "key"
 
 export interface TerminalAuthPrompt {
   request_id: string
-  kind?: "keyboard_interactive" | "credential_retry" | string
+  kind?: "keyboard_interactive" | "credential_retry" | "private_key_passphrase" | string
   name?: string
   instruction?: string
   prompts: TerminalAuthPromptItem[]
@@ -304,6 +304,7 @@ export class TerminalWebSocket {
         this.lastError = null
         this.errorNotified = false
         this.setPhase("ssh_connecting")
+        this.startPing()
         // 注意：onopen只表示WebSocket握手完成，SSH连接可能还在建立中
         // 真正的连接成功由服务器的"connected"消息通知
       }
@@ -617,7 +618,6 @@ export class TerminalWebSocket {
         this.errorNotified = false
         this.authCancelled = false
         this.onConnected?.()
-        this.startPing()
 
         // SSH连接建立后按需请求补全数据
         if (this.enableCompletionFetch) {
@@ -675,7 +675,20 @@ export class TerminalWebSocket {
         if (
           errorCode === "initialization_failed" ||
           errorCode === "initialization_timeout" ||
-          errorCode === "host_key_changed"
+          errorCode === "host_key_changed" ||
+          errorCode === "auth_cancelled" ||
+          errorCode === "auth_failed" ||
+          errorCode === "private_key_passphrase_required" ||
+          errorCode === "private_key_passphrase_invalid" ||
+          errorCode === "private_key_invalid" ||
+          errorCode === "private_key_decrypt_failed" ||
+          errorCode === "password_decrypt_failed" ||
+          errorCode === "connection_refused" ||
+          errorCode === "no_route_to_host" ||
+          errorCode === "network_unreachable" ||
+          errorCode === "connection_timeout" ||
+          errorCode === "host_key_revoked" ||
+          errorCode === "ssh_algorithm_mismatch"
         ) {
           this.isManualClose = true
           this.setPhase("failed")
@@ -719,6 +732,10 @@ export class TerminalWebSocket {
    * 启动心跳
    */
   private startPing(): void {
+    if (this.pingInterval) {
+      return
+    }
+
     this.sendPing()
     this.pingInterval = setInterval(() => {
       this.sendPing()

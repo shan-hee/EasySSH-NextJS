@@ -52,36 +52,37 @@ export function TerminalAuthChallengeDialog({
 
   const prompts = useMemo(() => prompt?.prompts ?? [], [prompt])
   const isCredentialRetry = prompt?.kind === "credential_retry"
+  const isPrivateKeyPassphrase = prompt?.kind === "private_key_passphrase"
 
-	  useEffect(() => {
-	    let frame = 0
-	    if (!prompt) {
-	      frame = window.requestAnimationFrame(() => {
-	        setAnswers([])
-	        setAuthMethod("password")
-	      })
-	      return () => window.cancelAnimationFrame(frame)
-	    }
-	
-	    frame = window.requestAnimationFrame(() => {
-	      setAnswers(new Array(prompt.prompts.length).fill(""))
-	      setAuthMethod(prompt.auth_method === "key" ? "key" : "password")
-	    })
-	    const timer = window.setTimeout(() => {
-	      if (prompt.auth_method === "key") {
-	        firstTextAreaRef.current?.focus()
+  useEffect(() => {
+    let frame = 0
+    if (!prompt) {
+      frame = window.requestAnimationFrame(() => {
+        setAnswers([])
+        setAuthMethod("password")
+      })
+      return () => window.cancelAnimationFrame(frame)
+    }
+
+    frame = window.requestAnimationFrame(() => {
+      setAnswers(new Array(prompt.prompts.length).fill(""))
+      setAuthMethod(prompt.auth_method === "key" ? "key" : "password")
+    })
+    const timer = window.setTimeout(() => {
+      if (prompt.kind === "credential_retry" && prompt.auth_method === "key") {
+        firstTextAreaRef.current?.focus()
         firstTextAreaRef.current?.select()
       } else {
         firstInputRef.current?.focus()
         firstInputRef.current?.select()
       }
-	    }, 0)
-	
-	    return () => {
-	      window.cancelAnimationFrame(frame)
-	      window.clearTimeout(timer)
-	    }
-	  }, [prompt])
+    }, 0)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(timer)
+    }
+  }, [prompt])
 
   useEffect(() => {
     if (!prompt) return
@@ -145,11 +146,15 @@ export function TerminalAuthChallengeDialog({
             <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
               {isCredentialRetry
                 ? tTerminal("authRetryTitle")
+                : isPrivateKeyPassphrase
+                  ? tTerminal("authPassphraseTitle")
                 : tTerminal("authChallengeTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
               {isCredentialRetry
                 ? tTerminal("authRetryServer", { server: serverName })
+                : isPrivateKeyPassphrase
+                  ? tTerminal("authPassphraseServer", { server: serverName })
                 : tTerminal("authChallengeServer", { server: serverName })}
             </p>
           </div>
@@ -190,7 +195,29 @@ export function TerminalAuthChallengeDialog({
         )}
 
         <div className="mt-4 space-y-3">
-          {isCredentialRetry ? (
+          {isPrivateKeyPassphrase ? (
+            <div className="space-y-2">
+              <Label
+                htmlFor={`terminal-auth-${prompt.request_id}-passphrase`}
+                className="text-zinc-800 dark:text-zinc-200"
+              >
+                {tTerminal("authPassphraseLabel")}
+              </Label>
+              <div className="relative">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <Input
+                  ref={firstInputRef}
+                  id={`terminal-auth-${prompt.request_id}-passphrase`}
+                  type="password"
+                  value={answers[0] ?? ""}
+                  onChange={(event) => updateAnswer(0, event.target.value)}
+                  autoComplete="current-password"
+                  required
+                  className="pl-10"
+                />
+              </div>
+            </div>
+          ) : isCredentialRetry ? (
             <div className="space-y-2">
               <Label
                 htmlFor={`terminal-auth-${prompt.request_id}-credential`}
@@ -259,6 +286,8 @@ export function TerminalAuthChallengeDialog({
           <Button type="submit">
             {isCredentialRetry
               ? tTerminal("authRetrySubmit")
+              : isPrivateKeyPassphrase
+                ? tTerminal("authPassphraseSubmit")
               : tTerminal("authChallengeSubmit")}
           </Button>
         </div>

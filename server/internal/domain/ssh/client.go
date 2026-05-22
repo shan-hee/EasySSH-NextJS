@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -22,10 +23,11 @@ type Client struct {
 }
 
 type clientOptions struct {
-	keyboardInteractive ssh.KeyboardInteractiveChallenge
-	authMethod          *server.AuthMethod
-	password            string
-	privateKey          string
+	keyboardInteractive  ssh.KeyboardInteractiveChallenge
+	authMethod           *server.AuthMethod
+	password             string
+	privateKey           string
+	privateKeyPassphrase string
 }
 
 // ClientOption configures optional SSH client behavior.
@@ -53,6 +55,13 @@ func WithPrivateKeyAuth(privateKey string) ClientOption {
 		method := server.AuthMethodKey
 		opts.authMethod = &method
 		opts.privateKey = privateKey
+	}
+}
+
+// WithPrivateKeyPassphrase uses a plaintext passphrase for an encrypted private key.
+func WithPrivateKeyPassphrase(passphrase string) ClientOption {
+	return func(opts *clientOptions) {
+		opts.privateKeyPassphrase = passphrase
 	}
 }
 
@@ -94,9 +103,9 @@ func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback 
 			}
 		}
 
-		signer, err := ssh.ParsePrivateKey([]byte(privateKey))
+		signer, err := parsePrivateKey(privateKey, options.privateKeyPassphrase)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse private key: %w", err)
+			return nil, err
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
 	}
@@ -126,6 +135,30 @@ func NewClient(srv *server.Server, encryptor *crypto.Encryptor, hostKeyCallback 
 	}
 
 	return client, nil
+}
+
+func parsePrivateKey(privateKey, passphrase string) (ssh.Signer, error) {
+	keyBytes := []byte(privateKey)
+	signer, err := ssh.ParsePrivateKey(keyBytes)
+	if err == nil {
+		return signer, nil
+	}
+
+	var missingPassphrase *ssh.PassphraseMissingError
+	if !errors.As(err, &missingPassphrase) {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	if passphrase == "" {
+		return nil, fmt.Errorf("private_key_passphrase_required: %w", err)
+	}
+
+	signer, err = ssh.ParsePrivateKeyWithPassphrase(keyBytes, []byte(passphrase))
+	if err != nil {
+		return nil, fmt.Errorf("private_key_passphrase_invalid: %w", err)
+	}
+
+	return signer, nil
 }
 
 // Connect 连接到服务器

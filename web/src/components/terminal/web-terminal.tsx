@@ -174,15 +174,52 @@ export function WebTerminal({
   const formatTerminalErrorMessage = useCallback((error: TerminalConnectionError) => {
     const rawMessage = (error.rawMessage || error.message || "").toLowerCase()
 
-    if (error.code === "initialization_timeout" || rawMessage.includes("timeout")) {
+    if (
+      error.code === "initialization_timeout" ||
+      error.code === "connection_timeout" ||
+      rawMessage.includes("timeout")
+    ) {
       return tTerminal("terminalErrorTimeout")
     }
 
-    if (rawMessage.includes("authentication cancelled")) {
+    if (
+      error.code === "auth_cancelled" ||
+      rawMessage.includes("authentication cancelled") ||
+      rawMessage.includes("passphrase cancelled")
+    ) {
       return tTerminal("terminalErrorAuthCancelled")
     }
 
     if (
+      error.code === "private_key_passphrase_required" ||
+      rawMessage.includes("private_key_passphrase_required")
+    ) {
+      return tTerminal("terminalErrorPrivateKeyPassphraseRequired")
+    }
+
+    if (
+      error.code === "private_key_passphrase_invalid" ||
+      rawMessage.includes("private_key_passphrase_invalid")
+    ) {
+      return tTerminal("terminalErrorPrivateKeyPassphraseInvalid")
+    }
+
+    if (
+      error.code === "private_key_invalid" ||
+      rawMessage.includes("failed to parse private key")
+    ) {
+      return tTerminal("terminalErrorPrivateKeyInvalid")
+    }
+
+    if (
+      error.code === "private_key_decrypt_failed" ||
+      error.code === "password_decrypt_failed"
+    ) {
+      return tTerminal("terminalErrorCredentialDecryptFailed")
+    }
+
+    if (
+      error.code === "auth_failed" ||
       rawMessage.includes("unable to authenticate") ||
       rawMessage.includes("permission denied") ||
       rawMessage.includes("authentication failed")
@@ -212,7 +249,24 @@ export function WebTerminal({
     }
 
     if (
+      error.code === "host_key_revoked" ||
+      rawMessage.includes("host key trust has been revoked")
+    ) {
+      return tTerminal("terminalErrorHostKeyRevoked")
+    }
+
+    if (
+      error.code === "ssh_algorithm_mismatch" ||
+      rawMessage.includes("no common algorithm")
+    ) {
+      return tTerminal("terminalErrorAlgorithmMismatch")
+    }
+
+    if (
       error.code === "connection_failed" ||
+      error.code === "connection_refused" ||
+      error.code === "no_route_to_host" ||
+      error.code === "network_unreachable" ||
       rawMessage.includes("connection_failed") ||
       rawMessage.includes("connection refused") ||
       rawMessage.includes("no route to host") ||
