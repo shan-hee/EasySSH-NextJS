@@ -72,13 +72,6 @@ type restoreConflictKey struct {
 	Required bool
 }
 
-var configBackupTables = map[string]bool{
-	"system_config":       true,
-	"security_config":     true,
-	"notification_config": true,
-	"ai_config":           true,
-}
-
 // ExportBackup 导出统一备份文件。
 // @Summary 导出统一备份文件
 // @Tags 备份恢复
@@ -106,7 +99,7 @@ func (h *BackupHandler) ExportBackup(c *gin.Context) {
 	}
 
 	if includeConfig {
-		section, err := h.exportStructuredSection(isConfigBackupTable)
+		section, err := h.exportStructuredSection(backupSectionConfig)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":  "Failed to export config",
@@ -118,9 +111,7 @@ func (h *BackupHandler) ExportBackup(c *gin.Context) {
 	}
 
 	if includeDatabase {
-		section, err := h.exportStructuredSection(func(table string) bool {
-			return !isConfigBackupTable(table)
-		})
+		section, err := h.exportStructuredSection(backupSectionDatabase)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":  "Failed to export database",
@@ -204,16 +195,20 @@ func (h *BackupHandler) RestoreBackup(c *gin.Context) {
 		return
 	}
 
-	strategy, err := parseRestoreConflictStrategy(c.PostForm("conflict_strategy"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	strategy := RestoreConflictError
+	if includeDatabase {
+		var err error
+		strategy, err = parseRestoreConflictStrategy(c.PostForm("conflict_strategy"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	summary := gin.H{}
 	if err := h.db.Transaction(func(tx *gorm.DB) error {
 		if includeConfig {
-			result, err := h.restoreConfigSection(tx, backup.Config, strategy)
+			result, err := h.restoreConfigSection(tx, backup.Config)
 			if err != nil {
 				return err
 			}
@@ -305,11 +300,7 @@ func validateUnifiedBackup(backup *UnifiedBackup) error {
 	return nil
 }
 
-func isConfigBackupTable(table string) bool {
-	return configBackupTables[strings.ToLower(strings.TrimSpace(table))]
-}
-
-func (h *BackupHandler) exportStructuredSection(includeTable func(string) bool) (*BackupDataSection, error) {
+func (h *BackupHandler) exportStructuredSection(sectionType backupSection) (*BackupDataSection, error) {
 	driver := h.db.Dialector.Name()
 	section := &BackupDataSection{
 		Driver: driver,
@@ -326,7 +317,11 @@ func (h *BackupHandler) exportStructuredSection(includeTable func(string) bool) 
 	}
 
 	for _, table := range tables {
-		if !includeTable(table) {
+		policy, ok := backupPolicyForTable(table)
+		if !ok {
+			return nil, fmt.Errorf("backup table %s has no policy", table)
+		}
+		if policy.Section != sectionType || !policy.Exportable {
 			continue
 		}
 
@@ -424,63 +419,25 @@ func normalizeBackupValue(value interface{}) interface{} {
 	}
 }
 
-func (h *BackupHandler) restoreConfigSection(tx *gorm.DB, section *BackupDataSection, strategy RestoreConflictStrategy) (*restoreSectionSummary, error) {
+func (h *BackupHandler) restoreConfigSection(tx *gorm.DB, section *BackupDataSection) (*restoreSectionSummary, error) {
 	summary := &restoreSectionSummary{}
 	restoredTables := make([]BackupTable, 0)
+
 	for _, table := range section.Tables {
-		if !isConfigBackupTable(table.Name) {
-			continue
+		policy, ok := backupPolicyForTable(table.Name)
+		if !ok {
+			return nil, fmt.Errorf("backup table %s has no policy", table.Name)
 		}
-		summary.Tables++
-		if len(table.Rows) == 0 {
+		if policy.Section != backupSectionConfig || policy.RestoreMode != backupRestoreSingleton || !policy.Restorable {
 			continue
 		}
 
-		if err := h.validateRestoreTable(tx, &table); err != nil {
-			return nil, err
-		}
-
-		if len(table.PrimaryKey) == 0 {
-			table.PrimaryKey = fallbackPrimaryKey(table.Columns)
-		}
-		conflictKeys, err := h.getRestoreConflictKeys(tx, table.Name, table.PrimaryKey)
+		changed, restoredTable, err := h.restoreSingletonConfigTable(tx, table, policy, summary)
 		if err != nil {
 			return nil, err
 		}
-		if len(conflictKeys) == 0 {
-			return nil, fmt.Errorf("config table %s has no primary or unique key, cannot restore safely", table.Name)
-		}
-
-		for _, rawRow := range table.Rows {
-			row, err := h.normalizeRestoreRow(tx, table.Name, table.Columns, rawRow)
-			if err != nil {
-				return nil, err
-			}
-
-			conflictKey, err := h.findBackupConflictKey(tx, table.Name, conflictKeys, row)
-			if err != nil {
-				return nil, err
-			}
-			if conflictKey == nil {
-				conflictKey, err = h.findExistingConfigRowKey(tx, table.Name, table.PrimaryKey, row)
-				if err != nil {
-					return nil, err
-				}
-			}
-			if conflictKey != nil {
-				if err := h.updateBackupRow(tx, table.Name, *conflictKey, table.PrimaryKey, row); err != nil {
-					return nil, err
-				}
-				summary.Updated++
-				restoredTables = append(restoredTables, table)
-				continue
-			}
-
-			if err := tx.Table(table.Name).Create(row).Error; err != nil {
-				return nil, fmt.Errorf("failed to restore config table %s: %w", table.Name, err)
-			}
-			summary.Inserted++
-			restoredTables = append(restoredTables, table)
+		if changed {
+			restoredTables = append(restoredTables, restoredTable)
 		}
 	}
 	if err := h.resetPostgresSequences(tx, &BackupDataSection{Tables: restoredTables}); err != nil {
@@ -489,86 +446,167 @@ func (h *BackupHandler) restoreConfigSection(tx *gorm.DB, section *BackupDataSec
 	return summary, nil
 }
 
+func (h *BackupHandler) restoreSingletonConfigTable(tx *gorm.DB, table BackupTable, policy backupTablePolicy, summary *restoreSectionSummary) (bool, BackupTable, error) {
+	summary.Tables++
+	if len(table.Rows) == 0 {
+		return false, table, nil
+	}
+
+	if err := h.validateRestoreTable(tx, &table); err != nil {
+		return false, table, err
+	}
+
+	if len(table.PrimaryKey) == 0 {
+		table.PrimaryKey = fallbackPrimaryKey(table.Columns)
+	}
+	conflictKeys, err := h.getRestoreConflictKeysForPolicy(tx, table.Name, table.PrimaryKey, policy)
+	if err != nil {
+		return false, table, err
+	}
+	if len(conflictKeys) == 0 {
+		return false, table, fmt.Errorf("config table %s has no primary or unique key, cannot restore safely", table.Name)
+	}
+
+	changed := false
+	for _, rawRow := range table.Rows {
+		row, err := h.normalizeRestoreRow(tx, table.Name, table.Columns, rawRow)
+		if err != nil {
+			return false, table, err
+		}
+
+		conflictKey, err := h.findBackupConflictKey(tx, table.Name, conflictKeys, row)
+		if err != nil {
+			return false, table, err
+		}
+		if conflictKey == nil {
+			conflictKey, err = h.findExistingConfigRowKey(tx, table.Name, table.PrimaryKey, row)
+			if err != nil {
+				return false, table, err
+			}
+		}
+		if conflictKey != nil {
+			if err := h.updateBackupRow(tx, table.Name, *conflictKey, table.PrimaryKey, row); err != nil {
+				return false, table, err
+			}
+			summary.Updated++
+			changed = true
+			continue
+		}
+
+		if err := tx.Table(table.Name).Create(row).Error; err != nil {
+			return false, table, fmt.Errorf("failed to restore config table %s: %w", table.Name, err)
+		}
+		summary.Inserted++
+		changed = true
+	}
+	return changed, table, nil
+}
+
 func (h *BackupHandler) restoreDataSection(tx *gorm.DB, section *BackupDataSection, strategy RestoreConflictStrategy) (*restoreSectionSummary, error) {
 	summary := &restoreSectionSummary{}
 	restoredTables := make([]BackupTable, 0)
 	userIDMappings := make(map[string]interface{})
 
 	for _, table := range orderedDataRestoreTables(section.Tables) {
-		if isConfigBackupTable(table.Name) {
-			continue
+		policy, ok := backupPolicyForTable(table.Name)
+		if !ok {
+			return nil, fmt.Errorf("backup table %s has no policy", table.Name)
 		}
-		summary.Tables++
-		if len(table.Rows) == 0 {
+		if policy.Section != backupSectionDatabase || policy.RestoreMode != backupRestoreEntity || !policy.Restorable {
 			continue
 		}
 
-		if err := h.validateRestoreTable(tx, &table); err != nil {
-			return nil, err
-		}
-
-		if len(table.PrimaryKey) == 0 {
-			table.PrimaryKey = fallbackPrimaryKey(table.Columns)
-		}
-		conflictKeys, err := h.getRestoreConflictKeys(tx, table.Name, table.PrimaryKey)
+		changed, restoredTable, err := h.restoreEntityTable(tx, table, policy, strategy, userIDMappings, summary)
 		if err != nil {
 			return nil, err
 		}
-		if len(conflictKeys) == 0 {
-			return nil, fmt.Errorf("table %s has no primary or unique key, cannot apply conflict strategy", table.Name)
-		}
-
-		for _, rawRow := range table.Rows {
-			row, err := h.normalizeRestoreRow(tx, table.Name, table.Columns, rawRow)
-			if err != nil {
-				return nil, err
-			}
-			if !isUsersRestoreTable(table.Name) {
-				applyRestoreUserIDMapping(row, userIDMappings)
-			}
-
-			conflictKey, err := h.findBackupConflictKey(tx, table.Name, conflictKeys, row)
-			if err != nil {
-				return nil, err
-			}
-
-			if conflictKey != nil {
-				if isUsersRestoreTable(table.Name) {
-					if err := h.recordExistingUserIDMapping(tx, table.Name, table.PrimaryKey, *conflictKey, row, userIDMappings); err != nil {
-						return nil, err
-					}
-				}
-
-				switch strategy {
-				case RestoreConflictSkip:
-					summary.Skipped++
-					continue
-				case RestoreConflictError:
-					return nil, fmt.Errorf("table %s item already exists: %s", table.Name, formatConflictKey(*conflictKey, row))
-				case RestoreConflictOverwrite:
-					if err := h.updateBackupRow(tx, table.Name, *conflictKey, table.PrimaryKey, row); err != nil {
-						return nil, err
-					}
-					summary.Updated++
-					restoredTables = append(restoredTables, table)
-					continue
-				}
-			}
-
-			if err := tx.Table(table.Name).Create(row).Error; err != nil {
-				return nil, fmt.Errorf("failed to restore table %s: %w", table.Name, err)
-			}
-			if isUsersRestoreTable(table.Name) {
-				recordInsertedUserIDMapping(table.PrimaryKey, row, userIDMappings)
-			}
-			summary.Inserted++
-			restoredTables = append(restoredTables, table)
+		if changed {
+			restoredTables = append(restoredTables, restoredTable)
 		}
 	}
 	if err := h.resetPostgresSequences(tx, &BackupDataSection{Tables: restoredTables}); err != nil {
 		return nil, err
 	}
 	return summary, nil
+}
+
+func (h *BackupHandler) restoreEntityTable(tx *gorm.DB, table BackupTable, policy backupTablePolicy, strategy RestoreConflictStrategy, userIDMappings map[string]interface{}, summary *restoreSectionSummary) (bool, BackupTable, error) {
+	summary.Tables++
+	if len(table.Rows) == 0 {
+		return false, table, nil
+	}
+
+	if err := h.validateRestoreTable(tx, &table); err != nil {
+		return false, table, err
+	}
+
+	if len(table.PrimaryKey) == 0 {
+		table.PrimaryKey = fallbackPrimaryKey(table.Columns)
+	}
+	conflictKeys, err := h.getRestoreConflictKeysForPolicy(tx, table.Name, table.PrimaryKey, policy)
+	if err != nil {
+		return false, table, err
+	}
+	if len(conflictKeys) == 0 {
+		return false, table, fmt.Errorf("table %s has no primary or unique key, cannot apply conflict strategy", table.Name)
+	}
+
+	changed := false
+	for _, rawRow := range table.Rows {
+		row, err := h.normalizeRestoreRow(tx, table.Name, table.Columns, rawRow)
+		if err != nil {
+			return false, table, err
+		}
+		if policy.UserScoped {
+			applyRestoreUserIDMapping(row, userIDMappings)
+		}
+
+		conflictKey, err := h.findBackupConflictKey(tx, table.Name, conflictKeys, row)
+		if err != nil {
+			return false, table, err
+		}
+
+		if conflictKey != nil {
+			if isUsersRestoreTable(table.Name) {
+				if err := h.recordExistingUserIDMapping(tx, table.Name, table.PrimaryKey, *conflictKey, row, userIDMappings); err != nil {
+					return false, table, err
+				}
+			}
+			if policy.DefaultSeeded {
+				if err := h.updateBackupRow(tx, table.Name, *conflictKey, table.PrimaryKey, row); err != nil {
+					return false, table, err
+				}
+				summary.Updated++
+				changed = true
+				continue
+			}
+
+			switch strategy {
+			case RestoreConflictSkip:
+				summary.Skipped++
+				continue
+			case RestoreConflictError:
+				return false, table, fmt.Errorf("table %s item already exists: %s", table.Name, formatConflictKey(*conflictKey, row))
+			case RestoreConflictOverwrite:
+				if err := h.updateBackupRow(tx, table.Name, *conflictKey, table.PrimaryKey, row); err != nil {
+					return false, table, err
+				}
+				summary.Updated++
+				changed = true
+				continue
+			}
+		}
+
+		if err := tx.Table(table.Name).Create(row).Error; err != nil {
+			return false, table, fmt.Errorf("failed to restore table %s: %w", table.Name, err)
+		}
+		if isUsersRestoreTable(table.Name) {
+			recordInsertedUserIDMapping(table.PrimaryKey, row, userIDMappings)
+		}
+		summary.Inserted++
+		changed = true
+	}
+	return changed, table, nil
 }
 
 func (h *BackupHandler) validateRestoreTable(tx *gorm.DB, table *BackupTable) error {
@@ -765,18 +803,39 @@ func (h *BackupHandler) findExistingConfigRowKey(tx *gorm.DB, table string, prim
 	}, nil
 }
 
-func (h *BackupHandler) getRestoreConflictKeys(tx *gorm.DB, table string, primaryKey []string) ([]restoreConflictKey, error) {
+func (h *BackupHandler) getRestoreConflictKeysForPolicy(tx *gorm.DB, table string, primaryKey []string, policy backupTablePolicy) ([]restoreConflictKey, error) {
 	keys := make([]restoreConflictKey, 0)
 	seen := make(map[string]bool)
 
+	addKey := func(key restoreConflictKey) {
+		if len(key.Columns) == 0 {
+			return
+		}
+		signature := columnsSignature(key.Columns)
+		if seen[signature] {
+			return
+		}
+		seen[signature] = true
+		keys = append(keys, key)
+	}
+
 	if len(primaryKey) > 0 {
-		key := restoreConflictKey{
+		addKey(restoreConflictKey{
 			Name:     "primary key",
 			Columns:  append([]string(nil), primaryKey...),
 			Required: true,
+		})
+	}
+
+	for _, columns := range policy.LogicalKeys {
+		normalizedColumns := normalizeConflictKeyColumns(columns)
+		if len(normalizedColumns) == 0 {
+			continue
 		}
-		keys = append(keys, key)
-		seen[columnsSignature(key.Columns)] = true
+		addKey(restoreConflictKey{
+			Name:    "backup policy key",
+			Columns: normalizedColumns,
+		})
 	}
 
 	uniqueKeys, err := h.getTableUniqueKeys(tx, table)
@@ -784,15 +843,7 @@ func (h *BackupHandler) getRestoreConflictKeys(tx *gorm.DB, table string, primar
 		return nil, fmt.Errorf("failed to get unique keys for table %s: %w", table, err)
 	}
 	for _, key := range uniqueKeys {
-		if len(key.Columns) == 0 {
-			continue
-		}
-		signature := columnsSignature(key.Columns)
-		if seen[signature] {
-			continue
-		}
-		seen[signature] = true
-		keys = append(keys, key)
+		addKey(key)
 	}
 
 	return keys, nil
@@ -1033,6 +1084,18 @@ func missingConflictKeyColumn(row map[string]interface{}, columns []string) stri
 		}
 	}
 	return ""
+}
+
+func normalizeConflictKeyColumns(columns []string) []string {
+	normalized := make([]string, 0, len(columns))
+	for _, column := range columns {
+		column = strings.TrimSpace(column)
+		if column == "" {
+			continue
+		}
+		normalized = append(normalized, column)
+	}
+	return normalized
 }
 
 func columnsSignature(columns []string) string {

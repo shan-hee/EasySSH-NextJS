@@ -2699,21 +2699,21 @@ const messages = {
     exportHintContent: "• Export config only, database only, or both",
     restoreHintFormat: "• Supported format: EasySSH unified backup JSON",
     restoreHintWarning:
-      "• Overwrite updates records with the same primary key. Only restore trusted backups.",
+      "• Overwrite updates current matching records. Only restore trusted backups.",
     conflictStrategyLabel: "Conflict handling",
     conflictStrategyDescription:
-      "Config is restored to the backup values; existing database records use this strategy.",
+      "Config and default data are restored to the backup values; other existing database records use this strategy.",
     conflictSkipTitle: "Skip existing items",
     conflictSkipDescription:
       "Keep current database data and import only records that do not exist.",
     conflictOverwriteTitle: "Overwrite existing items",
     conflictOverwriteDescription:
-      "Update current records with backup records that share the same primary key.",
+      "Update current matching records with backup records.",
     conflictErrorTitle: "Fail on conflict",
     conflictErrorDescription:
       "Stop restoring as soon as any existing record is found.",
     confirmOverwriteRestore:
-      "Overwrite will update current records with the same primary key. Continue?",
+      "Overwrite will update current matching records. Continue?",
     toastSelectExportContent: "Select at least one export content type",
     toastSelectRestoreContent: "Select at least one restore content type",
     toastExportLoading: "Exporting backup...",
