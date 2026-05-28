@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, type ReactNode, type SetStateAction } from "react"
 import { useRouter } from "next/navigation"
 import { authApi, type User } from "@/lib/api/auth"
 import { useSystemConfig } from "@/contexts/system-config-context"
@@ -31,18 +31,34 @@ interface ClientAuthProviderProps {
  * 注意: access_token 仅保存在内存中，refresh_token 由后端通过 HttpOnly Cookie 管理
  */
 export function ClientAuthProvider({ children, initialUser }: ClientAuthProviderProps) {
-  const [user, setUser] = useState<User | null>(initialUser)
+  const initialUserKey = getUserSyncKey(initialUser)
+  const [authState, setAuthState] = useState(() => ({
+    initialUserKey,
+    user: initialUser,
+  }))
   const router = useRouter()
   const { markLoggedOut } = useSystemConfig()
   const clearToken = useAuthStore((state) => state.clearToken)
   const resetTerminals = useTerminalStore((state) => state.resetAll)
 
-  // 同步 initialUser 的变化（用于乐观渲染场景）
-  useEffect(() => {
-    if (initialUser !== null) {
-      setUser(initialUser)
-    }
-  }, [initialUser])
+  // 同步 initialUser 的变化（用于乐观渲染场景）。放在 render 阶段做受保护的派生，避免 effect 里同步 setState。
+  const shouldSyncInitialUser = initialUser !== null && authState.initialUserKey !== initialUserKey
+  const user = shouldSyncInitialUser ? initialUser : authState.user
+  if (shouldSyncInitialUser) {
+    setAuthState({
+      initialUserKey,
+      user: initialUser,
+    })
+  }
+
+  const setUser = useCallback((value: SetStateAction<User | null>) => {
+    setAuthState((current) => ({
+      ...current,
+      user: typeof value === "function"
+        ? (value as (currentUser: User | null) => User | null)(current.user)
+        : value,
+    }))
+  }, [])
 
   const isAuthenticated = !!user
 
@@ -69,7 +85,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
 
       router.replace("/login")
     }
-  }, [router])
+  }, [router, setUser])
 
   // 登出
   // 后端会自动清除 HttpOnly Cookie，同时前端清空内存中的 access_token
@@ -84,7 +100,7 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
     resetTerminals()
     markLoggedOut()
     router.replace("/login")
-  }, [clearToken, markLoggedOut, resetTerminals, router])
+  }, [clearToken, markLoggedOut, resetTerminals, router, setUser])
 
   return (
     <ClientAuthContext.Provider
@@ -109,4 +125,8 @@ export function useClientAuth() {
     throw new Error("useClientAuth must be used within a ClientAuthProvider")
   }
   return context
+}
+
+function getUserSyncKey(user: User | null) {
+  return user ? `${user.id}:${user.updated_at}` : null
 }

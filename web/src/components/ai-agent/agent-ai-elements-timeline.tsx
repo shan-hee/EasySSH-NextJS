@@ -95,6 +95,10 @@ function toolError(part: AgentToolPart) {
   return part.state === "output-error" ? part.errorText : undefined
 }
 
+function shouldToolBeOpen(state: AgentToolPart["state"]) {
+  return state !== "output-available" && state !== "output-error" && state !== "output-denied"
+}
+
 function ToolHeaderForPart({ part }: { part: AgentToolPart }) {
   if (part.type === "dynamic-tool") {
     return (
@@ -124,12 +128,12 @@ function ToolPartView({
   const summary = part.toolMetadata && typeof part.toolMetadata.summary === "string"
     ? part.toolMetadata.summary
     : ""
-  const defaultOpen = part.state !== "output-available"
+  const defaultOpen = shouldToolBeOpen(part.state)
   const input = "input" in part ? part.input : {}
   const approvalId = "approval" in part ? part.approval?.id : undefined
 
   return (
-    <Tool defaultOpen={defaultOpen} className={cn("mb-0", compact && "text-xs")}>
+    <Tool key={part.state} defaultOpen={defaultOpen} className={cn("mb-0", compact && "text-xs")}>
       <ToolHeaderForPart part={part} />
       <ToolContent className={compact ? "space-y-3 p-3" : undefined}>
         {summary && (
@@ -148,7 +152,7 @@ function ToolPartView({
         )}
 
         {part.state === "approval-requested" && approvalId && onConfirmTask && (
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-3">
             <Button size="sm" className="h-8" onClick={() => onConfirmTask(approvalId, "confirm")}>
               {tText("confirmAction")}
             </Button>
@@ -292,7 +296,7 @@ export function AgentAIElementsTimeline({
 
   if (renderableMessages.length === 0 && !shouldShowLoadingIndicator) {
     return (
-      <AgentEmptyState className={cn("min-h-[120px] justify-start border-none bg-transparent px-1 py-2", compact && "text-xs")}>
+      <AgentEmptyState className={cn("min-h-[120px] justify-start border-none bg-transparent px-1 py-2", compact && "text-xs", className)}>
         {emptyDescription || tText("emptyDescriptionIntro")}
       </AgentEmptyState>
     )

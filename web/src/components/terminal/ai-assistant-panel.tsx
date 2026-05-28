@@ -703,8 +703,8 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
     terminalSession.id,
   ])
 
-  const handleSubmit = useCallback(async () => {
-    const normalizedInput = input.trim()
+  const handleSubmit = useCallback(async (messageText = input) => {
+    const normalizedInput = messageText.trim()
     if (!normalizedInput || !isConfigured || isConfigLoading || sessionCreatingRef.current) {
       return
     }
@@ -712,6 +712,8 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
     if (session && session.status !== "closed" && !canSendToSession) {
       return
     }
+
+    setInput("")
 
     if (!session || session.status === "closed") {
       sessionCreatingRef.current = true
@@ -730,6 +732,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
       }
 
       if (!response) {
+        setInput((current) => current || messageText)
         return
       }
 
@@ -744,8 +747,8 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
       permissionMode,
       terminalScope
     )
-    if (sent) {
-      setInput("")
+    if (!sent) {
+      setInput((current) => current || messageText)
     }
   }, [
     activeModel,
@@ -1050,10 +1053,10 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
         </div>
         </div>
 
-        <Conversation className="min-h-0 flex-1">
+        <Conversation className="min-h-0 w-full flex-1">
           <ConversationContent
             aria-label={tAI("panelAriaHistoryLabel")}
-            className="h-full min-h-full overflow-y-auto px-4 py-4 scrollbar-custom"
+            className="h-full min-h-full w-full overflow-y-auto px-4 py-4 scrollbar-custom"
           >
             <AgentAIElementsTimeline
               messages={uiMessages}
@@ -1062,6 +1065,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
               assistantLoadingState={assistantLoadingState}
               emptyDescription={tAI("terminalEmptyDescription")}
               compact
+              className="w-full"
             />
           </ConversationContent>
           <ConversationScrollButton className="bottom-3 size-8" />
@@ -1078,121 +1082,121 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
             </div>
           )}
 
-        <PromptInput
-          onSubmit={handleSubmit}
-          className="rounded-xl border-zinc-200/80 bg-zinc-50/95 shadow-lg ring-1 ring-black/5 dark:border-zinc-800 dark:bg-zinc-900/95 dark:ring-white/5"
-        >
-          <PromptInputTextarea
-            ref={inputRef}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder={
-              isConfigLoading
-                ? tAI("checkingConfig")
-                : !isConfigured
-                  ? tAI("aiNotConfiguredPlaceholder")
-                  : tAI("terminalPanelInputPlaceholder")
-            }
-            minHeight={74}
-            maxHeight={176}
-            className="px-3 py-3 text-sm"
-            disabled={
-              isConfigLoading ||
-              !isConfigured ||
-              sessionCreating ||
-              transport === "connecting" ||
-              (Boolean(session) && !canSendToSession && session?.status !== "closed")
-            }
-          />
+          <PromptInput
+            onSubmit={(message) => handleSubmit(message.text)}
+            className="rounded-xl border-zinc-200/80 bg-zinc-50/95 shadow-lg ring-1 ring-black/5 dark:border-zinc-800 dark:bg-zinc-900/95 dark:ring-white/5"
+          >
+            <PromptInputTextarea
+              ref={inputRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder={
+                isConfigLoading
+                  ? tAI("checkingConfig")
+                  : !isConfigured
+                    ? tAI("aiNotConfiguredPlaceholder")
+                    : tAI("terminalPanelInputPlaceholder")
+              }
+              minHeight={74}
+              maxHeight={176}
+              className="px-3 py-3 text-sm"
+              disabled={
+                isConfigLoading ||
+                !isConfigured ||
+                sessionCreating ||
+                transport === "connecting" ||
+                (Boolean(session) && !canSendToSession && session?.status !== "closed")
+              }
+            />
 
-          <PromptInputToolbar className="gap-2 px-2 py-1.5">
-            <PromptInputTools className="flex flex-wrap items-center gap-1.5">
-              {isConfigured ? (
-                <>
-                  <PromptInputModelSelect
-                    value={resolvedModel}
-                    onValueChange={setModel}
-                  >
-                    <PromptInputModelSelectTrigger className="h-8 max-w-[150px] gap-1.5 rounded-md px-2 text-xs">
-                      <Sparkles className="size-3.5 shrink-0" />
-                      <PromptInputModelSelectValue />
-                    </PromptInputModelSelectTrigger>
-                    <PromptInputModelSelectContent>
-                      {modelOptions.map((option) => (
-                        <PromptInputModelSelectItem key={option} value={option}>
-                          {option}
-                        </PromptInputModelSelectItem>
-                      ))}
-                    </PromptInputModelSelectContent>
-                  </PromptInputModelSelect>
-
-                  <PromptInputModelSelect
-                    value={permissionMode}
-                    onValueChange={(value) => setPermissionMode(value as PermissionMode)}
-                  >
-                    <PromptInputModelSelectTrigger
-                      className="h-8 max-w-[150px] gap-1.5 rounded-md px-2 text-xs"
-                      title={activePermissionOption.description}
+            <PromptInputToolbar className="gap-2 px-2 py-1.5">
+              <PromptInputTools className="flex flex-wrap items-center gap-1.5">
+                {isConfigured ? (
+                  <>
+                    <PromptInputModelSelect
+                      value={resolvedModel}
+                      onValueChange={setModel}
                     >
-                      <Shield className="size-3.5 shrink-0" />
-                      <PromptInputModelSelectValue />
-                    </PromptInputModelSelectTrigger>
-                    <PromptInputModelSelectContent>
-                      {permissionOptions.map((option) => (
-                        <PromptInputModelSelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </PromptInputModelSelectItem>
-                      ))}
-                    </PromptInputModelSelectContent>
-                  </PromptInputModelSelect>
-                </>
-              ) : isConfigLoading ? (
-                <div className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  <span>{tAI("checkingConfig")}</span>
-                </div>
-              ) : (
-                <Button
-                  asChild
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
-                >
-                  <Link href="/dashboard/settings?tab=ai">
-                    <Settings2 className="size-3.5" />
-                    <span>{tAI("configureAI")}</span>
-                  </Link>
-                </Button>
-              )}
-            </PromptInputTools>
+                      <PromptInputModelSelectTrigger className="h-8 max-w-[150px] gap-1.5 rounded-md px-2 text-xs">
+                        <Sparkles className="size-3.5 shrink-0" />
+                        <PromptInputModelSelectValue />
+                      </PromptInputModelSelectTrigger>
+                      <PromptInputModelSelectContent>
+                        {modelOptions.map((option) => (
+                          <PromptInputModelSelectItem key={option} value={option}>
+                            {option}
+                          </PromptInputModelSelectItem>
+                        ))}
+                      </PromptInputModelSelectContent>
+                    </PromptInputModelSelect>
 
-            <div className="ml-auto flex items-center gap-2">
-              <span className="hidden text-xs text-muted-foreground sm:inline">
-                {tAI("sidebarMessageCount", { count: messageCount })}
-              </span>
+                    <PromptInputModelSelect
+                      value={permissionMode}
+                      onValueChange={(value) => setPermissionMode(value as PermissionMode)}
+                    >
+                      <PromptInputModelSelectTrigger
+                        className="h-8 max-w-[150px] gap-1.5 rounded-md px-2 text-xs"
+                        title={activePermissionOption.description}
+                      >
+                        <Shield className="size-3.5 shrink-0" />
+                        <PromptInputModelSelectValue />
+                      </PromptInputModelSelectTrigger>
+                      <PromptInputModelSelectContent>
+                        {permissionOptions.map((option) => (
+                          <PromptInputModelSelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </PromptInputModelSelectItem>
+                        ))}
+                      </PromptInputModelSelectContent>
+                    </PromptInputModelSelect>
+                  </>
+                ) : isConfigLoading ? (
+                  <div className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>{tAI("checkingConfig")}</span>
+                  </div>
+                ) : (
+                  <Button
+                    asChild
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+                  >
+                    <Link href="/dashboard/settings?tab=ai">
+                      <Settings2 className="size-3.5" />
+                      <span>{tAI("configureAI")}</span>
+                    </Link>
+                  </Button>
+                )}
+              </PromptInputTools>
 
-              {isSessionRunning ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-md"
-                  onClick={() => void cancelSession()}
-                  aria-label={tAI("stopGenerating")}
-                  title={tAI("stopGenerating")}
-                >
-                  <Square className="size-3.5" />
-                </Button>
-              ) : (
-                <PromptInputSubmit
-                  disabled={!canSend}
-                  className="size-8 rounded-md"
-                  aria-label={tAI("send")}
-                />
-              )}
-            </div>
-          </PromptInputToolbar>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="hidden text-xs text-muted-foreground sm:inline">
+                  {tAI("sidebarMessageCount", { count: messageCount })}
+                </span>
+
+                {isSessionRunning ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-md"
+                    onClick={() => void cancelSession()}
+                    aria-label={tAI("stopGenerating")}
+                    title={tAI("stopGenerating")}
+                  >
+                    <Square className="size-3.5" />
+                  </Button>
+                ) : (
+                  <PromptInputSubmit
+                    disabled={!canSend}
+                    className="size-8 rounded-md"
+                    aria-label={tAI("send")}
+                  />
+                )}
+              </div>
+            </PromptInputToolbar>
           </PromptInput>
         </div>
       </div>

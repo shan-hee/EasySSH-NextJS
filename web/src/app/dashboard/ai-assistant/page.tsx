@@ -218,8 +218,8 @@ export default function AIAssistantPage() {
     ].slice(0, SESSION_LIST_LIMIT))
   }, [sessionSearch, t])
 
-  const submit = async () => {
-    const normalizedDraft = draft.trim()
+  const submit = async (messageText = draft) => {
+    const normalizedDraft = messageText.trim()
     if (!normalizedDraft || !ready || isLoading || !isConfigured || attachmentsLoading || sessionCreatingRef.current) {
       return
     }
@@ -227,6 +227,11 @@ export default function AIAssistantPage() {
     if (session && session.status !== "idle" && session.status !== "closed") {
       return
     }
+
+    const contextText = buildMessageContext()
+    const submittedAttachments = attachments
+    setDraft("")
+    setAttachments([])
 
     if (!sessionId || session?.status === "closed") {
       sessionCreatingRef.current = true
@@ -244,16 +249,17 @@ export default function AIAssistantPage() {
       }
 
       if (!response) {
+        setDraft((current) => current || messageText)
+        setAttachments((current) => current.length > 0 ? current : submittedAttachments)
         return
       }
       prependSessionListItem(response)
     }
 
-    const contextText = buildMessageContext()
     const sent = await sendMessage(normalizedDraft, contextText, selectedModel || undefined, permissionMode)
-    if (sent) {
-      setDraft("")
-      setAttachments([])
+    if (!sent) {
+      setDraft((current) => current || messageText)
+      setAttachments((current) => current.length > 0 ? current : submittedAttachments)
     }
   }
 
@@ -701,13 +707,14 @@ export default function AIAssistantPage() {
               {hasTimeline ? (
                 <Conversation className="h-full w-full">
                   <ConversationContent
-                    className="mx-auto h-full w-full max-w-5xl space-y-4 overflow-y-auto px-4 py-6 scrollbar-custom md:px-6"
+                    className="h-full w-full overflow-y-auto px-4 py-6 scrollbar-custom md:px-6"
                   >
                     <AgentAIElementsTimeline
                       messages={uiMessages}
                       tText={t}
                       onConfirmTask={confirmTask}
                       assistantLoadingState={assistantLoadingState}
+                      className="mx-auto w-full max-w-5xl"
                     />
                   </ConversationContent>
                   <ConversationScrollButton />
@@ -718,43 +725,14 @@ export default function AIAssistantPage() {
             </div>
 
             <div className="shrink-0 pt-4">
-            {ready && isConfigured && pendingConfirmationTasks.length > 0 && (
-              <div className="mx-auto mb-3 w-full max-w-[72rem] rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 shadow-sm">
-                <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
-                  <Shield className="size-4" />
-                  {t("pendingConfirmationTitle")}
-                </div>
-                <div className="mt-1 text-sm text-amber-700/90 dark:text-amber-200/80">
-                  {t("pendingConfirmationDesc")}
-                </div>
+              {error && (
+                <AgentNoticeCard tone="error" size="md" className="mx-auto mb-3 w-full max-w-[72rem] shadow-sm">
+                  {error}
+                </AgentNoticeCard>
+              )}
 
-                <div className="mt-3 space-y-2">
-                  {pendingConfirmationTasks.map((task) => (
-                    <div key={task.id} className="rounded-xl border border-amber-500/20 bg-background/70 px-3 py-3">
-                      <div className="text-sm font-medium">{task.tool_display_name || task.tool_name}</div>
-                      {task.summary && <div className="mt-1 text-sm text-muted-foreground">{task.summary}</div>}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => confirmTask(task.id, "confirm")}>
-                          {t("confirmAction")}
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => confirmTask(task.id, "reject")}>
-                          {t("rejectAction")}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <AgentNoticeCard tone="error" size="md" className="mx-auto mb-3 w-full max-w-[72rem] shadow-sm">
-                {error}
-              </AgentNoticeCard>
-            )}
-
-            <div className="mx-auto w-full max-w-[72rem]">
-              <input
+              <div className="mx-auto w-full max-w-[72rem]">
+                <input
                   ref={fileInputRef}
                   type="file"
                   multiple
@@ -762,7 +740,7 @@ export default function AIAssistantPage() {
                   onChange={(event) => void handleAttachmentSelection(event)}
                 />
 
-              <ComposerReferenceChips
+                <ComposerReferenceChips
                   attachments={attachments}
                   onClearServers={() => setSelectedServerIds([])}
                   onRemoveAttachment={removeAttachment}
@@ -771,13 +749,11 @@ export default function AIAssistantPage() {
                   t={t}
                 />
 
-              <PromptInput
-                  className="border-border/60 bg-card/95 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/80"
-                  onSubmit={() => {
-                    void submit()
-                  }}
+                <PromptInput
+                  className="border-border/0 bg-card/0 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/0"
+                  onSubmit={(message) => submit(message.text)}
                 >
-                <PromptInputTextarea
+                  <PromptInputTextarea
                     ref={inputRef}
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
@@ -787,9 +763,9 @@ export default function AIAssistantPage() {
                     className="px-4 pt-3 text-sm"
                   />
 
-                <PromptInputToolbar className="flex-wrap gap-3 px-2 py-1.5">
-                  <PromptInputTools className="flex flex-wrap items-center gap-2">
-                    <PromptInputModelSelect
+                  <PromptInputToolbar className="flex-wrap gap-3 px-2 py-1.5">
+                    <PromptInputTools className="flex flex-wrap items-center gap-2">
+                      <PromptInputModelSelect
                         value={selectedModel}
                         onValueChange={setSelectedModel}
                         disabled={modelSelectDisabled}

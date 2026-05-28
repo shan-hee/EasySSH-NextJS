@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useReducer } from "react"
 import { useRouter } from "next/navigation"
 import { useSystemConfig } from "@/contexts/system-config-context"
 
@@ -8,6 +8,26 @@ type EntryPage = "home" | "login"
 
 interface UseAuthStatusRedirectResult {
   isChecking: boolean
+}
+
+interface AuthRedirectState {
+  hasSettled: boolean
+  isChecking: boolean
+}
+
+type AuthRedirectAction = {
+  isChecking: boolean
+  type: "settle"
+}
+
+function authRedirectReducer(state: AuthRedirectState, action: AuthRedirectAction): AuthRedirectState {
+  switch (action.type) {
+    case "settle":
+      if (state.hasSettled && state.isChecking === action.isChecking) {
+        return state
+      }
+      return { hasSettled: true, isChecking: action.isChecking }
+  }
 }
 
 /**
@@ -23,30 +43,27 @@ interface UseAuthStatusRedirectResult {
 export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectResult {
   const router = useRouter()
   const { authStatus, isLoading } = useSystemConfig()
-  const [isChecking, setIsChecking] = useState(true)
-  const hasSettledRef = useRef(false)
-
-  const settleChecking = useCallback((value: boolean) => {
-    hasSettledRef.current = true
-    setIsChecking(value)
-  }, [])
+  const [redirectState, dispatchRedirect] = useReducer(authRedirectReducer, {
+    hasSettled: false,
+    isChecking: true,
+  })
 
   useEffect(() => {
-    if (page !== "login" || hasSettledRef.current) {
+    if (page !== "login" || redirectState.hasSettled) {
       return
     }
 
     const timer = window.setTimeout(() => {
-      settleChecking(false)
+      dispatchRedirect({ type: "settle", isChecking: false })
     }, 5000)
 
     return () => window.clearTimeout(timer)
-  }, [page, settleChecking])
+  }, [page, redirectState.hasSettled])
 
   useEffect(() => {
     // login 页: 如果已经完成过一次初始检查(确认停留在登录页),
     // 后续仅关注"已认证"的场景,避免再次进入全屏加载态
-    if (page === "login" && hasSettledRef.current) {
+    if (page === "login" && redirectState.hasSettled) {
       // 仅在 authStatus 表示已认证时重定向到 dashboard
       if (!isLoading && authStatus && authStatus.is_authenticated) {
         router.replace("/dashboard")
@@ -54,9 +71,8 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
       return
     }
 
-    // 等待系统配置 / 认证状态加载完成
+    // 等待系统配置 / 认证状态加载完成；初始 isChecking 已经为 true。
     if (isLoading) {
-      setIsChecking(true)
       return
     }
 
@@ -65,7 +81,7 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
       if (page === "home") {
         router.replace("/login")
       } else {
-        settleChecking(false)
+        dispatchRedirect({ type: "settle", isChecking: false })
       }
       return
     }
@@ -82,7 +98,7 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
     if (status.account_locked) {
       if (page === "login") {
         // 已在登录页，显示锁定提示
-        settleChecking(false)
+        dispatchRedirect({ type: "settle", isChecking: false })
       } else {
         const params = new URLSearchParams()
         params.set("locked", "true")
@@ -107,9 +123,9 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
     if (page === "home") {
       router.replace("/login")
     } else {
-      settleChecking(false)
+      dispatchRedirect({ type: "settle", isChecking: false })
     }
-  }, [authStatus, isLoading, page, router, settleChecking])
+  }, [authStatus, isLoading, page, redirectState.hasSettled, router])
 
-  return { isChecking }
+  return { isChecking: redirectState.isChecking }
 }
