@@ -21,7 +21,6 @@ type CreateTicketRequest struct {
 	Type            string   `json:"type" binding:"required"`
 	ServerID        string   `json:"server_id"`
 	TaskID          string   `json:"task_id"`
-	SessionID       string   `json:"session_id"`
 	Path            string   `json:"path"`
 	Paths           []string `json:"paths"`
 	Mode            string   `json:"mode"`
@@ -112,18 +111,6 @@ func (h *TicketHandler) CreateTicket(c *gin.Context) {
 			return
 		}
 		createReq.Ref = serverID
-
-	case auth.TicketTypeWSAISession:
-		sessionID := strings.TrimSpace(req.SessionID)
-		if sessionID == "" {
-			RespondError(c, http.StatusBadRequest, "missing_session_id", "session_id is required")
-			return
-		}
-		if _, err := uuid.Parse(sessionID); err != nil {
-			RespondError(c, http.StatusBadRequest, "invalid_session_id", "Invalid session_id")
-			return
-		}
-		createReq.Ref = sessionID
 
 	case auth.TicketTypeWSSFTPUpload, auth.TicketTypeWSSFTPTransfer:
 		taskID := strings.TrimSpace(req.TaskID)

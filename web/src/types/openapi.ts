@@ -4,14 +4,17 @@
  */
 
 export interface paths {
-    "/api/status": {
+    "/health": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 服务运行状态 */
+        /**
+         * 健康检查
+         * @description 检查 API 服务状态
+         */
         get: {
             parameters: {
                 query?: never;
@@ -21,17 +24,17 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 运行状态 */
+                /** @description 服务正常 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": {
+                            /** @example ok */
                             status?: string;
-                            version?: string;
-                            databases?: components["schemas"]["StatusDatabases"];
-                            timestamp?: string;
+                            /** @example easyssh-api */
+                            service?: string;
                         };
                     };
                 };
@@ -45,46 +48,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users/admin-exists": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 检查是否已有管理员 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 是否存在管理员 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            adminExists?: boolean;
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/register": {
+    "/oauth/authorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -93,7 +57,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 注册（首个用户自动为管理员） */
+        /**
+         * 使用邮箱密码 + PKCE 创建授权码
+         * @description 前端以 JSON 方式提交邮箱密码与 PKCE 参数，成功时返回授权码；
+         *     如用户启用 2FA，则返回 requires_2fa=true 与临时令牌。
+         *
+         */
         post: {
             parameters: {
                 query?: never;
@@ -103,85 +72,35 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["RegisterDto"];
+                    "application/json": components["schemas"]["OAuthAuthorizeRequest"];
                 };
             };
             responses: {
-                /** @description 注册成功 */
-                201: {
+                /** @description 授权码创建成功或需要 2FA */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            message?: string;
-                            user?: components["schemas"]["UserSafe"];
-                            token?: string;
-                        };
+                        "application/json": components["schemas"]["OAuthAuthorizeResponse"];
                     };
                 };
-                /** @description 注册失败 */
+                /** @description 请求参数错误 */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 登录或进行 MFA 二次验证 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["LoginDto"];
-                };
-            };
-            responses: {
-                /** @description 登录/验证结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            message?: string;
-                            user?: components["schemas"]["UserSafe"];
-                            token?: string;
-                        };
-                    };
-                };
-                /** @description 登录失败 */
+                /** @description 认证失败（用户名或密码错误） */
                 401: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
             };
@@ -192,7 +111,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users/verify-mfa": {
+    "/oauth/token": {
         parameters: {
             query?: never;
             header?: never;
@@ -201,7 +120,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 独立 MFA 验证入口 */
+        /**
+         * 使用授权码或 refresh_token 换取访问令牌
+         * @description 当 grant_type=authorization_code 时，从请求体读取授权码等参数；
+         *     当 grant_type=refresh_token 时，从 HttpOnly Cookie 中读取 refresh_token。
+         *
+         */
         post: {
             parameters: {
                 query?: never;
@@ -211,21 +135,35 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["LoginDto"];
+                    "application/json": components["schemas"]["OAuthTokenRequest"];
                 };
             };
             responses: {
-                /** @description 验证成功 */
+                /** @description 令牌签发成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            user?: components["schemas"]["UserSafe"];
-                            token?: string;
-                        };
+                        "application/json": components["schemas"]["OAuthTokenResponse"];
+                    };
+                };
+                /** @description 请求参数错误或授权码无效 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description refresh_token 缺失或无效 */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
             };
@@ -236,14 +174,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users/me": {
+    "/oauth/logout": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 获取当前用户信息 */
+        get?: never;
+        put?: never;
+        /**
+         * 用户登出
+         * @description 推荐的登出端点。浏览器会将 Path=/api/v1/oauth 的 refresh_token Cookie
+         *     发送到该路径，后端可据此完整撤销 refresh token 与当前会话。
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 登出成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SuccessResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 用户登出（兼容别名）
+         * @deprecated
+         * @description 兼容旧客户端的别名端点。由于 refresh_token Cookie 的 Path 为 /api/v1/oauth，
+         *     该路径通常收不到 refresh cookie，因此不建议作为主流程使用。
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 登出成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SuccessResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取 AI 配置状态 */
         get: {
             parameters: {
                 query?: never;
@@ -253,45 +274,25 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 用户信息 */
+                /** @description 返回当前用户可用的 AI 配置状态 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": {
-                            success?: boolean;
-                            user?: components["schemas"]["UserSafe"];
+                            configured?: boolean;
+                            provider?: string;
+                            model?: string;
+                            models?: string[];
+                            has_key?: boolean;
+                            message?: string;
                         };
                     };
                 };
             };
         };
-        /** 更新当前用户信息（含可选密码更新） */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["UpdateUserDto"];
-                };
-            };
-            responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -299,130 +300,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users/change-password": {
+    "/ai/sessions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** 修改密码 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["ChangePasswordDto"];
-                };
-            };
-            responses: {
-                /** @description 修改结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 注销当前设备 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 注销结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/logout-all-devices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 注销所有设备 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 注销结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 获取用户设置（可选按分类） */
+        /**
+         * 查询 AI 会话列表
+         * @description 返回当前用户的 AI 会话快照列表，按 updated_at 倒序排列。用于会话列表抽屉、历史恢复和后续多会话入口。
+         */
         get: {
             parameters: {
                 query?: {
-                    category?: string;
+                    page?: number;
+                    limit?: number;
+                    /** @description 按会话标题或消息快照文本搜索。 */
+                    q?: string;
+                    /** @description 按 AI 会话作用域过滤，例如 terminal 表示终端页签范围。 */
+                    scope_kind?: "global" | "terminal";
+                    /** @description 终端页签会话 ID，用于恢复当前终端的 AI 会话。 */
+                    terminal_session_id?: string;
+                    /** @description 当前终端连接的服务器 ID，用于限定终端 AI 会话。 */
+                    server_id?: string;
                 };
                 header?: never;
                 path?: never;
@@ -430,150 +331,19 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 设置字典 */
+                /** @description 会话列表 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        /** 更新用户设置（单分类） */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        category: string;
-                        data: {
-                            [key: string]: unknown;
-                        };
-                        version?: number;
-                        clientTimestamp?: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/settings/terminal/minimal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 获取终端最小配置 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 最小配置 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["ListAISessionsResponse"];
                     };
                 };
             };
         };
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/settings/batch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 批量更新设置 */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        ops?: {
-                            op?: string;
-                            category?: string;
-                            data?: {
-                                [key: string]: unknown;
-                            };
-                        }[];
-                    };
-                };
-            };
-            responses: {
-                /** @description 执行结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/settings/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 同步设置 */
+        /** 创建临时 AI 会话 */
         post: {
             parameters: {
                 query?: never;
@@ -583,21 +353,17 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": {
-                        data?: {
-                            [key: string]: unknown;
-                        };
-                    };
+                    "application/json": components["schemas"]["CreateAISessionRequest"];
                 };
             };
             responses: {
-                /** @description 同步状态 */
-                200: {
+                /** @description 会话创建成功 */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["CreateAISessionResponse"];
                     };
                 };
             };
@@ -608,71 +374,325 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users/settings/{category}": {
+    "/ai/sessions/latest": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 恢复最近活跃 AI 会话
+         * @description 返回当前用户最近一个未关闭的 AI 会话快照。Dashboard 和 Terminal 会用它在刷新或打开面板后恢复会话。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 最近未关闭会话 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreateAISessionResponse"];
+                    };
+                };
+                /** @description 没有可恢复会话 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
         put?: never;
         post?: never;
-        /** 删除某个分类的设置 */
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取指定 AI 会话快照
+         * @description 从内存 runtime 或 ai_sessions 持久化快照恢复指定会话，用于会话列表点击切换。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 会话快照 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreateAISessionResponse"];
+                    };
+                };
+                /** @description 会话不存在或已关闭 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * 删除 AI 会话
+         * @description 从会话列表移除指定会话快照，并停止对应运行中 runtime。
+         */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    category: string;
+                    session_id: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description 删除结果 */
-                200: {
+                /** @description 已删除 */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description 会话不存在 */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
             };
         };
         options?: never;
         head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/servers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出我的服务器 */
-        get: {
+        /** 重命名 AI 会话 */
+        patch: {
             parameters: {
                 query?: never;
                 header?: never;
-                path?: never;
+                path: {
+                    session_id: string;
+                };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RenameAISessionRequest"];
+                };
+            };
             responses: {
-                /** @description 服务器列表 */
+                /** @description 已重命名 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": {
-                            success?: boolean;
-                            servers?: components["schemas"]["Server"][];
+                            updated?: boolean;
                         };
+                    };
+                };
+                /** @description 会话不存在 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/ai/sessions/{session_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 中断 AI 会话当前回复
+         * @description 取消当前模型回复或工具执行，将会话恢复为空闲状态，但保留会话快照与历史记录。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 已中断 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            cancelled?: boolean;
+                        };
+                    };
+                };
+                /** @description 会话不存在 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/sessions/{session_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AI SDK UI 标准聊天流
+         * @description 接收 Vercel AI SDK UI `DefaultChatTransport` 请求体，并返回 `UIMessageChunk` SSE。
+         *     响应头包含 `X-Vercel-AI-UI-Message-Stream: v1`，每个 `data:` 载荷都是一个 AI SDK UIMessageChunk JSON 对象，流结束时发送 `data: [DONE]`。
+         *     EasySSH 的 context/model/permission_mode/scope/approval 字段是标准 UI 协议外的附加能力。
+         *
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    session_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AISDKChatRequest"];
+                };
+            };
+            responses: {
+                /** @description AI SDK UI message stream */
+                200: {
+                    headers: {
+                        /** @description AI SDK UI message stream version */
+                        "X-Vercel-AI-UI-Message-Stream"?: "v1";
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        /** @description SSE data 载荷为 AIUIMessageChunk JSON；结束帧为 [DONE]。 */
+                        "text/event-stream": components["schemas"]["AIUIMessageChunk"];
+                    };
+                };
+                /** @description 会话不存在 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description 会话当前不可接受新消息 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取服务器列表 */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    per_page?: number;
+                    /** @description 按组筛选 */
+                    group?: string;
+                    /** @description 按状态筛选 */
+                    status?: "online" | "offline" | "error";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 成功获取服务器列表 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServerList"];
                     };
                 };
             };
@@ -688,21 +708,26 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["CreateServerDto"];
+                    "application/json": components["schemas"]["ServerCreate"];
                 };
             };
             responses: {
-                /** @description 创建成功 */
+                /** @description 服务器创建成功 */
                 201: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            message?: string;
-                            server?: components["schemas"]["Server"];
-                        };
+                        "application/json": components["schemas"]["Server"];
+                    };
+                };
+                /** @description 请求参数错误 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
             };
@@ -713,7 +738,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/servers/{id}": {
+    "/servers/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -723,9 +748,7 @@ export interface paths {
         /** 获取服务器详情 */
         get: {
             parameters: {
-                query?: {
-                    includeCredentials?: "true" | "false";
-                };
+                query?: never;
                 header?: never;
                 path: {
                     id: string;
@@ -734,16 +757,22 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 服务器详情 */
+                /** @description 成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            server?: components["schemas"]["Server"];
-                        };
+                        "application/json": components["schemas"]["Server"];
+                    };
+                };
+                /** @description 服务器不存在 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
             };
@@ -760,17 +789,17 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["UpdateServerDto"];
+                    "application/json": components["schemas"]["ServerUpdate"];
                 };
             };
             responses: {
-                /** @description 更新结果 */
+                /** @description 更新成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["Server"];
                     };
                 };
             };
@@ -788,13 +817,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 删除结果 */
+                /** @description 删除成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["SuccessResponse"];
                     };
                 };
             };
@@ -804,7 +833,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/servers/{id}/connect": {
+    "/servers/{id}/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -813,7 +842,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 连接计数 +1 */
+        /** 测试服务器连接 */
         post: {
             parameters: {
                 query?: never;
@@ -825,431 +854,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/monitor/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 监控状态 */
-        get: {
-            parameters: {
-                query?: {
-                    hostname?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 状态 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/monitor/sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 会话列表 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 会话信息 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            sessions?: components["schemas"]["MonitorSession"][];
-                            count?: number;
-                            timestamp?: number;
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections/check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 连接 API 健康检查 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 获取我的连接列表 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            connections?: components["schemas"]["Connection"][];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        /** 新增连接 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        connection: components["schemas"]["ConnectionInput"];
-                    };
-                };
-            };
-            responses: {
-                /** @description 创建结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            connectionId?: string;
-                            message?: string;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 概览统计 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 统计 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 更新连接 */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        connection: components["schemas"]["ConnectionInput"];
-                    };
-                };
-            };
-            responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        /** 删除连接 */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 删除结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections/favorites": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 获取收藏 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 收藏列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        /** 更新收藏 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        ids?: string[];
-                    };
-                };
-            };
-            responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 获取历史 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 历史记录 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            history?: {
-                                entryId?: number;
-                                id?: string;
-                                name?: string;
-                                host?: string;
-                                port?: number;
-                                username?: string;
-                                description?: string;
-                                group?: string;
-                                authType?: string;
-                                timestamp?: number;
-                            }[];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        /** 记录历史 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        history?: components["schemas"]["Connection"][];
-                    };
-                };
-            };
-            responses: {
-                /** @description 记录结果 */
+                /** @description 连接测试成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1258,14 +863,28 @@ export interface paths {
                         "application/json": {
                             success?: boolean;
                             message?: string;
-                            entryId?: number | null;
+                            /** @description 连接延迟（毫秒） */
+                            latency?: number;
                         };
                     };
                 };
             };
         };
-        /** 清空历史 */
-        delete: {
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ssh/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取活动 SSH 会话列表 */
+        get: {
             parameters: {
                 query?: never;
                 header?: never;
@@ -1274,23 +893,26 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 清空结果 */
+                /** @description 成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["SSHSession"][];
                     };
                 };
             };
         };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/connections/history/entry/{entryId}": {
+    "/ssh/sessions/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1300,25 +922,25 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 删除某条历史记录 */
+        /** 关闭 SSH 会话 */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    entryId: number;
+                    id: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description 删除结果 */
+                /** @description 会话已关闭 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["SuccessResponse"];
                     };
                 };
             };
@@ -1328,307 +950,19 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/connections/pinned": {
+    "/sftp/list": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 获取置顶连接 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            pinned?: {
-                                [key: string]: number;
-                            };
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        /** 更新置顶连接 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        ids?: string[];
-                    };
-                };
-            };
-            responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections/order": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 更新排序 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        order?: (string | {
-                            id?: string;
-                            sortOrder?: number;
-                        })[];
-                    };
-                };
-            };
-            responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connections/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 批量同步 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        connections?: components["schemas"]["ConnectionInput"][];
-                        favorites?: string[];
-                        history?: {
-                            id?: string;
-                            timestamp?: number;
-                        }[];
-                        pinned?: {
-                            [key: string]: number;
-                        };
-                    };
-                };
-            };
-            responses: {
-                /** @description 同步结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/public": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 公共脚本列表 */
-        get: {
-            parameters: {
-                query?: {
-                    page?: number;
-                    limit?: number;
-                    category?: string;
-                    search?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            scripts?: components["schemas"]["Script"][];
-                            pagination?: components["schemas"]["Pagination"];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 分类列表 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            categories?: string[];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/popular": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 热门脚本 */
-        get: {
-            parameters: {
-                query?: {
-                    limit?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            scripts?: components["schemas"]["Script"][];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 搜索脚本 */
+        /** 列出目录内容 */
         get: {
             parameters: {
                 query: {
-                    q: string;
-                    page?: number;
-                    limit?: number;
+                    server_id: string;
+                    path: string;
                 };
                 header?: never;
                 path?: never;
@@ -1636,18 +970,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 搜索结果 */
+                /** @description 成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            scripts?: components["schemas"]["Script"][];
-                            query?: string;
-                            pagination?: components["schemas"]["Pagination"];
-                        };
+                        "application/json": components["schemas"]["FileInfo"][];
                     };
                 };
             };
@@ -1660,21 +989,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scripts/user": {
+    "/sftp/upload": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 获取我的脚本 */
+        get?: never;
+        put?: never;
+        /** 上传文件 */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file: string;
+                        /** Format: uuid */
+                        server_id: string;
+                        remote_path: string;
+                        overwrite?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description 上传成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SuccessResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sftp/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载文件 */
         get: {
             parameters: {
-                query?: {
-                    page?: number;
-                    limit?: number;
-                    category?: string;
-                    search?: string;
+                query: {
+                    server_id: string;
+                    path: string;
                 };
                 header?: never;
                 path?: never;
@@ -1682,17 +1056,88 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 列表 */
+                /** @description 文件内容 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            scripts?: components["schemas"]["Script"][];
-                            pagination?: components["schemas"]["Pagination"];
-                        };
+                        "application/octet-stream": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sftp/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除文件或目录 */
+        delete: {
+            parameters: {
+                query: {
+                    server_id: string;
+                    path: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 删除成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SuccessResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scripts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取脚本列表 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Script"][];
                     };
                 };
             };
@@ -1711,25 +1156,19 @@ export interface paths {
                     "application/json": {
                         name: string;
                         description?: string;
-                        command: string;
-                        tags?: string[];
-                        keywords?: string[];
-                        category?: string;
+                        content: string;
+                        language?: string;
                     };
                 };
             };
             responses: {
-                /** @description 创建结果 */
+                /** @description 创建成功 */
                 201: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            script?: components["schemas"]["Script"];
-                            message?: string;
-                        };
+                        "application/json": components["schemas"]["Script"];
                     };
                 };
             };
@@ -1740,15 +1179,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scripts/user/{id}": {
+    "/scripts/{id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        /** 更新我的脚本 */
+        /** 获取脚本详情 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Script"];
+                    };
+                };
+            };
+        };
+        /** 更新脚本 */
         put: {
             parameters: {
                 query?: never;
@@ -1763,31 +1224,25 @@ export interface paths {
                     "application/json": {
                         name?: string;
                         description?: string;
-                        command?: string;
-                        tags?: string[];
-                        keywords?: string[];
-                        category?: string;
+                        content?: string;
+                        language?: string;
                     };
                 };
             };
             responses: {
-                /** @description 更新结果 */
+                /** @description 更新成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            script?: components["schemas"]["Script"];
-                            message?: string;
-                        };
+                        "application/json": components["schemas"]["Script"];
                     };
                 };
             };
         };
         post?: never;
-        /** 删除我的脚本 */
+        /** 删除脚本 */
         delete: {
             parameters: {
                 query?: never;
@@ -1799,13 +1254,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 删除结果 */
+                /** @description 删除成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
+                        "application/json": components["schemas"]["SuccessResponse"];
                     };
                 };
             };
@@ -1815,20 +1270,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scripts/all": {
+    "/scripts/execute": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 获取所有脚本（公开+我的） */
+        get?: never;
+        put?: never;
+        /** 执行脚本 */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ScriptExecutionRequest"];
+                };
+            };
+            responses: {
+                /** @description 执行已开始 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ScriptExecutionResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/monitoring/servers/{id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取服务器监控指标 */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description 开始时间 */
+                    from?: string;
+                    /** @description 结束时间 */
+                    to?: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SystemMetrics"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取日志列表 */
         get: {
             parameters: {
                 query?: {
                     page?: number;
-                    limit?: number;
-                    search?: string;
+                    per_page?: number;
+                    level?: "debug" | "info" | "warning" | "error" | "critical";
+                    source?: string;
+                    from?: string;
+                    to?: string;
                 };
                 header?: never;
                 path?: never;
@@ -1836,202 +1377,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/incremental": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 增量获取脚本 */
-        get: {
-            parameters: {
-                query?: {
-                    since?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 记录脚本使用 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        scriptId?: number;
-                        userScriptId?: number;
-                        scriptName?: string;
-                        command?: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description 记录结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/execute": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 执行脚本
-         * @description 需要在已有连接上执行；服务端将根据 host+username 查找连接配置。
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        scriptId?: number;
-                        scriptName?: string;
-                        command: string;
-                        serverId?: string;
-                        serverName?: string;
-                        host: string;
-                        port?: number;
-                        username: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description 执行结果 */
+                /** @description 成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": {
-                            success?: boolean;
-                            result?: {
-                                stdout?: string;
-                                stderr?: string;
-                                exitCode?: number;
-                                executedAt?: string;
-                                duration?: number;
-                            };
-                            message?: string;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/executions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 执行历史 */
-        get: {
-            parameters: {
-                query?: {
-                    connectionId?: string;
-                    scriptId?: number;
-                    page?: number;
-                    limit?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 历史列表 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            history?: components["schemas"]["ScriptExecution"][];
-                            pagination?: components["schemas"]["Pagination"];
+                            data?: components["schemas"]["Log"][];
+                            meta?: components["schemas"]["PaginationMeta"];
                         };
                     };
                 };
@@ -2045,35 +1399,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scripts/executions/{id}": {
+    "/users": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 执行详情 */
+        /** 获取用户列表 */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
-                path: {
-                    id: number;
-                };
+                path?: never;
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description 详情 */
+                /** @description 成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            success?: boolean;
-                            execution?: components["schemas"]["ScriptExecution"];
-                        };
+                        "application/json": components["schemas"]["User"][];
                     };
                 };
             };
@@ -2086,14 +1435,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scripts/favorites": {
+    "/users/me": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 收藏脚本列表 */
+        /** 获取当前用户信息 */
         get: {
             parameters: {
                 query?: never;
@@ -2103,156 +1452,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description 列表 */
+                /** @description 成功 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        /** 更新收藏脚本 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        ids?: string[];
-                    };
-                };
-            };
-            responses: {
-                /** @description 更新结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/scripts/favorites/{scriptId}/toggle": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 切换收藏状态 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    scriptId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 切换结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai/test-connection": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 测试第三方 AI 连接 */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["AIConnectionTestDto"];
-                };
-            };
-            responses: {
-                /** @description 测试结果 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ApiResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** AI 状态能力 */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description 当前支持的模型与功能 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success?: boolean;
-                            data?: components["schemas"]["AIStatus"];
-                        };
+                        "application/json": components["schemas"]["User"];
                     };
                 };
             };
@@ -2269,215 +1475,873 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ApiResponse: {
-            success?: boolean;
-            message?: string;
+        Error: {
+            /** @example validation_error */
+            error: string;
+            /** @example Invalid request parameters */
+            message: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        SuccessResponse: {
+            /** @example true */
+            success: boolean;
+            /** @example Operation completed successfully */
+            message: string;
+        };
+        PaginationMeta: {
+            /** @example 1 */
+            page?: number;
+            /** @example 20 */
+            per_page?: number;
+            /** @example 100 */
+            total?: number;
+            /** @example 5 */
+            total_pages?: number;
+        };
+        OAuthAuthorizeRequest: {
+            /**
+             * @description 固定为 "code"
+             * @example code
+             */
+            response_type: string;
+            /**
+             * @description SPA 客户端标识
+             * @example easyssh-web
+             */
+            client_id: string;
+            /**
+             * Format: uri
+             * @description 登录成功后前端回调地址
+             * @example https://app.example.com/auth/callback
+             */
+            redirect_uri: string;
+            /**
+             * @description OAuth 作用域
+             * @example openid profile easyssh
+             */
+            scope?: string;
+            /** @description 由 code_verifier 推导的 S256 code_challenge */
+            code_challenge: string;
+            /**
+             * @description 固定为 "S256"
+             * @example S256
+             */
+            code_challenge_method: string;
+            /** @description 前端自定义的关联参数，后端会原样返回 */
+            state?: string;
+            /**
+             * Format: email
+             * @example admin@example.com
+             */
+            email: string;
+            /**
+             * Format: password
+             * @example password123
+             */
+            password: string;
+        };
+        OAuthAuthorizeResponse: {
+            /**
+             * @description 授权码（未启用 2FA 时返回）
+             * @example AbCdEfGh123
+             */
+            code?: string;
+            /** @description 从请求中透传返回的 state */
+            state?: string;
+            /**
+             * @description 是否需要继续进行 2FA 验证
+             * @example true
+             */
+            requires_2fa?: boolean;
+            /** @description 启用 2FA 时返回的临时令牌 */
+            temp_token?: string;
+        };
+        OAuthTokenRequest: {
+            /**
+             * @description 授权类型，支持 authorization_code 与 refresh_token
+             * @example authorization_code
+             * @enum {string}
+             */
+            grant_type: "authorization_code" | "refresh_token";
+            /** @description 使用授权码模式时必填 */
+            code?: string;
+            /**
+             * Format: uri
+             * @description 使用授权码模式时必填
+             */
+            redirect_uri?: string;
+            /**
+             * @description 使用授权码模式时必填
+             * @example easyssh-web
+             */
+            client_id?: string;
+            /** @description 使用授权码模式时必填，对应于之前生成的 code_verifier */
+            code_verifier?: string;
+        };
+        OAuthTokenResponse: {
+            /**
+             * @description 短期访问令牌，前端需以 Bearer Token 方式携带
+             * @example eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+             */
+            access_token: string;
+            /** @example Bearer */
+            token_type: string;
+            /**
+             * @description access_token 的有效期（秒）
+             * @example 3600
+             */
+            expires_in: number;
+        };
+        User: {
+            /**
+             * Format: uuid
+             * @example 550e8400-e29b-41d4-a716-446655440000
+             */
+            id: string;
+            /** @example admin */
+            username: string;
+            /**
+             * Format: email
+             * @example admin@example.com
+             */
+            email: string;
+            /**
+             * @example admin
+             * @enum {string}
+             */
+            role: "admin" | "user" | "viewer";
+            /**
+             * Format: uri
+             * @example https://api.example.com/avatars/user.jpg
+             */
+            avatar?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        Server: {
+            /**
+             * Format: uuid
+             * @example 550e8400-e29b-41d4-a716-446655440001
+             */
+            id: string;
+            /** @example Production Server */
+            name: string;
+            /** @example 192.168.1.100 */
+            host: string;
+            /** @example 22 */
+            port: number;
+            /** @example root */
+            username: string;
+            /**
+             * @example key
+             * @enum {string}
+             */
+            auth_method?: "password" | "key";
+            /** @example production */
+            group?: string;
+            /** @example [
+             *       "web",
+             *       "nginx",
+             *       "docker"
+             *     ] */
+            tags?: string[];
+            /**
+             * @example online
+             * @enum {string}
+             */
+            status?: "online" | "offline" | "error";
+            /** Format: date-time */
+            last_connected?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        /**
+         * @example balanced
+         * @enum {string}
+         */
+        AIPermissionMode: "readonly" | "balanced" | "privileged";
+        /**
+         * @example ai_sdk_ui
+         * @enum {string}
+         */
+        AITransportType: "ai_sdk_ui";
+        /**
+         * @example idle
+         * @enum {string}
+         */
+        AISessionStatus: "idle" | "running" | "waiting_confirmation" | "closed";
+        /**
+         * @example waiting_confirm
+         * @enum {string}
+         */
+        AITaskStatus: "queued" | "waiting_confirm" | "running" | "succeeded" | "failed" | "cancelled";
+        AIToolView: {
+            name: string;
+            display_name?: string;
+            description: string;
+            dangerous: boolean;
+        };
+        AIMessageView: {
+            id: string;
+            /** @enum {string} */
+            role: "user" | "assistant" | "system" | "tool";
+            content: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description Vercel AI SDK UIMessage。前端直接渲染 parts，不再从 MessageView/TaskView 做本地适配。 */
+        AIUIMessage: {
+            id: string;
+            /** @enum {string} */
+            role: "system" | "user" | "assistant";
+            metadata?: {
+                [key: string]: unknown;
+            };
+            parts: components["schemas"]["AIUIMessagePart"][];
+        };
+        AIUIMessagePart: components["schemas"]["AIUITextPart"] | components["schemas"]["AIUIReasoningPart"] | components["schemas"]["AIUIToolPart"] | components["schemas"]["AIUIDynamicToolPart"] | components["schemas"]["AIUIDataPart"] | components["schemas"]["AIUIStepStartPart"] | components["schemas"]["AIUIFilePart"] | components["schemas"]["AIUISourceURLPart"] | components["schemas"]["AIUISourceDocumentPart"] | ({
+            type: string;
+        } & {
+            [key: string]: unknown;
+        });
+        AIUITextPart: {
+            /** @constant */
+            type: "text";
+            text: string;
+            /** @enum {string} */
+            state?: "streaming" | "done";
         } & {
             [key: string]: unknown;
         };
-        Pagination: {
-            page?: number;
-            limit?: number;
-            total?: number;
-        };
-        StatusDatabases: {
+        AIUIReasoningPart: {
+            /** @constant */
+            type: "reasoning";
+            text: string;
             /** @enum {string} */
-            sqlite?: "connected" | "disconnected";
-            /** @enum {string} */
-            cache?: "connected";
+            state?: "streaming" | "done";
+        } & {
+            [key: string]: unknown;
         };
-        UserSafe: {
-            id?: number;
-            username?: string;
-            email?: string | null;
-            displayName?: string;
-            avatar?: string;
-            mfaEnabled?: boolean;
-            /** @enum {string} */
-            theme?: "dark" | "light" | "system";
-            fontSize?: number;
-            isAdmin?: boolean;
-            status?: string;
-            lastLogin?: string | null;
-            createdAt?: string;
-            updatedAt?: string;
-        };
-        RegisterDto: {
-            username: string;
-            password: string;
-            /** Format: email */
-            email?: string;
-            profile?: {
-                [key: string]: unknown;
-            };
-            settings?: {
-                [key: string]: unknown;
-            };
-        };
-        LoginDto: {
-            username?: string;
-            password?: string;
-            mfaCode?: string;
-            isMfaVerification?: boolean;
-            operation?: string;
-        };
-        UpdateUserDto: {
-            /** Format: email */
-            email?: string;
-            displayName?: string;
-            avatar?: string;
-            profile?: {
-                [key: string]: unknown;
-            };
-            settings?: {
+        AIUIDynamicToolPart: {
+            /** @constant */
+            type: "dynamic-tool";
+            toolName: string;
+            toolCallId: string;
+            title?: string;
+            providerExecuted?: boolean;
+            toolMetadata?: {
                 [key: string]: unknown;
             };
             /** @enum {string} */
-            theme?: "dark" | "light" | "system";
-            fontSize?: number;
-            oldPassword?: string;
-            newPassword?: string;
+            state: "input-streaming" | "input-available" | "approval-requested" | "approval-responded" | "output-available" | "output-error" | "output-denied";
+            /** @description AI SDK UI tool input payload */
+            input?: unknown;
+            /** @description AI SDK UI tool output payload */
+            output?: unknown;
+            errorText?: string;
+            approval?: {
+                id?: string;
+                approved?: boolean;
+                reason?: string;
+            } & {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
         };
-        ChangePasswordDto: {
-            oldPassword: string;
-            newPassword: string;
+        AIUIToolPart: {
+            type: string;
+            toolCallId: string;
+            title?: string;
+            providerExecuted?: boolean;
+            toolMetadata?: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            state: "input-streaming" | "input-available" | "approval-requested" | "approval-responded" | "output-available" | "output-error" | "output-denied";
+            /** @description AI SDK UI tool input payload */
+            input?: unknown;
+            /** @description AI SDK UI tool output payload */
+            output?: unknown;
+            errorText?: string;
+            approval?: {
+                id?: string;
+                approved?: boolean;
+                reason?: string;
+            } & {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
         };
-        SharedInfo: {
-            isShared?: boolean;
-            sharedWith?: string[];
+        /** @description AI SDK UI data-* part，例如 data-tool-status。 */
+        AIUIDataPart: {
+            type: string;
+            id?: string;
+            /** @description Data part payload */
+            data: unknown;
+        } & {
+            [key: string]: unknown;
         };
-        /** @description toSafeObject 返回的服务器安全对象 */
-        Server: {
-            id?: number;
-            name?: string;
+        AIUIStepStartPart: {
+            /** @constant */
+            type: "step-start";
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIFilePart: {
+            /** @constant */
+            type: "file";
+            mediaType: string;
+            filename?: string;
+            url: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUISourceURLPart: {
+            /** @constant */
+            type: "source-url";
+            sourceId: string;
+            url: string;
+            title?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUISourceDocumentPart: {
+            /** @constant */
+            type: "source-document";
+            sourceId: string;
+            mediaType: string;
+            title: string;
+            filename?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AITaskView: {
+            id: string;
+            /** @description 生成该工具调用的 AI SDK UI assistant message id。 */
+            assistant_message_id?: string;
+            tool_call_id: string;
+            tool_name: string;
+            tool_display_name?: string;
+            summary?: string;
+            status: components["schemas"]["AITaskStatus"];
+            dangerous: boolean;
+            requires_confirmation: boolean;
+            arguments?: {
+                [key: string]: unknown;
+            };
+            result?: string;
+            error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description AI 会话作用域。terminal 表示助手默认面向当前终端页签和服务器。 */
+        AISessionScope: {
+            /** @enum {string} */
+            kind?: "global" | "terminal";
+            terminal_session_id?: string;
+            /** Format: uuid */
+            server_id?: string;
+            server_name?: string;
             host?: string;
             port?: number;
             username?: string;
-            usePrivateKey?: boolean;
-            description?: string;
-            tags?: string[];
-            timeout?: number;
-            lastConnected?: string | null;
-            connectionCount?: number;
-            owner?: string | null;
-            shared?: components["schemas"]["SharedInfo"];
-            createdAt?: string;
-            updatedAt?: string;
         };
-        CreateServerDto: {
+        AISessionView: {
+            /** Format: uuid */
+            id: string;
+            model: string;
+            permission_mode: components["schemas"]["AIPermissionMode"];
+            scope?: components["schemas"]["AISessionScope"];
+            status: components["schemas"]["AISessionStatus"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            messages: components["schemas"]["AIMessageView"][];
+            tasks: components["schemas"]["AITaskView"][];
+            ui_messages: components["schemas"]["AIUIMessage"][];
+            available_tools: components["schemas"]["AIToolView"][];
+            default_transport: components["schemas"]["AITransportType"];
+        };
+        CreateAISessionRequest: {
+            model?: string;
+            permission_mode?: components["schemas"]["AIPermissionMode"];
+            scope?: components["schemas"]["AISessionScope"];
+        };
+        CreateAISessionResponse: {
+            /** Format: uuid */
+            session_id: string;
+            session: components["schemas"]["AISessionView"];
+            default_transport: components["schemas"]["AITransportType"];
+        };
+        AISessionListItem: {
+            /** Format: uuid */
+            id: string;
+            model: string;
+            permission_mode: components["schemas"]["AIPermissionMode"];
+            status: components["schemas"]["AISessionStatus"];
+            /** @description 会话标题。未手动命名时从首条用户消息生成。 */
+            title: string;
+            /** @description 是否为用户手动重命名的标题。 */
+            custom_title: boolean;
+            message_count: number;
+            task_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ListAISessionsResponse: {
+            items: components["schemas"]["AISessionListItem"][];
+            total: number;
+        };
+        RenameAISessionRequest: {
+            /** @description 新的会话标题，服务端会 trim 并限制长度。 */
+            title: string;
+        };
+        AISDKChatApprovalRequest: {
+            /** @description EasySSH 工具任务 ID，同时作为 AI SDK tool approval id。 */
+            task_id?: string;
+            /** @enum {string} */
+            decision?: "confirm" | "reject";
+        };
+        /** @description Vercel AI SDK UI DefaultChatTransport 请求体。context/model/permission_mode/scope/approval 是 EasySSH 在标准 UI 协议外追加的会话能力。 */
+        AISDKChatRequest: {
+            id?: string;
+            messages?: components["schemas"]["AIUIMessage"][];
+            /** @enum {string} */
+            trigger?: "submit-message" | "regenerate-message";
+            messageId?: string;
+            /** @description EasySSH 附加上下文，会由服务端拼入本轮用户消息。 */
+            context?: string;
+            model?: string;
+            permission_mode?: components["schemas"]["AIPermissionMode"];
+            scope?: components["schemas"]["AISessionScope"];
+            approval?: components["schemas"]["AISDKChatApprovalRequest"];
+        };
+        /** @description Vercel AI SDK UIMessageChunk，用于 X-Vercel-AI-UI-Message-Stream v1 SSE data 载荷。 */
+        AIUIMessageChunk: components["schemas"]["AIUIStartChunk"] | components["schemas"]["AIUITextStartChunk"] | components["schemas"]["AIUITextDeltaChunk"] | components["schemas"]["AIUITextEndChunk"] | components["schemas"]["AIUIReasoningStartChunk"] | components["schemas"]["AIUIReasoningDeltaChunk"] | components["schemas"]["AIUIReasoningEndChunk"] | components["schemas"]["AIUIToolInputStartChunk"] | components["schemas"]["AIUIToolInputDeltaChunk"] | components["schemas"]["AIUIToolInputAvailableChunk"] | components["schemas"]["AIUIToolInputErrorChunk"] | components["schemas"]["AIUIToolApprovalRequestChunk"] | components["schemas"]["AIUIToolOutputAvailableChunk"] | components["schemas"]["AIUIToolOutputErrorChunk"] | components["schemas"]["AIUIToolOutputDeniedChunk"] | components["schemas"]["AIUISourceURLChunk"] | components["schemas"]["AIUISourceDocumentChunk"] | components["schemas"]["AIUIFileChunk"] | components["schemas"]["AIUIDataChunk"] | components["schemas"]["AIUIErrorChunk"] | components["schemas"]["AIUIStartStepChunk"] | components["schemas"]["AIUIFinishStepChunk"] | components["schemas"]["AIUIFinishChunk"] | components["schemas"]["AIUIAbortChunk"] | components["schemas"]["AIUIMessageMetadataChunk"] | ({
+            type: string;
+        } & {
+            [key: string]: unknown;
+        });
+        AIUIStartChunk: {
+            /** @constant */
+            type: "start";
+            messageId?: string;
+            /** @description AI SDK UI message metadata */
+            messageMetadata?: unknown;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUITextStartChunk: {
+            /** @constant */
+            type: "text-start";
+            id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUITextDeltaChunk: {
+            /** @constant */
+            type: "text-delta";
+            id: string;
+            delta: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUITextEndChunk: {
+            /** @constant */
+            type: "text-end";
+            id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIReasoningStartChunk: {
+            /** @constant */
+            type: "reasoning-start";
+            id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIReasoningDeltaChunk: {
+            /** @constant */
+            type: "reasoning-delta";
+            id: string;
+            delta: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIReasoningEndChunk: {
+            /** @constant */
+            type: "reasoning-end";
+            id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolInputStartChunk: {
+            /** @constant */
+            type: "tool-input-start";
+            toolCallId: string;
+            toolName: string;
+            dynamic?: boolean;
+            title?: string;
+            toolMetadata?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolInputDeltaChunk: {
+            /** @constant */
+            type: "tool-input-delta";
+            toolCallId: string;
+            inputTextDelta: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolInputAvailableChunk: {
+            /** @constant */
+            type: "tool-input-available";
+            toolCallId: string;
+            toolName: string;
+            /** @description AI SDK UI tool input payload */
+            input: unknown;
+            dynamic?: boolean;
+            title?: string;
+            toolMetadata?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolInputErrorChunk: {
+            /** @constant */
+            type: "tool-input-error";
+            toolCallId: string;
+            toolName: string;
+            /** @description AI SDK UI tool input payload */
+            input: unknown;
+            errorText: string;
+            dynamic?: boolean;
+            title?: string;
+            toolMetadata?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolApprovalRequestChunk: {
+            /** @constant */
+            type: "tool-approval-request";
+            approvalId: string;
+            toolCallId: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolOutputAvailableChunk: {
+            /** @constant */
+            type: "tool-output-available";
+            toolCallId: string;
+            /** @description AI SDK UI tool output payload */
+            output: unknown;
+            dynamic?: boolean;
+            preliminary?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolOutputErrorChunk: {
+            /** @constant */
+            type: "tool-output-error";
+            toolCallId: string;
+            errorText: string;
+            dynamic?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIToolOutputDeniedChunk: {
+            /** @constant */
+            type: "tool-output-denied";
+            toolCallId: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUISourceURLChunk: {
+            /** @constant */
+            type: "source-url";
+            sourceId: string;
+            url: string;
+            title?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUISourceDocumentChunk: {
+            /** @constant */
+            type: "source-document";
+            sourceId: string;
+            mediaType: string;
+            title: string;
+            filename?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIFileChunk: {
+            /** @constant */
+            type: "file";
+            url: string;
+            mediaType: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIDataChunk: {
+            type: string;
+            id?: string;
+            /** @description AI SDK UI data part payload */
+            data: unknown;
+            transient?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIErrorChunk: {
+            /** @constant */
+            type: "error";
+            errorText: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIStartStepChunk: {
+            /** @constant */
+            type: "start-step";
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIFinishStepChunk: {
+            /** @constant */
+            type: "finish-step";
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIFinishChunk: {
+            /** @constant */
+            type: "finish";
+            /** @enum {string} */
+            finishReason?: "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other";
+            /** @description AI SDK UI message metadata */
+            messageMetadata?: unknown;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIAbortChunk: {
+            /** @constant */
+            type: "abort";
+            reason?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AIUIMessageMetadataChunk: {
+            /** @constant */
+            type: "message-metadata";
+            /** @description AI SDK UI message metadata */
+            messageMetadata: unknown;
+        } & {
+            [key: string]: unknown;
+        };
+        ServerCreate: {
+            /** @example Production Server */
             name: string;
+            /** @example 192.168.1.100 */
             host: string;
-            port?: number;
+            /** @example 22 */
+            port: number;
+            /** @example root */
             username: string;
+            /** @enum {string} */
+            auth_method: "password" | "key";
+            /**
+             * Format: password
+             * @description 当 auth_method 为 password 时必填
+             */
             password?: string;
-            privateKey?: string;
-            usePrivateKey?: boolean;
-            description?: string;
+            /** @description 当 auth_method 为 key 时必填 */
+            private_key?: string;
+            /** @example production */
+            group?: string;
             tags?: string[];
-            timeout?: number;
         };
-        UpdateServerDto: {
+        ServerUpdate: {
             name?: string;
             host?: string;
             port?: number;
             username?: string;
+            /** Format: password */
             password?: string;
-            privateKey?: string;
-            usePrivateKey?: boolean;
-            description?: string;
+            private_key?: string;
+            group?: string;
             tags?: string[];
-            timeout?: number;
         };
-        Connection: {
-            id?: string;
-            name?: string;
-            host?: string;
-            port?: number;
-            username?: string;
-            password?: string;
-            rememberPassword?: boolean;
-            privateKey?: string;
-            passphrase?: string;
-            /** @enum {string} */
-            authType?: "password" | "key";
-            description?: string;
-            group?: string;
-            config?: {
-                [key: string]: unknown;
-            };
-            sortOrder?: number;
-            createdAt?: string;
-            updatedAt?: string;
+        ServerList: {
+            data: components["schemas"]["Server"][];
+            meta: components["schemas"]["PaginationMeta"];
         };
-        ConnectionInput: {
-            id?: string;
-            name?: string;
-            host: string;
-            port?: number;
-            username: string;
-            password?: string;
-            rememberPassword?: boolean;
-            privateKey?: string;
-            passphrase?: string;
-            /** @enum {string} */
-            authType?: "password" | "key";
-            description?: string;
+        SSHSession: {
+            /**
+             * Format: uuid
+             * @example 550e8400-e29b-41d4-a716-446655440002
+             */
+            id: string;
+            /** Format: uuid */
+            server_id: string;
+            /** @example Production Server */
+            server_name?: string;
+            /**
+             * @example active
+             * @enum {string}
+             */
+            status: "connecting" | "active" | "closed" | "error";
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            last_activity?: string;
+        };
+        FileInfo: {
+            /** @example document.pdf */
+            name: string;
+            /** @example /home/user/documents/document.pdf */
+            path: string;
+            /**
+             * @example file
+             * @enum {string}
+             */
+            type: "file" | "directory" | "symlink";
+            /**
+             * Format: int64
+             * @example 1048576
+             */
+            size: number;
+            /** @example -rw-r--r-- */
+            permissions?: string;
+            /** @example root */
+            owner?: string;
+            /** @example root */
             group?: string;
-            config?: {
-                [key: string]: unknown;
-            };
-            sortOrder?: number;
+            /** Format: date-time */
+            modified_at?: string;
+        };
+        FileUploadRequest: {
+            /** Format: uuid */
+            server_id: string;
+            /** @example /home/user/uploads/ */
+            remote_path: string;
+            /** @default false */
+            overwrite: boolean;
         };
         Script: {
-            id?: number;
-            name?: string;
+            /** Format: uuid */
+            id: string;
+            /** @example Deploy Script */
+            name: string;
+            /** @example Automated deployment script */
             description?: string;
-            command?: string;
-            author?: string;
-            tags?: string[];
-            keywords?: string[];
-            category?: string;
-            isPublic?: boolean;
-            isSystem?: boolean;
-            usageCount?: number;
-            createdBy?: number | null;
-            createdAt?: string;
-            updatedAt?: string;
+            /** @example #!/bin/bash
+             *     cd /var/www
+             *     git pull */
+            content: string;
+            /**
+             * @default bash
+             * @enum {string}
+             */
+            language: "bash" | "python" | "nodejs";
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
         };
-        ScriptExecution: {
-            id?: number;
-            scriptId?: number | null;
-            scriptName?: string | null;
-            command?: string;
-            connectionId?: string;
-            serverName?: string | null;
-            host?: string;
-            port?: number;
-            username?: string;
-            stdout?: string;
-            stderr?: string;
-            exitCode?: number;
-            executedAt?: string;
-        };
-        MonitorSession: {
-            id?: string;
-            clientIp?: string;
-            connectedAt?: string;
-            lastActivity?: string;
-            subscribedServers?: string[];
-            messageStats?: {
+        ScriptExecutionRequest: {
+            /** Format: uuid */
+            script_id: string;
+            server_ids: string[];
+            parameters?: {
                 [key: string]: unknown;
             };
         };
-        AIConnectionTestDto: {
-            baseUrl: string;
-            apiKey: string;
-            model: string;
+        ScriptExecutionResult: {
+            /** Format: uuid */
+            execution_id?: string;
+            /** @enum {string} */
+            status?: "pending" | "running" | "completed" | "failed";
+            results?: {
+                /** Format: uuid */
+                server_id?: string;
+                server_name?: string;
+                /** @enum {string} */
+                status?: "success" | "failed";
+                output?: string;
+                error?: string;
+                exit_code?: number;
+                /** Format: date-time */
+                executed_at?: string;
+            }[];
         };
-        AIStatus: {
-            available?: boolean;
-            supportedModels?: string[];
-            features?: string[];
+        SystemMetrics: {
+            /**
+             * Format: float
+             * @example 45.2
+             */
+            cpu_usage?: number;
+            /**
+             * Format: float
+             * @example 68.5
+             */
+            memory_usage?: number;
+            /**
+             * Format: float
+             * @example 72.1
+             */
+            disk_usage?: number;
+            /**
+             * Format: int64
+             * @example 1048576
+             */
+            network_in?: number;
+            /**
+             * Format: int64
+             * @example 2097152
+             */
+            network_out?: number;
+            /**
+             * Format: int64
+             * @example 86400
+             */
+            uptime?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        Log: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            level?: "debug" | "info" | "warning" | "error" | "critical";
+            message?: string;
+            /** @example ssh_connection */
+            source?: string;
+            /** Format: uuid */
+            user_id?: string;
+            /** Format: uuid */
+            server_id?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at?: string;
         };
     };
     responses: never;

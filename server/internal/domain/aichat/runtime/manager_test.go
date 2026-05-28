@@ -133,7 +133,7 @@ func TestManagerAutoExecutesSafeTaskAndCompletesSession(t *testing.T) {
 	require.NoError(t, manager.SendUserMessage(context.Background(), userID, session.ID, "帮我看一下服务器情况"))
 
 	completed := waitForEvent(t, events, func(evt Event) bool {
-		return evt.Type == EventSessionCompleted && evt.Session != nil && len(evt.Session.Tasks) == 1
+		return evt.Type == EventSessionCompleted && evt.Session != nil && evt.Session.Status == SessionStatusIdle && len(evt.Session.Tasks) == 1
 	})
 
 	require.Equal(t, 1, executed)
@@ -218,7 +218,7 @@ func TestManagerWaitsForConfirmationAndContinuesAfterConfirm(t *testing.T) {
 	))
 
 	completed := waitForEvent(t, events, func(evt Event) bool {
-		return evt.Type == EventSessionCompleted && evt.Session != nil && len(evt.Session.Tasks) == 1
+		return evt.Type == EventSessionCompleted && evt.Session != nil && evt.Session.Status == SessionStatusIdle && len(evt.Session.Tasks) == 1
 	})
 
 	require.Equal(t, 1, executed)
@@ -295,7 +295,7 @@ func TestManagerContinuesAfterRejectingDangerousTask(t *testing.T) {
 	))
 
 	completed := waitForEvent(t, events, func(evt Event) bool {
-		return evt.Type == EventSessionCompleted && evt.Session != nil && len(evt.Session.Tasks) == 1
+		return evt.Type == EventSessionCompleted && evt.Session != nil && evt.Session.Status == SessionStatusIdle && len(evt.Session.Tasks) == 1
 	})
 
 	require.Equal(t, 2, runner.callCount())

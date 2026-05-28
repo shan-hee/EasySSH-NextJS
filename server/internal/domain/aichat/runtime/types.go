@@ -46,8 +46,7 @@ const (
 type TransportType string
 
 const (
-	TransportWS  TransportType = "ws"
-	TransportSSE TransportType = "sse"
+	TransportAISDKUI TransportType = "ai_sdk_ui"
 )
 
 type ToolView struct {
@@ -66,6 +65,7 @@ type MessageView struct {
 
 type TaskView struct {
 	ID                   string                 `json:"id"`
+	AssistantMessageID   string                 `json:"assistant_message_id,omitempty"`
 	ToolCallID           string                 `json:"tool_call_id"`
 	ToolName             string                 `json:"tool_name"`
 	ToolDisplayName      string                 `json:"tool_display_name,omitempty"`
@@ -167,4 +167,9 @@ type SendUserMessageInput struct {
 	Model          string
 	PermissionMode string
 	Scope          SessionScope
+}
+
+type ConfirmTaskInput struct {
+	TaskID   string
+	Decision Decision
 }

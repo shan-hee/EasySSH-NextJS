@@ -1,428 +1,362 @@
-import { useCallback, useEffect, useReducer, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useChat, type UIMessage } from "@ai-sdk/react"
+import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
 import {
   cancelAISession,
   closeAISession,
-  confirmAISessionTask,
-  connectAISessionWebSocket,
   createAISession,
   getAISession,
   getLatestAISession,
-  openAISessionEventStream,
-  sendAISessionMessage,
   type AgentSessionScope,
   type CreateSessionResponse,
   type PermissionMode,
   type SessionView,
-  type SessionWebSocketConnection,
   type ToolView,
 } from "@/lib/api/ai-agent"
-import {
-  agentSessionReducer,
-  initialAgentSessionState,
-  resolveTimelineItems,
-} from "@/lib/ai-agent/session-state"
+import { getApiUrl, getAuthHeaders } from "@/lib/api-client"
+
+type TransportState = "idle" | "connecting" | "ai_sdk_ui"
 
 function createLocalId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function useAgentSession() {
-  const [state, dispatch] = useReducer(agentSessionReducer, initialAgentSessionState)
+function emptySessionMessages(session: SessionView | null) {
+  return session?.ui_messages ?? []
+}
 
-  const currentSessionIdRef = useRef<string | null>(null)
-  const wsConnectionRef = useRef<SessionWebSocketConnection | null>(null)
-  const sseAbortControllerRef = useRef<AbortController | null>(null)
-  const pingTimerRef = useRef<number | null>(null)
-  const closingSessionIdRef = useRef<string | null>(null)
+function collectApprovalIds(messages: UIMessage[]) {
+  const pending = new Set<string>()
+  const responded = new Set<string>()
+  for (const message of messages) {
+    if (message.role !== "assistant") {
+      continue
+    }
+    for (const part of message.parts) {
+      if (isToolUIPart(part) && part.state === "approval-requested") {
+        pending.add(part.approval.id)
+      }
+      if (isToolUIPart(part) && part.state === "approval-responded") {
+        responded.add(part.approval.id)
+      }
+    }
+  }
+  return { pending, responded }
+}
+
+export function useAgentSession() {
+  const [session, setSession] = useState<SessionView | null>(null)
+  const [transport, setTransport] = useState<TransportState>("idle")
+  const [error, setError] = useState<string | null>(null)
+  const [localErrorMessages, setLocalErrorMessages] = useState<UIMessage[]>([])
+
+  const sessionRef = useRef<SessionView | null>(null)
   const latestRestoreAttemptedRef = useRef(false)
-  const stateRef = useRef(state)
+  const closingSessionIdRef = useRef<string | null>(null)
+  const restoredMessagesSessionIdRef = useRef<string | null>(null)
+  const idleChatIdRef = useRef(createLocalId("agent-chat"))
 
   useEffect(() => {
-    stateRef.current = state
-  }, [state])
+    sessionRef.current = session
+  }, [session])
 
-  const stopHeartbeat = useCallback(() => {
-    if (pingTimerRef.current !== null) {
-      window.clearInterval(pingTimerRef.current)
-      pingTimerRef.current = null
+  const sessionId = session?.id ?? null
+  const chatId = sessionId ?? idleChatIdRef.current
+
+  const chatTransport = useMemo(
+    () => new DefaultChatTransport<UIMessage>({
+      api: sessionId ? getApiUrl(`/ai/sessions/${sessionId}/chat`) : getApiUrl("/ai/sessions/__idle__/chat"),
+      headers: () => getAuthHeaders(),
+    }),
+    [sessionId]
+  )
+
+  const refreshSessionSnapshot = useCallback(async (targetSessionId = sessionRef.current?.id) => {
+    if (!targetSessionId || closingSessionIdRef.current === targetSessionId) {
+      return null
+    }
+
+    try {
+      const response = await getAISession(targetSessionId)
+      if (closingSessionIdRef.current === targetSessionId) {
+        return null
+      }
+      setSession(response.session)
+      setTransport("ai_sdk_ui")
+      return response.session
+    } catch (refreshError) {
+      const message = refreshError instanceof Error ? refreshError.message : String(refreshError)
+      setError(message)
+      return null
     }
   }, [])
 
-  const cleanupTransport = useCallback(() => {
-    stopHeartbeat()
-    wsConnectionRef.current?.close()
-    wsConnectionRef.current = null
-    sseAbortControllerRef.current?.abort()
-    sseAbortControllerRef.current = null
-  }, [stopHeartbeat])
-
-  const pushLocalError = useCallback((message: string, code: string = "client_error") => {
-    dispatch({
-      type: "local.error",
-      error: {
-        key: createLocalId("error"),
-        code,
-        message,
-        created_at: new Date().toISOString(),
-      },
-    })
-  }, [])
-
-  const startSSEFallback = useCallback(
-    (sessionId: string) => {
-      if (currentSessionIdRef.current !== sessionId) {
-        return
-      }
-
-      stopHeartbeat()
-      wsConnectionRef.current = null
-      dispatch({ type: "transport", transport: "sse" })
-      sseAbortControllerRef.current?.abort()
-      sseAbortControllerRef.current = openAISessionEventStream(sessionId, {
-        onEvent(event) {
-          dispatch({ type: "event", event })
-        },
-        onError(error) {
-          pushLocalError(error.message, "sse_error")
-        },
-      })
+  const chat = useChat<UIMessage>({
+    id: chatId,
+    messages: emptySessionMessages(session),
+    transport: chatTransport,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onError(chatError) {
+      setError(chatError.message)
+      setTransport(sessionRef.current ? "ai_sdk_ui" : "idle")
     },
-    [pushLocalError, stopHeartbeat]
-  )
-
-  const connectTransport = useCallback(
-    async (sessionId: string, preferredTransport: SessionView["default_transport"]) => {
-      if (preferredTransport !== "ws") {
-        startSSEFallback(sessionId)
-        return
-      }
-
-      dispatch({ type: "transport", transport: "connecting_ws" })
-
-      try {
-        const connection = await connectAISessionWebSocket(sessionId, {
-          onEvent(event) {
-            dispatch({ type: "event", event })
-          },
-          onError(error) {
-            pushLocalError(error.message, "ws_error")
-          },
-          onClose() {
-            if (currentSessionIdRef.current !== sessionId) {
-              return
-            }
-            if (closingSessionIdRef.current === sessionId) {
-              return
-            }
-            if (stateRef.current.session?.status === "closed") {
-              return
-            }
-            startSSEFallback(sessionId)
-          },
-        })
-
-        if (currentSessionIdRef.current !== sessionId) {
-          connection.close()
-          return
-        }
-
-        wsConnectionRef.current = connection
-        dispatch({ type: "transport", transport: "ws" })
-
-        stopHeartbeat()
-        pingTimerRef.current = window.setInterval(() => {
-          wsConnectionRef.current?.ping()
-        }, 20000)
-      } catch {
-        startSSEFallback(sessionId)
-      }
+    onFinish() {
+      void refreshSessionSnapshot()
     },
-    [pushLocalError, startSSEFallback, stopHeartbeat]
-  )
+  })
 
-  const closeCurrentRemoteSession = useCallback(async () => {
-    const sessionId = currentSessionIdRef.current
-    if (!sessionId) {
+  useEffect(() => {
+    if (!session?.id) {
+      restoredMessagesSessionIdRef.current = null
       return
     }
 
-    closingSessionIdRef.current = sessionId
-
-    try {
-      if (wsConnectionRef.current) {
-        wsConnectionRef.current.cancelSession()
-      }
-    } catch {
-      // ignore
+    if (restoredMessagesSessionIdRef.current === session.id) {
+      return
     }
 
-    try {
-      await closeAISession(sessionId)
-    } catch {
-      // ignore
-    }
+    chat.setMessages(session.ui_messages || [])
+    restoredMessagesSessionIdRef.current = session.id
+  }, [chat, session?.id, session?.ui_messages])
+
+  const pushLocalError = useCallback((message: string) => {
+    setError(message)
+    setLocalErrorMessages((current) => [
+      ...current,
+      {
+        id: createLocalId("error"),
+        role: "assistant",
+        metadata: {
+          source: "local-error",
+          createdAt: new Date().toISOString(),
+        },
+        parts: [
+          {
+            type: "data-error",
+            id: createLocalId("error-part"),
+            data: { message },
+          },
+        ],
+      } satisfies UIMessage,
+    ])
   }, [])
 
-  const detachCurrentSession = useCallback(async () => {
-    const sessionId = currentSessionIdRef.current
-    const shouldCancelRunningSession = stateRef.current.session?.status === "running"
-
-    if (sessionId && shouldCancelRunningSession) {
-      try {
-        await cancelAISession(sessionId)
-      } catch {
-        // ignore
-      }
-    }
-
-    currentSessionIdRef.current = null
-    closingSessionIdRef.current = sessionId
-    cleanupTransport()
+  const applySessionResponse = useCallback((response: CreateSessionResponse) => {
     closingSessionIdRef.current = null
-  }, [cleanupTransport])
-
-
-  const applyRestoredSession = useCallback(
-    async (response: CreateSessionResponse) => {
-      cleanupTransport()
-      currentSessionIdRef.current = response.session_id
-      closingSessionIdRef.current = null
-      dispatch({ type: "reset" })
-      dispatch({
-        type: "event",
-        event: {
-          id: createLocalId("restore"),
-          type: "session.started",
-          session_id: response.session_id,
-          created_at: new Date().toISOString(),
-          session: response.session,
-        },
-      })
-
-      await connectTransport(response.session_id, response.default_transport)
-      return true
-    },
-    [cleanupTransport, connectTransport]
-  )
+    setError(null)
+    setLocalErrorMessages([])
+    setSession(response.session)
+    setTransport("ai_sdk_ui")
+    restoredMessagesSessionIdRef.current = null
+    return response
+  }, [])
 
   const restoreLatestSession = useCallback(async (scope?: AgentSessionScope) => {
-    if (latestRestoreAttemptedRef.current || currentSessionIdRef.current || stateRef.current.transport !== "idle") {
+    if (latestRestoreAttemptedRef.current || sessionRef.current || transport !== "idle") {
       return false
     }
 
     latestRestoreAttemptedRef.current = true
-    dispatch({ type: "transport", transport: "connecting_ws" })
+    setTransport("connecting")
 
     try {
       const response = await getLatestAISession(scope)
       if (!response) {
-        dispatch({ type: "transport", transport: "idle" })
+        setTransport("idle")
         return false
       }
 
-      return await applyRestoredSession(response)
-    } catch (error) {
-      dispatch({ type: "transport", transport: "idle" })
-      pushLocalError(error instanceof Error ? error.message : String(error), "restore_session_failed")
+      applySessionResponse(response)
+      return true
+    } catch (restoreError) {
+      setTransport("idle")
+      pushLocalError(restoreError instanceof Error ? restoreError.message : String(restoreError))
       return false
     }
-  }, [applyRestoredSession, pushLocalError])
+  }, [applySessionResponse, pushLocalError, transport])
 
-  const restoreSession = useCallback(
-    async (sessionId: string, input: { silent?: boolean } = {}) => {
-      if (!sessionId) {
-        return false
+  const restoreSession = useCallback(async (targetSessionId: string, input: { silent?: boolean } = {}) => {
+    if (!targetSessionId) {
+      return false
+    }
+
+    setTransport("connecting")
+
+    try {
+      const response = await getAISession(targetSessionId)
+      applySessionResponse(response)
+      return true
+    } catch (restoreError) {
+      setTransport(sessionRef.current ? "ai_sdk_ui" : "idle")
+      if (!input.silent) {
+        pushLocalError(restoreError instanceof Error ? restoreError.message : String(restoreError))
       }
+      return false
+    }
+  }, [applySessionResponse, pushLocalError])
 
-      dispatch({ type: "transport", transport: "connecting_ws" })
+  const startNewSession = useCallback(async (input: { model?: string; permissionMode?: PermissionMode; scope?: AgentSessionScope }) => {
+    latestRestoreAttemptedRef.current = true
+    setError(null)
+    setLocalErrorMessages([])
+    setTransport("connecting")
 
+    const currentSession = sessionRef.current
+    if (currentSession?.status === "running") {
       try {
-        const response = await getAISession(sessionId)
-        return await applyRestoredSession(response)
-      } catch (error) {
-        dispatch({ type: "transport", transport: "idle" })
-        if (!input.silent) {
-          pushLocalError(error instanceof Error ? error.message : String(error), "restore_session_failed")
-        }
-        return false
+        await cancelAISession(currentSession.id)
+      } catch {
+        // ignore cancellation race when starting a replacement session
       }
-    },
-    [applyRestoredSession, pushLocalError]
-  )
+    }
 
-  const startNewSession = useCallback(
-    async (input: { model?: string; permissionMode?: PermissionMode; scope?: AgentSessionScope }) => {
-      await detachCurrentSession()
-
-      latestRestoreAttemptedRef.current = true
-      dispatch({ type: "reset" })
-      dispatch({ type: "transport", transport: "connecting_ws" })
-
-      try {
-        const response = await createAISession({
-          model: input.model,
-          permission_mode: input.permissionMode,
-          scope: input.scope,
-        })
-
-        currentSessionIdRef.current = response.session_id
-        dispatch({
-          type: "event",
-          event: {
-            id: createLocalId("bootstrap"),
-            type: "session.started",
-            session_id: response.session_id,
-            created_at: new Date().toISOString(),
-            session: response.session,
-          },
-        })
-
-        await connectTransport(response.session_id, response.default_transport)
-        return response
-      } catch (error) {
-        dispatch({ type: "transport", transport: "idle" })
-        pushLocalError(error instanceof Error ? error.message : String(error), "create_session_failed")
-        return null
-      }
-    },
-    [connectTransport, detachCurrentSession, pushLocalError]
-  )
-
-  const sendMessage = useCallback(
-    async (
-      content: string,
-      contextText?: string,
-      model?: string,
-      permissionMode?: PermissionMode,
-      scope?: AgentSessionScope
-    ) => {
-      const sessionId = currentSessionIdRef.current
-      if (!sessionId) {
-        return false
-      }
-
-      const normalizedContent = content.trim()
-      if (!normalizedContent) {
-        return false
-      }
-
-      dispatch({
-        type: "local.user",
-        message: {
-          id: createLocalId("user"),
-          role: "user",
-          content: normalizedContent,
-          created_at: new Date().toISOString(),
-          pending: false,
-        },
+    try {
+      const response = await createAISession({
+        model: input.model,
+        permission_mode: input.permissionMode,
+        scope: input.scope,
       })
+      applySessionResponse(response)
+      return response
+    } catch (createError) {
+      setTransport(currentSession ? "ai_sdk_ui" : "idle")
+      pushLocalError(createError instanceof Error ? createError.message : String(createError))
+      return null
+    }
+  }, [applySessionResponse, pushLocalError])
 
-      try {
-        if (wsConnectionRef.current) {
-          wsConnectionRef.current.sendUserMessage({
-            content: normalizedContent,
-            context: contextText,
-            model,
-            permission_mode: permissionMode,
-            scope,
-          })
-          return true
-        }
+  const sendMessage = useCallback(async (
+    content: string,
+    contextText?: string,
+    model?: string,
+    permissionMode?: PermissionMode,
+    scope?: AgentSessionScope
+  ) => {
+    const activeSessionId = sessionRef.current?.id
+    const normalizedContent = content.trim()
+    if (!activeSessionId || !normalizedContent) {
+      return false
+    }
 
-        await sendAISessionMessage(sessionId, {
-          content: normalizedContent,
+    setError(null)
+    setSession((current) => current
+      ? { ...current, status: "running", updated_at: new Date().toISOString() }
+      : current
+    )
+    setTransport("ai_sdk_ui")
+
+    try {
+      await chat.sendMessage({ text: normalizedContent }, {
+        body: {
           context: contextText,
           model,
           permission_mode: permissionMode,
           scope,
-        })
-        return true
-      } catch (error) {
-        pushLocalError(error instanceof Error ? error.message : String(error), "send_message_failed")
-        return false
-      }
-    },
-    [pushLocalError]
-  )
+        },
+      })
+      return true
+    } catch (sendError) {
+      const message = sendError instanceof Error ? sendError.message : String(sendError)
+      pushLocalError(message)
+      void refreshSessionSnapshot(activeSessionId)
+      return false
+    }
+  }, [chat, pushLocalError, refreshSessionSnapshot])
 
-  const confirmTask = useCallback(
-    async (taskId: string, decision: "confirm" | "reject") => {
-      const sessionId = currentSessionIdRef.current
-      if (!sessionId) {
-        return
-      }
-
-      try {
-        if (wsConnectionRef.current) {
-          wsConnectionRef.current.confirmTask(taskId, decision)
-          return
-        }
-
-        await confirmAISessionTask(sessionId, taskId, { decision })
-      } catch (error) {
-        pushLocalError(error instanceof Error ? error.message : String(error), "confirm_task_failed")
-      }
-    },
-    [pushLocalError]
-  )
-
-  const cancelSession = useCallback(async () => {
-    const sessionId = currentSessionIdRef.current
-    if (!sessionId) {
+  const confirmTask = useCallback(async (taskId: string, decision: "confirm" | "reject") => {
+    const activeSessionId = sessionRef.current?.id
+    if (!activeSessionId || !taskId) {
       return
     }
 
-    closingSessionIdRef.current = sessionId
+    setError(null)
+    const approvalIds = collectApprovalIds(chat.messages)
+    const approved = decision === "confirm"
 
     try {
-      if (wsConnectionRef.current) {
-        wsConnectionRef.current.cancelSession()
+      if (approvalIds.pending.has(taskId)) {
+        await chat.addToolApprovalResponse({
+          id: taskId,
+          approved,
+        })
+        return
+      }
+      if (approvalIds.responded.has(taskId)) {
         return
       }
 
-      await cancelAISession(sessionId)
-    } catch (error) {
-      pushLocalError(error instanceof Error ? error.message : String(error), "cancel_session_failed")
+      await chat.sendMessage(undefined, {
+        body: {
+          approval: {
+            task_id: taskId,
+            decision,
+          },
+        },
+      })
+    } catch (confirmError) {
+      pushLocalError(confirmError instanceof Error ? confirmError.message : String(confirmError))
+      void refreshSessionSnapshot(activeSessionId)
     }
-  }, [pushLocalError])
+  }, [chat, pushLocalError, refreshSessionSnapshot])
+
+  const cancelSession = useCallback(async () => {
+    const activeSessionId = sessionRef.current?.id
+    if (!activeSessionId) {
+      return
+    }
+
+    try {
+      await chat.stop()
+      await cancelAISession(activeSessionId)
+      await refreshSessionSnapshot(activeSessionId)
+    } catch (cancelError) {
+      pushLocalError(cancelError instanceof Error ? cancelError.message : String(cancelError))
+    }
+  }, [chat, pushLocalError, refreshSessionSnapshot])
 
   const closeSession = useCallback(async () => {
-    await closeCurrentRemoteSession()
-    cleanupTransport()
-    currentSessionIdRef.current = null
+    const activeSessionId = sessionRef.current?.id
+    if (activeSessionId) {
+      closingSessionIdRef.current = activeSessionId
+      try {
+        await closeAISession(activeSessionId)
+      } catch {
+        // ignore close errors for local detach
+      }
+    }
+
+    setSession(null)
+    setError(null)
+    setLocalErrorMessages([])
+    chat.setMessages([])
+    restoredMessagesSessionIdRef.current = null
     closingSessionIdRef.current = null
     latestRestoreAttemptedRef.current = true
-    dispatch({ type: "reset" })
-  }, [cleanupTransport, closeCurrentRemoteSession])
+    setTransport("idle")
+  }, [chat])
 
-  useEffect(() => {
-    return () => {
-      cleanupTransport()
-    }
-  }, [cleanupTransport])
-
-  const timelineEntries = resolveTimelineItems(state)
-  const uiMessages = timelineEntries.flatMap((entry) => entry.uiMessage ? [entry.uiMessage] : [])
-
-  const tasks = Object.values(state.tasksById).sort(
-    (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+  const tasks = useMemo(
+    () => [...(session?.tasks || [])].sort(
+      (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+    ),
+    [session?.tasks]
   )
-
   const pendingConfirmationTasks = tasks.filter((task) => task.status === "waiting_confirm")
-  const availableTools: ToolView[] = state.session?.available_tools || []
-  const sessionId = state.session?.id ?? null
-  const canSend = Boolean(sessionId) && state.session?.status === "idle"
+  const availableTools: ToolView[] = session?.available_tools || []
+  const canSend = Boolean(sessionId) && session?.status === "idle" && chat.status === "ready"
+  const uiMessages = [...chat.messages, ...localErrorMessages]
 
   return {
-    session: state.session,
+    session,
     sessionId,
-    transport: state.transport,
-    timeline: timelineEntries,
+    transport,
+    chatStatus: chat.status,
+    timeline: [],
     uiMessages,
     tasks,
     pendingConfirmationTasks,
     availableTools,
-    error: state.error,
+    error,
     canSend,
     restoreLatestSession,
     restoreSession,

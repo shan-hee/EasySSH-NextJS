@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import Link from "next/link"
 import { Check, History, Loader2, Pencil, Plus, RefreshCw, Search, Send, Server as ServerIcon, Shield, Square, SquarePen, Trash2, X } from "lucide-react"
 
-import { DashboardAgentTimeline } from "@/components/ai-agent/dashboard-agent-timeline"
+import { AgentAIElementsTimeline } from "@/components/ai-agent/agent-ai-elements-timeline"
 import {
   ComposerReferenceChips,
   MAX_COMPOSER_ATTACHMENTS,
@@ -44,12 +44,12 @@ import {
   PromptInputTextarea,
   PromptInputToolbar,
   PromptInputTools,
-} from "@/components/ui/shadcn-io/ai/prompt-input"
+} from "@/components/ai-elements/prompt-input"
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from "@/components/ui/shadcn-io/ai/conversation"
+} from "@/components/ai-elements/conversation"
 import { AgentNoticeCard } from "@/components/ai-agent/agent-notice"
 import { useAgentSession } from "@/hooks/use-agent-session"
 import { useAIConfig } from "@/hooks/use-ai-config"
@@ -57,7 +57,6 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { serversApi, type Server as ManagedServer } from "@/lib/api"
 import { deleteAISession, listAISessions, renameAISession, type CreateSessionResponse, type PermissionMode, type SessionListItem } from "@/lib/api/ai-agent"
-import { getLatestRemoteOutputKindAfterLatestUserMessage } from "@/lib/ai-agent/timeline-utils"
 import { getServerDisplayName } from "@/lib/server-utils"
 import { cn } from "@/lib/utils"
 import { useTranslations } from "next-intl"
@@ -94,7 +93,7 @@ export default function AIAssistantPage() {
   const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
   const { isLoading, isConfigured, models } = useAIConfig()
   const agentSession = useAgentSession()
-  const { session, sessionId, pendingConfirmationTasks, error, restoreLatestSession, restoreSession, startNewSession, sendMessage, confirmTask, cancelSession, closeSession } = agentSession
+  const { session, sessionId, uiMessages, pendingConfirmationTasks, error, restoreLatestSession, restoreSession, startNewSession, sendMessage, confirmTask, cancelSession, closeSession } = agentSession
 
   const [draft, setDraft] = useState("")
   const [selectedModel, setSelectedModel] = useState("")
@@ -169,10 +168,6 @@ export default function AIAssistantPage() {
     [t]
   )
 
-  const visibleTimeline = useMemo(
-    () => agentSession.timeline.filter((entry) => entry.kind !== "confirmation"),
-    [agentSession.timeline]
-  )
   const selectedServers = useMemo(
     () => availableServers.filter((server) => selectedServerIds.includes(server.id)),
     [availableServers, selectedServerIds]
@@ -183,27 +178,18 @@ export default function AIAssistantPage() {
   const serverReferenceDisabled = !ready || isLoading || !isConfigured
   const attachmentDisabled = attachmentsLoading || attachments.length >= MAX_COMPOSER_ATTACHMENTS || !ready || isLoading || !isConfigured
 
-  const hasTimeline = visibleTimeline.length > 0
+  const hasTimeline = uiMessages.length > 0
   const isSessionRunning = session?.status === "running"
   const runningTasks = agentSession.tasks.filter((task) => task.status === "running" || task.status === "queued")
-  const hasPendingAssistantMessage = visibleTimeline.some(
-    (entry) => entry.kind === "message" && entry.data?.role === "assistant" && Boolean(entry.data.pending)
-  )
-  const latestRemoteOutputKind = getLatestRemoteOutputKindAfterLatestUserMessage(visibleTimeline)
   const shouldShowLoadingIndicator =
     isSessionRunning &&
-    !hasPendingAssistantMessage &&
     runningTasks.length === 0 &&
     pendingConfirmationTasks.length === 0
-  const assistantLoadingState = shouldShowLoadingIndicator
-    ? latestRemoteOutputKind && latestRemoteOutputKind !== "assistant"
-      ? "thinking"
-      : "waiting"
-    : false
+  const assistantLoadingState = shouldShowLoadingIndicator ? "waiting" : false
   const isCurrentSessionBlank = Boolean(
     session &&
     session.status !== "closed" &&
-    visibleTimeline.length === 0 &&
+    uiMessages.length === 0 &&
     agentSession.tasks.length === 0
   )
   const createSessionDisabled = !ready || isLoading || !isConfigured || sessionCreating
@@ -715,11 +701,10 @@ export default function AIAssistantPage() {
               {hasTimeline ? (
                 <Conversation className="h-full w-full">
                   <ConversationContent
-                    className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6"
-                    scrollClassName="h-full w-full overflow-y-auto scrollbar-custom"
+                    className="mx-auto h-full w-full max-w-5xl space-y-4 overflow-y-auto px-4 py-6 scrollbar-custom md:px-6"
                   >
-                    <DashboardAgentTimeline
-                      entries={visibleTimeline}
+                    <AgentAIElementsTimeline
+                      messages={uiMessages}
                       tText={t}
                       onConfirmTask={confirmTask}
                       assistantLoadingState={assistantLoadingState}
@@ -788,8 +773,7 @@ export default function AIAssistantPage() {
 
               <PromptInput
                   className="border-border/60 bg-card/95 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/80"
-                  onSubmit={(event) => {
-                    event.preventDefault()
+                  onSubmit={() => {
                     void submit()
                   }}
                 >
@@ -977,7 +961,7 @@ export default function AIAssistantPage() {
                         <PromptInputSubmit
                           type="button"
                           status="streaming"
-                          size="icon"
+                          size="icon-sm"
                           className="h-9 w-9"
                           aria-label="中断回复"
                           title="中断回复"
@@ -988,7 +972,7 @@ export default function AIAssistantPage() {
                       ) : (
                         <PromptInputSubmit
                           disabled={!canSubmit}
-                          size="icon"
+                          size="icon-sm"
                           className="h-9 w-9"
                           aria-label={t("send")}
                           title={t("send")}

@@ -400,13 +400,22 @@ func (m *Manager) SendUserMessageWithOptions(ctx context.Context, userID uuid.UU
 }
 
 func (m *Manager) ConfirmTask(ctx context.Context, userID uuid.UUID, sessionID, taskID string, decision Decision) error {
+	return m.ConfirmTasks(ctx, userID, sessionID, []ConfirmTaskInput{{TaskID: taskID, Decision: decision}})
+}
+
+func (m *Manager) ConfirmTasks(ctx context.Context, userID uuid.UUID, sessionID string, inputs []ConfirmTaskInput) error {
 	s, err := m.getOrRestoreSession(ctx, userID, sessionID)
 	if err != nil {
 		return err
 	}
 
-	if decision != DecisionConfirm && decision != DecisionReject {
+	if len(inputs) == 0 {
 		return ErrInvalidDecision
+	}
+	for _, input := range inputs {
+		if input.Decision != DecisionConfirm && input.Decision != DecisionReject {
+			return ErrInvalidDecision
+		}
 	}
 
 	m.mu.Lock()
@@ -414,49 +423,70 @@ func (m *Manager) ConfirmTask(ctx context.Context, userID uuid.UUID, sessionID, 
 		m.mu.Unlock()
 		return ErrSessionClosed
 	}
-	task, ok := s.tasks[taskID]
-	if !ok {
-		m.mu.Unlock()
-		return ErrTaskNotFound
-	}
-	if task.view.Status != TaskStatusWaitingConfirm {
-		m.mu.Unlock()
-		return ErrTaskConfirmationNotPending
+	for _, input := range inputs {
+		task, ok := s.tasks[input.TaskID]
+		if !ok {
+			m.mu.Unlock()
+			return ErrTaskNotFound
+		}
+		if task.view.Status != TaskStatusWaitingConfirm {
+			m.mu.Unlock()
+			return ErrTaskConfirmationNotPending
+		}
 	}
 
 	now := time.Now()
-	confirmationStatus := string(task.view.Status)
-	if decision == DecisionConfirm {
-		s.status = SessionStatusRunning
-		task.view.Status = TaskStatusRunning
-		confirmationStatus = string(TaskStatusRunning)
-	} else {
-		task.view.Status = TaskStatusCancelled
-		task.view.Result = "用户已拒绝执行该操作。"
-		confirmationStatus = string(TaskStatusCancelled)
+	resolved := make([]struct {
+		view     TaskView
+		decision Decision
+		status   string
+	}, 0, len(inputs))
+	for _, input := range inputs {
+		task := s.tasks[input.TaskID]
+		confirmationStatus := string(task.view.Status)
+		if input.Decision == DecisionConfirm {
+			s.status = SessionStatusRunning
+			task.view.Status = TaskStatusRunning
+			confirmationStatus = string(TaskStatusRunning)
+		} else {
+			task.view.Status = TaskStatusCancelled
+			task.view.Result = "用户已拒绝执行该操作。"
+			confirmationStatus = string(TaskStatusCancelled)
+		}
+		task.view.UpdatedAt = now
+		resolved = append(resolved, struct {
+			view     TaskView
+			decision Decision
+			status   string
+		}{
+			view:     task.view,
+			decision: input.Decision,
+			status:   confirmationStatus,
+		})
 	}
-	task.view.UpdatedAt = now
-	view := task.view
 	s.updatedAt = now
 	snapshot := m.snapshotForPersistenceLocked(s)
 	m.mu.Unlock()
 
 	m.saveSnapshot(ctx, snapshot)
-	m.emitEvent(s, Event{
-		ID:        uuid.NewString(),
-		Type:      EventConfirmationResolved,
-		SessionID: s.id,
-		CreatedAt: now,
-		Confirmation: &ConfirmationView{
-			TaskID:    taskID,
-			Status:    confirmationStatus,
-			Decision:  string(decision),
+	for _, item := range resolved {
+		view := item.view
+		m.emitEvent(s, Event{
+			ID:        uuid.NewString(),
+			Type:      EventConfirmationResolved,
+			SessionID: s.id,
 			CreatedAt: now,
-		},
-		UIMessage: uiMessagePtrForTask(view),
-	})
+			Confirmation: &ConfirmationView{
+				TaskID:    view.ID,
+				Status:    item.status,
+				Decision:  string(item.decision),
+				CreatedAt: now,
+			},
+			UIMessage: uiMessagePtrForTask(view),
+		})
+	}
 
-	go m.resolvePendingTask(sessionID, taskID, decision)
+	go m.resolvePendingTasks(sessionID, inputs)
 	return nil
 }
 
@@ -630,7 +660,7 @@ func (m *Manager) runSession(sessionID string) {
 			return
 		}
 
-		autoTasks, pendingConfirm := m.materializeTasks(s, result.ToolCalls)
+		autoTasks, pendingConfirm := m.materializeTasks(s, assistantMessageID, result.ToolCalls)
 		for _, taskID := range autoTasks {
 			m.executeTask(ctx, s, taskID)
 		}
@@ -643,9 +673,17 @@ func (m *Manager) runSession(sessionID string) {
 				s.currentRun = nil
 				s.updatedAt = time.Now()
 			}
+			view := m.snapshotSessionLocked(s)
 			snapshot := m.snapshotForPersistenceLocked(s)
 			m.mu.Unlock()
 			m.saveSnapshot(context.Background(), snapshot)
+			m.emitEvent(s, Event{
+				ID:        uuid.NewString(),
+				Type:      EventSessionCompleted,
+				SessionID: s.id,
+				CreatedAt: time.Now(),
+				Session:   &view,
+			})
 			return
 		}
 	}
@@ -653,16 +691,18 @@ func (m *Manager) runSession(sessionID string) {
 	m.failSessionTurn(s, "max_rounds_reached", errConversationMaxRoundsReached.Error())
 }
 
-func (m *Manager) resolvePendingTask(sessionID, taskID string, decision Decision) {
+func (m *Manager) resolvePendingTasks(sessionID string, inputs []ConfirmTaskInput) {
 	s, ok := m.getSessionByID(sessionID)
 	if !ok {
 		return
 	}
 
-	if decision == DecisionConfirm {
-		m.executeTask(context.Background(), s, taskID)
-	} else {
-		m.rejectTask(s, taskID)
+	for _, input := range inputs {
+		if input.Decision == DecisionConfirm {
+			m.executeTask(context.Background(), s, input.TaskID)
+		} else {
+			m.rejectTask(s, input.TaskID)
+		}
 	}
 
 	m.mu.Lock()
@@ -775,7 +815,7 @@ func (m *Manager) rejectTask(s *session, taskID string) {
 	m.emitTaskEvent(s, EventTaskUpdated, view)
 }
 
-func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([]string, bool) {
+func (m *Manager) materializeTasks(s *session, assistantMessageID string, toolCalls []registry.ToolCall) ([]string, bool) {
 	autoTasks := make([]string, 0, len(toolCalls))
 	pendingConfirm := false
 
@@ -788,6 +828,7 @@ func (m *Manager) materializeTasks(s *session, toolCalls []registry.ToolCall) ([
 
 		view := TaskView{
 			ID:                   taskID,
+			AssistantMessageID:   assistantMessageID,
 			ToolCallID:           tc.ID,
 			ToolName:             tc.Name,
 			ToolDisplayName:      coalesce(spec.DisplayName, tc.Name),
@@ -983,7 +1024,7 @@ func (m *Manager) snapshotSessionLocked(s *session) SessionView {
 		Tasks:            tasks,
 		UIMessages:       m.buildUIMessagesLocked(s),
 		AvailableTools:   buildToolViews(m.visibleToolsForSessionLocked(s)),
-		DefaultTransport: TransportWS,
+		DefaultTransport: TransportAISDKUI,
 	}
 }
 
@@ -999,25 +1040,120 @@ func (m *Manager) emitTaskEvent(s *session, eventType EventType, task TaskView) 
 }
 
 func (m *Manager) buildUIMessagesLocked(s *session) []UIMessage {
-	messages := make([]UIMessage, 0, len(s.messageViews)+len(s.taskOrder))
-
+	items := make([]uiTimelineItem, 0, len(s.messageViews)+len(s.taskOrder))
+	sequence := 0
 	for _, message := range s.messageViews {
-		if uiMessage, ok := uiMessageForMessage(message, false); ok {
-			messages = append(messages, uiMessage)
-		}
+		items = append(items, uiTimelineItem{
+			createdAt:  message.CreatedAt,
+			sequence:   sequence,
+			message:    message,
+			hasMessage: true,
+		})
+		sequence++
 	}
-
 	for _, taskID := range s.taskOrder {
 		if task, ok := s.tasks[taskID]; ok {
-			messages = append(messages, uiMessageForTask(task.view))
+			items = append(items, uiTimelineItem{
+				createdAt: task.view.CreatedAt,
+				sequence:  sequence,
+				task:      task.view,
+				hasTask:   true,
+			})
+			sequence++
 		}
 	}
 
-	sort.SliceStable(messages, func(i, j int) bool {
-		return uiMessageCreatedAt(messages[i]).Before(uiMessageCreatedAt(messages[j]))
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].createdAt.Equal(items[j].createdAt) {
+			return items[i].sequence < items[j].sequence
+		}
+		return items[i].createdAt.Before(items[j].createdAt)
 	})
 
+	messages := make([]UIMessage, 0, len(items))
+	currentAssistantIndex := -1
+	currentStepSource := ""
+
+	for _, item := range items {
+		if item.hasMessage {
+			message := item.message
+			switch message.Role {
+			case "user", "system":
+				if uiMessage, ok := uiMessageForMessage(message, false); ok {
+					messages = append(messages, uiMessage)
+				}
+				currentAssistantIndex = -1
+				currentStepSource = ""
+			case "assistant":
+				parts := uiPartsForAssistant(message, false)
+				if len(parts) == 0 {
+					continue
+				}
+				currentAssistantIndex = ensureAssistantUIMessage(&messages, currentAssistantIndex, message.ID, message.CreatedAt)
+				appendStepStartIfNeeded(&messages[currentAssistantIndex], &currentStepSource, message.ID)
+				messages[currentAssistantIndex].Parts = append(messages[currentAssistantIndex].Parts, parts...)
+			}
+			continue
+		}
+
+		if item.hasTask {
+			task := item.task
+			messageID := coalesce(task.AssistantMessageID, "task:"+task.ID)
+			currentAssistantIndex = ensureAssistantUIMessage(&messages, currentAssistantIndex, messageID, task.CreatedAt)
+
+			stepSource := task.AssistantMessageID
+			if stepSource == "" {
+				stepSource = currentStepSource
+			}
+			if stepSource == "" {
+				stepSource = "task:" + task.ID
+			}
+			appendStepStartIfNeeded(&messages[currentAssistantIndex], &currentStepSource, stepSource)
+			messages[currentAssistantIndex].Parts = append(messages[currentAssistantIndex].Parts, uiToolPartForTask(task))
+		}
+	}
+
 	return messages
+}
+
+type uiTimelineItem struct {
+	createdAt  time.Time
+	sequence   int
+	message    MessageView
+	hasMessage bool
+	task       TaskView
+	hasTask    bool
+}
+
+func ensureAssistantUIMessage(messages *[]UIMessage, currentIndex int, messageID string, createdAt time.Time) int {
+	if currentIndex >= 0 {
+		return currentIndex
+	}
+	if strings.TrimSpace(messageID) == "" {
+		messageID = "assistant"
+	}
+	*messages = append(*messages, UIMessage{
+		ID:   messageID,
+		Role: "assistant",
+		Metadata: map[string]interface{}{
+			"source":       "message",
+			"createdAt":    createdAt,
+			"originalRole": "assistant",
+		},
+		Parts: []map[string]interface{}{},
+	})
+	return len(*messages) - 1
+}
+
+func appendStepStartIfNeeded(message *UIMessage, currentStepSource *string, sourceID string) {
+	if strings.TrimSpace(sourceID) == "" {
+		sourceID = "assistant"
+	}
+	if *currentStepSource == sourceID {
+		return
+	}
+	message.Parts = append(message.Parts, map[string]interface{}{"type": "step-start"})
+	*currentStepSource = sourceID
 }
 
 func (m *Manager) uiMessageForAssistantDelta(s *session, messageID string) *UIMessage {
@@ -1092,6 +1228,20 @@ func uiMessageForMessage(message MessageView, streaming bool) (UIMessage, bool) 
 }
 
 func uiMessageForAssistant(message MessageView, streaming bool) UIMessage {
+	return UIMessage{
+		ID:   message.ID,
+		Role: "assistant",
+		Metadata: map[string]interface{}{
+			"source":       "message",
+			"createdAt":    message.CreatedAt,
+			"pending":      streaming,
+			"originalRole": message.Role,
+		},
+		Parts: uiPartsForAssistant(message, streaming),
+	}
+}
+
+func uiPartsForAssistant(message MessageView, streaming bool) []map[string]interface{} {
 	toolStatus, withoutToolStatus := extractLastTaggedContent(message.Content, "tool-status")
 	reasoning, text := extractLastTaggedContent(withoutToolStatus, "think")
 	state := "done"
@@ -1124,17 +1274,7 @@ func uiMessageForAssistant(message MessageView, streaming bool) UIMessage {
 		})
 	}
 
-	return UIMessage{
-		ID:   message.ID,
-		Role: "assistant",
-		Metadata: map[string]interface{}{
-			"source":       "message",
-			"createdAt":    message.CreatedAt,
-			"pending":      streaming,
-			"originalRole": message.Role,
-		},
-		Parts: parts,
-	}
+	return parts
 }
 
 func uiMessageForTask(task TaskView) UIMessage {
@@ -1169,6 +1309,15 @@ func uiToolPartForTask(task TaskView) map[string]interface{} {
 		"title":            coalesce(task.ToolDisplayName, task.ToolName),
 		"providerExecuted": false,
 		"input":            task.Arguments,
+		"toolMetadata": map[string]interface{}{
+			"taskId":               task.ID,
+			"assistantMessageId":   task.AssistantMessageID,
+			"taskStatus":           task.Status,
+			"dangerous":            task.Dangerous,
+			"requiresConfirmation": task.RequiresConfirmation,
+			"displayName":          task.ToolDisplayName,
+			"summary":              task.Summary,
+		},
 	}
 
 	switch task.Status {

@@ -41,8 +41,6 @@ func ticketExpectationForRequest(c *gin.Context) (auth.TicketExpectation, bool) 
 		return auth.TicketExpectation{Type: auth.TicketTypeWSTerminal, Ref: c.Param("server_id")}, true
 	case "/api/v1/monitor/server/:server_id":
 		return auth.TicketExpectation{Type: auth.TicketTypeWSMonitor, Ref: c.Param("server_id")}, true
-	case "/api/v1/ai/sessions/:session_id/ws":
-		return auth.TicketExpectation{Type: auth.TicketTypeWSAISession, Ref: c.Param("session_id")}, true
 	case "/api/v1/sftp/upload/ws/:task_id":
 		return auth.TicketExpectation{Type: auth.TicketTypeWSSFTPUpload, Ref: c.Param("task_id")}, true
 	case "/api/v1/sftp/transfer/ws/:task_id":

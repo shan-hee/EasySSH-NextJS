@@ -18,7 +18,7 @@ import {
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 
-import { TerminalAgentTimeline } from "@/components/ai-agent/terminal-agent-timeline"
+import { AgentAIElementsTimeline } from "@/components/ai-agent/agent-ai-elements-timeline"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -31,7 +31,7 @@ import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from "@/components/ui/shadcn-io/ai/conversation"
+} from "@/components/ai-elements/conversation"
 import {
   PromptInput,
   PromptInputModelSelect,
@@ -43,7 +43,7 @@ import {
   PromptInputTextarea,
   PromptInputToolbar,
   PromptInputTools,
-} from "@/components/ui/shadcn-io/ai/prompt-input"
+} from "@/components/ai-elements/prompt-input"
 import { useAIConfig } from "@/hooks/use-ai-config"
 import { useAgentSession } from "@/hooks/use-agent-session"
 import {
@@ -55,7 +55,6 @@ import {
   type PermissionMode,
   type SessionListItem,
 } from "@/lib/api/ai-agent"
-import { getLatestRemoteOutputKindAfterLatestUserMessage } from "@/lib/ai-agent/timeline-utils"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { cn } from "@/lib/utils"
 import type { TerminalSession } from "./types"
@@ -164,7 +163,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
     session,
     sessionId,
     transport,
-    timeline,
+    uiMessages,
     tasks,
     error,
     canSend: canSendToSession,
@@ -281,24 +280,15 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
             : modelOptions[0]
         )
   const activeModel = resolvedModel === "auto" ? undefined : resolvedModel
-  const messageCount = timeline.filter((entry) => entry.kind === "message" && entry.data).length
+  const messageCount = uiMessages.length
   const runningTasks = tasks.filter((task) => task.status === "running" || task.status === "queued")
   const pendingConfirmationTasks = tasks.filter((task) => task.status === "waiting_confirm")
-  const hasPendingAssistantMessage = timeline.some(
-    (entry) => entry.kind === "message" && entry.data?.role === "assistant" && Boolean(entry.data.pending)
-  )
   const isSessionRunning = session?.status === "running"
-  const latestRemoteOutputKind = getLatestRemoteOutputKindAfterLatestUserMessage(timeline)
   const shouldShowLoadingIndicator =
     isSessionRunning &&
-    !hasPendingAssistantMessage &&
     runningTasks.length === 0 &&
     pendingConfirmationTasks.length === 0
-  const assistantLoadingState = shouldShowLoadingIndicator
-    ? latestRemoteOutputKind && latestRemoteOutputKind !== "assistant"
-      ? "thinking"
-      : "waiting"
-    : false
+  const assistantLoadingState = shouldShowLoadingIndicator ? "waiting" : false
   const canSend =
     !!input.trim() &&
     isConfigured &&
@@ -309,7 +299,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
   const isCurrentSessionBlank = Boolean(
     session &&
     session.status !== "closed" &&
-    timeline.length === 0 &&
+    uiMessages.length === 0 &&
     tasks.length === 0
   )
   useEffect(() => {
@@ -713,9 +703,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
     terminalSession.id,
   ])
 
-  const handleSubmit = useCallback(async (event: React.FormEvent) => {
-    event.preventDefault()
-
+  const handleSubmit = useCallback(async () => {
     const normalizedInput = input.trim()
     if (!normalizedInput || !isConfigured || isConfigLoading || sessionCreatingRef.current) {
       return
@@ -1065,15 +1053,15 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
         <Conversation className="min-h-0 flex-1">
           <ConversationContent
             aria-label={tAI("panelAriaHistoryLabel")}
-            className="min-h-full px-4 py-4"
-            scrollClassName="h-full w-full overflow-y-auto scrollbar-custom"
+            className="h-full min-h-full overflow-y-auto px-4 py-4 scrollbar-custom"
           >
-            <TerminalAgentTimeline
-              entries={timeline}
+            <AgentAIElementsTimeline
+              messages={uiMessages}
               tText={tAI}
               onConfirmTask={confirmTask}
               assistantLoadingState={assistantLoadingState}
               emptyDescription={tAI("terminalEmptyDescription")}
+              compact
             />
           </ConversationContent>
           <ConversationScrollButton className="bottom-3 size-8" />
@@ -1112,7 +1100,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
               isConfigLoading ||
               !isConfigured ||
               sessionCreating ||
-              transport === "connecting_ws" ||
+              transport === "connecting" ||
               (Boolean(session) && !canSendToSession && session?.status !== "closed")
             }
           />

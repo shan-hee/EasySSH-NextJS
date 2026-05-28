@@ -317,8 +317,8 @@ components:
 
     AITransportType:
       type: string
-      enum: [ws, sse]
-      example: ws
+      enum: [ai_sdk_ui]
+      example: ai_sdk_ui
 
     AISessionStatus:
       type: string
@@ -380,6 +380,7 @@ components:
       anyOf:
         - $ref: '#/components/schemas/AIUITextPart'
         - $ref: '#/components/schemas/AIUIReasoningPart'
+        - $ref: '#/components/schemas/AIUIToolPart'
         - $ref: '#/components/schemas/AIUIDynamicToolPart'
         - $ref: '#/components/schemas/AIUIDataPart'
         - $ref: '#/components/schemas/AIUIStepStartPart'
@@ -433,6 +434,53 @@ components:
           type: string
         providerExecuted:
           type: boolean
+        toolMetadata:
+          type: object
+          additionalProperties: true
+        state:
+          type: string
+          enum:
+            - input-streaming
+            - input-available
+            - approval-requested
+            - approval-responded
+            - output-available
+            - output-error
+            - output-denied
+        input:
+          description: AI SDK UI tool input payload
+        output:
+          description: AI SDK UI tool output payload
+        errorText:
+          type: string
+        approval:
+          type: object
+          properties:
+            id:
+              type: string
+            approved:
+              type: boolean
+            reason:
+              type: string
+          additionalProperties: true
+      additionalProperties: true
+
+    AIUIToolPart:
+      type: object
+      required: [type, toolCallId, state]
+      properties:
+        type:
+          type: string
+          pattern: '^tool-'
+        toolCallId:
+          type: string
+        title:
+          type: string
+        providerExecuted:
+          type: boolean
+        toolMetadata:
+          type: object
+          additionalProperties: true
         state:
           type: string
           enum:
@@ -541,6 +589,9 @@ components:
       properties:
         id:
           type: string
+        assistant_message_id:
+          type: string
+          description: 生成该工具调用的 AI SDK UI assistant message id。
         tool_call_id:
           type: string
         tool_name:
@@ -568,41 +619,6 @@ components:
         updated_at:
           type: string
           format: date-time
-
-    AIAssistantEventData:
-      type: object
-      required: [message_id]
-      properties:
-        message_id:
-          type: string
-        delta:
-          type: string
-        content:
-          type: string
-
-    AIConfirmationView:
-      type: object
-      required: [task_id, status, created_at]
-      properties:
-        task_id:
-          type: string
-        status:
-          type: string
-        decision:
-          type: string
-          enum: [confirm, reject]
-        created_at:
-          type: string
-          format: date-time
-
-    AIErrorView:
-      type: object
-      required: [code, message]
-      properties:
-        code:
-          type: string
-        message:
-          type: string
 
     AISessionScope:
       type: object
@@ -675,43 +691,6 @@ components:
             $ref: '#/components/schemas/AIToolView'
         default_transport:
           $ref: '#/components/schemas/AITransportType'
-
-    AIEvent:
-      type: object
-      required: [id, type, session_id, created_at]
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-          enum:
-            - session.started
-            - assistant.delta
-            - assistant.completed
-            - task.created
-            - task.updated
-            - confirmation.requested
-            - confirmation.resolved
-            - error
-            - session.completed
-        session_id:
-          type: string
-          format: uuid
-        created_at:
-          type: string
-          format: date-time
-        session:
-          $ref: '#/components/schemas/AISessionView'
-        assistant:
-          $ref: '#/components/schemas/AIAssistantEventData'
-        task:
-          $ref: '#/components/schemas/AITaskView'
-        ui_message:
-          $ref: '#/components/schemas/AIUIMessage'
-        confirmation:
-          $ref: '#/components/schemas/AIConfirmationView'
-        error:
-          $ref: '#/components/schemas/AIErrorView'
 
     CreateAISessionRequest:
       type: object
@@ -786,28 +765,396 @@ components:
           maxLength: 80
           description: 新的会话标题，服务端会 trim 并限制长度。
 
-    SendAISessionMessageRequest:
+    AISDKChatApprovalRequest:
       type: object
-      required: [content]
       properties:
-        content:
+        task_id:
+          type: string
+          description: EasySSH 工具任务 ID，同时作为 AI SDK tool approval id。
+        decision:
+          type: string
+          enum: [confirm, reject]
+
+    AISDKChatRequest:
+      type: object
+      description: Vercel AI SDK UI DefaultChatTransport 请求体。context/model/permission_mode/scope/approval 是 EasySSH 在标准 UI 协议外追加的会话能力。
+      properties:
+        id:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIUIMessage'
+        trigger:
+          type: string
+          enum: [submit-message, regenerate-message]
+        messageId:
           type: string
         context:
           type: string
+          description: EasySSH 附加上下文，会由服务端拼入本轮用户消息。
         model:
           type: string
         permission_mode:
           $ref: '#/components/schemas/AIPermissionMode'
         scope:
           $ref: '#/components/schemas/AISessionScope'
+        approval:
+          $ref: '#/components/schemas/AISDKChatApprovalRequest'
 
-    ConfirmAISessionTaskRequest:
+    AIUIMessageChunk:
+      description: Vercel AI SDK UIMessageChunk，用于 X-Vercel-AI-UI-Message-Stream v1 SSE data 载荷。
+      anyOf:
+        - $ref: '#/components/schemas/AIUIStartChunk'
+        - $ref: '#/components/schemas/AIUITextStartChunk'
+        - $ref: '#/components/schemas/AIUITextDeltaChunk'
+        - $ref: '#/components/schemas/AIUITextEndChunk'
+        - $ref: '#/components/schemas/AIUIReasoningStartChunk'
+        - $ref: '#/components/schemas/AIUIReasoningDeltaChunk'
+        - $ref: '#/components/schemas/AIUIReasoningEndChunk'
+        - $ref: '#/components/schemas/AIUIToolInputStartChunk'
+        - $ref: '#/components/schemas/AIUIToolInputDeltaChunk'
+        - $ref: '#/components/schemas/AIUIToolInputAvailableChunk'
+        - $ref: '#/components/schemas/AIUIToolInputErrorChunk'
+        - $ref: '#/components/schemas/AIUIToolApprovalRequestChunk'
+        - $ref: '#/components/schemas/AIUIToolOutputAvailableChunk'
+        - $ref: '#/components/schemas/AIUIToolOutputErrorChunk'
+        - $ref: '#/components/schemas/AIUIToolOutputDeniedChunk'
+        - $ref: '#/components/schemas/AIUISourceURLChunk'
+        - $ref: '#/components/schemas/AIUISourceDocumentChunk'
+        - $ref: '#/components/schemas/AIUIFileChunk'
+        - $ref: '#/components/schemas/AIUIDataChunk'
+        - $ref: '#/components/schemas/AIUIErrorChunk'
+        - $ref: '#/components/schemas/AIUIStartStepChunk'
+        - $ref: '#/components/schemas/AIUIFinishStepChunk'
+        - $ref: '#/components/schemas/AIUIFinishChunk'
+        - $ref: '#/components/schemas/AIUIAbortChunk'
+        - $ref: '#/components/schemas/AIUIMessageMetadataChunk'
+        - type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+          additionalProperties: true
+
+    AIUIStartChunk:
       type: object
-      required: [decision]
+      required: [type]
       properties:
-        decision:
+        type:
+          const: start
+        messageId:
           type: string
-          enum: [confirm, reject]
+        messageMetadata:
+          description: AI SDK UI message metadata
+      additionalProperties: true
+
+    AIUITextStartChunk:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          const: text-start
+        id:
+          type: string
+      additionalProperties: true
+
+    AIUITextDeltaChunk:
+      type: object
+      required: [type, id, delta]
+      properties:
+        type:
+          const: text-delta
+        id:
+          type: string
+        delta:
+          type: string
+      additionalProperties: true
+
+    AIUITextEndChunk:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          const: text-end
+        id:
+          type: string
+      additionalProperties: true
+
+    AIUIReasoningStartChunk:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          const: reasoning-start
+        id:
+          type: string
+      additionalProperties: true
+
+    AIUIReasoningDeltaChunk:
+      type: object
+      required: [type, id, delta]
+      properties:
+        type:
+          const: reasoning-delta
+        id:
+          type: string
+        delta:
+          type: string
+      additionalProperties: true
+
+    AIUIReasoningEndChunk:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          const: reasoning-end
+        id:
+          type: string
+      additionalProperties: true
+
+    AIUIToolInputStartChunk:
+      type: object
+      required: [type, toolCallId, toolName]
+      properties:
+        type:
+          const: tool-input-start
+        toolCallId:
+          type: string
+        toolName:
+          type: string
+        dynamic:
+          type: boolean
+        title:
+          type: string
+        toolMetadata:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+
+    AIUIToolInputDeltaChunk:
+      type: object
+      required: [type, toolCallId, inputTextDelta]
+      properties:
+        type:
+          const: tool-input-delta
+        toolCallId:
+          type: string
+        inputTextDelta:
+          type: string
+      additionalProperties: true
+
+    AIUIToolInputAvailableChunk:
+      type: object
+      required: [type, toolCallId, toolName, input]
+      properties:
+        type:
+          const: tool-input-available
+        toolCallId:
+          type: string
+        toolName:
+          type: string
+        input:
+          description: AI SDK UI tool input payload
+        dynamic:
+          type: boolean
+        title:
+          type: string
+        toolMetadata:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+
+    AIUIToolInputErrorChunk:
+      type: object
+      required: [type, toolCallId, toolName, input, errorText]
+      properties:
+        type:
+          const: tool-input-error
+        toolCallId:
+          type: string
+        toolName:
+          type: string
+        input:
+          description: AI SDK UI tool input payload
+        errorText:
+          type: string
+        dynamic:
+          type: boolean
+        title:
+          type: string
+        toolMetadata:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+
+    AIUIToolApprovalRequestChunk:
+      type: object
+      required: [type, approvalId, toolCallId]
+      properties:
+        type:
+          const: tool-approval-request
+        approvalId:
+          type: string
+        toolCallId:
+          type: string
+      additionalProperties: true
+
+    AIUIToolOutputAvailableChunk:
+      type: object
+      required: [type, toolCallId, output]
+      properties:
+        type:
+          const: tool-output-available
+        toolCallId:
+          type: string
+        output:
+          description: AI SDK UI tool output payload
+        dynamic:
+          type: boolean
+        preliminary:
+          type: boolean
+      additionalProperties: true
+
+    AIUIToolOutputErrorChunk:
+      type: object
+      required: [type, toolCallId, errorText]
+      properties:
+        type:
+          const: tool-output-error
+        toolCallId:
+          type: string
+        errorText:
+          type: string
+        dynamic:
+          type: boolean
+      additionalProperties: true
+
+    AIUIToolOutputDeniedChunk:
+      type: object
+      required: [type, toolCallId]
+      properties:
+        type:
+          const: tool-output-denied
+        toolCallId:
+          type: string
+      additionalProperties: true
+
+    AIUISourceURLChunk:
+      type: object
+      required: [type, sourceId, url]
+      properties:
+        type:
+          const: source-url
+        sourceId:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+      additionalProperties: true
+
+    AIUISourceDocumentChunk:
+      type: object
+      required: [type, sourceId, mediaType, title]
+      properties:
+        type:
+          const: source-document
+        sourceId:
+          type: string
+        mediaType:
+          type: string
+        title:
+          type: string
+        filename:
+          type: string
+      additionalProperties: true
+
+    AIUIFileChunk:
+      type: object
+      required: [type, url, mediaType]
+      properties:
+        type:
+          const: file
+        url:
+          type: string
+        mediaType:
+          type: string
+      additionalProperties: true
+
+    AIUIDataChunk:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          pattern: '^data-'
+        id:
+          type: string
+        data:
+          description: AI SDK UI data part payload
+        transient:
+          type: boolean
+      additionalProperties: true
+
+    AIUIErrorChunk:
+      type: object
+      required: [type, errorText]
+      properties:
+        type:
+          const: error
+        errorText:
+          type: string
+      additionalProperties: true
+
+    AIUIStartStepChunk:
+      type: object
+      required: [type]
+      properties:
+        type:
+          const: start-step
+      additionalProperties: true
+
+    AIUIFinishStepChunk:
+      type: object
+      required: [type]
+      properties:
+        type:
+          const: finish-step
+      additionalProperties: true
+
+    AIUIFinishChunk:
+      type: object
+      required: [type]
+      properties:
+        type:
+          const: finish
+        finishReason:
+          type: string
+          enum: [stop, length, content-filter, tool-calls, error, other]
+        messageMetadata:
+          description: AI SDK UI message metadata
+      additionalProperties: true
+
+    AIUIAbortChunk:
+      type: object
+      required: [type]
+      properties:
+        type:
+          const: abort
+        reason:
+          type: string
+      additionalProperties: true
+
+    AIUIMessageMetadataChunk:
+      type: object
+      required: [type, messageMetadata]
+      properties:
+        type:
+          const: message-metadata
+        messageMetadata:
+          description: AI SDK UI message metadata
+      additionalProperties: true
 
     ServerCreate:
       type: object
@@ -1493,11 +1840,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /ai/sessions/{session_id}/messages:
+  /ai/sessions/{session_id}/chat:
     post:
       tags:
         - ai
-      summary: 向 AI 会话发送用户消息
+      summary: AI SDK UI 标准聊天流
+      description: |
+        接收 Vercel AI SDK UI `DefaultChatTransport` 请求体，并返回 `UIMessageChunk` SSE。
+        响应头包含 `X-Vercel-AI-UI-Message-Stream: v1`，每个 `data:` 载荷都是一个 AI SDK UIMessageChunk JSON 对象，流结束时发送 `data: [DONE]`。
+        EasySSH 的 context/model/permission_mode/scope/approval 字段是标准 UI 协议外的附加能力。
       security:
         - bearerAuth: []
       parameters:
@@ -1512,10 +1863,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SendAISessionMessageRequest'
+              $ref: '#/components/schemas/AISDKChatRequest'
       responses:
-        '202':
-          description: 消息已入队，后续结果通过 SSE 或 WS 返回
+        '200':
+          description: AI SDK UI message stream
+          headers:
+            X-Vercel-AI-UI-Message-Stream:
+              schema:
+                type: string
+                enum: [v1]
+              description: AI SDK UI message stream version
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/AIUIMessageChunk'
+              description: SSE data 载荷为 AIUIMessageChunk JSON；结束帧为 [DONE]。
+              examples:
+                textDelta:
+                  summary: 文本增量
+                  value: |
+                    data: {"type":"start","messageId":"assistant-message-id"}
+
+                    data: {"type":"text-start","id":"assistant-message-id:text:0"}
+
+                    data: {"type":"text-delta","id":"assistant-message-id:text:0","delta":"你好"}
+
+                    data: {"type":"text-end","id":"assistant-message-id:text:0"}
+
+                    data: {"type":"finish","finishReason":"stop"}
+
+                    data: [DONE]
         '404':
           description: 会话不存在
           content:
@@ -1524,72 +1901,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: 会话当前不可接受新消息
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /ai/sessions/{session_id}/events:
-    get:
-      tags:
-        - ai
-      summary: 订阅 AI 会话 SSE 事件流
-      description: |
-        输出统一的 `AIEvent` JSON 负载。每个 SSE 事件的 data 字段都对应同一套事件 schema。
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: SSE 事件流，data 载荷遵循 AIEvent schema
-          content:
-            text/event-stream:
-              schema:
-                type: string
-                description: 每个事件的 data 字段都是一个 AIEvent JSON 对象
-
-  /ai/sessions/{session_id}/tasks/{task_id}/confirm:
-    post:
-      tags:
-        - ai
-      summary: 确认或拒绝危险任务
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: task_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfirmAISessionTaskRequest'
-      responses:
-        '202':
-          description: 确认决策已接受
-        '404':
-          description: 会话或任务不存在
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '409':
-          description: 当前任务不处于可确认状态
           content:
             application/json:
               schema:

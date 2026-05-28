@@ -472,7 +472,6 @@ func main() {
 	aiRuntimeManager := aichat.NewRuntimeManager(aiConfigService, userAIConfigService, aiToolExecutor)
 	aiRuntimeManager.SetSessionStore(runtime.NewGormSessionStore(database))
 	aiSessionHandler := rest.NewAISessionHandler(aiRuntimeManager)
-	aiSessionWSHandler := ws.NewAISessionHandler(aiRuntimeManager, securityService, cfg.Server.WebDevPort)
 	// Docker 处理器（复用监控连接池）
 	dockerHandler := rest.NewDockerHandler(serverService, serverRepo, encryptor, sshHostKeyService.GetHostKeyCallback(), monitorConnectionPool)
 	// 其他处理器
@@ -956,12 +955,9 @@ func main() {
 			aiChatRoutes.POST("/sessions", aiSessionHandler.CreateSession)
 			aiChatRoutes.GET("/sessions/:session_id", aiSessionHandler.GetSession)
 			aiChatRoutes.PATCH("/sessions/:session_id", aiSessionHandler.RenameSession)
-			aiChatRoutes.POST("/sessions/:session_id/messages", aiSessionHandler.SendMessage)
+			aiChatRoutes.POST("/sessions/:session_id/chat", aiSessionHandler.Chat)
 			aiChatRoutes.POST("/sessions/:session_id/cancel", aiSessionHandler.CancelSession)
-			aiChatRoutes.GET("/sessions/:session_id/events", aiSessionHandler.StreamEvents)
-			aiChatRoutes.POST("/sessions/:session_id/tasks/:task_id/confirm", aiSessionHandler.ConfirmTask)
 			aiChatRoutes.DELETE("/sessions/:session_id", aiSessionHandler.DeleteSession)
-			aiChatRoutes.GET("/sessions/:session_id/ws", aiSessionWSHandler.HandleSession)
 		}
 
 		// 备份恢复路由（需要认证）

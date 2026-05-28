@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -83,9 +84,8 @@ func newTestAISessionRouter(userID uuid.UUID, handler *AISessionHandler) *gin.En
 	router.POST("/sessions", handler.CreateSession)
 	router.GET("/sessions/:session_id", handler.GetSession)
 	router.PATCH("/sessions/:session_id", handler.RenameSession)
-	router.POST("/sessions/:session_id/messages", handler.SendMessage)
+	router.POST("/sessions/:session_id/chat", handler.Chat)
 	router.POST("/sessions/:session_id/cancel", handler.CancelSession)
-	router.POST("/sessions/:session_id/tasks/:task_id/confirm", handler.ConfirmTask)
 	router.DELETE("/sessions/:session_id", handler.DeleteSession)
 	return router
 }
@@ -108,21 +108,73 @@ func performJSONRequest(t *testing.T, router http.Handler, method, path string, 
 	return recorder
 }
 
-func waitForRuntimeEvent(t *testing.T, events <-chan runtime.Event, match func(runtime.Event) bool) runtime.Event {
+func parseSSEChunks(t *testing.T, recorder *httptest.ResponseRecorder) []map[string]interface{} {
 	t.Helper()
 
-	timeout := time.After(2 * time.Second)
-	for {
-		select {
-		case event, ok := <-events:
-			require.True(t, ok, "event channel closed before target event")
-			if match(event) {
-				return event
+	chunks := make([]map[string]interface{}, 0)
+	for _, block := range strings.Split(recorder.Body.String(), "\n\n") {
+		block = strings.TrimSpace(block)
+		if block == "" {
+			continue
+		}
+
+		for _, line := range strings.Split(block, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
 			}
-		case <-timeout:
-			t.Fatal("timed out waiting for runtime event")
+			payload := strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			if payload == "" || payload == "[DONE]" {
+				continue
+			}
+
+			var chunk map[string]interface{}
+			require.NoError(t, json.Unmarshal([]byte(payload), &chunk))
+			chunks = append(chunks, chunk)
 		}
 	}
+
+	return chunks
+}
+
+func chunkTypes(chunks []map[string]interface{}) []string {
+	types := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		if typ, ok := chunk["type"].(string); ok {
+			types = append(types, typ)
+		}
+	}
+	return types
+}
+
+func findChunk(chunks []map[string]interface{}, typ string) (map[string]interface{}, bool) {
+	for _, chunk := range chunks {
+		if chunk["type"] == typ {
+			return chunk, true
+		}
+	}
+	return nil, false
+}
+
+func chatRequestBody(content string, extra map[string]interface{}) map[string]interface{} {
+	messageID := uuid.NewString()
+	body := map[string]interface{}{
+		"id":        "test-chat",
+		"trigger":   "submit-message",
+		"messageId": messageID,
+		"messages": []map[string]interface{}{
+			{
+				"id":   messageID,
+				"role": "user",
+				"parts": []map[string]interface{}{
+					{"type": "text", "text": content},
+				},
+			},
+		},
+	}
+	for key, value := range extra {
+		body[key] = value
+	}
+	return body
 }
 
 func TestAISessionHandlerCreateSendConfirmAndClose(t *testing.T) {
@@ -182,48 +234,51 @@ func TestAISessionHandlerCreateSendConfirmAndClose(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(createResp.Body.Bytes(), &created))
 	require.NotEmpty(t, created.Data.SessionID)
-	require.Equal(t, runtime.TransportWS, created.Data.DefaultTransport)
+	require.Equal(t, runtime.TransportAISDKUI, created.Data.DefaultTransport)
 
-	events, unsubscribe, err := manager.Subscribe(userID, created.Data.SessionID)
-	require.NoError(t, err)
-	defer unsubscribe()
-
-	waitForRuntimeEvent(t, events, func(event runtime.Event) bool {
-		return event.Type == runtime.EventSessionStarted
-	})
-
-	sendResp := performJSONRequest(t, router, http.MethodPost, "/sessions/"+created.Data.SessionID+"/messages", map[string]interface{}{
-		"content": "执行 uptime",
+	sendResp := performJSONRequest(t, router, http.MethodPost, "/sessions/"+created.Data.SessionID+"/chat", chatRequestBody("执行 uptime", map[string]interface{}{
 		"context": "请只返回摘要，不要贴满屏原始输出。",
-	})
-	require.Equal(t, http.StatusAccepted, sendResp.Code)
+	}))
+	require.Equal(t, http.StatusOK, sendResp.Code)
+	require.Equal(t, "v1", sendResp.Header().Get("X-Vercel-AI-UI-Message-Stream"))
 
-	confirmation := waitForRuntimeEvent(t, events, func(event runtime.Event) bool {
-		return event.Type == runtime.EventConfirmationRequested && event.Confirmation != nil
-	})
+	sendChunks := parseSSEChunks(t, sendResp)
+	require.Contains(t, chunkTypes(sendChunks), "tool-approval-request")
+	approvalChunk, ok := findChunk(sendChunks, "tool-approval-request")
+	require.True(t, ok)
+	taskID, ok := approvalChunk["approvalId"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, taskID)
 
-	secondSendResp := performJSONRequest(t, router, http.MethodPost, "/sessions/"+created.Data.SessionID+"/messages", map[string]interface{}{
-		"content": "再检查一次",
-	})
+	secondSendResp := performJSONRequest(t, router, http.MethodPost, "/sessions/"+created.Data.SessionID+"/chat", chatRequestBody("再检查一次", nil))
 	require.Equal(t, http.StatusConflict, secondSendResp.Code)
 
 	var sendConflict ErrorResponse
 	require.NoError(t, json.Unmarshal(secondSendResp.Body.Bytes(), &sendConflict))
 	require.Equal(t, "session_conflict", sendConflict.Error)
 
-	confirmResp := performJSONRequest(t, router, http.MethodPost, "/sessions/"+created.Data.SessionID+"/tasks/"+confirmation.Confirmation.TaskID+"/confirm", map[string]interface{}{
-		"decision": "confirm",
+	confirmResp := performJSONRequest(t, router, http.MethodPost, "/sessions/"+created.Data.SessionID+"/chat", map[string]interface{}{
+		"id": "test-chat",
+		"approval": map[string]interface{}{
+			"task_id":  taskID,
+			"decision": "confirm",
+		},
 	})
-	require.Equal(t, http.StatusAccepted, confirmResp.Code)
+	require.Equal(t, http.StatusOK, confirmResp.Code)
+	confirmChunks := parseSSEChunks(t, confirmResp)
+	require.Contains(t, chunkTypes(confirmChunks), "tool-output-available")
+	require.Contains(t, chunkTypes(confirmChunks), "text-delta")
 
-	completed := waitForRuntimeEvent(t, events, func(event runtime.Event) bool {
-		return event.Type == runtime.EventSessionCompleted && event.Session != nil
-	})
-
-	require.Equal(t, runtime.SessionStatusIdle, completed.Session.Status)
-	require.Len(t, completed.Session.Tasks, 1)
-	require.Equal(t, runtime.TaskStatusSucceeded, completed.Session.Tasks[0].Status)
-	require.Equal(t, "命令执行完成，系统负载正常。", completed.Session.Messages[len(completed.Session.Messages)-1].Content)
+	latestResp := performJSONRequest(t, router, http.MethodGet, "/sessions/"+created.Data.SessionID, nil)
+	require.Equal(t, http.StatusOK, latestResp.Code)
+	var latest struct {
+		Data CreateAISessionResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(latestResp.Body.Bytes(), &latest))
+	require.Equal(t, runtime.SessionStatusIdle, latest.Data.Session.Status)
+	require.Len(t, latest.Data.Session.Tasks, 1)
+	require.Equal(t, runtime.TaskStatusSucceeded, latest.Data.Session.Tasks[0].Status)
+	require.Equal(t, "命令执行完成，系统负载正常。", latest.Data.Session.Messages[len(latest.Data.Session.Messages)-1].Content)
 
 	calls := runner.snapshotCalls()
 	require.Len(t, calls, 2)
@@ -234,7 +289,7 @@ func TestAISessionHandlerCreateSendConfirmAndClose(t *testing.T) {
 	closeResp := performJSONRequest(t, router, http.MethodDelete, "/sessions/"+created.Data.SessionID, nil)
 	require.Equal(t, http.StatusNoContent, closeResp.Code)
 
-	_, err = manager.GetSession(userID, created.Data.SessionID)
+	_, err := manager.GetSession(userID, created.Data.SessionID)
 	require.ErrorIs(t, err, runtime.ErrSessionNotFound)
 }
 
@@ -250,9 +305,7 @@ func TestAISessionHandlerReturnsNotFoundForUnknownSession(t *testing.T) {
 	handler := NewAISessionHandler(manager)
 	router := newTestAISessionRouter(userID, handler)
 
-	resp := performJSONRequest(t, router, http.MethodPost, "/sessions/not-found/messages", map[string]interface{}{
-		"content": "hello",
-	})
+	resp := performJSONRequest(t, router, http.MethodPost, "/sessions/not-found/chat", chatRequestBody("hello", nil))
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
 	var errorResponse ErrorResponse
