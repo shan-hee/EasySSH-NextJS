@@ -1,6 +1,7 @@
 import { apiFetch, getApiUrl, getAuthHeaders } from "@/lib/api-client"
 import { createAuthTicket } from "@/lib/auth-ticket"
 import { getWsUrl } from "@/lib/config"
+import type { UIMessage } from "@ai-sdk/react"
 
 export type PermissionMode = "readonly" | "balanced" | "privileged"
 export type AgentSessionStatus = "idle" | "running" | "waiting_confirmation" | "closed"
@@ -99,6 +100,7 @@ export interface SessionView {
   updated_at: string
   messages: MessageView[]
   tasks: TaskView[]
+  ui_messages: UIMessage[]
   available_tools: ToolView[]
   default_transport: AgentTransportType
 }
@@ -111,6 +113,7 @@ export interface AIEvent {
   session?: SessionView
   assistant?: AssistantEventData
   task?: TaskView
+  ui_message?: UIMessage
   confirmation?: ConfirmationView
   error?: ErrorView
 }

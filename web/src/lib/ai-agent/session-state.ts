@@ -6,11 +6,7 @@ import type {
   SessionView,
   TaskView,
 } from "@/lib/api/ai-agent"
-import {
-  messageToAIUIMessage,
-  taskToAIUIMessage,
-  type AgentUIMessage,
-} from "@/lib/ai-agent/ai-sdk-ui"
+import type { UIMessage } from "@ai-sdk/react"
 
 export type TransportState = "idle" | "connecting_ws" | "ws" | "sse"
 
@@ -59,14 +55,14 @@ export type ResolvedTimelineItem =
       kind: "message"
       createdAt: string
       data?: TimelineMessage
-      uiMessage?: AgentUIMessage | null
+      uiMessage?: UIMessage | null
     }
   | {
       id: string
       kind: "task"
       createdAt: string
       data?: TaskView
-      uiMessage?: AgentUIMessage
+      uiMessage?: UIMessage
     }
   | {
       id: string
@@ -88,6 +84,7 @@ export interface AgentSessionState {
   transport: TransportState
   messagesById: Record<string, TimelineMessage>
   tasksById: Record<string, TaskView>
+  uiMessagesById: Record<string, UIMessage>
   confirmationsByKey: Record<string, TimelineConfirmation>
   errorsByKey: Record<string, TimelineError>
   timeline: TimelineItem[]
@@ -106,6 +103,7 @@ export const initialAgentSessionState: AgentSessionState = {
   transport: "idle",
   messagesById: {},
   tasksById: {},
+  uiMessagesById: {},
   confirmationsByKey: {},
   errorsByKey: {},
   timeline: [],
@@ -152,7 +150,12 @@ function applySessionSnapshot(
   }
 
   const messagesById = { ...next.messagesById }
+  const uiMessagesById = { ...next.uiMessagesById }
   let timeline = next.timeline
+
+  for (const uiMessage of snapshot.ui_messages || []) {
+    uiMessagesById[uiMessage.id] = uiMessage
+  }
 
   for (const message of snapshot.messages) {
     if (!includeUserMessages && message.role === "user") {
@@ -186,6 +189,7 @@ function applySessionSnapshot(
     ...next,
     messagesById,
     tasksById,
+    uiMessagesById,
     timeline,
   }
 
@@ -232,6 +236,12 @@ function applyEvent(state: AgentSessionState, event: AIEvent): AgentSessionState
           ...state.messagesById,
           [nextMessage.id]: nextMessage,
         },
+        uiMessagesById: event.ui_message
+          ? {
+              ...state.uiMessagesById,
+              [event.ui_message.id]: event.ui_message,
+            }
+          : state.uiMessagesById,
         timeline: upsertTimelineItem(state.timeline, {
           id: `message:${nextMessage.id}`,
           kind: "message",
@@ -271,6 +281,12 @@ function applyEvent(state: AgentSessionState, event: AIEvent): AgentSessionState
           ...state.messagesById,
           [nextMessage.id]: nextMessage,
         },
+        uiMessagesById: event.ui_message
+          ? {
+              ...state.uiMessagesById,
+              [event.ui_message.id]: event.ui_message,
+            }
+          : state.uiMessagesById,
         timeline: upsertTimelineItem(state.timeline, {
           id: `message:${nextMessage.id}`,
           kind: "message",
@@ -296,6 +312,12 @@ function applyEvent(state: AgentSessionState, event: AIEvent): AgentSessionState
           ...state.tasksById,
           [event.task.id]: event.task,
         },
+        uiMessagesById: event.ui_message
+          ? {
+              ...state.uiMessagesById,
+              [event.ui_message.id]: event.ui_message,
+            }
+          : state.uiMessagesById,
         timeline: upsertTimelineItem(state.timeline, {
           id: `task:${event.task.id}`,
           kind: "task",
@@ -335,6 +357,12 @@ function applyEvent(state: AgentSessionState, event: AIEvent): AgentSessionState
             key: confirmationKey,
           },
         },
+        uiMessagesById: event.ui_message
+          ? {
+              ...state.uiMessagesById,
+              [event.ui_message.id]: event.ui_message,
+            }
+          : state.uiMessagesById,
         timeline: upsertTimelineItem(state.timeline, {
           id: `confirmation:${confirmationKey}`,
           kind: "confirmation",
@@ -413,6 +441,25 @@ export function agentSessionReducer(state: AgentSessionState, action: AgentSessi
           ...state.messagesById,
           [action.message.id]: action.message,
         },
+        uiMessagesById: {
+          ...state.uiMessagesById,
+          [action.message.id]: {
+            id: action.message.id,
+            role: "user",
+            metadata: {
+              source: "message",
+              createdAt: action.message.created_at,
+              originalRole: "user",
+            },
+            parts: [
+              {
+                type: "text",
+                text: action.message.content,
+                state: "done",
+              },
+            ],
+          },
+        },
         timeline: upsertTimelineItem(state.timeline, {
           id: `message:${action.message.id}`,
           kind: "message",
@@ -451,7 +498,7 @@ export function resolveTimelineItems(state: AgentSessionState): ResolvedTimeline
             kind: item.kind,
             createdAt: item.createdAt,
             data: message,
-            uiMessage: message ? messageToAIUIMessage(message) : null,
+            uiMessage: message ? state.uiMessagesById[message.id] || null : null,
           }
         }
       case "task":
@@ -462,7 +509,7 @@ export function resolveTimelineItems(state: AgentSessionState): ResolvedTimeline
             kind: item.kind,
             createdAt: item.createdAt,
             data: task,
-            uiMessage: task ? taskToAIUIMessage(task) : undefined,
+            uiMessage: task ? state.uiMessagesById[`task:${task.id}`] : undefined,
           }
         }
       case "confirmation":

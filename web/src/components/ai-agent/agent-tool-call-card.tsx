@@ -1,6 +1,13 @@
 "use client"
 
 import { useMemo, useState, type ReactNode } from "react"
+import type { UIMessage } from "@ai-sdk/react"
+import {
+  getToolName,
+  isToolUIPart,
+  type DynamicToolUIPart,
+  type ToolUIPart,
+} from "ai"
 import {
   AlertTriangle,
   Braces,
@@ -16,16 +23,8 @@ import {
 import { AgentNoticeCard } from "@/components/ai-agent/agent-notice"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  getAgentToolErrorText,
-  getAgentToolInputText,
-  getAgentToolName,
-  getAgentToolOutputText,
-  getAgentUIMessageToolPart,
-  type AgentUIMessage,
-} from "@/lib/ai-agent/ai-sdk-ui"
 import { getTaskStatusLabel, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
-import type { AgentTaskStatus, TaskView } from "@/lib/api/ai-agent"
+import type { AgentTaskStatus } from "@/lib/api/ai-agent"
 import { cn } from "@/lib/utils"
 
 type ToolPartState =
@@ -38,13 +37,23 @@ type ToolPartState =
   | "output-denied"
 
 interface AgentToolCallCardProps {
-  task: TaskView
-  uiMessage?: AgentUIMessage
+  uiMessage: UIMessage
   tText: TimelineTranslate
   onConfirmTask?: (taskId: string, decision: "confirm" | "reject") => void
   compact?: boolean
   className?: string
 }
+
+type AgentToolMetadata = {
+  taskId?: string
+  taskStatus?: unknown
+  dangerous?: boolean
+  requiresConfirmation?: boolean
+  displayName?: string
+  summary?: string
+}
+
+type AgentToolUIPart = DynamicToolUIPart | ToolUIPart
 
 function getFallbackPartState(status: AgentTaskStatus): ToolPartState {
   switch (status) {
@@ -61,6 +70,86 @@ function getFallbackPartState(status: AgentTaskStatus): ToolPartState {
     default:
       return "input-available"
   }
+}
+
+function getToolPart(message: UIMessage): AgentToolUIPart | null {
+  return message.parts.find(isToolUIPart) || null
+}
+
+function getMetadata(message: UIMessage): AgentToolMetadata {
+  return message.metadata && typeof message.metadata === "object"
+    ? message.metadata as AgentToolMetadata
+    : {}
+}
+
+function normalizeTaskStatus(value: unknown): AgentTaskStatus {
+  switch (value) {
+    case "queued":
+    case "waiting_confirm":
+    case "running":
+    case "succeeded":
+    case "failed":
+    case "cancelled":
+      return value
+    default:
+      return "queued"
+  }
+}
+
+function getMetadataString(value: unknown) {
+  return typeof value === "string" ? value : undefined
+}
+
+function formatPartValue(value: unknown) {
+  if (value == null) {
+    return ""
+  }
+
+  if (typeof value === "string") {
+    return value
+  }
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function getPartInputText(part: AgentToolUIPart | null) {
+  if (!part || !("input" in part)) {
+    return ""
+  }
+
+  return formatPartValue(part.input)
+}
+
+function getPartOutputText(part: AgentToolUIPart | null) {
+  if (!part || part.state !== "output-available") {
+    return ""
+  }
+
+  return formatPartValue(part.output)
+}
+
+function getPartErrorText(part: AgentToolUIPart | null) {
+  if (!part || part.state !== "output-error") {
+    return ""
+  }
+
+  return part.errorText
+}
+
+function getApprovalTaskId(part: AgentToolUIPart | null, metadata: AgentToolMetadata) {
+  if (!part) {
+    return getMetadataString(metadata.taskId) || ""
+  }
+
+  if ("approval" in part && part.approval?.id) {
+    return part.approval.id
+  }
+
+  return getMetadataString(metadata.taskId) || ""
 }
 
 function getStateTone(state: ToolPartState) {
@@ -153,23 +242,28 @@ function ToolSection({
 }
 
 export function AgentToolCallCard({
-  task,
   uiMessage,
   tText,
   onConfirmTask,
   compact = false,
   className,
 }: AgentToolCallCardProps) {
-  const toolPart = useMemo(() => getAgentUIMessageToolPart(uiMessage), [uiMessage])
-  const toolState = (toolPart?.state || getFallbackPartState(task.status)) as ToolPartState
-  const toolName = toolPart ? getAgentToolName(toolPart) : task.tool_name
-  const toolTitle = toolPart?.title || task.tool_display_name || toolName
-  const toolCallId = toolPart?.toolCallId || task.tool_call_id || task.id
-  const inputText = getAgentToolInputText(toolPart)
-  const outputText = getAgentToolOutputText(toolPart) || task.result || ""
-  const errorText = getAgentToolErrorText(toolPart) || task.error || ""
-  const summary = task.summary && task.summary !== toolTitle ? task.summary : undefined
-  const defaultOpen = task.status !== "succeeded" || Boolean(errorText) || !outputText
+  const metadata = useMemo(() => getMetadata(uiMessage), [uiMessage])
+  const toolPart = useMemo(() => getToolPart(uiMessage), [uiMessage])
+  const taskStatus = normalizeTaskStatus(metadata.taskStatus)
+  const toolState = (toolPart?.state || getFallbackPartState(taskStatus)) as ToolPartState
+  const displayName = getMetadataString(metadata.displayName)
+  const toolName = toolPart ? getToolName(toolPart) : displayName || "tool"
+  const toolTitle = toolPart?.title || displayName || toolName
+  const taskId = getMetadataString(metadata.taskId)
+  const toolCallId = toolPart?.toolCallId || taskId || uiMessage.id
+  const inputText = getPartInputText(toolPart)
+  const outputText = getPartOutputText(toolPart)
+  const errorText = getPartErrorText(toolPart)
+  const metadataSummary = getMetadataString(metadata.summary)
+  const summary = metadataSummary && metadataSummary !== toolTitle ? metadataSummary : undefined
+  const confirmTaskId = getApprovalTaskId(toolPart, metadata)
+  const defaultOpen = taskStatus !== "succeeded" || Boolean(errorText) || !outputText
   const [isOpen, setIsOpen] = useState(defaultOpen)
   const preview = outputText || errorText || inputText || summary || ""
 
@@ -204,9 +298,6 @@ export function AgentToolCallCard({
                 {toolName}
               </span>
             )}
-            <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-[10px] text-sky-700 dark:text-sky-300">
-              AI SDK UI
-            </Badge>
           </span>
 
           <span className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -214,10 +305,10 @@ export function AgentToolCallCard({
               {getStateIcon(toolState)}
               {toolState}
             </Badge>
-            <Badge variant="outline" className={cn("text-[10px]", getStatusBadgeClassName(task.status))}>
-              {getTaskStatusLabel(task.status, tText)}
+            <Badge variant="outline" className={cn("text-[10px]", getStatusBadgeClassName(taskStatus))}>
+              {getTaskStatusLabel(taskStatus, tText)}
             </Badge>
-            {task.dangerous && (
+            {metadata.dangerous && (
               <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-300">
                 {tText("dangerousAction")}
               </Badge>
@@ -259,16 +350,16 @@ export function AgentToolCallCard({
             </AgentNoticeCard>
           )}
 
-          {task.status === "waiting_confirm" && onConfirmTask && (
+          {taskStatus === "waiting_confirm" && confirmTaskId && onConfirmTask && (
             <div className="flex flex-wrap gap-2 pt-1">
-              <Button size="sm" className="h-7 text-xs" onClick={() => onConfirmTask(task.id, "confirm")}>
+              <Button size="sm" className="h-7 text-xs" onClick={() => onConfirmTask(confirmTaskId, "confirm")}>
                 {tText("confirmAction")}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs"
-                onClick={() => onConfirmTask(task.id, "reject")}
+                onClick={() => onConfirmTask(confirmTaskId, "reject")}
               >
                 {tText("rejectAction")}
               </Button>

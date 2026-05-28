@@ -8,6 +8,7 @@ import {
   type ResolvedTimelineItem,
 } from "@/lib/ai-agent/session-state"
 import type { AIEvent, SessionView, TaskView } from "@/lib/api/ai-agent"
+import type { UIMessage } from "@ai-sdk/react"
 
 type MessageTimelineItem = Extract<ResolvedTimelineItem, { kind: "message" }> & {
   data: NonNullable<Extract<ResolvedTimelineItem, { kind: "message" }>["data"]>
@@ -27,6 +28,7 @@ function buildSessionSnapshot(overrides: Partial<SessionView> = {}): SessionView
     updated_at: "2026-04-20T10:00:00Z",
     messages: [],
     tasks: [],
+    ui_messages: [],
     available_tools: [],
     default_transport: "ws",
     ...overrides,
@@ -166,7 +168,7 @@ test("任务、确认和错误事件会被归约并解析到时间线", () => {
   assert.equal(timeline[1]?.data?.task_id, task.id)
 })
 
-test("解析时间线时会生成 AI SDK UI message parts", () => {
+test("后端返回的 AI SDK UI message 会被原样收敛到时间线", () => {
   const task = buildTask({
     status: "succeeded",
     arguments: {
@@ -174,6 +176,60 @@ test("解析时间线时会生成 AI SDK UI message parts", () => {
     },
     result: "load average: 0.15",
   })
+  const assistantUIMessage: UIMessage = {
+    id: "msg-ai-ui",
+    role: "assistant",
+    metadata: {
+      source: "message",
+      createdAt: "2026-04-20T10:00:01Z",
+      originalRole: "assistant",
+    },
+    parts: [
+      {
+        type: "data-tool-status",
+        data: {
+          text: "正在执行命令",
+        },
+      },
+      {
+        type: "reasoning",
+        text: "检查负载",
+        state: "done",
+      },
+      {
+        type: "text",
+        text: "负载正常。",
+        state: "done",
+      },
+    ],
+  }
+  const taskUIMessage: UIMessage = {
+    id: `task:${task.id}`,
+    role: "assistant",
+    metadata: {
+      source: "task",
+      createdAt: task.created_at,
+      updatedAt: task.updated_at,
+      taskId: task.id,
+      taskStatus: task.status,
+      dangerous: task.dangerous,
+      requiresConfirmation: task.requires_confirmation,
+      displayName: task.tool_display_name,
+      summary: task.summary,
+    },
+    parts: [
+      {
+        type: "dynamic-tool",
+        toolName: "execute_command",
+        toolCallId: "call-1",
+        title: "执行命令",
+        providerExecuted: false,
+        state: "output-available",
+        input: { command: "uptime" },
+        output: "load average: 0.15",
+      },
+    ],
+  }
 
   let state = agentSessionReducer(initialAgentSessionState, {
     type: "event",
@@ -186,6 +242,7 @@ test("解析时间线时会生成 AI SDK UI message parts", () => {
         message_id: "msg-ai-ui",
         content: "<tool-status>正在执行命令</tool-status><think>检查负载</think>负载正常。",
       },
+      ui_message: assistantUIMessage,
     },
   })
 
@@ -197,6 +254,7 @@ test("解析时间线时会生成 AI SDK UI message parts", () => {
       session_id: "session-1",
       created_at: task.updated_at,
       task,
+      ui_message: taskUIMessage,
     },
   })
 
@@ -206,12 +264,14 @@ test("解析时间线时会生成 AI SDK UI message parts", () => {
 
   assert.equal(message?.kind, "message")
   assert.equal(message?.kind === "message" ? message.uiMessage?.role : null, "assistant")
+  assert.deepEqual(message?.kind === "message" ? message.uiMessage : null, assistantUIMessage)
   assert.deepEqual(
     message?.kind === "message" ? message.uiMessage?.parts.map((part) => part.type) : [],
     ["data-tool-status", "reasoning", "text"]
   )
 
   assert.equal(taskEntry?.kind, "task")
+  assert.deepEqual(taskEntry?.kind === "task" ? taskEntry.uiMessage : null, taskUIMessage)
   const toolPart = taskEntry?.kind === "task" ? taskEntry.uiMessage?.parts[0] : undefined
   assert.equal(toolPart?.type, "dynamic-tool")
   if (toolPart?.type === "dynamic-tool" && toolPart.state === "output-available") {

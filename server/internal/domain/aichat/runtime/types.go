@@ -98,6 +98,13 @@ type ErrorView struct {
 	Message string `json:"message"`
 }
 
+type UIMessage struct {
+	ID       string                   `json:"id"`
+	Role     string                   `json:"role"`
+	Metadata map[string]interface{}   `json:"metadata,omitempty"`
+	Parts    []map[string]interface{} `json:"parts"`
+}
+
 type SessionListItem struct {
 	ID             string        `json:"id"`
 	Model          string        `json:"model"`
@@ -131,6 +138,7 @@ type SessionView struct {
 	UpdatedAt        time.Time     `json:"updated_at"`
 	Messages         []MessageView `json:"messages"`
 	Tasks            []TaskView    `json:"tasks"`
+	UIMessages       []UIMessage   `json:"ui_messages"`
 	AvailableTools   []ToolView    `json:"available_tools"`
 	DefaultTransport TransportType `json:"default_transport"`
 }
@@ -143,6 +151,7 @@ type Event struct {
 	Session      *SessionView        `json:"session,omitempty"`
 	Assistant    *AssistantEventData `json:"assistant,omitempty"`
 	Task         *TaskView           `json:"task,omitempty"`
+	UIMessage    *UIMessage          `json:"ui_message,omitempty"`
 	Confirmation *ConfirmationView   `json:"confirmation,omitempty"`
 	Error        *ErrorView          `json:"error,omitempty"`
 }

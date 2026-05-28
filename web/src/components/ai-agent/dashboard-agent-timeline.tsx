@@ -1,17 +1,14 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { UIMessage } from "@ai-sdk/react"
+import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai"
 import { ChevronDown, Loader2 } from "lucide-react"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 
 import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-notice"
 import { AgentToolCallCard } from "@/components/ai-agent/agent-tool-call-card"
 import { Response } from "@/components/ui/shadcn-io/ai/response"
-import {
-  getAgentUIMessageReasoning,
-  getAgentUIMessageText,
-  getAgentUIMessageToolStatus,
-} from "@/lib/ai-agent/ai-sdk-ui"
 import type { ResolvedTimelineItem } from "@/lib/ai-agent/session-state"
 import { getTaskStatusLabel, type AssistantLoadingState, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
 import type { TaskView } from "@/lib/api/ai-agent"
@@ -33,6 +30,7 @@ type DashboardMessageEntry = Extract<ResolvedTimelineItem, { kind: "message" }> 
 
 type DashboardTaskEntry = Extract<ResolvedTimelineItem, { kind: "task" }> & {
   data: NonNullable<Extract<ResolvedTimelineItem, { kind: "task" }>["data"]>
+  uiMessage: UIMessage
 }
 
 type DashboardErrorEntry = Extract<ResolvedTimelineItem, { kind: "error" }> & {
@@ -63,6 +61,50 @@ type DashboardTimelineBlock =
       entry: DashboardErrorEntry
     }
 
+function getUIMessageText(message?: UIMessage | null) {
+  if (!message) {
+    return ""
+  }
+
+  return message.parts
+    .filter(isTextUIPart)
+    .map((part) => part.text)
+    .join("")
+}
+
+function getUIMessageReasoning(message?: UIMessage | null) {
+  if (!message) {
+    return null
+  }
+
+  const reasoning = message.parts
+    .filter(isReasoningUIPart)
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+
+  return reasoning || null
+}
+
+function getUIMessageToolStatus(message?: UIMessage | null) {
+  if (!message) {
+    return null
+  }
+
+  const statusPart = message.parts.find((part) => part.type === "data-tool-status")
+  const data = statusPart && "data" in statusPart ? statusPart.data : null
+  if (!data || typeof data !== "object") {
+    return null
+  }
+
+  const text = (data as { text?: unknown }).text
+  return typeof text === "string" && text.trim() ? text : null
+}
+
+function hasUIMessageToolPart(message?: UIMessage | null) {
+  return Boolean(message?.parts.some(isToolUIPart))
+}
+
 function formatDateTime(value: string) {
   const date = new Date(value)
   return new Intl.DateTimeFormat(undefined, {
@@ -81,9 +123,10 @@ function getRenderableEntry(entry: ResolvedTimelineItem): DashboardRenderableEnt
   if (entry.kind === "message") {
     if (
       entry.data.role === "assistant" &&
-      !getAgentUIMessageText(entry.uiMessage).trim() &&
-      !getAgentUIMessageReasoning(entry.uiMessage) &&
-      !getAgentUIMessageToolStatus(entry.uiMessage)
+      !getUIMessageText(entry.uiMessage).trim() &&
+      !getUIMessageReasoning(entry.uiMessage) &&
+      !getUIMessageToolStatus(entry.uiMessage) &&
+      !hasUIMessageToolPart(entry.uiMessage)
     ) {
       return null
     }
@@ -92,6 +135,10 @@ function getRenderableEntry(entry: ResolvedTimelineItem): DashboardRenderableEnt
   }
 
   if (entry.kind === "task") {
+    if (!entry.uiMessage) {
+      return null
+    }
+
     return entry as DashboardTaskEntry
   }
 
@@ -198,10 +245,10 @@ function TimelineMessageItem({
   tText: TimelineTranslate
 }) {
   const isUser = entry.data.role === "user"
-  const parsedMessageText = getAgentUIMessageText(entry.uiMessage)
+  const parsedMessageText = getUIMessageText(entry.uiMessage)
   const messageText = isUser ? parsedMessageText || entry.data.content : parsedMessageText
-  const reasoningText = getAgentUIMessageReasoning(entry.uiMessage)
-  const toolStatus = getAgentUIMessageToolStatus(entry.uiMessage)
+  const reasoningText = getUIMessageReasoning(entry.uiMessage)
+  const toolStatus = getUIMessageToolStatus(entry.uiMessage)
 
   if (isUser) {
     return (
@@ -387,7 +434,6 @@ function TimelineTaskGroup({
           {entries.map((entry) => (
             <div key={entry.id} className="p-2.5">
               <AgentToolCallCard
-                task={entry.data}
                 uiMessage={entry.uiMessage}
                 tText={tText}
                 onConfirmTask={onConfirmTask}
@@ -436,7 +482,6 @@ export function DashboardAgentTimeline({
             return (
               <AgentToolCallCard
                 key={block.id}
-                task={block.entry.data}
                 uiMessage={block.entry.uiMessage}
                 tText={tText}
                 onConfirmTask={onConfirmTask}

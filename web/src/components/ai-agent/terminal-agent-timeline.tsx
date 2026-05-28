@@ -1,6 +1,8 @@
 "use client"
 
 import { memo, useMemo, useState } from "react"
+import type { UIMessage } from "@ai-sdk/react"
+import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai"
 import { Bot, Brain, ChevronRight, Loader2 } from "lucide-react"
 
 import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-notice"
@@ -12,13 +14,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import {
-  getAgentUIMessageReasoning,
-  getAgentUIMessageText,
-  getAgentUIMessageToolStatus,
-  isAgentUIMessageReasoningStreaming,
-  type AgentUIMessage,
-} from "@/lib/ai-agent/ai-sdk-ui"
 import { type AssistantLoadingState, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
 import type { ResolvedTimelineItem, TimelineMessage } from "@/lib/ai-agent/session-state"
 import { cn } from "@/lib/utils"
@@ -30,6 +25,54 @@ function formatMessageTime(value: string) {
   })
 }
 
+function getUIMessageText(message?: UIMessage | null) {
+  if (!message) {
+    return ""
+  }
+
+  return message.parts
+    .filter(isTextUIPart)
+    .map((part) => part.text)
+    .join("")
+}
+
+function getUIMessageReasoning(message?: UIMessage | null) {
+  if (!message) {
+    return null
+  }
+
+  const reasoning = message.parts
+    .filter(isReasoningUIPart)
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+
+  return reasoning || null
+}
+
+function getUIMessageToolStatus(message?: UIMessage | null) {
+  if (!message) {
+    return null
+  }
+
+  const statusPart = message.parts.find((part) => part.type === "data-tool-status")
+  const data = statusPart && "data" in statusPart ? statusPart.data : null
+  if (!data || typeof data !== "object") {
+    return null
+  }
+
+  const text = (data as { text?: unknown }).text
+  return typeof text === "string" && text.trim() ? text : null
+}
+
+function isUIMessageReasoningStreaming(message?: UIMessage | null) {
+  return Boolean(message?.parts.some((part) => isReasoningUIPart(part) && part.state === "streaming"))
+}
+
+function hasUIMessageToolPart(message?: UIMessage | null) {
+  return Boolean(message?.parts.some(isToolUIPart))
+}
+
 const MessageItem = memo(({
   message,
   uiMessage,
@@ -37,17 +80,17 @@ const MessageItem = memo(({
   thinkingProcessLabel,
 }: {
   message: TimelineMessage
-  uiMessage?: AgentUIMessage | null
+  uiMessage?: UIMessage | null
   thinkingLabel: string
   thinkingProcessLabel: string
 }) => {
   const [isThinkingOpen, setIsThinkingOpen] = useState(false)
-  const toolStatus = useMemo(() => getAgentUIMessageToolStatus(uiMessage), [uiMessage])
-  const thinking = useMemo(() => getAgentUIMessageReasoning(uiMessage), [uiMessage])
-  const content = useMemo(() => getAgentUIMessageText(uiMessage), [uiMessage])
+  const toolStatus = useMemo(() => getUIMessageToolStatus(uiMessage), [uiMessage])
+  const thinking = useMemo(() => getUIMessageReasoning(uiMessage), [uiMessage])
+  const content = useMemo(() => getUIMessageText(uiMessage), [uiMessage])
 
-  const isThinkingStreaming = Boolean(isAgentUIMessageReasoningStreaming(uiMessage) && thinking && !content)
-  const hasAssistantVisualContent = Boolean(toolStatus || thinking || content)
+  const isThinkingStreaming = Boolean(isUIMessageReasoningStreaming(uiMessage) && thinking && !content)
+  const hasAssistantVisualContent = Boolean(toolStatus || thinking || content || hasUIMessageToolPart(uiMessage))
 
   if (message.role === "user") {
     return (
@@ -161,21 +204,26 @@ export function TerminalAgentTimeline({
             thinkingProcessLabel={tText("thinkingProcess")}
           />
         )}
-        renderTask={(entry) => (
-          <div className="flex items-start gap-3">
-            <div className="h-7 w-7 shrink-0 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
-              <Bot className="h-3.5 w-3.5" />
+        renderTask={(entry) => {
+          if (!entry.uiMessage) {
+            return null
+          }
+
+          return (
+            <div className="flex items-start gap-3">
+              <div className="h-7 w-7 shrink-0 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
+                <Bot className="h-3.5 w-3.5" />
+              </div>
+              <AgentToolCallCard
+                uiMessage={entry.uiMessage}
+                tText={tText}
+                onConfirmTask={onConfirmTask}
+                compact
+                className="min-w-0 max-w-[85%] flex-1"
+              />
             </div>
-            <AgentToolCallCard
-              task={entry.data}
-              uiMessage={entry.uiMessage}
-              tText={tText}
-              onConfirmTask={onConfirmTask}
-              compact
-              className="min-w-0 max-w-[85%] flex-1"
-            />
-          </div>
-        )}
+          )
+        }}
         renderConfirmation={(entry) => (
           <AgentNoticeCard
             tone="warning"

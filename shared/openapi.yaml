@@ -358,6 +358,175 @@ components:
           type: string
           format: date-time
 
+    AIUIMessage:
+      type: object
+      description: Vercel AI SDK UIMessage。前端直接渲染 parts，不再从 MessageView/TaskView 做本地适配。
+      required: [id, role, parts]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [system, user, assistant]
+        metadata:
+          type: object
+          additionalProperties: true
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIUIMessagePart'
+
+    AIUIMessagePart:
+      anyOf:
+        - $ref: '#/components/schemas/AIUITextPart'
+        - $ref: '#/components/schemas/AIUIReasoningPart'
+        - $ref: '#/components/schemas/AIUIDynamicToolPart'
+        - $ref: '#/components/schemas/AIUIDataPart'
+        - $ref: '#/components/schemas/AIUIStepStartPart'
+        - $ref: '#/components/schemas/AIUIFilePart'
+        - $ref: '#/components/schemas/AIUISourceURLPart'
+        - $ref: '#/components/schemas/AIUISourceDocumentPart'
+        - type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+          additionalProperties: true
+
+    AIUITextPart:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          const: text
+        text:
+          type: string
+        state:
+          type: string
+          enum: [streaming, done]
+      additionalProperties: true
+
+    AIUIReasoningPart:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          const: reasoning
+        text:
+          type: string
+        state:
+          type: string
+          enum: [streaming, done]
+      additionalProperties: true
+
+    AIUIDynamicToolPart:
+      type: object
+      required: [type, toolName, toolCallId, state]
+      properties:
+        type:
+          const: dynamic-tool
+        toolName:
+          type: string
+        toolCallId:
+          type: string
+        title:
+          type: string
+        providerExecuted:
+          type: boolean
+        state:
+          type: string
+          enum:
+            - input-streaming
+            - input-available
+            - approval-requested
+            - approval-responded
+            - output-available
+            - output-error
+            - output-denied
+        input:
+          description: AI SDK UI tool input payload
+        output:
+          description: AI SDK UI tool output payload
+        errorText:
+          type: string
+        approval:
+          type: object
+          properties:
+            id:
+              type: string
+            approved:
+              type: boolean
+            reason:
+              type: string
+          additionalProperties: true
+      additionalProperties: true
+
+    AIUIDataPart:
+      type: object
+      description: AI SDK UI data-* part，例如 data-tool-status。
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          pattern: '^data-'
+        id:
+          type: string
+        data:
+          description: Data part payload
+      additionalProperties: true
+
+    AIUIStepStartPart:
+      type: object
+      required: [type]
+      properties:
+        type:
+          const: step-start
+      additionalProperties: true
+
+    AIUIFilePart:
+      type: object
+      required: [type, mediaType, url]
+      properties:
+        type:
+          const: file
+        mediaType:
+          type: string
+        filename:
+          type: string
+        url:
+          type: string
+      additionalProperties: true
+
+    AIUISourceURLPart:
+      type: object
+      required: [type, sourceId, url]
+      properties:
+        type:
+          const: source-url
+        sourceId:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+      additionalProperties: true
+
+    AIUISourceDocumentPart:
+      type: object
+      required: [type, sourceId, mediaType, title]
+      properties:
+        type:
+          const: source-document
+        sourceId:
+          type: string
+        mediaType:
+          type: string
+        title:
+          type: string
+        filename:
+          type: string
+      additionalProperties: true
+
     AITaskView:
       type: object
       required:
@@ -467,6 +636,7 @@ components:
         - updated_at
         - messages
         - tasks
+        - ui_messages
         - available_tools
         - default_transport
       properties:
@@ -495,6 +665,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AITaskView'
+        ui_messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIUIMessage'
         available_tools:
           type: array
           items:
@@ -532,6 +706,8 @@ components:
           $ref: '#/components/schemas/AIAssistantEventData'
         task:
           $ref: '#/components/schemas/AITaskView'
+        ui_message:
+          $ref: '#/components/schemas/AIUIMessage'
         confirmation:
           $ref: '#/components/schemas/AIConfirmationView'
         error:
