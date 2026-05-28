@@ -10,6 +10,7 @@ import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
 import { CompletionConfigProvider } from "@/contexts/completion-config-context"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { DashboardI18nProvider } from "@/providers/dashboard-i18n-provider"
+import { getAuthRedirectDecision, getCurrentBrowserPath } from "@/lib/auth-redirect"
 import type { User } from "@/lib/api/auth"
 import { cn } from "@/lib/utils"
 
@@ -50,38 +51,12 @@ export default function DashboardLayout({
   useEffect(() => {
     if (isLoading) return
 
-    // 如果加载失败（authStatus 为空），按未认证处理
-    if (!authStatus) {
-      router.replace("/login")
-      return
+    const currentPath = getCurrentBrowserPath(pathname)
+    const decision = getAuthRedirectDecision("dashboard", authStatus, { currentPath })
+    if (decision.type === "redirect") {
+      router.replace(decision.href)
     }
-
-    // 需要初始化 → 跳转到 /setup
-    if (authStatus.need_init) {
-      router.replace("/setup")
-      return
-    }
-
-    // 账户被锁定 → 跳转到登录页并显示锁定提示
-    if (authStatus.account_locked) {
-      const params = new URLSearchParams()
-      params.set("locked", "true")
-      if (authStatus.locked_until) {
-        params.set("locked_until", authStatus.locked_until)
-      }
-      if (authStatus.lock_reason) {
-        params.set("lock_reason", authStatus.lock_reason)
-      }
-      router.replace(`/login?${params.toString()}`)
-      return
-    }
-
-    // 未认证 → 跳转到登录
-    if (!authStatus.is_authenticated) {
-      router.replace("/login")
-      return
-    }
-  }, [authStatus, isLoading, router])
+  }, [authStatus, isLoading, pathname, router])
 
   const initialUser: User | null =
     authStatus && authStatus.is_authenticated && authStatus.user

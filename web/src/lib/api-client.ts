@@ -2,6 +2,12 @@ import { getApiUrl as getApiUrlFromConfig } from "@/lib/config"
 import { getCurrentAccessToken } from "@/stores/auth-store"
 import { performRefreshToken } from "@/lib/session-refresh"
 import { clearCSRFToken, ensureCSRFToken, updateCSRFTokenFromHeaders } from "@/lib/csrf"
+import {
+  buildLockedLoginRedirectUrl,
+  buildLoginRedirectUrl,
+  getAuthLockInfo,
+  getCurrentBrowserPath,
+} from "@/lib/auth-redirect"
 
 // 重新导出 getApiUrl 以便其他模块使用
 export function getApiUrl(path: string = ""): string {
@@ -39,7 +45,7 @@ export function resetUnauthorizedRedirectFlag() {
 
 function handleGlobalUnauthorized(error: unknown) {
   if (typeof window === 'undefined') return
-  const currentPath = window.location.pathname + window.location.search + window.location.hash
+  const currentPath = getCurrentBrowserPath() ?? ""
   // 已在登录页时收到 401，多数来自后台请求，忽略即可，避免重复刷新
   if (currentPath.startsWith("/login")) {
     console.error("[apiFetch] Unauthorized while already on /login, ignoring redirect", error)
@@ -53,12 +59,7 @@ function handleGlobalUnauthorized(error: unknown) {
   console.error("[apiFetch] Unauthorized, redirecting to /login", error)
 
   try {
-    const params = new URLSearchParams()
-    if (currentPath && currentPath !== "/") {
-      params.set("next", currentPath)
-    }
-    const query = params.toString()
-    window.location.href = query ? `/login?${query}` : "/login"
+    window.location.href = buildLoginRedirectUrl(currentPath)
   } catch {
     window.location.href = "/login"
   }
@@ -76,7 +77,7 @@ export function resetAccountLockedRedirectFlag() {
 
 function handleAccountLocked(detail: unknown) {
   if (typeof window === 'undefined') return
-  const currentPath = window.location.pathname + window.location.search + window.location.hash
+  const currentPath = getCurrentBrowserPath() ?? ""
   // 已在登录页时收到锁定错误，忽略
   if (currentPath.startsWith("/login")) {
     return
@@ -88,13 +89,7 @@ function handleAccountLocked(detail: unknown) {
   console.error("[apiFetch] Account locked, redirecting to /login", detail)
 
   try {
-    const params = new URLSearchParams()
-    params.set("locked", "true")
-    if (currentPath && currentPath !== "/") {
-      params.set("next", currentPath)
-    }
-    const query = params.toString()
-    window.location.href = `/login?${query}`
+    window.location.href = buildLockedLoginRedirectUrl(getAuthLockInfo(detail), currentPath)
   } catch {
     window.location.href = "/login?locked=true"
   }

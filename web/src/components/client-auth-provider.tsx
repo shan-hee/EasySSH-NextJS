@@ -7,6 +7,12 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { useAuthStore } from "@/stores/auth-store"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { isApiError } from "@/lib/api-client"
+import {
+  buildLockedLoginRedirectUrl,
+  buildLoginRedirectUrl,
+  getAuthLockInfo,
+  getCurrentBrowserPath,
+} from "@/lib/auth-redirect"
 
 interface ClientAuthContextType {
   user: User | null
@@ -78,12 +84,14 @@ export function ClientAuthProvider({ children, initialUser }: ClientAuthProvider
       if (isApiError(error) && error.status === 403) {
         const detail = error.detail as { error?: string } | undefined
         if (detail?.error === 'account_locked') {
-          router.replace("/login?locked=true")
+          router.replace(
+            buildLockedLoginRedirectUrl(getAuthLockInfo(error.detail), getCurrentBrowserPath()),
+          )
           return
         }
       }
 
-      router.replace("/login")
+      router.replace(buildLoginRedirectUrl(getCurrentBrowserPath()))
     }
   }, [router, setUser])
 

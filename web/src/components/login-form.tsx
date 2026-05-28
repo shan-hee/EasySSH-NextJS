@@ -29,6 +29,7 @@ import { isApiError } from "@/lib/api-client"
 import { generateCodeVerifier, deriveCodeChallenge } from "@/lib/pkce"
 import { useAuthStore } from "@/stores/auth-store"
 import { resetUnauthorizedRedirectFlag, resetAccountLockedRedirectFlag } from "@/lib/api-client"
+import { buildLoginRedirectUrl, getSafeAuthNextPath } from "@/lib/auth-redirect"
 import { useTranslations } from "next-intl"
 
 export function LoginForm({
@@ -68,16 +69,7 @@ export function LoginForm({
 
   // 登录成功后的回跳路径,优先使用 /login?next=xxx 中的 next
   const getRedirectTarget = useCallback(() => {
-    const rawNext = searchParams.get("next")
-    if (
-      rawNext &&
-      rawNext.startsWith("/") &&
-      !rawNext.startsWith("//") &&
-      !rawNext.startsWith("/login")
-    ) {
-      return rawNext
-    }
-    return "/dashboard"
+    return getSafeAuthNextPath(searchParams.get("next")) ?? "/dashboard"
   }, [searchParams])
 
   // 进入登录表单时，重置全局重定向标记，开始新的认证周期
@@ -116,12 +108,7 @@ export function LoginForm({
       description: message,
     })
 
-    const next = searchParams.get("next")
-    const query = new URLSearchParams()
-    if (next) {
-      query.set("next", next)
-    }
-    router.replace(query.toString() ? `/login?${query.toString()}` : "/login")
+    router.replace(buildLoginRedirectUrl(searchParams.get("next")))
   }, [router, searchParams, tAuth])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -321,14 +308,7 @@ export function LoginForm({
           ? `${window.location.origin}/auth/google/callback`
           : "/auth/google/callback"
 
-      const rawNext = searchParams.get("next")
-      const next =
-        rawNext &&
-        rawNext.startsWith("/") &&
-        !rawNext.startsWith("//") &&
-        !rawNext.startsWith("/login")
-          ? rawNext
-          : null
+      const next = getSafeAuthNextPath(searchParams.get("next"))
 
       const statePayload = {
         next,

@@ -9,16 +9,17 @@ import { useAuthStore } from "@/stores/auth-store"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { getErrorMessage } from "@/lib/error-utils"
 import { isApiError } from "@/lib/api-client"
+import {
+  buildLoginRedirectUrl,
+  getSafeAuthNextPath,
+  getSafeInternalPath,
+} from "@/lib/auth-redirect"
 import { AuthI18nProvider } from "@/providers/auth-i18n-provider"
 
 type GoogleOAuthState = {
   mode?: "login" | "link"
   next?: string | null
   returnTo?: string | null
-}
-
-function isSafeInternalPath(value: string | null | undefined): value is string {
-  return !!value && value.startsWith("/") && !value.startsWith("//")
 }
 
 // 解析 state 中携带的 next / mode 信息
@@ -47,26 +48,20 @@ function GoogleAuthCallbackInner() {
     const state = queryParams.get("state") || searchParams.get("state")
     const parsedState = parseState(state)
     const mode = parsedState.mode === "link" ? "link" : "login"
-    const next =
-      isSafeInternalPath(parsedState.next) && !parsedState.next.startsWith("/login")
-        ? parsedState.next
-        : null
-    const returnTo = isSafeInternalPath(parsedState.returnTo)
-      ? parsedState.returnTo
-      : "/dashboard"
+    const next = getSafeAuthNextPath(parsedState.next)
+    const returnTo = getSafeInternalPath(parsedState.returnTo) ?? "/dashboard"
 
     const redirectBackToLogin = (params: Record<string, string> = {}) => {
-      const query = new URLSearchParams()
-      if (next) {
-        query.set("next", next)
-      }
+      const loginUrl = buildLoginRedirectUrl(next)
+      const [path, existingQuery = ""] = loginUrl.split("?")
+      const query = new URLSearchParams(existingQuery)
       for (const [key, value] of Object.entries(params)) {
         if (value) {
           query.set(key, value)
         }
       }
       const queryString = query.toString()
-      router.replace(queryString ? `/login?${queryString}` : "/login")
+      router.replace(queryString ? `${path}?${queryString}` : path)
     }
 
     const redirectBackToSettings = (params: Record<string, string> = {}) => {
