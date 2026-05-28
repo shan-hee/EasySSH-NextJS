@@ -6,6 +6,11 @@ import type {
   SessionView,
   TaskView,
 } from "@/lib/api/ai-agent"
+import {
+  messageToAIUIMessage,
+  taskToAIUIMessage,
+  type AgentUIMessage,
+} from "@/lib/ai-agent/ai-sdk-ui"
 
 export type TransportState = "idle" | "connecting_ws" | "ws" | "sse"
 
@@ -54,24 +59,28 @@ export type ResolvedTimelineItem =
       kind: "message"
       createdAt: string
       data?: TimelineMessage
+      uiMessage?: AgentUIMessage | null
     }
   | {
       id: string
       kind: "task"
       createdAt: string
       data?: TaskView
+      uiMessage?: AgentUIMessage
     }
   | {
       id: string
       kind: "confirmation"
       createdAt: string
       data?: TimelineConfirmation
+      uiMessage?: undefined
     }
   | {
       id: string
       kind: "error"
       createdAt: string
       data?: TimelineError
+      uiMessage?: undefined
     }
 
 export interface AgentSessionState {
@@ -435,18 +444,26 @@ export function resolveTimelineItems(state: AgentSessionState): ResolvedTimeline
   return state.timeline.map((item) => {
     switch (item.kind) {
       case "message":
-        return {
-          id: item.id,
-          kind: item.kind,
-          createdAt: item.createdAt,
-          data: state.messagesById[item.messageId],
+        {
+          const message = state.messagesById[item.messageId]
+          return {
+            id: item.id,
+            kind: item.kind,
+            createdAt: item.createdAt,
+            data: message,
+            uiMessage: message ? messageToAIUIMessage(message) : null,
+          }
         }
       case "task":
-        return {
-          id: item.id,
-          kind: item.kind,
-          createdAt: item.createdAt,
-          data: state.tasksById[item.taskId],
+        {
+          const task = state.tasksById[item.taskId]
+          return {
+            id: item.id,
+            kind: item.kind,
+            createdAt: item.createdAt,
+            data: task,
+            uiMessage: task ? taskToAIUIMessage(task) : undefined,
+          }
         }
       case "confirmation":
         return {

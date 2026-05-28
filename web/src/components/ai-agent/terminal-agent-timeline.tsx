@@ -1,85 +1,27 @@
 "use client"
 
 import { memo, useMemo, useState } from "react"
-import { Bot, Brain, ChevronRight, Loader2, Sparkles } from "lucide-react"
+import { Bot, Brain, ChevronRight, Loader2 } from "lucide-react"
 
 import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-notice"
 import { AgentTimeline } from "@/components/ai-agent/agent-timeline"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { AgentToolCallCard } from "@/components/ai-agent/agent-tool-call-card"
 import { Response } from "@/components/ui/shadcn-io/ai/response"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { getTaskStatusLabel, type AssistantLoadingState, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
+import {
+  getAgentUIMessageReasoning,
+  getAgentUIMessageText,
+  getAgentUIMessageToolStatus,
+  isAgentUIMessageReasoningStreaming,
+  type AgentUIMessage,
+} from "@/lib/ai-agent/ai-sdk-ui"
+import { type AssistantLoadingState, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
 import type { ResolvedTimelineItem, TimelineMessage } from "@/lib/ai-agent/session-state"
-import type { TaskView } from "@/lib/api/ai-agent"
 import { cn } from "@/lib/utils"
-
-interface ParsedContent {
-  thinking: string | null
-  content: string
-}
-
-interface ParsedToolStatus {
-  toolStatus: string | null
-  content: string
-}
-
-interface ParsedAssistantMessage extends ParsedContent {
-  toolStatus: string | null
-}
-
-function parseThinkingContent(text: string): ParsedContent {
-  const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i)
-
-  if (thinkMatch) {
-    const thinking = thinkMatch[1].trim()
-    const content = text.replace(/<think>[\s\S]*?<\/think>/i, "").trim()
-    return { thinking, content }
-  }
-
-  const unclosedMatch = text.match(/<think>([\s\S]*)$/i)
-  if (unclosedMatch) {
-    return { thinking: unclosedMatch[1].trim(), content: "" }
-  }
-
-  return { thinking: null, content: text }
-}
-
-function parseToolStatus(text: string): ParsedToolStatus {
-  const toolStatusMatches = text.match(/<tool-status>([\s\S]*?)<\/tool-status>/gi)
-
-  if (toolStatusMatches && toolStatusMatches.length > 0) {
-    const lastMatch = toolStatusMatches[toolStatusMatches.length - 1]
-    const statusMatch = lastMatch.match(/<tool-status>([\s\S]*?)<\/tool-status>/i)
-    const toolStatus = statusMatch ? statusMatch[1].trim() : null
-    const content = text.replace(/<tool-status>[\s\S]*?<\/tool-status>/gi, "").trim()
-    return { toolStatus, content }
-  }
-
-  const unclosedMatch = text.match(/<tool-status>([\s\S]*)$/i)
-  if (unclosedMatch) {
-    return {
-      toolStatus: unclosedMatch[1].trim(),
-      content: text.replace(/<tool-status>[\s\S]*$/i, "").trim(),
-    }
-  }
-
-  return { toolStatus: null, content: text }
-}
-
-function parseAssistantMessageContent(text: string): ParsedAssistantMessage {
-  const toolStatusResult = parseToolStatus(text)
-  const thinkingResult = parseThinkingContent(toolStatusResult.content)
-  return {
-    toolStatus: toolStatusResult.toolStatus,
-    thinking: thinkingResult.thinking,
-    content: thinkingResult.content,
-  }
-}
 
 function formatMessageTime(value: string) {
   return new Date(value).toLocaleTimeString(undefined, {
@@ -88,42 +30,24 @@ function formatMessageTime(value: string) {
   })
 }
 
-function getTaskBadgeClassName(status: TaskView["status"]) {
-  switch (status) {
-    case "succeeded":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-    case "failed":
-      return "border-destructive/30 bg-destructive/10 text-destructive"
-    case "running":
-      return "border-primary/30 bg-primary/10 text-primary"
-    case "waiting_confirm":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-700"
-    default:
-      return "border-border bg-muted/60 text-muted-foreground"
-  }
-}
-
 const MessageItem = memo(({
   message,
+  uiMessage,
   thinkingLabel,
   thinkingProcessLabel,
 }: {
   message: TimelineMessage
+  uiMessage?: AgentUIMessage | null
   thinkingLabel: string
   thinkingProcessLabel: string
 }) => {
   const [isThinkingOpen, setIsThinkingOpen] = useState(false)
-  const parsedAssistant = useMemo(
-    () => (message.role === "assistant" ? parseAssistantMessageContent(message.content) : null),
-    [message.role, message.content]
-  )
+  const toolStatus = useMemo(() => getAgentUIMessageToolStatus(uiMessage), [uiMessage])
+  const thinking = useMemo(() => getAgentUIMessageReasoning(uiMessage), [uiMessage])
+  const content = useMemo(() => getAgentUIMessageText(uiMessage), [uiMessage])
 
-  const isThinkingStreaming = Boolean(
-    message.pending && parsedAssistant?.thinking && !parsedAssistant?.content
-  )
-  const hasAssistantVisualContent = Boolean(
-    parsedAssistant?.toolStatus || parsedAssistant?.thinking || parsedAssistant?.content
-  )
+  const isThinkingStreaming = Boolean(isAgentUIMessageReasoningStreaming(uiMessage) && thinking && !content)
+  const hasAssistantVisualContent = Boolean(toolStatus || thinking || content)
 
   if (message.role === "user") {
     return (
@@ -132,7 +56,7 @@ const MessageItem = memo(({
           <span className="px-1 text-xs text-muted-foreground">{formatMessageTime(message.created_at)}</span>
           <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm text-foreground">
             <div className="whitespace-pre-wrap break-words leading-6">
-              {message.content}
+              {content || message.content}
             </div>
           </div>
         </div>
@@ -154,14 +78,14 @@ const MessageItem = memo(({
       </div>
 
       <div className="flex max-w-[85%] flex-col items-start gap-1.5">
-        {parsedAssistant?.toolStatus && (
+        {toolStatus && (
           <div className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
-            <span>{parsedAssistant.toolStatus}</span>
+            <span>{toolStatus}</span>
           </div>
         )}
 
-        {parsedAssistant?.thinking && (
+        {thinking && (
           <Collapsible open={isThinkingOpen} onOpenChange={setIsThinkingOpen}>
             <CollapsibleTrigger asChild>
               <button
@@ -177,16 +101,16 @@ const MessageItem = memo(({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="mt-1 whitespace-pre-wrap rounded-lg bg-muted/70 px-3 py-2 text-xs text-muted-foreground">
-                {parsedAssistant.thinking}
+                {thinking}
               </div>
             </CollapsibleContent>
           </Collapsible>
         )}
 
-        {parsedAssistant?.content && (
+        {content && (
           <div className="px-1 py-1 text-sm text-foreground">
             <Response className="text-sm leading-6 break-words [&_pre]:text-xs">
-              {parsedAssistant.content}
+              {content}
             </Response>
           </div>
         )}
@@ -198,73 +122,6 @@ const MessageItem = memo(({
 })
 
 MessageItem.displayName = "MessageItem"
-
-function TaskItem({
-  task,
-  tText,
-  onConfirmTask,
-}: {
-  task: TaskView
-  tText: TimelineTranslate
-  onConfirmTask: (taskId: string, decision: "confirm" | "reject") => void
-}) {
-  const argumentsText = task.arguments ? JSON.stringify(task.arguments, null, 2) : ""
-
-  return (
-    <div className="flex items-start gap-3">
-      <div className="h-7 w-7 shrink-0 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
-        <Sparkles className="h-3.5 w-3.5" />
-      </div>
-
-      <div className="min-w-0 max-w-[85%] rounded-xl border bg-background px-3 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className={cn("text-[10px]", getTaskBadgeClassName(task.status))}>
-            {getTaskStatusLabel(task.status, tText)}
-          </Badge>
-          <span className="text-sm font-medium">{task.tool_display_name || task.tool_name}</span>
-          {task.dangerous && (
-            <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700">
-              {tText("dangerousAction")}
-            </Badge>
-          )}
-        </div>
-
-        {task.summary && <div className="mt-2 text-sm text-foreground/90">{task.summary}</div>}
-
-        {argumentsText && (
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-muted/70 p-2.5 text-xs">
-            {argumentsText}
-          </pre>
-        )}
-
-        {task.result && (
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-muted/70 p-2.5 text-xs">
-            {task.result}
-          </pre>
-        )}
-
-        {task.error && (
-          <AgentNoticeCard tone="error" size="sm" className="mt-2">
-            {task.error}
-          </AgentNoticeCard>
-        )}
-
-        <div className="mt-2 text-[11px] text-muted-foreground">{formatMessageTime(task.created_at)}</div>
-
-        {task.status === "waiting_confirm" && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" className="h-7 text-xs" onClick={() => onConfirmTask(task.id, "confirm")}>
-              {tText("confirmAction")}
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onConfirmTask(task.id, "reject")}>
-              {tText("rejectAction")}
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 interface TerminalAgentTimelineProps {
   entries: ResolvedTimelineItem[]
@@ -299,12 +156,25 @@ export function TerminalAgentTimeline({
         renderMessage={(entry) => (
           <MessageItem
             message={entry.data}
+            uiMessage={entry.uiMessage}
             thinkingLabel={tText("thinkingLabel")}
             thinkingProcessLabel={tText("thinkingProcess")}
           />
         )}
         renderTask={(entry) => (
-          <TaskItem task={entry.data} tText={tText} onConfirmTask={onConfirmTask} />
+          <div className="flex items-start gap-3">
+            <div className="h-7 w-7 shrink-0 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
+              <Bot className="h-3.5 w-3.5" />
+            </div>
+            <AgentToolCallCard
+              task={entry.data}
+              uiMessage={entry.uiMessage}
+              tText={tText}
+              onConfirmTask={onConfirmTask}
+              compact
+              className="min-w-0 max-w-[85%] flex-1"
+            />
+          </div>
         )}
         renderConfirmation={(entry) => (
           <AgentNoticeCard

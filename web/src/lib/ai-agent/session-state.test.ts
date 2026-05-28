@@ -166,6 +166,62 @@ test("任务、确认和错误事件会被归约并解析到时间线", () => {
   assert.equal(timeline[1]?.data?.task_id, task.id)
 })
 
+test("解析时间线时会生成 AI SDK UI message parts", () => {
+  const task = buildTask({
+    status: "succeeded",
+    arguments: {
+      command: "uptime",
+    },
+    result: "load average: 0.15",
+  })
+
+  let state = agentSessionReducer(initialAgentSessionState, {
+    type: "event",
+    event: {
+      id: "evt-ui-1",
+      type: "assistant.completed",
+      session_id: "session-1",
+      created_at: "2026-04-20T10:00:01Z",
+      assistant: {
+        message_id: "msg-ai-ui",
+        content: "<tool-status>正在执行命令</tool-status><think>检查负载</think>负载正常。",
+      },
+    },
+  })
+
+  state = agentSessionReducer(state, {
+    type: "event",
+    event: {
+      id: "evt-ui-2",
+      type: "task.updated",
+      session_id: "session-1",
+      created_at: task.updated_at,
+      task,
+    },
+  })
+
+  const timeline = resolveTimelineItems(state)
+  const message = timeline[0]
+  const taskEntry = timeline[1]
+
+  assert.equal(message?.kind, "message")
+  assert.equal(message?.kind === "message" ? message.uiMessage?.role : null, "assistant")
+  assert.deepEqual(
+    message?.kind === "message" ? message.uiMessage?.parts.map((part) => part.type) : [],
+    ["data-tool-status", "reasoning", "text"]
+  )
+
+  assert.equal(taskEntry?.kind, "task")
+  const toolPart = taskEntry?.kind === "task" ? taskEntry.uiMessage?.parts[0] : undefined
+  assert.equal(toolPart?.type, "dynamic-tool")
+  if (toolPart?.type === "dynamic-tool" && toolPart.state === "output-available") {
+    assert.equal(toolPart.state, "output-available")
+    assert.equal(toolPart.toolName, "execute_command")
+    assert.deepEqual(toolPart.input, { command: "uptime" })
+    assert.equal(toolPart.output, "load average: 0.15")
+  }
+})
+
 test("session.completed 会合并最终快照但不重复灌入旧用户消息", () => {
   const seeded = agentSessionReducer(initialAgentSessionState, {
     type: "local.user",

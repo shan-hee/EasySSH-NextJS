@@ -402,6 +402,7 @@ export function useAgentSession() {
   }, [cleanupTransport])
 
   const timelineEntries = resolveTimelineItems(state)
+  const uiMessages = timelineEntries.flatMap((entry) => entry.uiMessage ? [entry.uiMessage] : [])
 
   const tasks = Object.values(state.tasksById).sort(
     (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
@@ -417,6 +418,7 @@ export function useAgentSession() {
     sessionId,
     transport: state.transport,
     timeline: timelineEntries,
+    uiMessages,
     tasks,
     pendingConfirmationTasks,
     availableTools,

@@ -1,18 +1,22 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, Loader2 } from "lucide-react"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 
 import { AgentEmptyState, AgentNoticeCard } from "@/components/ai-agent/agent-notice"
-import { Button } from "@/components/ui/button"
+import { AgentToolCallCard } from "@/components/ai-agent/agent-tool-call-card"
 import { Response } from "@/components/ui/shadcn-io/ai/response"
+import {
+  getAgentUIMessageReasoning,
+  getAgentUIMessageText,
+  getAgentUIMessageToolStatus,
+} from "@/lib/ai-agent/ai-sdk-ui"
 import type { ResolvedTimelineItem } from "@/lib/ai-agent/session-state"
 import { getTaskStatusLabel, type AssistantLoadingState, type TimelineTranslate } from "@/lib/ai-agent/timeline-utils"
 import type { TaskView } from "@/lib/api/ai-agent"
 import { cn } from "@/lib/utils"
 
-const TASK_OUTPUT_EXPAND_THRESHOLD = 72
 const TASK_GROUP_PREVIEW_LIMIT = 4
 const TASK_GROUP_STATUS_ORDER: TaskView["status"][] = [
   "waiting_confirm",
@@ -75,7 +79,12 @@ function getRenderableEntry(entry: ResolvedTimelineItem): DashboardRenderableEnt
   }
 
   if (entry.kind === "message") {
-    if (entry.data.role === "assistant" && entry.data.content.trim() === "") {
+    if (
+      entry.data.role === "assistant" &&
+      !getAgentUIMessageText(entry.uiMessage).trim() &&
+      !getAgentUIMessageReasoning(entry.uiMessage) &&
+      !getAgentUIMessageToolStatus(entry.uiMessage)
+    ) {
       return null
     }
 
@@ -164,240 +173,6 @@ function getTaskDisplayName(task: TaskView) {
   return task.tool_display_name || task.tool_name
 }
 
-function TaskResultPanel({
-  result,
-  shouldAutoCollapse,
-  forceCollapsible = false,
-  compact = false,
-  tText,
-  header,
-  summary,
-  footer,
-}: {
-  result: string
-  shouldAutoCollapse: boolean
-  forceCollapsible?: boolean
-  compact?: boolean
-  tText: TimelineTranslate
-  header?: ReactNode
-  summary?: string
-  footer?: ReactNode
-}) {
-  const { isAtBottom, scrollToBottom, state } = useStickToBottomContext()
-  const contentRef = useRef<HTMLPreElement>(null)
-  const detailsRef = useRef<HTMLDivElement>(null)
-  const previousAutoCollapseRef = useRef(shouldAutoCollapse)
-  const scrollSyncTimerRef = useRef<number | null>(null)
-  const autoCollapseFrameRef = useRef<number | null>(null)
-  const [isCollapsed, setIsCollapsed] = useState(shouldAutoCollapse)
-  const [isExpandable, setIsExpandable] = useState(false)
-  const [detailsHeight, setDetailsHeight] = useState(0)
-  const canToggle = forceCollapsible || isExpandable
-  const effectiveCollapsed = canToggle ? isCollapsed : false
-  const showDetails = !effectiveCollapsed
-
-  const shouldKeepConversationBottomVisible = isAtBottom || state.isNearBottom
-
-  const syncConversationBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    if (!shouldKeepConversationBottomVisible) {
-      return
-    }
-
-    requestAnimationFrame(() => {
-      void scrollToBottom(behavior)
-    })
-
-    if (scrollSyncTimerRef.current !== null) {
-      window.clearTimeout(scrollSyncTimerRef.current)
-    }
-
-    scrollSyncTimerRef.current = window.setTimeout(() => {
-      void scrollToBottom("smooth")
-      scrollSyncTimerRef.current = null
-    }, 520)
-  }, [scrollToBottom, shouldKeepConversationBottomVisible])
-
-  useLayoutEffect(() => {
-    const element = detailsRef.current
-    if (!element) {
-      return
-    }
-
-    const measure = () => {
-      setDetailsHeight(element.scrollHeight)
-    }
-
-    measure()
-
-    if (typeof ResizeObserver === "undefined") {
-      return
-    }
-
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [result, summary, isExpandable])
-
-  useEffect(() => {
-    const element = contentRef.current
-    if (!element) {
-      return
-    }
-
-    const measure = () => {
-      setIsExpandable(element.scrollHeight > TASK_OUTPUT_EXPAND_THRESHOLD + 24)
-    }
-
-    measure()
-
-    if (typeof ResizeObserver === "undefined") {
-      return
-    }
-
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [result])
-
-  useEffect(() => {
-    if (!previousAutoCollapseRef.current && shouldAutoCollapse) {
-      autoCollapseFrameRef.current = window.requestAnimationFrame(() => {
-        setIsCollapsed(true)
-        syncConversationBottom("instant")
-        autoCollapseFrameRef.current = null
-      })
-    }
-    previousAutoCollapseRef.current = shouldAutoCollapse
-  }, [shouldAutoCollapse, syncConversationBottom])
-
-  useEffect(() => {
-    return () => {
-      if (autoCollapseFrameRef.current !== null) {
-        window.cancelAnimationFrame(autoCollapseFrameRef.current)
-      }
-      if (scrollSyncTimerRef.current !== null) {
-        window.clearTimeout(scrollSyncTimerRef.current)
-      }
-    }
-  }, [])
-
-  return (
-    <div
-      className={cn(
-        "overflow-hidden bg-muted/70",
-        compact ? "rounded-none" : "mt-2 rounded-lg border border-border/60"
-      )}
-    >
-      {(header || canToggle) && (
-        <div
-          className={cn(
-            "flex items-start justify-between gap-2 bg-background/60 px-2.5 py-1.5",
-            showDetails && "border-b border-border/50"
-          )}
-        >
-          {canToggle ? (
-            <button
-              type="button"
-              aria-label={effectiveCollapsed ? tText("expandTaskOutput") : tText("collapseTaskOutput")}
-              className="min-w-0 flex-1 text-left"
-              onClick={() => {
-                setIsCollapsed((value) => !value)
-                syncConversationBottom("instant")
-              }}
-            >
-              {header}
-            </button>
-          ) : (
-            <div className="min-w-0 flex-1">{header}</div>
-          )}
-          {canToggle && (
-            <button
-              type="button"
-              aria-label={effectiveCollapsed ? tText("expandTaskOutput") : tText("collapseTaskOutput")}
-              title={effectiveCollapsed ? tText("expandTaskOutput") : tText("collapseTaskOutput")}
-              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/70 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              onClick={() => {
-                setIsCollapsed((value) => !value)
-                syncConversationBottom("instant")
-              }}
-            >
-              <ChevronDown className={cn("size-3.5 transition-transform duration-300", !effectiveCollapsed && "rotate-180")} />
-            </button>
-          )}
-        </div>
-      )}
-
-      <div
-        ref={detailsRef}
-        className="overflow-hidden transition-[max-height,opacity] duration-500 ease-in-out"
-        style={{
-          maxHeight: showDetails ? `${detailsHeight}px` : "0px",
-          opacity: showDetails ? 1 : 0,
-        }}
-      >
-        {summary && (
-          <div className="border-b border-border/40 px-2.5 py-1.5 text-xs leading-5 text-foreground/85">
-            {summary}
-          </div>
-        )}
-
-        <div
-          className={cn(
-            "overflow-x-auto",
-            showDetails && "max-h-[35rem] overflow-y-auto scrollbar-custom"
-          )}
-        >
-          <pre
-            ref={contentRef}
-            className="whitespace-pre-wrap px-2.5 py-2 text-[11px] leading-5"
-          >
-            {result}
-          </pre>
-        </div>
-
-        {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-1.5 border-t border-border/50 bg-background/60 px-2.5 py-1.5">
-            {footer}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function TaskMetaHeader({
-  task,
-  tText,
-}: {
-  task: TaskView
-  tText: TimelineTranslate
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
-      {task.tool_display_name && (
-        <span
-          className="min-w-0 max-w-[12rem] truncate text-xs font-medium text-foreground/90"
-          title={task.tool_display_name}
-        >
-          {task.tool_display_name}
-        </span>
-      )}
-      <span
-        className="min-w-0 max-w-[10rem] truncate font-mono text-[10px] text-muted-foreground"
-        title={task.tool_name}
-      >
-        {task.tool_name}
-      </span>
-      <TaskStatusBadge status={task.status} tText={tText} />
-      {task.dangerous && (
-        <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
-          {tText("dangerousAction")}
-        </span>
-      )}
-    </div>
-  )
-}
-
 function TaskStatusBadge({
   status,
   tText,
@@ -415,76 +190,6 @@ function TaskStatusBadge({
   )
 }
 
-function TimelineTaskCard({
-  task,
-  tText,
-  shouldAutoCollapse,
-  onConfirmTask,
-  compact = false,
-}: {
-  task: TaskView
-  tText: TimelineTranslate
-  shouldAutoCollapse: boolean
-  onConfirmTask?: (taskId: string, decision: "confirm" | "reject") => void
-  compact?: boolean
-}) {
-  const summary = task.summary && task.summary !== task.tool_display_name ? task.summary : undefined
-
-  return (
-    <div
-      className={cn(
-        compact ? "bg-muted/10" : "rounded-2xl border border-border/60 bg-muted/20 px-3.5 py-3 shadow-sm"
-      )}
-    >
-      {task.result && (
-        <TaskResultPanel
-          result={task.result}
-          shouldAutoCollapse={compact ? true : shouldAutoCollapse}
-          forceCollapsible={compact}
-          compact={compact}
-          tText={tText}
-          header={<TaskMetaHeader task={task} tText={tText} />}
-          summary={summary}
-        />
-      )}
-
-      {!task.result && (
-        <div className={cn(compact && "px-2.5 py-2")}>
-          <div className="flex items-start justify-between gap-2">
-            <TaskMetaHeader task={task} tText={tText} />
-          </div>
-
-          {summary && (
-            <div className="mt-2 text-sm text-foreground/90">{summary}</div>
-          )}
-        </div>
-      )}
-
-      {task.error && (
-        <AgentNoticeCard tone="error" size="md" className={cn(compact ? "mx-2.5 mb-2" : "mt-3")}>
-          {task.error}
-        </AgentNoticeCard>
-      )}
-
-      {task.status === "waiting_confirm" && onConfirmTask && (
-        <div className={cn("flex flex-wrap gap-2", compact ? "px-2.5 pb-2.5 pt-1" : "mt-3")}>
-          <Button size="sm" className="h-7 text-xs" onClick={() => onConfirmTask(task.id, "confirm")}>
-            {tText("confirmAction")}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => onConfirmTask(task.id, "reject")}
-          >
-            {tText("rejectAction")}
-          </Button>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function TimelineMessageItem({
   entry,
   tText,
@@ -493,6 +198,10 @@ function TimelineMessageItem({
   tText: TimelineTranslate
 }) {
   const isUser = entry.data.role === "user"
+  const parsedMessageText = getAgentUIMessageText(entry.uiMessage)
+  const messageText = isUser ? parsedMessageText || entry.data.content : parsedMessageText
+  const reasoningText = getAgentUIMessageReasoning(entry.uiMessage)
+  const toolStatus = getAgentUIMessageToolStatus(entry.uiMessage)
 
   if (isUser) {
     return (
@@ -503,7 +212,7 @@ function TimelineMessageItem({
           </span>
           <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 shadow-sm">
             <div className="whitespace-pre-wrap break-words text-sm leading-6">
-              {entry.data.content}
+              {messageText}
             </div>
           </div>
         </div>
@@ -524,9 +233,22 @@ function TimelineMessageItem({
             </span>
           )}
         </div>
-        <Response className="text-sm leading-6 break-words [&_pre]:text-xs">
-          {entry.data.content}
-        </Response>
+        {toolStatus && (
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" />
+            <span>{toolStatus}</span>
+          </div>
+        )}
+        {reasoningText && !messageText && (
+          <div className="whitespace-pre-wrap rounded-lg bg-muted/70 px-3 py-2 text-xs text-muted-foreground">
+            {reasoningText}
+          </div>
+        )}
+        {messageText && (
+          <Response className="text-sm leading-6 break-words [&_pre]:text-xs">
+            {messageText}
+          </Response>
+        )}
       </div>
     </div>
   )
@@ -663,14 +385,15 @@ function TimelineTaskGroup({
       {isOpen && (
         <div className="divide-y divide-border/50">
           {entries.map((entry) => (
-            <TimelineTaskCard
-              key={entry.id}
-              task={entry.data}
-              tText={tText}
-              shouldAutoCollapse={true}
-              onConfirmTask={onConfirmTask}
-              compact
-            />
+            <div key={entry.id} className="p-2.5">
+              <AgentToolCallCard
+                task={entry.data}
+                uiMessage={entry.uiMessage}
+                tText={tText}
+                onConfirmTask={onConfirmTask}
+                compact
+              />
+            </div>
           ))}
         </div>
       )}
@@ -711,15 +434,13 @@ export function DashboardAgentTimeline({
             return <TimelineMessageItem key={block.id} entry={block.entry} tText={tText} />
           case "task":
             return (
-              <div key={block.id} className="overflow-hidden rounded-2xl border border-border/60 bg-muted/10 shadow-sm">
-                <TimelineTaskCard
-                  task={block.entry.data}
-                  tText={tText}
-                  shouldAutoCollapse={true}
-                  onConfirmTask={onConfirmTask}
-                  compact
-                />
-              </div>
+              <AgentToolCallCard
+                key={block.id}
+                task={block.entry.data}
+                uiMessage={block.entry.uiMessage}
+                tText={tText}
+                onConfirmTask={onConfirmTask}
+              />
             )
           case "task-group":
             return (
