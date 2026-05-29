@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import {
-  Settings2,
   Server,
   Monitor,
   Terminal,
@@ -14,7 +13,6 @@ import { useTranslations } from "next-intl"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
-import { NavExtra } from "@/components/nav-extra"
 import { QuickAccess } from "@/components/quick-access"
 import { TeamSwitcher } from "@/components/team-switcher"
 import {
@@ -90,20 +88,12 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
 
       // 仅管理员可见的菜单项
       if (isAdmin) {
-        baseItems.push(
-          {
-            title: tNav("userManagement"),
-            url: "/dashboard/users",
-            icon: Users,
-            isActive: false,
-          },
-          {
-            title: tNav("systemSettings"),
-            url: "/dashboard/settings",
-            icon: Settings2,
-            isActive: false,
-          },
-        )
+        baseItems.push({
+          title: tNav("userManagement"),
+          url: "/dashboard/users",
+          icon: Users,
+          isActive: false,
+        })
       }
 
       return baseItems
@@ -134,7 +124,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
     [all, tNav]
   )
   const groupSettings = React.useMemo(
-    () => all.filter((i) => [tNav("userManagement"), tNav("systemSettings")].includes(i.title)),
+    () => all.filter((i) => [tNav("userManagement")].includes(i.title)),
     [all, tNav],
   )
 
@@ -160,10 +150,9 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
         {groupWorkbench.length > 0 && <NavMain label={tNav("workbench")} items={groupWorkbench} />}
         {groupCore.length > 0 && <NavMain label={tNav("coreServers")} items={groupCore} />}
         {groupObserveAudit.length > 0 && <NavMain label={tNav("observeAudit")} items={groupObserveAudit} />}
-        {groupSettings.length > 0 && <NavMain label={tNav("settings")} items={groupSettings} />}
+        {groupSettings.length > 0 && <NavMain label={tNav("systemOrg")} items={groupSettings} />}
       </SidebarContent>
       <SidebarFooter>
-        <NavExtra />
         {/* 用户信息区域：加载时显示占位，加载完成后显示真实内容 */}
         {userData ? (
           <NavUser user={userData} />

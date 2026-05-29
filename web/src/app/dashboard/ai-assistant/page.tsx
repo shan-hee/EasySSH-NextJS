@@ -482,25 +482,28 @@ export default function AIAssistantPage() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {confirmDialog}
-      <PageHeader title={t("pageTitle")}>
-        <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-zinc-900"
-              aria-label={t("sidebarTitle")}
-              title={t("sidebarTitle")}
-            >
-              <History className="size-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            sideOffset={8}
-            className="w-[330px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border-zinc-200/80 p-0 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
-          >
+      <PageHeader
+        title={t("pageTitle")}
+        titleActions={
+          <>
+            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-zinc-900"
+                  aria-label={t("sidebarTitle")}
+                  title={t("sidebarTitle")}
+                >
+                  <History className="size-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                sideOffset={8}
+                className="w-[330px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border-zinc-200/80 p-0 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+              >
             <div className="border-b border-border/60 p-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -679,26 +682,28 @@ export default function AIAssistantPage() {
                 )}
               </div>
             </ScrollArea>
-          </PopoverContent>
-        </Popover>
+              </PopoverContent>
+            </Popover>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-zinc-900"
-          disabled={createSessionDisabled}
-          onClick={() => void handleCreateNewSession()}
-          aria-label={t("newSession")}
-          title={t("newSession")}
-        >
-          {sessionCreating ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <SquarePen className="size-4" />
-          )}
-        </Button>
-      </PageHeader>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-zinc-900"
+              disabled={createSessionDisabled}
+              onClick={() => void handleCreateNewSession()}
+              aria-label={t("newSession")}
+              title={t("newSession")}
+            >
+              {sessionCreating ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <SquarePen className="size-4" />
+              )}
+            </Button>
+          </>
+        }
+      />
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="h-full min-w-0 overflow-y-auto pb-4 md:pb-6 lg:overflow-hidden">

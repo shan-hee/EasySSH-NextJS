@@ -76,7 +76,7 @@ import { sessionsApi, type Session } from "@/lib/api/sessions"
 import { notificationsApi } from "@/lib/api/notifications"
 import * as sshKeysApi from "@/lib/api/ssh-keys"
 import { userAIConfigApi, type UserAIConfig, type SaveUserAIConfigRequest } from "@/lib/api/settings"
-import { getEffectiveLocale, getEffectiveTimezone, formatInTimezone, saveLocaleToStorage } from "@/utils/datetime"
+import { getEffectiveLocale, getEffectiveTimezone, formatInTimezone } from "@/utils/datetime"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
@@ -194,9 +194,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
   const [notifySuspicious, setNotifySuspicious] = React.useState(true)
   const [notificationLoading, setNotificationLoading] = React.useState(false)
 
-  // 个人偏好状态（语言与时区）
+  // 个人偏好状态（时区）
   const [preferencesForm, setPreferencesForm] = React.useState({
-    language: "",
     timezone: "",
   })
   const [preferencesLoading, setPreferencesLoading] = React.useState(false)
@@ -271,7 +270,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setNotifySuspicious(user.notify_suspicious ?? true)
       // 初始化个人偏好（优先使用用户配置，其次使用系统默认配置）
       setPreferencesForm({
-        language: user.language || config?.default_language || "zh-CN",
         timezone: user.timezone || config?.default_timezone || "Asia/Shanghai",
       })
       // 初始化监控数据源设置
@@ -472,7 +470,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
       setCountdown(0)
       // 重新同步个人偏好（避免系统配置或用户信息变化后未刷新）
       setPreferencesForm({
-        language: user.language || config?.default_language || "zh-CN",
         timezone: user.timezone || config?.default_timezone || "Asia/Shanghai",
       })
     }
@@ -587,12 +584,8 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
     }
   }, [profileForm, originalEmail, avatarFile, avatarPreview, refreshUser, tAccount])
 
-  // 保存个人偏好（语言与时区）
+  // 保存个人偏好（时区）
   const handleSavePreferences = React.useCallback(async () => {
-    if (!preferencesForm.language) {
-      toast.error(tAccount("toastLanguageRequired"))
-      return
-    }
     if (!preferencesForm.timezone) {
       toast.error(tAccount("toastTimezoneRequired"))
       return
@@ -600,13 +593,7 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
 
     setPreferencesLoading(true)
     try {
-      // 立即保存到 localStorage，确保页面刷新时能立即使用
-      if (preferencesForm.language === "zh-CN" || preferencesForm.language === "en-US") {
-        saveLocaleToStorage(preferencesForm.language)
-      }
-
       await authApi.updateProfile({
-        language: preferencesForm.language,
         timezone: preferencesForm.timezone,
       })
       await refreshUser()
@@ -1348,29 +1335,6 @@ export const SettingsDialog = React.memo(function SettingsDialog({ children }: {
                         {tAccount("preferencesDescription")}
                       </p>
                       <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="language">
-                            {tAccount("languageLabel")}
-                          </Label>
-                          <Select
-                            value={preferencesForm.language}
-                            onValueChange={(value) =>
-                              setPreferencesForm((prev) => ({ ...prev, language: value }))
-                            }
-                          >
-                            <SelectTrigger id="language" className="w-full">
-                              <SelectValue placeholder={tAccount("languagePlaceholder")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="zh-CN">
-                                {tAccount("languageOptionZhCN")}
-                              </SelectItem>
-                              <SelectItem value="en-US">
-                                {tAccount("languageOptionEnUS")}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="timezone">
                             {tAccount("timezoneLabel")}

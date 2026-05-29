@@ -6,7 +6,6 @@ import SidebarProviderServer from "@/components/sidebar-provider-server"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { ClientAuthProvider } from "@/components/client-auth-provider"
-import { BreadcrumbProvider } from "@/contexts/breadcrumb-context"
 import { CompletionConfigProvider } from "@/contexts/completion-config-context"
 import { useSystemConfig } from "@/contexts/system-config-context"
 import { DashboardI18nProvider } from "@/providers/dashboard-i18n-provider"
@@ -69,23 +68,21 @@ export default function DashboardLayout({
     <ClientAuthProvider initialUser={initialUser}>
       <DashboardI18nProvider>
         <CompletionConfigProvider>
-          <BreadcrumbProvider>
-            <SidebarProviderServer>
-              <MobileSidebarRouteCloser />
-              <AppSidebar />
-              <SidebarInset>
-                {/* 添加淡入动画，使界面显示更平滑 */}
-                <div
-                  className={cn(
-                    "animate-in fade-in duration-300 flex flex-1 flex-col min-h-0 scrollbar-custom",
-                    disableOuterScroll ? "overflow-hidden" : "overflow-auto"
-                  )}
-                >
-                  {children}
-                </div>
-              </SidebarInset>
-            </SidebarProviderServer>
-          </BreadcrumbProvider>
+          <SidebarProviderServer>
+            <MobileSidebarRouteCloser />
+            <AppSidebar />
+            <SidebarInset>
+              {/* 添加淡入动画，使界面显示更平滑 */}
+              <div
+                className={cn(
+                  "animate-in fade-in duration-300 flex flex-1 flex-col min-h-0 scrollbar-custom",
+                  disableOuterScroll ? "overflow-hidden" : "overflow-auto"
+                )}
+              >
+                {children}
+              </div>
+            </SidebarInset>
+          </SidebarProviderServer>
         </CompletionConfigProvider>
       </DashboardI18nProvider>
     </ClientAuthProvider>

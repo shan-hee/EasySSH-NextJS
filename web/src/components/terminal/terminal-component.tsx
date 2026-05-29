@@ -10,23 +10,13 @@ import type {
 } from "@/components/terminal/types"
 import { cn } from "@/lib/utils"
 import { useTerminalStore } from "@/stores/terminal-store"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import Link from "next/link"
+import { PageHeader } from "@/components/page-header"
 import {
   TerminalSettingsDialog,
   type TerminalSettings,
 } from "./terminal-settings-dialog"
 import { TabTerminalContent } from "./tab-terminal-content"
 import { useTabUIStore } from "@/stores/tab-ui-store"
-import { useSystemConfig } from "@/contexts/system-config-context"
 import { useTranslations } from "next-intl"
 
 type LoaderState = "entering" | "loading" | "exiting"
@@ -169,9 +159,7 @@ export function TerminalComponent({
   onConnectionPhaseChange,
   onBehaviorSettingsChange,
 }: TerminalComponentProps) {
-  const { config } = useSystemConfig()
   const tTerminal = useTranslations("terminal")
-  const tNav = useTranslations("nav")
   const [activeSession, setActiveSession] = useState<string>(
     externalActiveSessionId || sessions[0]?.id || ""
   )
@@ -661,124 +649,82 @@ export function TerminalComponent({
 
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-black' : ''}`}>
-      {/* 全屏时隐藏面包屑头部 */}
       {!isFullscreen && (
-        <header className="flex h-16 shrink-0 items-center gap-2 sticky top-0 z-10 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-none group-data-[ready=true]/sidebar-wrapper:transition-[width,height] group-data-[ready=true]/sidebar-wrapper:duration-200 group-data-[ready=true]/sidebar-wrapper:ease-in-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
-            <SidebarTrigger
-              className="-ml-1 md:hidden"
-              aria-label={tNav("openSidebar")}
-              title={tNav("openSidebar")}
-            />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink asChild>
-                    <Link href="/dashboard">
-                      {config?.system_name || "EasySSH"}
-                    </Link>
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                {active && (
-                  <>
-                    <BreadcrumbSeparator className="hidden md:block" />
-                    {active.type === "quick" ? (
-                      <BreadcrumbItem>
-                        <BreadcrumbPage>{tTerminal("quickConnectTabName")}</BreadcrumbPage>
-                      </BreadcrumbItem>
-                    ) : (
-                      <>
-                        {active.group && (
-                          <>
-                            <BreadcrumbItem className="hidden md:block">
-                              <BreadcrumbPage>{active.group}</BreadcrumbPage>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator className="hidden md:block" />
-                          </>
-                        )}
-                        <BreadcrumbItem>
-                          <BreadcrumbPage>{active.serverName}</BreadcrumbPage>
-                        </BreadcrumbItem>
-                      </>
-                    )}
-                  </>
-                )}
-              </BreadcrumbList>
-            </Breadcrumb>
-          </div>
-        </header>
+        <PageHeader title={active?.serverName || tTerminal("quickConnectTabName")} />
       )}
 
-      <div className={cn(
-        "flex-1 flex flex-col rounded-xl border overflow-hidden shadow-2xl transition-colors",
-        "border-zinc-200 bg-gradient-to-b from-white to-zinc-50 dark:border-zinc-800/50 dark:from-black dark:to-zinc-950"
-      )}>
-        {/* 页签栏（仅保留标签，不显示面包屑） */}
-        <SessionTabBar
-          sessions={sessions}
-          activeId={activeSession}
-          onChangeActive={setActiveSessionFromUser}
-          onNewSession={handleNewSessionClick}
-          onCloseSession={handleCloseSession}
-          onDuplicateSession={onDuplicateSession}
-          onCloseOthers={handleCloseOthers}
-          onCloseAll={handleCloseAll}
-          onTogglePin={onTogglePin}
-          onReorder={onReorderSessions}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-          hideBreadcrumb
-        />
+      <div className="flex-1 flex flex-col min-h-0 p-4 pt-0">
+        <div className={cn(
+          "flex-1 flex flex-col min-h-0 rounded-xl border overflow-hidden shadow-2xl transition-colors",
+          "border-zinc-200 bg-gradient-to-b from-white to-zinc-50 dark:border-zinc-800/50 dark:from-black dark:to-zinc-950"
+        )}>
+          {/* 页签栏（仅保留标签，不显示面包屑） */}
+          <SessionTabBar
+            sessions={sessions}
+            activeId={activeSession}
+            onChangeActive={setActiveSessionFromUser}
+            onNewSession={handleNewSessionClick}
+            onCloseSession={handleCloseSession}
+            onDuplicateSession={onDuplicateSession}
+            onCloseOthers={handleCloseOthers}
+            onCloseAll={handleCloseAll}
+            onTogglePin={onTogglePin}
+            onReorder={onReorderSessions}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+            hideBreadcrumb
+          />
 
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-        {sessions.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-zinc-500">
-            暂无活动会话，使用右上角 + 新建
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            {sessions.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-zinc-500">
+                暂无活动会话，使用右上角 + 新建
+              </div>
+            ) : (
+              <Tabs value={active?.id || sessions[0]?.id || ''} className="flex-1 flex flex-col gap-0">
+                {/* ==================== 每个页签独立的 Provider 和内容 ==================== */}
+                {sessions.map((session) => {
+                  const isActive = session.id === activeSession
+
+                  return (
+                    <TabsContent
+                      key={session.id}
+                      value={session.id}
+                      forceMount // 强制保持挂载
+                      className={cn(
+                        "flex-1 flex flex-col m-0 absolute inset-0 transition-none"
+                      )}
+                      style={{
+                        visibility: isActive ? 'visible' : 'hidden',
+                        zIndex: isActive ? 10 : 0,
+                        pointerEvents: isActive ? 'auto' : 'none',
+                      }}
+                    >
+                      <TabTerminalContent
+                        session={session}
+                        isActive={isActive}
+                        settings={settings}
+                        effectiveIsLoading={effectiveIsLoading && isActive}
+                        loaderState={loaderStates[session.id] || "entering"}
+                        onAnimationComplete={() => handleAnimationComplete(session.id)}
+                        isFullscreen={isFullscreen}
+                        servers={servers}
+                        serversLoading={serversLoading}
+                        onCommand={(command) => handleCommand(session.id, command)}
+                        onConnectionPhaseChange={(phase) => onConnectionPhaseChange?.(session.id, phase)}
+                        onAuthCancelled={() => onAuthCancelled?.(session.id)}
+                        onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+                        onToggleSettings={() => setIsSettingsOpen(true)}
+                        onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}
+                        onInternalBackHandlerChange={handleInternalBackHandlerChange}
+                        onInternalBackAvailabilityChange={handleInternalBackAvailabilityChange}
+                      />
+                    </TabsContent>
+                  )
+                })}
+              </Tabs>
+            )}
           </div>
-        ) : (
-          <Tabs value={active?.id || sessions[0]?.id || ''} className="flex-1 flex flex-col gap-0">
-            {/* ==================== 每个页签独立的 Provider 和内容 ==================== */}
-            {sessions.map((session) => {
-              const isActive = session.id === activeSession
-
-              return (
-                <TabsContent
-                  key={session.id}
-                  value={session.id}
-                  forceMount // 强制保持挂载
-                  className={cn(
-                    "flex-1 flex flex-col m-0 absolute inset-0 transition-none"
-                  )}
-                  style={{
-                    visibility: isActive ? 'visible' : 'hidden',
-                    zIndex: isActive ? 10 : 0,
-                    pointerEvents: isActive ? 'auto' : 'none',
-                  }}
-                >
-                  <TabTerminalContent
-                    session={session}
-                    isActive={isActive}
-                    settings={settings}
-                    effectiveIsLoading={effectiveIsLoading && isActive}
-                    loaderState={loaderStates[session.id] || "entering"}
-                    onAnimationComplete={() => handleAnimationComplete(session.id)}
-                    isFullscreen={isFullscreen}
-                    servers={servers}
-                    serversLoading={serversLoading}
-                    onCommand={(command) => handleCommand(session.id, command)}
-                    onConnectionPhaseChange={(phase) => onConnectionPhaseChange?.(session.id, phase)}
-                    onAuthCancelled={() => onAuthCancelled?.(session.id)}
-                    onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-                    onToggleSettings={() => setIsSettingsOpen(true)}
-                    onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}
-                    onInternalBackHandlerChange={handleInternalBackHandlerChange}
-                    onInternalBackAvailabilityChange={handleInternalBackAvailabilityChange}
-                  />
-                </TabsContent>
-              )
-            })}
-          </Tabs>
-        )}
         </div>
       </div>
 
