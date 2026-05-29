@@ -18,6 +18,46 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # 存储需要释放的端口
 declare -a PORTS_TO_KILL
 
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+get_port_pids() {
+    local port="$1"
+
+    {
+        if command_exists ss; then
+            ss -H -ltnp "sport = :${port}" 2>/dev/null \
+                | grep -oE 'pid=[0-9]+' \
+                | cut -d '=' -f2 || true
+        fi
+
+        if command_exists lsof; then
+            lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+        fi
+    } | awk '/^[0-9]+$/ { print }' | sort -u
+}
+
+collect_child_pids() {
+    local pid="$1"
+    local child=""
+
+    echo "$pid"
+    if command_exists pgrep; then
+        while read -r child; do
+            [ -n "$child" ] && collect_child_pids "$child"
+        done < <(pgrep -P "$pid" 2>/dev/null || true)
+    fi
+}
+
+expand_pids_with_children() {
+    local pid=""
+
+    for pid in "$@"; do
+        collect_child_pids "$pid"
+    done | awk '/^[0-9]+$/ { print }' | sort -u
+}
+
 get_url_port() {
     local url="$1"
     local host_port="$url"
@@ -66,12 +106,25 @@ echo -e "${YELLOW}释放端口: ${UNIQUE_PORTS[*]}${NC}"
 
 # 释放端口
 for port in "${UNIQUE_PORTS[@]}"; do
-    pids=$(lsof -ti:$port 2>/dev/null || true)
+    mapfile -t pids < <(get_port_pids "$port")
 
-    if [ ! -z "$pids" ]; then
-        echo -e "${RED}杀死端口 ${port} 的进程${NC}"
-        echo "$pids" | xargs kill -9 2>/dev/null || true
-        echo -e "${GREEN}✓ 端口 ${port} 已释放${NC}"
+    if [ "${#pids[@]}" -gt 0 ]; then
+        mapfile -t kill_pids < <(expand_pids_with_children "${pids[@]}")
+        echo -e "${RED}杀死端口 ${port} 的进程: ${kill_pids[*]}${NC}"
+        kill "${kill_pids[@]}" 2>/dev/null || true
+        sleep 1
+
+        mapfile -t alive_pids < <(get_port_pids "$port")
+        if [ "${#alive_pids[@]}" -gt 0 ]; then
+            kill -9 "${alive_pids[@]}" 2>/dev/null || true
+        fi
+
+        mapfile -t alive_pids < <(get_port_pids "$port")
+        if [ "${#alive_pids[@]}" -gt 0 ]; then
+            echo -e "${RED}✗ 端口 ${port} 仍被占用: ${alive_pids[*]}${NC}"
+        else
+            echo -e "${GREEN}✓ 端口 ${port} 已释放${NC}"
+        fi
     else
         echo -e "${GREEN}✓ 端口 ${port} 未被占用${NC}"
     fi
