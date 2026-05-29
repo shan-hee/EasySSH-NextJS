@@ -83,7 +83,7 @@ export default function RootLayout({
         <script
           id="no-flash-init"
           dangerouslySetInnerHTML={{
-            __html: `!function(){try{var d=document.documentElement;var t=localStorage.getItem('theme');var dark=t==='dark'||((!t||t==='system')&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(dark){d.classList.add('dark')}else{d.classList.remove('dark')};var l=localStorage.getItem('user-language');if(l==='zh-CN'||l==='en-US'){d.setAttribute('lang',l)};var p=localStorage.getItem('easyssh-theme-preset');if(p==='nature'||p==='ocean'||p==='rose'){d.setAttribute('data-theme-preset',p)}else{d.removeAttribute('data-theme-preset')}}catch(e){}}();`,
+            __html: `!function(){try{var d=document.documentElement;var t=localStorage.getItem('theme');var dark=t==='dark'||((!t||t==='system')&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(dark){d.classList.add('dark')}else{d.classList.remove('dark')};var l=localStorage.getItem('user-language');if(l==='zh-CN'||l==='en-US'){d.setAttribute('lang',l)};var s='';var g=localStorage.getItem('easyssh-theme-generator');if(g){try{s=JSON.parse(g).css||''}catch(e){s=''}}if(s){var el=document.getElementById('easyssh-theme-generator-style');if(!el){el=document.createElement('style');el.id='easyssh-theme-generator-style';document.head.appendChild(el)}el.textContent=s}}catch(e){}}();`,
           }}
         />
       </head>
