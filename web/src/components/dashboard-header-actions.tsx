@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ThemeGeneratorPanel } from "@/components/theme-generator-panel"
+import { ThemeMenu } from "@/components/theme-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/contexts/system-config-context"
@@ -129,7 +129,7 @@ export function DashboardHeaderActions() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ThemeGeneratorPanel />
+      <ThemeMenu />
     </div>
   )
 }

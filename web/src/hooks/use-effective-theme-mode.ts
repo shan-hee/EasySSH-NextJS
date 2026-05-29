@@ -3,10 +3,6 @@
 import { useEffect, useState } from "react"
 
 import { useThemeGeneratorVersion } from "@/hooks/use-theme-generator-version"
-import {
-  loadThemeGeneratorState,
-  THEME_GENERATOR_STORAGE_KEY,
-} from "@/lib/theme-generator"
 
 export type EffectiveThemeMode = "light" | "dark"
 
@@ -18,18 +14,8 @@ function getDocumentThemeMode(): EffectiveThemeMode {
   return "light"
 }
 
-function getStoredThemeGeneratorMode(): EffectiveThemeMode | null {
-  if (typeof window === "undefined") {
-    return null
-  }
-
-  return window.localStorage.getItem(THEME_GENERATOR_STORAGE_KEY)
-    ? loadThemeGeneratorState().mode
-    : null
-}
-
 function getEffectiveThemeMode(): EffectiveThemeMode {
-  return getStoredThemeGeneratorMode() ?? getDocumentThemeMode()
+  return getDocumentThemeMode()
 }
 
 export function useEffectiveThemeMode() {

@@ -477,6 +477,9 @@ export function loadThemeGeneratorState(): ThemeGeneratorState {
       typeof stored.preset === "string" && THEME_PRESETS.some((preset) => preset.id === stored.preset)
         ? stored.preset
         : null
+    if (!storedPreset) {
+      return createThemeGeneratorState()
+    }
 
     return {
       ...defaultState,
@@ -491,7 +494,7 @@ export function loadThemeGeneratorState(): ThemeGeneratorState {
       styles: mergeLoadedThemeStyles(stored.styles),
     }
   } catch (error) {
-    console.warn("Failed to read theme generator state:", error)
+    console.warn("Failed to read theme settings state:", error)
     return createThemeGeneratorState()
   }
 }
@@ -515,7 +518,7 @@ export function persistThemeGeneratorState(state: ThemeGeneratorState) {
 
     window.localStorage.setItem(THEME_GENERATOR_STORAGE_KEY, JSON.stringify(stored))
   } catch (error) {
-    console.warn("Failed to persist theme generator state:", error)
+    console.warn("Failed to persist theme settings state:", error)
   }
 }
 
@@ -524,7 +527,7 @@ export function clearThemeGeneratorState() {
     try {
       window.localStorage.removeItem(THEME_GENERATOR_STORAGE_KEY)
     } catch (error) {
-      console.warn("Failed to clear theme generator state:", error)
+      console.warn("Failed to clear theme settings state:", error)
     }
   }
 

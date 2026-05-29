@@ -118,11 +118,11 @@ export function ServerFilters({
   }
 
   return (
-    <div className={"rounded-lg border p-4 bg-gradient-to-b from-zinc-50 to-white border-zinc-200 dark:from-zinc-900/40 dark:to-zinc-900/20 dark:border-zinc-800/30"}>
+    <div className={"rounded-lg border bg-card p-4 text-card-foreground border-border"}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Filter className={"h-4 w-4 text-zinc-600 dark:text-zinc-500"} />
-          <h3 className={"text-sm font-semibold text-zinc-900 dark:text-white"}>筛选和排序</h3>
+          <Filter className={"h-4 w-4 text-muted-foreground"} />
+          <h3 className={"text-sm font-semibold text-foreground"}>筛选和排序</h3>
         </div>
 
         {/* 视图模式切换 */}
@@ -173,12 +173,12 @@ export function ServerFilters({
         {/* 高级筛选 - 只在有数据时显示 */}
         {(uniqueTags.length > 0 || uniqueOS.length > 0) && (
           <>
-            <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
+            <div className={"h-px bg-gradient-to-r from-transparent via-border to-transparent"} />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {uniqueTags.length > 0 && (
                 <div className="space-y-1.5">
-                  <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>
+                  <label className={"text-xs font-medium text-muted-foreground"}>
                     {t("filterTagLabel")}
                   </label>
                   <Select
@@ -204,7 +204,7 @@ export function ServerFilters({
 
               {uniqueOS.length > 0 && (
                 <div className="space-y-1.5">
-                  <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>
+                  <label className={"text-xs font-medium text-muted-foreground"}>
                     {t("filterOsLabel")}
                   </label>
                   <Select
@@ -229,7 +229,7 @@ export function ServerFilters({
               )}
 
               <div className="space-y-1.5">
-                <label className={"text-xs font-medium text-zinc-600 dark:text-zinc-500"}>
+                <label className={"text-xs font-medium text-muted-foreground"}>
                   {t("filterSortLabel")}
                 </label>
                 <div className="flex gap-2">
@@ -269,7 +269,7 @@ export function ServerFilters({
         {/* 重置按钮 */}
         {(filters.group !== 'all' || filters.tag !== 'all' || filters.os !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
           <>
-            <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
+            <div className={"h-px bg-gradient-to-r from-transparent via-border to-transparent"} />
             <div className="flex justify-between items-center">
               <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8">
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" />

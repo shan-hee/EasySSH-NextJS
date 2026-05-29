@@ -266,7 +266,7 @@ export function getTerminalTheme(
   themeName: 'default' | 'dark' | 'light' | 'solarized' | 'dracula',
   appTheme?: 'light' | 'dark'
 ): TerminalTheme {
-  // default 跟随 Theme Generator 生成的 CSS 变量，并为终端做可读性兜底。
+  // default 跟随应用主题 CSS 变量，并为终端做可读性兜底。
   if (themeName === 'default') {
     return getThemeGeneratorTerminalTheme(appTheme)
   }

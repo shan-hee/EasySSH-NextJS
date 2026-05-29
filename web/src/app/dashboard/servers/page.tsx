@@ -77,23 +77,23 @@ function SortableServerItem({
       style={style}
       {...attributes}
       {...listeners}
-      className="group flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40 cursor-grab active:cursor-grabbing transition-colors duration-200"
+      className="group flex items-center gap-3 p-4 rounded-lg border bg-card text-card-foreground border-border hover:bg-accent/60 hover:border-primary/40 cursor-grab active:cursor-grabbing outline-none focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/20 transition-colors duration-200"
     >
-      <ServerIcon className="h-5 w-5 flex-shrink-0 text-sidebar-foreground transition-colors group-hover:text-green-500 dark:group-hover:text-green-400" />
+      <ServerIcon className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
 
       <div className="flex-1 min-w-0 flex items-center gap-4">
         <div className="flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-zinc-900 transition-colors truncate group-hover:text-green-600 dark:text-white dark:group-hover:text-green-400">
+            <div className="text-sm font-medium text-foreground transition-colors truncate group-hover:text-primary">
               {server.name || server.host}
             </div>
           </div>
-          <div className={"text-xs font-mono whitespace-nowrap text-zinc-500 dark:text-zinc-600"}>
+          <div className={"text-xs font-mono whitespace-nowrap text-muted-foreground"}>
             {server.username}@{server.host}:{server.port}
           </div>
         </div>
         {server.description && (
-          <div className={"flex-1 text-xs truncate text-zinc-400 dark:text-zinc-600 text-left"}>
+          <div className={"flex-1 text-xs truncate text-muted-foreground/80 text-left"}>
             {server.description}
           </div>
         )}
@@ -114,7 +114,7 @@ function SortableServerItem({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
           onClick={() => onConnect(server.id)}
           title={t("tooltipConnect")}>
           <Terminal className="h-4 w-4" />
@@ -122,7 +122,7 @@ function SortableServerItem({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 w-8 p-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
           onClick={() => onEdit(server)}
           title={t("tooltipEdit")}>
           <Edit className="h-4 w-4" />
@@ -130,7 +130,7 @@ function SortableServerItem({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 w-8 p-0 text-destructive hover:bg-red-50 dark:hover:bg-red-950/20"
+          className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
           onClick={() => onDelete(server.id)}
           title={t("tooltipDelete")}>
           <Trash2 className="h-4 w-4" />
@@ -436,8 +436,8 @@ export default function ServersPage() {
  <>
  <PageHeader title={t("pageTitle")} />
 
- <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-white dark:bg-black"}>
- <div className={"absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent to-transparent via-black/5 dark:via-white/5"} />
+ <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-background text-foreground"}>
+ <div className={"absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"} />
 
  <div className="flex-1 flex flex-col items-center px-8 py-8 overflow-y-auto">
  <div className="max-w-3xl w-full space-y-3">
@@ -447,10 +447,10 @@ export default function ServersPage() {
  <div className="flex items-center justify-between gap-4">
  {/* 左侧：搜索框 */}
  <div className="relative flex-1 max-w-md">
- <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 dark:text-zinc-600 h-4 w-4" />
+ <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
  placeholder={t("searchPlaceholder")}
- className={"pl-10 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}
+ className={"pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"}
  value={searchTerm}
  onChange={(e) => setSearchTerm(e.target.value)}
  />
@@ -491,10 +491,10 @@ export default function ServersPage() {
  {/* 加载状态 */}
  {loading && (
  <div className="space-y-4">
- <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
+ <div className={"h-px bg-gradient-to-r from-transparent via-border to-transparent"} />
  <div className="flex flex-col items-center justify-center py-12 gap-4">
- <Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600" />
- <p className="text-sm text-zinc-500 dark:text-zinc-600">
+ <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+ <p className="text-sm text-muted-foreground">
    {t("loadingList")}
  </p>
  </div>
@@ -504,7 +504,7 @@ export default function ServersPage() {
  {/* 服务器列表 */}
  {!loading && filteredServers.length > 0 && (
  <div className="space-y-4">
- <div className={"h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800"} />
+ <div className={"h-px bg-gradient-to-r from-transparent via-border to-transparent"} />
 
  {isMounted ? (
  <DndContext
@@ -532,9 +532,9 @@ export default function ServersPage() {
 
  <DragOverlay>
  {draggedServer ? (
- <div className="flex items-center gap-3 p-4 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30 shadow-lg opacity-80">
+ <div className="flex items-center gap-3 p-4 rounded-lg border bg-card text-card-foreground border-border shadow-lg opacity-80">
  <div className="flex-1 min-w-0">
- <div className="text-sm font-medium text-zinc-900 dark:text-white">
+ <div className="text-sm font-medium text-foreground">
  {draggedServer.name || draggedServer.host}
  </div>
  </div>
@@ -548,23 +548,23 @@ export default function ServersPage() {
  {filteredServers.map((server) => (
  <div
  key={server.id}
- className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40"}
+ className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-card text-card-foreground border-border hover:bg-accent/60 hover:border-primary/40 outline-none focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/20"}
  >
- <ServerIcon className="h-5 w-5 flex-shrink-0 text-sidebar-foreground transition-colors group-hover:text-green-500 dark:group-hover:text-green-400" />
+ <ServerIcon className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
 
  <div className="flex-1 min-w-0 flex items-center gap-4">
  <div className="flex-shrink-0">
  <div className="flex items-center gap-2">
- <div className="text-sm font-medium text-zinc-900 transition-colors truncate group-hover:text-green-600 dark:text-white dark:group-hover:text-green-400">
+ <div className="text-sm font-medium text-foreground transition-colors truncate group-hover:text-primary">
  {server.name || server.host}
  </div>
  </div>
- <div className={"text-xs font-mono whitespace-nowrap text-zinc-500 dark:text-zinc-600"}>
+ <div className={"text-xs font-mono whitespace-nowrap text-muted-foreground"}>
  {server.username}@{server.host}:{server.port}
  </div>
  </div>
  {server.description && (
- <div className={"flex-1 text-xs truncate text-zinc-400 dark:text-zinc-600 text-left"}>
+ <div className={"flex-1 text-xs truncate text-muted-foreground/80 text-left"}>
  {server.description}
  </div>
  )}
@@ -579,14 +579,14 @@ export default function ServersPage() {
  {/* 空状态 - 筛选后无结果 */}
  {!loading && filteredServers.length === 0 && servers.length > 0 && (
  <div className="text-center space-y-3 py-8">
- <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}>
- <Search className={"h-6 w-6 text-zinc-400 dark:text-zinc-600"} />
+ <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-card border-border"}>
+ <Search className={"h-6 w-6 text-muted-foreground"} />
  </div>
  <div className="space-y-1">
- <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
+ <p className={"text-sm text-muted-foreground"}>
  {t("emptyFilteredTitle")}
  </p>
- <p className={"text-xs text-zinc-500 dark:text-zinc-600"}>
+ <p className={"text-xs text-muted-foreground/80"}>
  {t("emptyFilteredDescription")}
  </p>
  </div>
@@ -599,10 +599,10 @@ export default function ServersPage() {
  <div className="flex items-center justify-between gap-4">
  {/* 左侧：搜索框（禁用状态） */}
  <div className="relative flex-1 max-w-md opacity-50 pointer-events-none">
- <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 dark:text-zinc-600 h-4 w-4" />
+ <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
  placeholder={t("searchPlaceholder")}
- className={"pl-10 bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}
+ className={"pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"}
  disabled
  />
  </div>
@@ -615,14 +615,14 @@ export default function ServersPage() {
  </div>
 
  <div className="text-center space-y-3 py-8">
- <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-zinc-50 border-zinc-200 dark:bg-zinc-900/40 dark:border-zinc-800/30"}>
- <ServerIcon className={"h-6 w-6 text-zinc-400 dark:text-zinc-600"} />
+ <div className={"inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-card border-border"}>
+ <ServerIcon className={"h-6 w-6 text-muted-foreground"} />
  </div>
  <div className="space-y-1">
- <p className={"text-sm text-zinc-600 dark:text-zinc-500"}>
+ <p className={"text-sm text-muted-foreground"}>
  {t("emptyAllTitle")}
  </p>
- <p className={"text-xs text-zinc-500 dark:text-zinc-600"}>
+ <p className={"text-xs text-muted-foreground/80"}>
  {t("emptyAllDescription")}
  </p>
  </div>

@@ -155,9 +155,9 @@ export function PrivateKeyInput({
       </div>
 
       {errorText ? (
-        <p className="text-sm text-red-500">{errorText}</p>
+        <p className="text-sm text-destructive">{errorText}</p>
       ) : warning ? (
-        <p className="text-xs text-amber-600">{warning}</p>
+        <p className="text-xs text-status-warning">{warning}</p>
       ) : null}
     </div>
   )

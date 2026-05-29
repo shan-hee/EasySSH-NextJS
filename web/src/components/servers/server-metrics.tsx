@@ -57,17 +57,17 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
   }
 
   const getUsageColor = (usage: number) => {
-    if (usage < 60) return "bg-green-500"
-    if (usage < 80) return "bg-yellow-500"
-    return "bg-red-500"
+    if (usage < 60) return "bg-status-connected"
+    if (usage < 80) return "bg-status-warning"
+    return "bg-destructive"
   }
 
   const getUsageStatus = (usage: number) => {
     if (usage < 60)
-      return { text: t("statusNormal"), color: "text-green-600" }
+      return { text: t("statusNormal"), color: "text-status-connected" }
     if (usage < 80)
-      return { text: t("statusWarning"), color: "text-yellow-600" }
-    return { text: t("statusDanger"), color: "text-red-600" }
+      return { text: t("statusWarning"), color: "text-status-warning" }
+    return { text: t("statusDanger"), color: "text-destructive" }
   }
 
   return (
@@ -178,8 +178,8 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
           <CardContent>
             <div className="text-lg font-bold">{metrics.uptime}</div>
             <div className="flex items-center gap-1 mt-2">
-              <TrendingUp className="h-3 w-3 text-green-500" />
-              <span className="text-xs text-green-600">
+              <TrendingUp className="h-3 w-3 text-status-connected" />
+              <span className="text-xs text-status-connected">
                 {t("uptimeStableLabel")}
               </span>
             </div>
@@ -202,7 +202,7 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-blue-500" />
+                <TrendingDown className="h-4 w-4 text-chart-1" />
                 <span className="text-sm font-medium">
                   {t("networkDownloadLabel")}
                 </span>
@@ -211,7 +211,7 @@ export function ServerMetrics({ metrics, serverName }: ServerMetricsProps) {
             </div>
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-green-500" />
+                <TrendingUp className="h-4 w-4 text-status-connected" />
                 <span className="text-sm font-medium">
                   {t("networkUploadLabel")}
                 </span>
