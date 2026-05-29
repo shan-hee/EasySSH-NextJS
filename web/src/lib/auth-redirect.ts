@@ -1,6 +1,6 @@
 import type { AuthStatusResponse } from "@/lib/api/auth"
 
-export type AuthGatePage = "home" | "login" | "dashboard"
+export type AuthGatePage = "home" | "login" | "dashboard" | "setup"
 
 export type AuthRedirectDecision =
   | { type: "stay" }
@@ -21,13 +21,13 @@ export function getAuthRedirectDecision(
   options: AuthRedirectOptions = {},
 ): AuthRedirectDecision {
   if (!authStatus) {
-    return page === "login"
+    return page === "login" || page === "setup"
       ? stay()
       : redirect(buildLoginRedirectUrl(options.currentPath))
   }
 
   if (authStatus.need_init) {
-    return redirect(INITIAL_SETUP_PATH)
+    return page === "setup" ? stay() : redirect(INITIAL_SETUP_PATH)
   }
 
   if (authStatus.account_locked) {
@@ -37,7 +37,9 @@ export function getAuthRedirectDecision(
 
     const nextPath = page === "login"
       ? getLoginNextPath(options.currentPath)
-      : options.currentPath
+      : page === "setup"
+        ? null
+        : options.currentPath
 
     return redirect(buildLockedLoginRedirectUrl(authStatus, nextPath))
   }
@@ -53,7 +55,7 @@ export function getAuthRedirectDecision(
 
   return page === "login"
     ? stay()
-    : redirect(buildLoginRedirectUrl(options.currentPath))
+    : redirect(buildLoginRedirectUrl(page === "setup" ? null : options.currentPath))
 }
 
 export function buildLoginRedirectUrl(nextPath?: string | null): string {
@@ -142,7 +144,7 @@ export function getCurrentBrowserPath(fallbackPath?: string | null): string | nu
 export function getSafeAuthNextPath(path?: string | null): string | null {
   const safePath = getSafeInternalPath(path)
 
-  if (!safePath || safePath === "/" || safePath.startsWith("/login")) {
+  if (!safePath || safePath === "/" || isLoginPath(safePath)) {
     return null
   }
 
@@ -167,6 +169,19 @@ function hasLockedLoginParam(path?: string | null): boolean {
     return url.pathname === "/login" && url.searchParams.get("locked") === "true"
   } catch {
     return false
+  }
+}
+
+export function isLoginPath(path?: string | null): boolean {
+  if (!path) {
+    return false
+  }
+
+  try {
+    const url = new URL(path, "http://easyssh.local")
+    return url.pathname === "/login"
+  } catch {
+    return path === "/login"
   }
 }
 

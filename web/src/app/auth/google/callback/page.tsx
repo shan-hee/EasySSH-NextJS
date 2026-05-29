@@ -10,7 +10,9 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { getErrorMessage } from "@/lib/error-utils"
 import { isApiError } from "@/lib/api-client"
 import {
+  buildLockedLoginRedirectUrl,
   buildLoginRedirectUrl,
+  getAuthLockInfo,
   getSafeAuthNextPath,
   getSafeInternalPath,
 } from "@/lib/auth-redirect"
@@ -157,9 +159,20 @@ function GoogleAuthCallbackInner() {
       } catch (err) {
         console.error("Google callback login error:", err)
         const message = getErrorMessage(err, t("loginGoogleRetryDesc"))
-        const detail = isApiError(err) && typeof err.detail === "object" && err.detail !== null
-          ? (err.detail as { error?: string; message?: string })
+        const apiError = isApiError(err) ? err : null
+        const detail = apiError && typeof apiError.detail === "object" && apiError.detail !== null
+          ? (apiError.detail as { error?: string; message?: string })
           : null
+        if (detail?.error === "account_locked") {
+          router.replace(
+            buildLockedLoginRedirectUrl(
+              getAuthLockInfo(apiError?.detail),
+              mode === "link" ? returnTo : next,
+            ),
+          )
+          return
+        }
+
         if (mode === "link") {
           redirectBackToSettings({
             google_link: detail?.error ?? "failed",

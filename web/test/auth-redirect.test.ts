@@ -7,6 +7,7 @@ import {
   getLoginNextPath,
   getSafeAuthNextPath,
   getSafeInternalPath,
+  isLoginPath,
 } from "../src/lib/auth-redirect"
 import type { AuthStatusResponse } from "../src/lib/api/auth"
 
@@ -24,6 +25,7 @@ describe("auth redirect decisions", () => {
       href: "/login?next=%2Fdashboard%2Fhosts",
     })
     assert.deepEqual(getAuthRedirectDecision("login", null), { type: "stay" })
+    assert.deepEqual(getAuthRedirectDecision("setup", null), { type: "stay" })
   })
 
   it("prioritizes setup before other auth states", () => {
@@ -31,6 +33,7 @@ describe("auth redirect decisions", () => {
       type: "redirect",
       href: "/setup",
     })
+    assert.deepEqual(getAuthRedirectDecision("setup", status({ need_init: true })), { type: "stay" })
   })
 
   it("keeps unauthenticated users on login and redirects protected pages", () => {
@@ -38,6 +41,10 @@ describe("auth redirect decisions", () => {
     assert.deepEqual(getAuthRedirectDecision("dashboard", unauthenticated, { currentPath: "/dashboard?tab=ssh" }), {
       type: "redirect",
       href: "/login?next=%2Fdashboard%3Ftab%3Dssh",
+    })
+    assert.deepEqual(getAuthRedirectDecision("setup", unauthenticated, { currentPath: "/setup" }), {
+      type: "redirect",
+      href: "/login",
     })
   })
 
@@ -49,6 +56,10 @@ describe("auth redirect decisions", () => {
     assert.deepEqual(getAuthRedirectDecision("login", authenticated, { currentPath: "/login?next=/dashboard/users" }), {
       type: "redirect",
       href: "/dashboard/users",
+    })
+    assert.deepEqual(getAuthRedirectDecision("setup", authenticated), {
+      type: "redirect",
+      href: "/dashboard",
     })
   })
 
@@ -64,6 +75,17 @@ describe("auth redirect decisions", () => {
         href: "/login?locked=true&next=%2Fdashboard%2Fsessions&locked_until=2026-05-28T10%3A00%3A00Z&lock_reason=manual",
       },
     )
+    assert.deepEqual(
+      getAuthRedirectDecision(
+        "setup",
+        status({ account_locked: true, locked_until: "2026-05-28T10:00:00Z", lock_reason: "manual" }),
+        { currentPath: "/setup" },
+      ),
+      {
+        type: "redirect",
+        href: "/login?locked=true&locked_until=2026-05-28T10%3A00%3A00Z&lock_reason=manual",
+      },
+    )
   })
 })
 
@@ -73,6 +95,7 @@ describe("auth redirect helpers", () => {
     assert.equal(getSafeAuthNextPath("//evil.example"), null)
     assert.equal(getSafeAuthNextPath("https://evil.example"), null)
     assert.equal(getSafeAuthNextPath("/login?next=/dashboard"), null)
+    assert.equal(getSafeAuthNextPath("/login-help"), "/login-help")
     assert.equal(getSafeAuthNextPath("/"), null)
   })
 
@@ -90,10 +113,18 @@ describe("auth redirect helpers", () => {
   it("builds login URLs consistently", () => {
     assert.equal(buildLoginRedirectUrl("/dashboard/hosts"), "/login?next=%2Fdashboard%2Fhosts")
     assert.equal(buildLoginRedirectUrl("/login"), "/login")
+    assert.equal(buildLoginRedirectUrl("/login-help"), "/login?next=%2Flogin-help")
     assert.equal(
       buildLockedLoginRedirectUrl({ locked_until: "later", lock_reason: "manual" }, "/dashboard"),
       "/login?locked=true&next=%2Fdashboard&locked_until=later&lock_reason=manual",
     )
+  })
+
+  it("matches only the real login route", () => {
+    assert.equal(isLoginPath("/login"), true)
+    assert.equal(isLoginPath("/login?next=/dashboard"), true)
+    assert.equal(isLoginPath("/login-help"), false)
+    assert.equal(isLoginPath("/dashboard/login"), false)
   })
 })
 

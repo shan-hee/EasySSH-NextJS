@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { authApi } from "@/lib/api/auth"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { getAuthRedirectDecision, getCurrentBrowserPath } from "@/lib/auth-redirect"
+import { useAuthStore } from "@/stores/auth-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -19,6 +21,7 @@ function SetupPageInner() {
   const tSetup = useTranslations("setup")
   const router = useRouter()
   const { authStatus, isLoading, refreshConfig } = useSystemConfig()
+  const setToken = useAuthStore((state) => state.setToken)
   const [step, setStep] = useState<"checking" | "welcome" | "mode-selection" | "create-admin" | "completed">("checking")
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
@@ -41,13 +44,16 @@ function SetupPageInner() {
       return
     }
 
-    if (!authStatus.need_init) {
-      // 无需初始化（已有管理员），重定向到登录页
-      router.replace("/login")
-    } else {
-      // 需要初始化，显示欢迎页面
-      setStep("welcome")
+    const decision = getAuthRedirectDecision("setup", authStatus, {
+      currentPath: getCurrentBrowserPath("/setup"),
+    })
+    if (decision.type === "redirect") {
+      router.replace(decision.href)
+      return
     }
+
+    // 需要初始化，显示欢迎页面
+    setStep("welcome")
   }, [authStatus, isLoading, router, step, tSetup])
 
   const handleStartSetup = () => {
@@ -81,17 +87,20 @@ function SetupPageInner() {
 
     setIsSubmitting(true)
     try {
-      await authApi.initializeAdmin({
+      const response = await authApi.initializeAdmin({
         username,
         email,
         password,
         run_mode: runMode, // 添加运行模式
       })
 
-      // 令牌由后端以 HttpOnly Cookie 下发，前端无需手动保存
+      if (response.access_token) {
+        const expiresIn = typeof response.expires_in === "number" ? response.expires_in : 0
+        setToken(response.access_token, expiresIn)
+      }
 
       // 刷新全局系统配置与认证状态，确保 need_init=false 且后续跳转不会再回到 /setup
-      await refreshConfig()
+      await refreshConfig({ refreshAuth: true })
 
       // 显示完成页面
       setStep("completed")

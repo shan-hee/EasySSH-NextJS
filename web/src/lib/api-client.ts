@@ -7,6 +7,7 @@ import {
   buildLoginRedirectUrl,
   getAuthLockInfo,
   getCurrentBrowserPath,
+  isLoginPath,
 } from "@/lib/auth-redirect"
 
 // 重新导出 getApiUrl 以便其他模块使用
@@ -47,7 +48,7 @@ function handleGlobalUnauthorized(error: unknown) {
   if (typeof window === 'undefined') return
   const currentPath = getCurrentBrowserPath() ?? ""
   // 已在登录页时收到 401，多数来自后台请求，忽略即可，避免重复刷新
-  if (currentPath.startsWith("/login")) {
+  if (isLoginPath(currentPath)) {
     console.error("[apiFetch] Unauthorized while already on /login, ignoring redirect", error)
     return
   }
@@ -79,7 +80,7 @@ function handleAccountLocked(detail: unknown) {
   if (typeof window === 'undefined') return
   const currentPath = getCurrentBrowserPath() ?? ""
   // 已在登录页时收到锁定错误，忽略
-  if (currentPath.startsWith("/login")) {
+  if (isLoginPath(currentPath)) {
     return
   }
 
@@ -152,6 +153,24 @@ function shouldIncludeCookies(url: string): boolean {
     url.includes("/auth/logout") ||
     url.includes("/auth/register") ||
     url.includes("/auth/initialize-admin")
+  )
+}
+
+function shouldHandleUnauthorizedGlobally(url: string): boolean {
+  return !(
+    url.includes("/oauth/authorize") ||
+    url.includes("/oauth/token") ||
+    url.includes("/oauth/google/verify") ||
+    url.includes("/users/me/oauth/google/link") ||
+    url.includes("/auth/2fa/verify") ||
+    url.includes("/auth/status")
+  )
+}
+
+function shouldHandleAccountLockedGlobally(url: string): boolean {
+  return !(
+    url.includes("/oauth/google/verify") ||
+    url.includes("/users/me/oauth/google/link")
   )
 }
 
@@ -230,6 +249,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
       // 401 处理：仅在浏览器端尝试用 Cookie 刷新并重放一次
       if (typeof window !== 'undefined' && isApiError(error) && error.status === 401) {
+        const handleUnauthorizedGlobally = shouldHandleUnauthorizedGlobally(path)
+        if (!handleUnauthorizedGlobally) {
+          throw error
+        }
+
         try {
           await refreshSession()
           // 刷新成功，重放原请求一次（不进入重试退避）。
@@ -369,7 +393,12 @@ async function apiFetchInternal<T>(path: string, options: Omit<ApiFetchOptions, 
 
       // 检查是否为账户锁定错误（403 + account_locked）
       // 如果用户已登录但被锁定，跳转到登录页面
-      if (res.status === 403 && typeof detail === 'object' && detail !== null) {
+      if (
+        shouldHandleAccountLockedGlobally(url) &&
+        res.status === 403 &&
+        typeof detail === 'object' &&
+        detail !== null
+      ) {
         const errorDetail = detail as { error?: string }
         console.log("[apiFetch] 403 error detail:", errorDetail)
         if (errorDetail.error === 'account_locked') {

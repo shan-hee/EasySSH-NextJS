@@ -6,6 +6,7 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import {
   getAuthRedirectDecision,
   getCurrentBrowserPath,
+  isLoginPath,
   type AuthGatePage,
 } from "@/lib/auth-redirect"
 
@@ -39,7 +40,7 @@ export function useAuthStatusRedirect(page: EntryPage): UseAuthStatusRedirectRes
     const decision = getAuthRedirectDecision(page, authStatus, { currentPath })
     if (decision.type === "redirect") {
       router.replace(decision.href)
-      if (page === "login" && decision.href.startsWith("/login")) {
+      if (page === "login" && isLoginPath(decision.href)) {
         setHasCompletedInitialCheck(true)
       }
       return

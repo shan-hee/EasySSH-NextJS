@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/oauth"
@@ -149,6 +150,11 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 					return
 				}
 			} else {
+				if user.IsLocked() {
+					respondGoogleAccountLocked(c, user)
+					return
+				}
+
 				user, err = h.authService.BindGoogleSub(c.Request.Context(), user.ID, userInfo.ID)
 				if err != nil {
 					if errors.Is(err, auth.ErrUserAlreadyExists) {
@@ -167,6 +173,11 @@ func (h *OAuthHandler) GoogleVerify(c *gin.Context) {
 
 	if user == nil {
 		RespondError(c, http.StatusInternalServerError, "internal_error", "Failed to get user")
+		return
+	}
+
+	if user.IsLocked() {
+		respondGoogleAccountLocked(c, user)
 		return
 	}
 
@@ -315,6 +326,26 @@ func (h *OAuthHandler) exchangeGoogleCode(c *gin.Context, req GoogleVerifyReques
 	}
 
 	return userInfo, true
+}
+
+func respondGoogleAccountLocked(c *gin.Context, user *auth.User) {
+	response := gin.H{
+		"error":   "account_locked",
+		"message": "Account is locked. Please contact administrator.",
+	}
+
+	if user != nil {
+		if user.LockedUntil != nil {
+			lockedUntil := user.LockedUntil.Format(time.RFC3339)
+			response["locked_until"] = lockedUntil
+			response["unlock_at"] = lockedUntil
+		}
+		if strings.TrimSpace(user.LockReason) != "" {
+			response["lock_reason"] = user.LockReason
+		}
+	}
+
+	c.JSON(http.StatusForbidden, response)
 }
 
 func currentUserIDFromContext(c *gin.Context) (uuid.UUID, bool) {

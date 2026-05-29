@@ -82,6 +82,9 @@ export interface ResetPasswordRequest {
  */
 export interface RegisterResponse {
   user: User
+  access_token?: string
+  token_type?: string
+  expires_in?: number
 }
 
 // 刷新令牌响应
