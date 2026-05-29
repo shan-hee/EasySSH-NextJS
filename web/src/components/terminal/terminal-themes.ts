@@ -1,5 +1,7 @@
 // 终端主题配置
 
+import { colorToHex, contrastRatio, ensureContrast, hexToRgb, mixHexColors } from "@/lib/color-utils"
+
 export interface TerminalTheme {
   background: string
   foreground: string
@@ -124,14 +126,149 @@ export const draculaTheme: TerminalTheme = {
   brightWhite: "#ffffff",
 }
 
+const THEME_COLOR_FALLBACKS = {
+  light: lightTheme,
+  dark: darkTheme,
+} as const
+
+type OklchColor = {
+  l: number
+  c: number
+  h: number
+}
+
+function getCssThemeValue(name: string, fallback: string): string {
+  if (typeof document === "undefined") {
+    return fallback
+  }
+
+  const value = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim()
+
+  return value || fallback
+}
+
+function getCssThemeColor(name: string, fallback: string): string {
+  return colorToHex(getCssThemeValue(name, fallback))
+}
+
+function getSelectionBackground(background: string, accent: string, foreground: string): string {
+  const accentSelection = mixHexColors(background, accent, 0.35)
+  if (contrastRatio(accentSelection, background) >= 1.25) {
+    return accentSelection
+  }
+
+  return mixHexColors(background, foreground, 0.2)
+}
+
+function getTerminalBackground(appTheme: 'light' | 'dark', themeBackground: string): string {
+  const rawSource = themeBackground
+  const oklch = parseOklchColor(rawSource)
+
+  if (oklch) {
+    const lightness = appTheme === 'light'
+      ? clamp(oklch.l, 0.925, 0.985)
+      : clamp(oklch.l * 0.65, 0.095, 0.2)
+    const chroma = clamp(oklch.c * (appTheme === 'light' ? 0.85 : 0.55), 0, appTheme === 'light' ? 0.04 : 0.035)
+
+    return colorToHex(`oklch(${lightness.toFixed(3)} ${chroma.toFixed(3)} ${oklch.h.toFixed(3)})`)
+  }
+
+  const source = colorToHex(rawSource)
+  const neutralTarget = appTheme === 'light' ? "#ffffff" : "#000000"
+  const neutralAmount = appTheme === 'light' ? 0.38 : 0.55
+
+  return mixHexColors(source, neutralTarget, neutralAmount)
+}
+
+function parseOklchColor(value: string): OklchColor | null {
+  const match = /oklch\(([^)]+)\)/i.exec(value)
+  if (!match) {
+    return null
+  }
+
+  const parts = match[1].split("/")[0].trim().split(/\s+/)
+  if (parts.length < 3) {
+    return null
+  }
+
+  const l = parts[0].endsWith("%") ? Number.parseFloat(parts[0]) / 100 : Number.parseFloat(parts[0])
+  const c = Number.parseFloat(parts[1])
+  const h = parts[2] === "none" ? 0 : Number.parseFloat(parts[2])
+
+  if (![l, c, h].every((part) => Number.isFinite(part))) {
+    return null
+  }
+
+  return { l, c, h }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function isLightColor(color: string): boolean {
+  const [r, g, b] = hexToRgb(color) ?? [255, 255, 255]
+  const channels = [r, g, b].map((channel) => {
+    const value = channel / 255
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  })
+  const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+  return luminance > 0.5
+}
+
+function getThemeGeneratorTerminalTheme(appTheme: 'light' | 'dark' = 'dark'): TerminalTheme {
+  const initialFallback = THEME_COLOR_FALLBACKS[appTheme]
+  const themeBackground = getCssThemeValue('background', initialFallback.background)
+  const inferredAppTheme: 'light' | 'dark' = isLightColor(colorToHex(themeBackground)) ? 'light' : 'dark'
+  const fallback = THEME_COLOR_FALLBACKS[inferredAppTheme]
+  const background = getTerminalBackground(inferredAppTheme, themeBackground)
+  const foreground = ensureContrast(getCssThemeColor('foreground', fallback.foreground), background, 7)
+  const mutedForeground = ensureContrast(getCssThemeColor('muted-foreground', fallback.brightBlack), background, 3)
+  const primary = ensureContrast(getCssThemeColor('primary', fallback.cursor), background, 3)
+  const accent = getCssThemeColor('accent', fallback.selectionBackground)
+  const destructive = ensureContrast(getCssThemeColor('destructive', fallback.red), background, 3)
+  const connected = ensureContrast(getCssThemeColor('status-connected', fallback.green), background, 3)
+  const warning = ensureContrast(getCssThemeColor('status-warning', fallback.yellow), background, 3)
+  const blue = ensureContrast(getCssThemeColor('chart-1', fallback.blue), background, 3)
+  const cyan = ensureContrast(getCssThemeColor('chart-2', fallback.cyan), background, 3)
+  const magenta = ensureContrast(getCssThemeColor('chart-4', fallback.magenta), background, 3)
+  const white = ensureContrast(foreground, background, 7)
+  const black = ensureContrast(mixHexColors(background, foreground, inferredAppTheme === 'light' ? 0.85 : 0.18), background, 3)
+
+  return {
+    background,
+    foreground,
+    cursor: primary,
+    cursorAccent: ensureContrast(background, primary, 3),
+    selectionBackground: getSelectionBackground(background, accent, foreground),
+    black,
+    red: destructive,
+    green: connected,
+    yellow: warning,
+    blue,
+    magenta,
+    cyan,
+    white,
+    brightBlack: mutedForeground,
+    brightRed: ensureContrast(mixHexColors(destructive, foreground, 0.18), background, 4.5),
+    brightGreen: ensureContrast(mixHexColors(connected, foreground, 0.16), background, 4.5),
+    brightYellow: ensureContrast(mixHexColors(warning, foreground, 0.16), background, 4.5),
+    brightBlue: ensureContrast(mixHexColors(blue, foreground, 0.16), background, 4.5),
+    brightMagenta: ensureContrast(mixHexColors(magenta, foreground, 0.16), background, 4.5),
+    brightCyan: ensureContrast(mixHexColors(cyan, foreground, 0.16), background, 4.5),
+    brightWhite: ensureContrast(mixHexColors(foreground, "#ffffff", inferredAppTheme === 'light' ? 0 : 0.12), background, 8),
+  }
+}
+
 // 获取主题函数
 export function getTerminalTheme(
   themeName: 'default' | 'dark' | 'light' | 'solarized' | 'dracula',
   appTheme?: 'light' | 'dark'
 ): TerminalTheme {
-  // 如果是 default，则根据应用主题选择
+  // default 跟随 Theme Generator 生成的 CSS 变量，并为终端做可读性兜底。
   if (themeName === 'default') {
-    return appTheme === 'light' ? lightTheme : darkTheme
+    return getThemeGeneratorTerminalTheme(appTheme)
   }
 
   switch (themeName) {

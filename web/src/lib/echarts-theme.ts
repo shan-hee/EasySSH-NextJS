@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import type { ChartConfig } from "@/components/ui/chart";
-import { useTheme } from "next-themes";
+import { useEffectiveThemeMode } from "@/hooks/use-effective-theme-mode";
+import { colorToHex } from "@/lib/color-utils";
 
 type ColorMap = Record<string, string>;
 
@@ -13,14 +14,30 @@ function resolveCssVarColor(raw: string | undefined, style: CSSStyleDeclaration)
 
   // 处理 var(--xxx) 形式，解析出真正的变量值
   if (trimmed.startsWith("var(")) {
-    const match = trimmed.match(/var\((--[^)]+)\)/);
+    const match = trimmed.match(/var\(\s*(--[\w-]+)(?:\s*,\s*([^)]+))?\s*\)/);
     if (match?.[1]) {
       const value = style.getPropertyValue(match[1]).trim();
       if (value) return value;
+      if (match[2]) return match[2].trim();
     }
   }
 
   return trimmed;
+}
+
+function normalizeEchartsColor(color: string): string {
+  return /^(#|rgb|hsl|oklch)\b/i.test(color.trim()) ? colorToHex(color) : color;
+}
+
+function areColorMapsEqual(a: ColorMap, b: ColorMap): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+
+  return aKeys.every((key) => a[key] === b[key]);
 }
 
 /**
@@ -30,7 +47,7 @@ function resolveCssVarColor(raw: string | undefined, style: CSSStyleDeclaration)
  * - 自动根据当前 light/dark 主题选择颜色
  */
 export function useEchartsColors(config: ChartConfig): ColorMap {
-  const { resolvedTheme } = useTheme();
+  const { mode, version } = useEffectiveThemeMode();
   const [colors, setColors] = React.useState<ColorMap>({});
 
   React.useEffect(() => {
@@ -47,8 +64,7 @@ export function useEchartsColors(config: ChartConfig): ColorMap {
       if ("color" in item && item.color) {
         rawColor = item.color;
       } else if ("theme" in item && item.theme) {
-        const themeKey =
-          (resolvedTheme === "dark" ? "dark" : "light") as keyof typeof item.theme;
+        const themeKey = mode as keyof typeof item.theme;
         rawColor = item.theme[themeKey];
       }
 
@@ -68,13 +84,12 @@ export function useEchartsColors(config: ChartConfig): ColorMap {
         color = "#4b9cff";
       }
 
-      result[key] = color;
+      result[key] = normalizeEchartsColor(color);
       index += 1;
     }
 
-    setColors(result);
-  }, [config, resolvedTheme]);
+    setColors((current) => (areColorMapsEqual(current, result) ? current : result));
+  }, [config, mode, version]);
 
   return colors;
 }
-

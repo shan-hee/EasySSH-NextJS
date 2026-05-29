@@ -788,8 +788,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
       <div
         className={cn(
           "absolute inset-y-0 right-0 flex h-full min-h-0 w-full flex-col overflow-hidden border-l shadow-2xl backdrop-blur-xl",
-          "border-zinc-200/70 bg-white/96",
-          "dark:border-zinc-800/70 dark:bg-zinc-950/96",
+          "border-border/70 bg-card/95 text-card-foreground",
           "md:w-[var(--terminal-ai-panel-width)]",
           "transition-opacity ease-out",
           isOpen
@@ -815,7 +814,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
           onPointerCancel={handleResizeEnd}
         />
 
-        <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-zinc-200/70 px-3 dark:border-zinc-800/70">
+        <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/60 px-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium">{tAI("terminalPanelTitle")}</span>
@@ -829,7 +828,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-zinc-900"
+                className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                 aria-label={tAI("sidebarTitle")}
                 title={tAI("sidebarTitle")}
               >
@@ -839,7 +838,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
             <PopoverContent
               align="end"
               sideOffset={8}
-              className="w-[330px] overflow-hidden rounded-lg border-zinc-200/80 p-0 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+              className="w-[330px] overflow-hidden rounded-lg border-border bg-popover p-0 text-popover-foreground shadow-2xl"
             >
               <div className="border-b border-border/60 p-2">
                 <div className="relative">
@@ -893,8 +892,8 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
                             className={cn(
                               "w-full rounded-md px-2 py-2 text-left transition-colors",
                               isActive
-                                ? "bg-accent text-foreground dark:bg-zinc-900"
-                                : "text-foreground hover:bg-accent dark:hover:bg-zinc-900"
+                                ? "bg-accent text-foreground"
+                                : "text-foreground hover:bg-accent"
                             )}
                             onClick={() => void handleRestoreSession(item.id)}
                             role="button"
@@ -981,7 +980,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground dark:hover:bg-zinc-800"
+                                    className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground"
                                     disabled={Boolean(sessionActionLoadingId)}
                                     onClick={() => beginRenameSession(item)}
                                     aria-label={tAI("rename")}
@@ -993,7 +992,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-destructive dark:hover:bg-zinc-800"
+                                    className="size-7 rounded-md text-muted-foreground hover:bg-background/80 hover:text-destructive"
                                     disabled={Boolean(sessionActionLoadingId)}
                                     onClick={() => void handleDeleteSession(item.id)}
                                     aria-label={tAI("delete")}
@@ -1026,7 +1025,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-zinc-900"
+            className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             disabled={createSessionDisabled}
             onClick={() => void handleCreateNewSession()}
             aria-label={tAI("newSession")}
@@ -1043,7 +1042,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-zinc-900"
+            className="size-8 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={onClose}
             aria-label={tAI("panelHintClose")}
             title={tAI("panelHintClose")}
@@ -1084,7 +1083,7 @@ export function AiAssistantPanel({ isOpen, onClose, terminalSession }: AiAssista
 
           <PromptInput
             onSubmit={(message) => handleSubmit(message.text)}
-            className="rounded-xl border-zinc-200/80 bg-zinc-50/95 shadow-lg ring-1 ring-black/5 dark:border-zinc-800 dark:bg-zinc-900/95 dark:ring-white/5"
+            className="rounded-xl border-border/80 bg-background/90 shadow-lg ring-1 ring-border/50"
           >
             <PromptInputTextarea
               ref={inputRef}

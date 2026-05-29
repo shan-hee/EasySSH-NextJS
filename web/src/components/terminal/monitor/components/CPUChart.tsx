@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
 import { MONITOR_COLORS } from "../constants/colors";
+import { useMonitorChartTheme } from "../hooks/useMonitorChartTheme";
 
 interface CPUChartProps {
   data: CPUData[];
@@ -46,7 +47,8 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
   );
 
   const colors = useEchartsColors(chartConfig);
-  const usageColor = colors.usage || MONITOR_COLORS.cpu.usage;
+  const chartTheme = useMonitorChartTheme();
+  const usageColor = colors.usage || chartTheme.cpu;
 
   // 动态 Y 轴上限：根据当前数据的最大值自适应
   const dataMax = chartData.length > 0
@@ -98,11 +100,12 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         },
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.95)",
-        borderColor: "rgba(148,163,184,0.2)",
+        backgroundColor: chartTheme.tooltipBackground,
+        borderColor: chartTheme.tooltipBorder,
         borderWidth: 1,
         textStyle: {
           fontSize: 11,
+          color: chartTheme.tooltipText,
         },
         formatter: (params) => {
           const p = (
@@ -122,7 +125,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
               : raw?.usage ?? 0;
           const label = p.axisValue ?? "";
           return `
-            <div style="font-size:11px;">
+            <div style="font-size:11px;color:${chartTheme.tooltipText};">
               <div style="margin-bottom:4px;">${t("tooltipTimeLabel")}: ${label}</div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <span
@@ -144,7 +147,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: "rgba(148,163,184,0.9)",
+          color: chartTheme.axisLabel,
           fontSize: 10,
         },
       },
@@ -159,8 +162,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
         splitLine: {
           show: true,
           lineStyle: {
-            color: "rgba(148,163,184,0.3)",
-            opacity: 0.3,
+            color: chartTheme.gridLine,
             type: "dashed",
           },
         },
@@ -199,14 +201,14 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
             itemStyle: {
               borderWidth: 2,
               borderColor: usageColor,
-              color: "rgba(15,23,42,1)", // 空心圆效果
+              color: chartTheme.pointFill, // 空心圆效果
             },
           },
           data: values,
         },
       ],
     };
-  }, [chartData, usageColor, maxValue, t]);
+  }, [chartData, usageColor, maxValue, t, chartTheme]);
 
   return (
     <div className="space-y-1">
@@ -214,7 +216,7 @@ export const CPUChart: React.FC<CPUChartProps> = React.memo(({ data, currentUsag
       <div className="flex justify-between items-center h-7">
         <span className="text-xs font-semibold">{t("cpuLabel")}</span>
         <span className={`text-xs font-mono font-semibold tabular-nums transition-colors duration-500 ${
-          currentUsage > 80 ? 'text-red-500' : currentUsage > 60 ? 'text-yellow-500' : 'text-muted-foreground'
+          currentUsage > 80 ? 'text-destructive' : currentUsage > 60 ? 'text-status-warning' : 'text-muted-foreground'
         }`}>
           {currentUsage}%
         </span>

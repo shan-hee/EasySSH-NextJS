@@ -220,18 +220,18 @@ export function FileManagerPanel({
             >
               <div
                 className={cn(
-                  "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-300 dark:bg-zinc-700 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity",
+                  "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100",
                   isResizing && "opacity-100"
                 )}
               >
-                <GripVertical className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
+                <GripVertical className="h-4 w-4" />
               </div>
             </div>
           )}
 
           {/* 主面板内容 */}
           <div className={cn(
-            "flex-1 min-w-0 flex flex-col bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl",
+            "flex-1 min-w-0 flex flex-col border-l border-border bg-card/95 text-card-foreground shadow-2xl backdrop-blur-xl",
             !isMobile && "rounded-l-xl" // 桌面端添加左侧圆角
           )}>
             {/* SFTP 管理器内容 - 直接显示，无顶部工具栏 */}
@@ -249,13 +249,13 @@ export function FileManagerPanel({
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
-                    <div className="h-16 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-4">
-                      <X className="h-8 w-8 text-zinc-400" />
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <X className="h-8 w-8" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-2 text-zinc-800 dark:text-zinc-200">
+                    <h3 className="mb-2 text-lg font-semibold text-foreground">
                       未连接
                     </h3>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    <p className="text-sm text-muted-foreground">
                       等待连接到服务器...
                     </p>
                   </div>

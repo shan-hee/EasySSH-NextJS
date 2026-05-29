@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useTheme } from "next-themes"
 import {
   Dialog,
   DialogContent,
@@ -35,6 +34,7 @@ import {
 import { KeyboardShortcutInput } from "./keyboard-shortcut-input"
 import { useTranslations } from "next-intl"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from "./terminal-themes"
+import { useEffectiveThemeMode } from "@/hooks/use-effective-theme-mode"
 
 export interface TerminalSettings {
   // 终端设置
@@ -117,17 +117,10 @@ export function TerminalSettingsDialog({
   onSettingsChange,
 }: TerminalSettingsDialogProps) {
   const t = useTranslations("terminalSettings")
-  const { theme: appTheme, resolvedTheme } = useTheme()
+  const { mode: effectiveAppTheme } = useEffectiveThemeMode()
   const [localSettings, setLocalSettings] = useState(settings)
   const deferredApplyTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
-  const initialIsDark =
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-  const effectiveAppTheme: 'light' | 'dark' =
-    currentAppTheme === 'system' || !currentAppTheme
-      ? (initialIsDark ? 'dark' : 'light')
-      : currentAppTheme
   const previewTheme = getTerminalTheme(localSettings.theme, effectiveAppTheme)
   const previewBackgroundColor =
     localSettings.opacity < 100

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
 import { MONITOR_COLORS } from "../constants/colors";
+import { useMonitorChartTheme } from "../hooks/useMonitorChartTheme";
 
 interface DiskUsageProps {
   data: DiskData[];
@@ -18,8 +19,6 @@ interface DiskUsageProps {
 }
 
 const DISK_COLOR_VARS = MONITOR_COLORS.disk.usedPalette;
-const DISK_COLOR_FALLBACKS = MONITOR_COLORS.disk.usedPalette;
-const FREE_SEGMENT_COLOR = MONITOR_COLORS.disk.freeSegment;
 
 /**
  * 磁盘使用组件
@@ -56,15 +55,17 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
   }, [chartData.length]);
 
   const colors = useEchartsColors(colorConfig);
+  const chartTheme = useMonitorChartTheme();
   const diskColors = React.useMemo(
     () =>
       chartData.map(
         (_, index) =>
           colors[`disk_${index}`] ||
-          DISK_COLOR_FALLBACKS[index % DISK_COLOR_FALLBACKS.length]
+          chartTheme.diskPalette[index % chartTheme.diskPalette.length]
       ),
-    [chartData, colors]
+    [chartData, colors, chartTheme.diskPalette]
   );
+  const freeSegmentColor = chartTheme.freeSegmentStrong;
 
   const option: EChartsOption = React.useMemo(() => {
     const names = chartData.map((item) => item.name);
@@ -92,11 +93,12 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
         axisPointer: { type: "none" },
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.88)",
-        borderColor: "rgba(148,163,184,0.15)",
+        backgroundColor: chartTheme.tooltipBackground,
+        borderColor: chartTheme.tooltipBorder,
         borderWidth: 1,
         textStyle: {
           fontSize: 11,
+          color: chartTheme.tooltipText,
         },
         formatter: (params) => {
           const list = (Array.isArray(params) ? params : [params]) as Array<{
@@ -124,10 +126,10 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
           const usedColor =
             data.usedColor ??
             base.color ??
-            DISK_COLOR_FALLBACKS[0];
+            chartTheme.diskPalette[0];
           const freeColor =
             data.freeColor ??
-            FREE_SEGMENT_COLOR;
+            freeSegmentColor;
           const percent = data.percent ?? 0;
           const freeDisplay =
             typeof free === "number" && Number.isFinite(free)
@@ -136,13 +138,13 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
 
           const percentColor =
             percent > 90
-              ? "rgb(239,68,68)"
+              ? chartTheme.danger
               : percent > 80
-              ? "rgb(234,179,8)"
-              : "rgba(248,250,252,1)";
+              ? chartTheme.warning
+              : chartTheme.tooltipText;
 
           return `
-            <div style="font-size:11px;">
+            <div style="font-size:11px;color:${chartTheme.tooltipText};">
               <div style="margin-bottom:4px;">${t("diskTooltipTotal")}: ${total} ${totalUnit}</div>
               <div style="margin-bottom:2px;display:flex;align-items:center;gap:6px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${usedColor};"></span>
@@ -171,7 +173,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: "rgba(148,163,184,0.9)",
+          color: chartTheme.axisLabel,
           fontSize: 9,
           // 强制显示最大值标签
           showMaxLabel: true,
@@ -189,8 +191,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
         splitLine: {
           show: true,
           lineStyle: {
-            color: "rgba(148,163,184,0.3)",
-            opacity: 0.3,
+            color: chartTheme.gridLine,
             type: "dashed",
           },
         },
@@ -220,7 +221,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
             value: item.used,
             ...item,
             usedColor: diskColors[index],
-            freeColor: FREE_SEGMENT_COLOR,
+            freeColor: freeSegmentColor,
             itemStyle: {
               color: diskColors[index],
               borderRadius: [4, 0, 0, 4],
@@ -242,16 +243,16 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
             value: item.free,
             ...item,
             usedColor: diskColors[index],
-            freeColor: FREE_SEGMENT_COLOR,
+            freeColor: freeSegmentColor,
             itemStyle: {
-              color: FREE_SEGMENT_COLOR,
+              color: freeSegmentColor,
               borderRadius: [0, 4, 4, 0],
             },
           })),
         },
       ],
     };
-  }, [chartData, diskColors, t]);
+  }, [chartData, diskColors, t, chartTheme, freeSegmentColor]);
 
   return (
     <div className="space-y-1">
@@ -259,7 +260,7 @@ export const DiskUsage: React.FC<DiskUsageProps> = React.memo(({ data, totalPerc
       <div className="flex justify-between items-center h-7">
         <span className="text-xs font-semibold">{t("diskLabel")}</span>
         <span className={`text-xs font-mono font-semibold tabular-nums transition-colors duration-500 ${
-          totalPercent > 90 ? 'text-red-500' : totalPercent > 80 ? 'text-yellow-500' : 'text-muted-foreground'
+          totalPercent > 90 ? 'text-destructive' : totalPercent > 80 ? 'text-status-warning' : 'text-muted-foreground'
         }`}>
           {totalPercent}%
         </span>

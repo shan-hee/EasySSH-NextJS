@@ -96,7 +96,7 @@ export const STATE_COLORS: Record<ContainerState, string> = {
 export const STATE_TEXT_COLORS: Record<ContainerState, string> = {
   running: 'text-green-600 dark:text-green-400',
   paused: 'text-yellow-600 dark:text-yellow-400',
-  exited: 'text-zinc-500 dark:text-zinc-400',
+  exited: 'text-muted-foreground',
   created: 'text-purple-600 dark:text-purple-400',
   restarting: 'text-blue-600 dark:text-blue-400',
   dead: 'text-red-600 dark:text-red-400',

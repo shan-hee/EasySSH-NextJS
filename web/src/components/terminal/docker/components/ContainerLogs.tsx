@@ -73,7 +73,7 @@ export function ContainerLogs({
 
   const displayContent = logs || (loading ? t('dockerLogsLoading') : t('dockerNoLogs'))
   const fileName = `${containerName}-logs.log`
-  const optionClassName = "bg-popover text-popover-foreground dark:bg-zinc-900 dark:text-zinc-100"
+  const optionClassName = "bg-popover text-popover-foreground"
 
   return (
     <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
@@ -104,7 +104,7 @@ export function ContainerLogs({
               <select
                 value={tailLines}
                 onChange={(event) => setTailLines(Number(event.target.value))}
-                className="h-7 rounded border border-zinc-200 bg-background px-2 text-xs text-foreground dark:border-zinc-700 [&_option]:bg-popover [&_option]:text-popover-foreground dark:[&_option]:bg-zinc-900 dark:[&_option]:text-zinc-100"
+                className="h-7 rounded border border-border bg-background px-2 text-xs text-foreground [&_option]:bg-popover [&_option]:text-popover-foreground"
                 aria-label={t('dockerLogsTailLines')}
               >
                 <option value={100} className={optionClassName}>100 lines</option>
@@ -115,7 +115,7 @@ export function ContainerLogs({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
+                className="h-7 w-7 text-muted-foreground hover:bg-accent hover:text-foreground"
                 onClick={fetchLogs}
                 disabled={loading}
                 title={t('dockerLogsRefresh')}

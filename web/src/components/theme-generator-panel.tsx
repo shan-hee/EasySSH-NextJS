@@ -75,6 +75,11 @@ import {
 } from "@/lib/theme-generator"
 
 const MAX_HISTORY = 40
+const LIVE_COMMIT_IDLE_MS = 220
+
+function areThemeStatesEqual(a: ThemeGeneratorState, b: ThemeGeneratorState) {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
 
 const styleOptions: Array<{ value: ThemeVisualStyleId; labelKey: string }> = [
   { value: "mira", labelKey: "styleMira" },
@@ -184,21 +189,139 @@ export function ThemeGeneratorPanel() {
   const [variablesOpen, setVariablesOpen] = React.useState(false)
   const initializedRef = React.useRef(false)
   const stateRef = React.useRef(state)
+  const liveCommitRef = React.useRef<{
+    previous: ThemeGeneratorState
+    timer: number | null
+  } | null>(null)
+  const previewFrameRef = React.useRef<number | null>(null)
+  const pendingPreviewStateRef = React.useRef<ThemeGeneratorState | null>(null)
 
   React.useEffect(() => {
     stateRef.current = state
   }, [state])
 
   const syncThemeState = React.useCallback(
-    (nextState: ThemeGeneratorState) => {
+    (nextState: ThemeGeneratorState, options: { persist?: boolean; notify?: boolean } = {}) => {
       if (theme !== nextState.mode) {
         setTheme(nextState.mode)
       }
-      applyThemeGeneratorState(nextState)
-      persistThemeGeneratorState(nextState)
+      applyThemeGeneratorState(nextState, { notify: options.notify })
+      if (options.persist !== false) {
+        persistThemeGeneratorState(nextState)
+      }
     },
     [setTheme, theme],
   )
+
+  const flushLivePreview = React.useCallback(() => {
+    const pendingState = pendingPreviewStateRef.current
+    if (!pendingState) {
+      return
+    }
+
+    if (previewFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewFrameRef.current)
+      previewFrameRef.current = null
+    }
+
+    pendingPreviewStateRef.current = null
+    setState(pendingState)
+    syncThemeState(pendingState, { persist: false, notify: false })
+  }, [syncThemeState])
+
+  const scheduleLivePreview = React.useCallback(
+    (nextState: ThemeGeneratorState) => {
+      pendingPreviewStateRef.current = nextState
+
+      if (previewFrameRef.current !== null) {
+        return
+      }
+
+      previewFrameRef.current = window.requestAnimationFrame(() => {
+        previewFrameRef.current = null
+        flushLivePreview()
+      })
+    },
+    [flushLivePreview],
+  )
+
+  const finishLiveCommit = React.useCallback(() => {
+    const liveCommit = liveCommitRef.current
+    if (!liveCommit) {
+      return
+    }
+
+    if (liveCommit.timer) {
+      window.clearTimeout(liveCommit.timer)
+    }
+    liveCommitRef.current = null
+    flushLivePreview()
+
+    const nextState = cloneThemeState(stateRef.current)
+    if (areThemeStatesEqual(liveCommit.previous, nextState)) {
+      return
+    }
+
+    setHistory((currentHistory) => ({
+      past: [...currentHistory.past.slice(-(MAX_HISTORY - 1)), liveCommit.previous],
+      future: [],
+    }))
+    syncThemeState(nextState)
+  }, [flushLivePreview, syncThemeState])
+
+  const liveCommit = React.useCallback(
+    (producer: (current: ThemeGeneratorState) => ThemeGeneratorState) => {
+      if (!liveCommitRef.current) {
+        liveCommitRef.current = {
+          previous: cloneThemeState(stateRef.current),
+          timer: null,
+        }
+      }
+
+      const nextState = cloneThemeState(producer(cloneThemeState(stateRef.current)))
+      stateRef.current = nextState
+      scheduleLivePreview(nextState)
+
+      if (liveCommitRef.current.timer) {
+        window.clearTimeout(liveCommitRef.current.timer)
+      }
+
+      liveCommitRef.current.timer = window.setTimeout(finishLiveCommit, LIVE_COMMIT_IDLE_MS)
+    },
+    [finishLiveCommit, scheduleLivePreview],
+  )
+
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        finishLiveCommit()
+      }
+      setOpen(nextOpen)
+    },
+    [finishLiveCommit],
+  )
+
+  React.useEffect(() => {
+    return () => {
+      const liveCommit = liveCommitRef.current
+      const pendingState = pendingPreviewStateRef.current
+
+      if (previewFrameRef.current !== null) {
+        window.cancelAnimationFrame(previewFrameRef.current)
+      }
+
+      if (liveCommit?.timer) {
+        window.clearTimeout(liveCommit.timer)
+      }
+
+      if (liveCommit) {
+        const latestState = cloneThemeState(pendingState ?? stateRef.current)
+        if (!areThemeStatesEqual(liveCommit.previous, latestState)) {
+          persistThemeGeneratorState(latestState)
+        }
+      }
+    }
+  }, [])
 
   React.useEffect(() => {
     if (initializedRef.current) {
@@ -218,6 +341,8 @@ export function ThemeGeneratorPanel() {
   }, [syncThemeState])
 
   const commit = React.useCallback((producer: (current: ThemeGeneratorState) => ThemeGeneratorState) => {
+    finishLiveCommit()
+
     const previous = cloneThemeState(stateRef.current)
     const next = cloneThemeState(producer(previous))
 
@@ -228,9 +353,11 @@ export function ThemeGeneratorPanel() {
     }))
     setState(next)
     syncThemeState(next)
-  }, [syncThemeState])
+  }, [finishLiveCommit, syncThemeState])
 
   const undo = React.useCallback(() => {
+    finishLiveCommit()
+
     const previous = history.past[history.past.length - 1]
     if (!previous) {
       return
@@ -243,9 +370,11 @@ export function ThemeGeneratorPanel() {
     stateRef.current = cloneThemeState(previous)
     setState(cloneThemeState(previous))
     syncThemeState(previous)
-  }, [history, state, syncThemeState])
+  }, [finishLiveCommit, history, state, syncThemeState])
 
   const redo = React.useCallback(() => {
+    finishLiveCommit()
+
     const next = history.future[0]
     if (!next) {
       return
@@ -258,9 +387,11 @@ export function ThemeGeneratorPanel() {
     stateRef.current = cloneThemeState(next)
     setState(cloneThemeState(next))
     syncThemeState(next)
-  }, [history, state, syncThemeState])
+  }, [finishLiveCommit, history, state, syncThemeState])
 
   const reset = React.useCallback(() => {
+    finishLiveCommit()
+
     const nextState = { ...createThemeGeneratorState(), mode: state.mode }
 
     clearThemeGeneratorState()
@@ -269,7 +400,7 @@ export function ThemeGeneratorPanel() {
     setState(nextState)
     syncThemeState(nextState)
     toast.success(t("toastReset"))
-  }, [state.mode, syncThemeState, t])
+  }, [finishLiveCommit, state.mode, syncThemeState, t])
 
   const copyThemeCSS = React.useCallback(async () => {
     try {
@@ -323,13 +454,13 @@ export function ThemeGeneratorPanel() {
   )
 
   const activeStyles = state.styles[state.mode]
-  const themeCSS = React.useMemo(() => generateThemeCode(state.styles), [state.styles])
+  const themeCSS = React.useMemo(() => (variablesOpen ? generateThemeCode(state.styles) : ""), [state.styles, variablesOpen])
   const canUndo = history.past.length > 0
   const canRedo = history.future.length > 0
 
   return (
     <>
-      <Sheet open={open} onOpenChange={setOpen} modal={false}>
+      <Sheet open={open} onOpenChange={handleOpenChange} modal={false}>
         <Tooltip>
           <TooltipTrigger asChild>
             <SheetTrigger asChild>
@@ -504,7 +635,7 @@ export function ThemeGeneratorPanel() {
                             key={item.key}
                             label={t(item.labelKey)}
                             value={activeStyles[item.key]}
-                            onChange={(value) => commit((current) => updateThemeValue(current, state.mode, item.key, value))}
+                            onChange={(value) => liveCommit((current) => updateThemeValue(current, current.mode, item.key, value))}
                           />
                         ))}
                       </div>
@@ -558,7 +689,7 @@ export function ThemeGeneratorPanel() {
                       <ColorControl
                         label={t("shadowColor")}
                         value={activeStyles["shadow-color"]}
-                        onChange={(value) => commit((current) => updateThemeValue(current, state.mode, "shadow-color", value))}
+                        onChange={(value) => liveCommit((current) => updateThemeValue(current, current.mode, "shadow-color", value))}
                       />
                       <SliderControl
                         label={t("shadowOpacity")}
@@ -887,7 +1018,7 @@ function ImportDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
-      <DialogContent className="max-h-[90vh] sm:max-w-[640px]">
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{labels.title}</DialogTitle>
           <DialogDescription className="sr-only">{labels.description}</DialogDescription>
@@ -896,7 +1027,7 @@ function ImportDialog({
         <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="min-h-72 font-mono text-xs"
+          className="field-sizing-fixed min-h-72 max-h-[calc(90vh-12rem)] flex-1 resize-none overflow-auto font-mono text-xs"
           placeholder={`:root {
   --background: oklch(1 0 0);
   --primary: oklch(0.62 0.14 39.04);

@@ -187,6 +187,7 @@ export function CompletionPopup({
         )}
         style={{
           backgroundColor: theme.background,
+          color: theme.foreground,
           // 当弹窗在上方时，增加底部间距避免遮挡光标
           marginBottom: placement === "top" ? 16 : 0,
         }}
@@ -236,15 +237,16 @@ export function CompletionPopup({
                     className={cn(
                       "flex items-center gap-3 px-3 py-1.5 cursor-pointer rounded-none",
                       "aria-selected:bg-transparent", // 禁用 cmdk 默认选中样式
-                      isSelected
-                        ? "bg-zinc-100 dark:bg-zinc-800"
-                        : "bg-transparent"
+                      "bg-transparent"
                     )}
+                    style={{
+                      backgroundColor: isSelected ? theme.selectionBackground : "transparent",
+                    }}
                   >
                     {/* 图标 */}
                     {showIcon && (
                       <div
-                        className="flex-shrink-0 text-zinc-500 dark:text-zinc-400"
+                        className="flex-shrink-0 opacity-70"
                         title={t(sourceLabelKey[item.source])}
                         aria-label={t(sourceLabelKey[item.source])}
                       >
@@ -256,7 +258,7 @@ export function CompletionPopup({
                     )}
 
                     {/* 主文本 */}
-                    <div className="flex-1 min-w-0 font-mono text-sm text-zinc-800 dark:text-zinc-200">
+                    <div className="flex-1 min-w-0 font-mono text-sm">
                       <HighlightedText
                         text={item.displayText || item.text}
                         prefix={matchedPrefix}

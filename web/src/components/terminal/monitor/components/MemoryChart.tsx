@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
 import { MONITOR_COLORS } from "../constants/colors";
+import { useMonitorChartTheme } from "../hooks/useMonitorChartTheme";
 
 interface MemoryChartProps {
   data: MemoryData;
@@ -47,8 +48,9 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
   );
 
   const colors = useEchartsColors(chartConfig);
-  const ramColor = colors.ram || MONITOR_COLORS.memory.ram;
-  const swapColor = colors.swap || MONITOR_COLORS.memory.swap;
+  const chartTheme = useMonitorChartTheme();
+  const ramColor = colors.ram || chartTheme.ram;
+  const swapColor = colors.swap || chartTheme.swap;
 
   const option: EChartsOption = React.useMemo(() => {
     const ramPercent = Math.max(0, Math.min(100, chartData.ramPercent));
@@ -57,8 +59,8 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
     const ramRest = Math.max(0, 100 - ramPercent);
     const swapRest = Math.max(0, 100 - swapPercent);
 
-    const ramBgColor = "rgba(148,163,184,0.18)";
-    const swapBgColor = "rgba(148,163,184,0.24)";
+    const ramBgColor = chartTheme.freeSegment;
+    const swapBgColor = chartTheme.freeSegmentStrong;
 
     return {
       animation: true,
@@ -71,11 +73,12 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
         trigger: "item",
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.88)",
-        borderColor: "rgba(148,163,184,0.15)",
+        backgroundColor: chartTheme.tooltipBackground,
+        borderColor: chartTheme.tooltipBorder,
         borderWidth: 1,
         textStyle: {
           fontSize: 11,
+          color: chartTheme.tooltipText,
         },
         formatter: (params) => {
           const point = (
@@ -88,7 +91,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
           const isRam = point.seriesName === "RAM";
           const mem = isRam ? data.ram : data.swap;
           return `
-            <div style="font-size:11px;">
+            <div style="font-size:11px;color:${chartTheme.tooltipText};">
               <div style="margin-bottom:4px;">${isRam ? "RAM" : "Swap"}</div>
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${point.color};"></span>
@@ -119,7 +122,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
           // 圆角环形效果（添加微妙阴影）
           itemStyle: {
             borderRadius: 8,
-            shadowColor: 'rgba(0, 0, 0, 0.15)',
+            shadowColor: chartTheme.shadow,
             shadowBlur: 8,
             shadowOffsetY: 2,
           },
@@ -151,7 +154,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
           },
           itemStyle: {
             borderRadius: 8,
-            shadowColor: 'rgba(0, 0, 0, 0.15)',
+            shadowColor: chartTheme.shadow,
             shadowBlur: 8,
             shadowOffsetY: 2,
           },
@@ -173,7 +176,7 @@ export const MemoryChart: React.FC<MemoryChartProps> = React.memo(({ data }) => 
         },
       ],
     };
-  }, [chartData, ramColor, swapColor, data, memoryTooltipUsedLabel]);
+  }, [chartData, ramColor, swapColor, data, memoryTooltipUsedLabel, chartTheme]);
 
   return (
     <div className="space-y-1">

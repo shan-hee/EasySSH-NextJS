@@ -40,7 +40,7 @@ const InfoRow: React.FC<{
         "flex justify-between items-center h-5 leading-5 text-xs cursor-pointer",
         "transition-all duration-300 ease-in-out",
         "hover:bg-accent/50 rounded px-1.5 -mx-1.5",
-        copied && "bg-green-500/10"
+        copied && "bg-status-connected/10"
       )}
       onClick={handleCopy}
       title={t("copyTooltip", { value })}
@@ -50,7 +50,7 @@ const InfoRow: React.FC<{
         "font-medium truncate ml-2",
         "transition-colors duration-300",
         monospace && "font-mono text-[11px]",
-        copied && "text-green-500"
+        copied && "text-status-connected"
       )}>
         {copied ? t("copyCopied") : value}
       </span>

@@ -136,21 +136,21 @@ export function TerminalAuthChallengeDialog({
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+        className="w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-2xl"
       >
         <div className="flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-base font-semibold text-foreground">
               {isCredentialRetry
                 ? tTerminal("authRetryTitle")
                 : isPrivateKeyPassphrase
                   ? tTerminal("authPassphraseTitle")
                 : tTerminal("authChallengeTitle")}
             </h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-muted-foreground">
               {isCredentialRetry
                 ? tTerminal("authRetryServer", { server: serverName })
                 : isPrivateKeyPassphrase
@@ -161,7 +161,7 @@ export function TerminalAuthChallengeDialog({
         </div>
 
         {(prompt.name || prompt.instruction) && (
-          <div className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300">
+          <div className="mt-4 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
             {prompt.name && <div className="font-medium">{prompt.name}</div>}
             {prompt.instruction && (
               <div className={prompt.name ? "mt-1 whitespace-pre-wrap" : "whitespace-pre-wrap"}>
@@ -172,7 +172,7 @@ export function TerminalAuthChallengeDialog({
         )}
 
         {isCredentialRetry && (
-          <div className="mt-4 grid grid-cols-2 rounded-md border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="mt-4 grid grid-cols-2 rounded-md border border-border bg-muted p-1">
             <Button
               type="button"
               variant={authMethod === "password" ? "secondary" : "ghost"}
@@ -199,12 +199,12 @@ export function TerminalAuthChallengeDialog({
             <div className="space-y-2">
               <Label
                 htmlFor={`terminal-auth-${prompt.request_id}-passphrase`}
-                className="text-zinc-800 dark:text-zinc-200"
+                className="text-foreground"
               >
                 {tTerminal("authPassphraseLabel")}
               </Label>
               <div className="relative">
-                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   ref={firstInputRef}
                   id={`terminal-auth-${prompt.request_id}-passphrase`}
@@ -221,7 +221,7 @@ export function TerminalAuthChallengeDialog({
             <div className="space-y-2">
               <Label
                 htmlFor={`terminal-auth-${prompt.request_id}-credential`}
-                className="text-zinc-800 dark:text-zinc-200"
+                className="text-foreground"
               >
                 {authMethod === "key"
                   ? tTerminal("authRetryPrivateKeyLabel")
@@ -240,7 +240,7 @@ export function TerminalAuthChallengeDialog({
                 />
               ) : (
                 <div className="relative">
-                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     ref={firstInputRef}
                     id={`terminal-auth-${prompt.request_id}-credential`}
@@ -259,11 +259,11 @@ export function TerminalAuthChallengeDialog({
 
             return (
               <div key={`${prompt.request_id}-${index}`} className="space-y-2">
-                <Label htmlFor={inputId} className="text-zinc-800 dark:text-zinc-200">
+                <Label htmlFor={inputId} className="text-foreground">
                   {item.text || tTerminal("authChallengePromptFallback", { index: index + 1 })}
                 </Label>
                 <div className="relative">
-                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     ref={index === 0 ? firstInputRef : undefined}
                     id={inputId}

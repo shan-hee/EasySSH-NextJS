@@ -648,7 +648,7 @@ export function TerminalComponent({
   // 每个页签独立管理快捷键
 
   return (
-    <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-black' : ''}`}>
+    <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
       {!isFullscreen && (
         <PageHeader title={active?.serverName || tTerminal("quickConnectTabName")} />
       )}
@@ -656,7 +656,7 @@ export function TerminalComponent({
       <div className="flex-1 flex flex-col min-h-0 p-4 pt-0">
         <div className={cn(
           "flex-1 flex flex-col min-h-0 rounded-xl border overflow-hidden shadow-2xl transition-colors",
-          "border-zinc-200 bg-gradient-to-b from-white to-zinc-50 dark:border-zinc-800/50 dark:from-black dark:to-zinc-950"
+          "border-border/60 bg-background/70 text-foreground backdrop-blur-md"
         )}>
           {/* 页签栏（仅保留标签，不显示面包屑） */}
           <SessionTabBar
@@ -677,7 +677,7 @@ export function TerminalComponent({
 
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {sessions.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-zinc-500">
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
                 暂无活动会话，使用右上角 + 新建
               </div>
             ) : (

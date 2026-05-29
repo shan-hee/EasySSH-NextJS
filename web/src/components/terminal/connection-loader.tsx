@@ -100,7 +100,7 @@ export function ConnectionLoader({
   }
 
   return (
-    <div className={`h-full w-full overflow-hidden relative transition-colors bg-background [--loader-color:oklch(0.145_0_0)] dark:[--loader-color:oklch(1_0_0)]`}>
+    <div className="relative h-full w-full overflow-hidden bg-background transition-colors [--loader-color:var(--foreground)]">
       {/* 动画背景线条：所有阶段都显示。为避免首帧闪线，给每条线加内联 transform 初始在屏外 */}
       <div className="longfazers absolute inset-0" data-state={animationState}>
         <span className="longfazer-1" style={{ transform: 'translateX(120vw)' }} />
@@ -132,12 +132,12 @@ export function ConnectionLoader({
 
       {/* 文字信息 - 绝对定位，固定在中间 */}
       <div className="text-wrapper">
-        <h1 className={"text-sm font-semibold uppercase tracking-wider text-zinc-900 dark:text-white"}>
+        <h1 className="text-sm font-semibold uppercase tracking-wider text-foreground">
           {animationState === "exiting"
             ? exitMessage ?? t("connectionLoaderSuccess")
             : message ?? t("connectionLoaderConnecting")}
         </h1>
-        <p className={"text-xs font-mono text-zinc-600 dark:text-zinc-500"}>
+        <p className="font-mono text-xs text-muted-foreground">
           {serverName ?? t("connectionLoaderServerFallback")}
         </p>
       </div>

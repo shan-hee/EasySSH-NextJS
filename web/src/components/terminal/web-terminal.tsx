@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useCallback, useLayoutEffect, useState } from "react"
 import { createPortal } from "react-dom"
-import { useTheme } from "next-themes"
 import { useTranslations } from "next-intl"
 import { toast } from "@/components/ui/sonner"
 import { Loader2, ShieldAlert } from "lucide-react"
@@ -33,6 +32,7 @@ import {
 import type { CompletionItem } from "@/lib/completion/types"
 import { TerminalThemeProvider } from "@/contexts/terminal-theme-context"
 import { useCompletionConfig } from "@/contexts/completion-config-context"
+import { useEffectiveThemeMode } from "@/hooks/use-effective-theme-mode"
 import type {
   TerminalAuthMethod,
   TerminalConnectionPhase,
@@ -77,6 +77,8 @@ interface WebTerminalProps {
   completionShowIcon?: boolean
   completionShowDescription?: boolean
   enableWebgl?: boolean
+  transparentBackground?: boolean
+  backgroundOpacity?: number
 }
 
 export function WebTerminal({
@@ -109,30 +111,30 @@ export function WebTerminal({
   completionShowIcon = true,
   completionShowDescription = true,
   enableWebgl = true,
+  transparentBackground = false,
+  backgroundOpacity = 1,
 }: WebTerminalProps) {
   const tTerminal = useTranslations("terminal")
-
-  // 使用 next-themes 获取应用主题
-  const { theme: appTheme, resolvedTheme } = useTheme()
+  const { mode: effectiveAppTheme, version: themeModeVersion } = useEffectiveThemeMode()
 
   // 使用补全配置 Context
   const { completionConfig, globalConfig } = useCompletionConfig()
   const effectiveCompletionEnabled = completionEnabled && completionConfig.enabled
 
-  // 获取实际的主题（light 或 dark）
-  const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
-  const initialIsDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-  const effectiveAppTheme: 'light' | 'dark' =
-    currentAppTheme === 'system' || !currentAppTheme
-      ? (initialIsDark ? 'dark' : 'light')
-      : currentAppTheme
-
   // 获取终端主题
   const terminalTheme = getTerminalTheme(theme, effectiveAppTheme)
+  const shouldUseTransparentRendererBackground =
+    transparentBackground || (theme === 'default' && backgroundOpacity < 1)
   const transparentTerminalBackground = withTerminalBackgroundOpacity(terminalTheme.background, 0)
+  const translucentTerminalBackground = withTerminalBackgroundOpacity(terminalTheme.background, backgroundOpacity)
+  const terminalRendererBackground = shouldUseTransparentRendererBackground
+    ? transparentTerminalBackground
+    : backgroundOpacity < 1
+      ? translucentTerminalBackground
+      : terminalTheme.background
   const terminalRendererTheme = {
     ...terminalTheme,
-    background: transparentTerminalBackground,
+    background: terminalRendererBackground,
   }
 
   // ==================== 核心改动：从 Store 获取终端实例 ====================
@@ -343,13 +345,13 @@ export function WebTerminal({
     terminal.options.allowTransparency = true
     terminal.options.theme = {
       ...getTerminalTheme(theme, effectiveAppTheme),
-      background: transparentTerminalBackground,
+      background: terminalRendererBackground,
     }
 
     requestAnimationFrame(() => {
       terminal.refresh(0, terminal.rows - 1)
     })
-  }, [theme, effectiveAppTheme, terminal, transparentTerminalBackground])
+  }, [theme, effectiveAppTheme, terminal, terminalRendererBackground, themeModeVersion])
 
   // ==================== 同步终端渲染相关设置 ====================
   useLayoutEffect(() => {
@@ -1256,52 +1258,52 @@ export function WebTerminal({
 
       {hostKeyWarning && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-lg border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="w-full max-w-xl rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-2xl">
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300">
                 <ShieldAlert className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
+                <h2 className="text-base font-semibold text-foreground">
                   {tTerminal("hostKeyChangedTitle")}
                 </h2>
-                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {tTerminal("hostKeyChangedDescription", { server: serverName })}
                 </p>
               </div>
             </div>
 
             <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/70">
-                <div className="mb-3 font-medium text-zinc-700 dark:text-zinc-300">
+              <div className="rounded-md border border-border bg-muted/60 p-3">
+                <div className="mb-3 font-medium text-foreground">
                   {hostKeyWarning.prompt.host}:{hostKeyWarning.prompt.port}
                 </div>
                 <div className="grid gap-3">
                   <div>
-                    <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    <div className="mb-1 text-xs font-medium text-muted-foreground">
                       {tTerminal("hostKeyChangedExpected")}
                     </div>
-                    <div className="break-all rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                    <div className="break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground">
                       {hostKeyWarning.prompt.expected_key}
                     </div>
-                    <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+                    <div className="mt-1 text-xs text-muted-foreground">
                       {hostKeyWarning.prompt.expected_key_type}
                     </div>
                   </div>
                   <div>
-                    <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    <div className="mb-1 text-xs font-medium text-muted-foreground">
                       {tTerminal("hostKeyChangedReceived")}
                     </div>
-                    <div className="break-all rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                    <div className="break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground">
                       {hostKeyWarning.prompt.received_key}
                     </div>
-                    <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+                    <div className="mt-1 text-xs text-muted-foreground">
                       {hostKeyWarning.prompt.received_key_type}
                     </div>
                   </div>
                 </div>
               </div>
-              <p className="text-zinc-600 dark:text-zinc-400">
+              <p className="text-muted-foreground">
                 {tTerminal("hostKeyChangedRisk")}
               </p>
             </div>

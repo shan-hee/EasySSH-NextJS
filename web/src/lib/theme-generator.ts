@@ -1,4 +1,8 @@
 import { SHADCN_STUDIO_PRESET_STYLES } from "@/lib/theme-generator-presets"
+import { dispatchThemeGeneratorChange } from "@/lib/theme-generator-events"
+import { colorToHex, hexToRgb } from "@/lib/color-utils"
+
+export { colorToHex } from "@/lib/color-utils"
 
 export type ThemeMode = "light" | "dark"
 export type ThemeBaseColorId = "neutral" | "zinc" | "slate" | "stone"
@@ -529,13 +533,19 @@ export function clearThemeGeneratorState() {
   }
 }
 
-export function applyThemeGeneratorState(state: ThemeGeneratorState) {
+export function applyThemeGeneratorState(
+  state: ThemeGeneratorState,
+  options: { notify?: boolean } = {},
+) {
   if (typeof document === "undefined") {
     return
   }
 
   if (isDefaultThemeState(state)) {
     document.getElementById(THEME_GENERATOR_STYLE_ID)?.remove()
+    if (options.notify !== false) {
+      dispatchThemeGeneratorChange()
+    }
     return
   }
 
@@ -547,6 +557,9 @@ export function applyThemeGeneratorState(state: ThemeGeneratorState) {
   }
 
   styleElement.textContent = generateRuntimeThemeCSS(state.styles, true)
+  if (options.notify !== false) {
+    dispatchThemeGeneratorChange()
+  }
 }
 
 export function generateRuntimeThemeCSS(styles: ThemeStyles, important = false): string {
@@ -739,30 +752,6 @@ export function parseThemeCSS(css: string, fallback: ThemeStyles): ThemeStyles {
   }
 }
 
-export function colorToHex(color: string): string {
-  const value = color.trim()
-  if (/^#[0-9a-f]{6}$/i.test(value)) {
-    return value
-  }
-  if (/^#[0-9a-f]{3}$/i.test(value)) {
-    return `#${value
-      .slice(1)
-      .split("")
-      .map((char) => `${char}${char}`)
-      .join("")}`
-  }
-  if (/^#[0-9a-f]{8}$/i.test(value)) {
-    return value.slice(0, 7)
-  }
-
-  const rgb = parseRgb(value) ?? parseHsl(value) ?? parseOklch(value)
-  if (!rgb) {
-    return "#000000"
-  }
-
-  return `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`
-}
-
 export function getThemeSwatches(styles: ThemeStyles): string[] {
   return [styles.light.primary, styles.light.destructive, styles.light.secondary, styles.light.accent]
 }
@@ -900,7 +889,7 @@ function colorWithOpacity(color: string, opacity: number): string {
   const cleaned = color.trim().replace(/\s*\/\s*[^)]+(?=\))/, "")
 
   if (cleaned.startsWith("#")) {
-    const rgb = parseHex(cleaned) ?? [0, 0, 0]
+    const rgb = hexToRgb(cleaned) ?? [0, 0, 0]
     return `rgb(${rgb[0]} ${rgb[1]} ${rgb[2]} / ${opacity.toFixed(2)})`
   }
 
@@ -913,145 +902,6 @@ function colorWithOpacity(color: string, opacity: number): string {
   }
 
   return `rgb(0 0 0 / ${opacity.toFixed(2)})`
-}
-
-function parseHex(value: string): [number, number, number] | null {
-  const hex = colorToHex(value)
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
-  if (!match) {
-    return null
-  }
-
-  return [Number.parseInt(match[1], 16), Number.parseInt(match[2], 16), Number.parseInt(match[3], 16)]
-}
-
-function parseRgb(value: string): [number, number, number] | null {
-  const match = /rgba?\(([^)]+)\)/i.exec(value)
-  if (!match) {
-    return null
-  }
-
-  const parts = match[1]
-    .replace(/,/g, " ")
-    .split("/")[0]
-    .trim()
-    .split(/\s+/)
-    .map((part) => Number.parseFloat(part))
-
-  if (parts.length < 3 || parts.some((part) => !Number.isFinite(part))) {
-    return null
-  }
-
-  return [clamp(Math.round(parts[0]), 0, 255), clamp(Math.round(parts[1]), 0, 255), clamp(Math.round(parts[2]), 0, 255)]
-}
-
-function parseHsl(value: string): [number, number, number] | null {
-  const match = /hsla?\(([^)]+)\)/i.exec(value)
-  if (!match) {
-    return null
-  }
-
-  const parts = match[1]
-    .replace(/,/g, " ")
-    .split("/")[0]
-    .trim()
-    .split(/\s+/)
-
-  if (parts.length < 3) {
-    return null
-  }
-
-  const h = Number.parseFloat(parts[0])
-  const s = Number.parseFloat(parts[1].replace("%", "")) / 100
-  const l = Number.parseFloat(parts[2].replace("%", "")) / 100
-
-  if (![h, s, l].every((part) => Number.isFinite(part))) {
-    return null
-  }
-
-  const hue = ((h % 360) + 360) % 360
-  const c = (1 - Math.abs(2 * l - 1)) * s
-  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1))
-  const m = l - c / 2
-  let r = 0
-  let g = 0
-  let b = 0
-
-  if (hue < 60) {
-    r = c
-    g = x
-  } else if (hue < 120) {
-    r = x
-    g = c
-  } else if (hue < 180) {
-    g = c
-    b = x
-  } else if (hue < 240) {
-    g = x
-    b = c
-  } else if (hue < 300) {
-    r = x
-    b = c
-  } else {
-    r = c
-    b = x
-  }
-
-  return [
-    clamp(Math.round((r + m) * 255), 0, 255),
-    clamp(Math.round((g + m) * 255), 0, 255),
-    clamp(Math.round((b + m) * 255), 0, 255),
-  ]
-}
-
-function parseOklch(value: string): [number, number, number] | null {
-  const match = /oklch\(([^)]+)\)/i.exec(value)
-  if (!match) {
-    return null
-  }
-
-  const parts = match[1]
-    .split("/")[0]
-    .trim()
-    .split(/\s+/)
-
-  if (parts.length < 3) {
-    return null
-  }
-
-  const l = parts[0].endsWith("%") ? Number.parseFloat(parts[0]) / 100 : Number.parseFloat(parts[0])
-  const c = Number.parseFloat(parts[1])
-  const h = Number.parseFloat(parts[2])
-
-  if (![l, c, h].every((part) => Number.isFinite(part))) {
-    return null
-  }
-
-  const a = c * Math.cos((h * Math.PI) / 180)
-  const b = c * Math.sin((h * Math.PI) / 180)
-
-  const lPrime = l + 0.3963377774 * a + 0.2158037573 * b
-  const mPrime = l - 0.1055613458 * a - 0.0638541728 * b
-  const sPrime = l - 0.0894841775 * a - 1.291485548 * b
-
-  const l3 = lPrime ** 3
-  const m3 = mPrime ** 3
-  const s3 = sPrime ** 3
-
-  const linearR = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3
-  const linearG = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3
-  const linearB = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3
-
-  return [
-    clamp(Math.round(linearToSrgb(linearR) * 255), 0, 255),
-    clamp(Math.round(linearToSrgb(linearG) * 255), 0, 255),
-    clamp(Math.round(linearToSrgb(linearB) * 255), 0, 255),
-  ]
-}
-
-function linearToSrgb(value: number): number {
-  const clamped = clamp(value, 0, 1)
-  return clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * clamped ** (1 / 2.4) - 0.055
 }
 
 function clamp(value: number, min: number, max: number): number {

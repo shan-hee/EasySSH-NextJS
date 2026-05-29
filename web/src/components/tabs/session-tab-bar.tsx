@@ -118,8 +118,8 @@ function SortableTab({
       className={cn(
         "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm cursor-grab active:cursor-grabbing",
         active
-          ? "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 shadow-lg shadow-zinc-200/50 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50 dark:shadow-black/20"
-          : "bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 opacity-75 hover:opacity-100 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40",
+          ? "border-border bg-card/90 text-foreground shadow-sm"
+          : "border-border/50 bg-card/35 text-muted-foreground opacity-75 hover:border-border hover:bg-card/65 hover:text-foreground hover:opacity-100",
         s.pinned && "ring-1 ring-blue-500/20",
         isDragging && "cursor-grabbing"
       )}
@@ -129,7 +129,7 @@ function SortableTab({
 
       <span className={cn(
         "max-w-32 truncate text-xs font-medium transition-colors",
-        active ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-gray-400"
+        active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
       )}>
         {s.serverName}
       </span>
@@ -366,7 +366,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
 
       {/* 页签栏（现代化设计） */}
       <div className={
-        "w-full min-w-0 border-b transition-colors bg-gradient-to-b from-white to-zinc-50 border-zinc-200 dark:from-black/95 dark:to-black dark:border-white/5"
+        "w-full min-w-0 border-b border-border/60 bg-background/65 text-foreground backdrop-blur-md transition-colors"
       }>
         <div className="flex items-center h-10 gap-0 px-2 min-w-0 overflow-hidden">
           {/* Tabs 容器 */}
@@ -403,7 +403,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                         variant="ghost"
                         size="icon"
                         className={cn(
-                          "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
+                          "ml-1 h-8 w-8 rounded-lg text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-accent/70 hover:text-accent-foreground",
                         )}
                         onClick={onNewSession}
                         aria-label={tTerminal("ariaNewSession")}
@@ -419,7 +419,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                   {draggedSession ? (
                     <div className={cn(
                       "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm shadow-2xl",
-                      "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50",
+                      "border-border bg-card/90 text-foreground",
                       draggedSession.pinned && "ring-1 ring-blue-500/20"
                     )}>
                       {/* 状态指示点 */}
@@ -431,7 +431,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                           ? "bg-yellow-500"
                           : "bg-red-500"
                       )} />
-                      <span className="max-w-32 truncate text-xs font-medium text-zinc-900 dark:text-white">
+                      <span className="max-w-32 truncate text-xs font-medium text-foreground">
                         {draggedSession.serverName}
                       </span>
                       {draggedSession.pinned && (
@@ -464,8 +464,8 @@ export function SessionTabBar(props: SessionTabBarProps) {
                       className={cn(
                         "group relative flex items-center gap-2 h-8 pl-3 pr-8 transition-all duration-200 ease-out select-none rounded-lg border backdrop-blur-sm",
                         active
-                          ? "bg-gradient-to-b from-zinc-100 to-zinc-200 border-zinc-300 shadow-lg shadow-zinc-200/50 dark:from-zinc-800/90 dark:to-zinc-900/90 dark:border-zinc-700/50 dark:shadow-black/20"
-                          : "bg-zinc-50 border-zinc-200 hover:bg-zinc-100 hover:border-zinc-300 opacity-75 hover:opacity-100 dark:bg-zinc-900/40 dark:border-zinc-800/30 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-700/40",
+                          ? "border-border bg-card/90 text-foreground shadow-sm"
+                          : "border-border/50 bg-card/35 text-muted-foreground opacity-75 hover:border-border hover:bg-card/65 hover:text-foreground hover:opacity-100",
                         s.pinned && "ring-1 ring-blue-500/20"
                       )}
                     >
@@ -474,7 +474,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
 
                       <span className={cn(
                         "max-w-32 truncate text-xs font-medium transition-colors",
-                        active ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-gray-400"
+                        active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
                       )}>
                         {s.serverName}
                       </span>
@@ -503,7 +503,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "ml-1 h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
+                      "ml-1 h-8 w-8 rounded-lg text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-accent/70 hover:text-accent-foreground",
                     )}
                     onClick={onNewSession}
                     aria-label={tTerminal("ariaNewSession")}
@@ -522,7 +522,7 @@ export function SessionTabBar(props: SessionTabBarProps) {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 rounded-lg hover:text-green-400 transition-all duration-200 hover:scale-105 hover:bg-zinc-200 text-zinc-500 dark:hover:bg-zinc-800/60 dark:text-gray-500",
+                  "h-8 w-8 rounded-lg text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-accent/70 hover:text-accent-foreground",
                 )}
                 onClick={onNewSession}
                 aria-label={tTerminal("ariaNewSession")}
@@ -533,12 +533,12 @@ export function SessionTabBar(props: SessionTabBarProps) {
           )}
 
           {onOpenSettings && (
-            <div className={"flex items-center gap-1 px-2 border-l border-zinc-200 dark:border-white/5"}>
+            <div className="flex items-center gap-1 border-l border-border/60 px-2">
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 rounded-lg hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:text-gray-400 dark:hover:text-white",
+                  "h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground",
                 )}
                 onClick={onOpenSettings}
                 aria-label={tTerminal("ariaSettings")}
@@ -556,20 +556,20 @@ export function SessionTabBar(props: SessionTabBarProps) {
         <div
           ref={menuRef}
           className={cn(
-            "fixed z-50 min-w-48 rounded-lg border p-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-200 border-zinc-200 bg-gradient-to-b from-white to-zinc-50 text-zinc-900 shadow-zinc-300/50 dark:border-zinc-800/50 dark:from-zinc-900 dark:to-black dark:text-white dark:shadow-black/50",
+            "fixed z-50 min-w-48 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-200",
           )}
           style={{ left: menu.x, top: menu.y }}
         >
           <div className={cn(
-            "text-[10px] px-3 py-1.5 uppercase font-semibold tracking-wider text-zinc-600 dark:text-zinc-500",
+            "px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
           )}>{tTerminal("tabMenuTitle")}</div>
           <div className={cn(
-            "h-px bg-gradient-to-r from-transparent to-transparent my-1 via-zinc-300 dark:via-zinc-800",
+            "my-1 h-px bg-gradient-to-r from-transparent via-border to-transparent",
           )} />
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
+              "group flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
             )}
             onClick={() => {
               if (menu.targetId) onDuplicateSession(menu.targetId)
@@ -577,13 +577,13 @@ export function SessionTabBar(props: SessionTabBarProps) {
             }}
           >
             <span className={cn(
-              "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
+              "text-muted-foreground transition-colors group-hover:text-accent-foreground",
             )}>{tTerminal("tabMenuDuplicate")}</span>
           </button>
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center gap-2 group hover:bg-zinc-200 dark:hover:bg-zinc-800/60",
+              "group flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
             )}
             onClick={() => {
               if (menu.targetId) onCloseOthers(menu.targetId)
@@ -591,13 +591,13 @@ export function SessionTabBar(props: SessionTabBarProps) {
             }}
           >
             <span className={cn(
-              "transition-colors text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white",
+              "text-muted-foreground transition-colors group-hover:text-accent-foreground",
             )}>{tTerminal("tabMenuCloseOthers")}</span>
           </button>
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center gap-2 text-zinc-600 dark:text-zinc-400",
+              "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive",
             )}
             onClick={() => { onCloseAll(); setMenu(m => ({ ...m, open: false })) }}
           >
@@ -605,12 +605,12 @@ export function SessionTabBar(props: SessionTabBarProps) {
           </button>
 
           <div className={cn(
-            "h-px bg-gradient-to-r from-transparent to-transparent my-1 via-zinc-300 dark:via-zinc-800",
+            "my-1 h-px bg-gradient-to-r from-transparent via-border to-transparent",
           )} />
 
           <button
             className={cn(
-              "w-full text-left text-sm px-3 py-2 rounded-md hover:bg-blue-500/20 hover:text-blue-400 transition-colors flex items-center gap-2 text-zinc-600 dark:text-zinc-400",
+              "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary",
             )}
             onClick={() => {
               if (menu.targetId) onTogglePin(menu.targetId)

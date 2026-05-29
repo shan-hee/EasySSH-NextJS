@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/chart";
 import { useEchartsColors } from "@/lib/echarts-theme";
 import { MONITOR_COLORS } from "../constants/colors";
+import { useMonitorChartTheme } from "../hooks/useMonitorChartTheme";
 
 interface NetworkChartProps {
   data: NetworkData[];
@@ -65,8 +66,9 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
   );
 
   const colors = useEchartsColors(chartConfig);
-  const downloadColor = colors.download || MONITOR_COLORS.network.download;
-  const uploadColor = colors.upload || MONITOR_COLORS.network.upload;
+  const chartTheme = useMonitorChartTheme();
+  const downloadColor = colors.download || chartTheme.download;
+  const uploadColor = colors.upload || chartTheme.upload;
 
   // 计算Y轴的最大值用于显示刻度
   // 找出实际数据的最大值
@@ -134,11 +136,12 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         },
         borderRadius: 6,
         padding: 8,
-        backgroundColor: "rgba(15,23,42,0.95)",
-        borderColor: "rgba(148,163,184,0.2)",
+        backgroundColor: chartTheme.tooltipBackground,
+        borderColor: chartTheme.tooltipBorder,
         borderWidth: 1,
         textStyle: {
           fontSize: 11,
+          color: chartTheme.tooltipText,
         },
         formatter: (params) => {
           const list = (Array.isArray(params) ? params : [params]) as Array<{
@@ -174,7 +177,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
             })
             .join("");
           return `
-            <div style="font-size:11px;">
+            <div style="font-size:11px;color:${chartTheme.tooltipText};">
               <div style="margin-bottom:4px;">${t("tooltipTimeLabel")}: ${label}</div>
               ${lines}
             </div>
@@ -188,7 +191,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: "rgba(148,163,184,0.9)",
+          color: chartTheme.axisLabel,
           fontSize: 10,
         },
       },
@@ -202,8 +205,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
         splitLine: {
           show: true,
           lineStyle: {
-            color: "rgba(148,163,184,0.3)",
-            opacity: 0.3,
+            color: chartTheme.gridLine,
             type: "dashed",
           },
         },
@@ -233,7 +235,7 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
               borderWidth: 2,
               borderColor: downloadColor,
               // 填充用背景色，形成「空心圆」效果
-              color: "rgba(15,23,42,1)",
+              color: chartTheme.pointFill,
             },
           },
           data: downloadValues,
@@ -260,14 +262,14 @@ export const NetworkChart: React.FC<NetworkChartProps> = React.memo(({
             itemStyle: {
               borderWidth: 2,
               borderColor: uploadColor,
-              color: "rgba(15,23,42,1)",
+              color: chartTheme.pointFill,
             },
           },
           data: uploadValues,
         },
       ],
     };
-  }, [chartData, downloadColor, uploadColor, maxValue, t]);
+  }, [chartData, downloadColor, uploadColor, maxValue, t, chartTheme]);
 
   return (
     <div className="space-y-1">

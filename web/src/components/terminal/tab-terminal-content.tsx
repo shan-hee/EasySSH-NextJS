@@ -7,7 +7,6 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { useTheme } from 'next-themes'
 import { MonitorWebSocketProvider } from './monitor/contexts/MonitorWebSocketContext'
 import { Button } from '@/components/ui/button'
 import { Maximize2, Minimize2, Settings, FolderOpen, Activity, Bot } from 'lucide-react'
@@ -29,6 +28,7 @@ import type { TerminalConnectionPhase, TerminalSession } from './types'
 import type { TerminalSettings } from './terminal-settings-dialog'
 import { useTranslations } from "next-intl"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from './terminal-themes'
+import { useEffectiveThemeMode } from '@/hooks/use-effective-theme-mode'
 
 const DESKTOP_TERMINAL_LAYOUT_QUERY = '(min-width: 768px)'
 
@@ -149,6 +149,7 @@ export function TabTerminalContent({
 
   const isDesktopMonitorOpen = tabState.isMonitorOpen
   const isMobileMonitorOpen = tabState.isMobileMonitorOpen ?? false
+  const isMonitorButtonActive = isDesktopLayout ? isDesktopMonitorOpen : isMobileMonitorOpen
   const isFileManagerOpen = tabState.isFileManagerOpen
   const isAiInputOpen = tabState.isAiInputOpen
 
@@ -190,46 +191,41 @@ export function TabTerminalContent({
       : ''
   const monitorEnabled = hasReadyServer
   const tTerminal = useTranslations("terminal")
-  const { theme: appTheme, resolvedTheme } = useTheme()
-  const currentAppTheme = (resolvedTheme || appTheme) as 'light' | 'dark' | 'system'
-  const initialIsDark =
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-  const effectiveAppTheme: 'light' | 'dark' =
-    currentAppTheme === 'system' || !currentAppTheme
-      ? (initialIsDark ? 'dark' : 'light')
-      : currentAppTheme
+  const { mode: effectiveAppTheme } = useEffectiveThemeMode()
+  const shouldUseTerminalSurface = session.type !== 'quick'
   const pageTheme = getTerminalTheme(settings.theme, effectiveAppTheme)
-  const pageBackgroundColor =
-    settings.opacity < 100
+  const pageBackgroundColor = shouldUseTerminalSurface
+    ? settings.opacity < 100
       ? withTerminalBackgroundOpacity(pageTheme.background, settings.opacity / 100)
       : pageTheme.background
-  const hasBackgroundImage = settings.backgroundImage.trim().length > 0
+    : 'transparent'
+  const hasBackgroundImage = session.type !== 'quick' && settings.backgroundImage.trim().length > 0
   const enableTerminalWebgl = true
   const connectionLoaderServerName =
     session.username && session.host
       ? `${session.username}@${session.host}`
       : session.serverName || session.host || session.serverId
 
-	  useEffect(() => {
-	    let frame = 0
-	    if (canUseFileManager) {
-	      frame = window.requestAnimationFrame(() => {
-	        setShouldRenderFileManager(true)
-	      })
-	      return () => window.cancelAnimationFrame(frame)
-	    }
-	
-	    const timer = window.setTimeout(() => {
-	      setShouldRenderFileManager(false)
-	    }, FILE_MANAGER_PANEL_ANIMATION_MS)
-	
-	    return () => {
-	      if (frame) {
-	        window.cancelAnimationFrame(frame)
-	      }
-	      window.clearTimeout(timer)
-	    }
-	  }, [canUseFileManager])
+  useEffect(() => {
+    let frame = 0
+    if (canUseFileManager) {
+      frame = window.requestAnimationFrame(() => {
+        setShouldRenderFileManager(true)
+      })
+      return () => window.cancelAnimationFrame(frame)
+    }
+
+    const timer = window.setTimeout(() => {
+      setShouldRenderFileManager(false)
+    }, FILE_MANAGER_PANEL_ANIMATION_MS)
+
+    return () => {
+      if (frame) {
+        window.cancelAnimationFrame(frame)
+      }
+      window.clearTimeout(timer)
+    }
+  }, [canUseFileManager])
 
   const canHandleInternalBack = isActive && (
     isFullscreen ||
@@ -350,8 +346,7 @@ export function TabTerminalContent({
             <div
               className={cn(
                 'border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-md transition-colors',
-                'border-zinc-200/70 bg-gradient-to-b from-white/70 via-white/55 to-white/40',
-                'dark:border-zinc-800/40 dark:from-black/65 dark:via-black/50 dark:to-black/35'
+                'border-border/60 bg-card/45 text-foreground shadow-sm'
               )}
             >
               {/* 左侧工具图标组 */}
@@ -372,7 +367,12 @@ export function TabTerminalContent({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  className={cn(
+                    "h-7 w-7 rounded-md transition-colors hover:bg-accent/80 hover:text-accent-foreground",
+                    isMonitorButtonActive
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground"
+                  )}
                   aria-label={tTerminal("ariaMonitor")}
                   title={tTerminal("titleMonitor")}
                   onClick={toggleMonitor}
@@ -435,8 +435,7 @@ export function TabTerminalContent({
               <div
                 className={cn(
                   'transition-all duration-300 ease-out overflow-hidden border-r backdrop-blur-md',
-                  'border-zinc-200/70 bg-gradient-to-b from-white/72 via-white/58 to-white/46',
-                  'dark:border-zinc-800/40 dark:from-zinc-950/42 dark:via-zinc-950/28 dark:to-zinc-950/18',
+                  'border-border/60 bg-card/35 text-foreground',
                   shouldReserveInlineMonitor
                     ? 'w-[280px] opacity-100 translate-x-0'
                     : 'w-0 opacity-0 -translate-x-4 border-r-0'
@@ -487,6 +486,8 @@ export function TabTerminalContent({
                   completionShowIcon={settings.completionShowIcon}
                   completionShowDescription={settings.completionShowDescription}
                   enableWebgl={enableTerminalWebgl}
+                  transparentBackground={hasBackgroundImage}
+                  backgroundOpacity={settings.opacity / 100}
                 />
               )}
             </div>
@@ -503,8 +504,7 @@ export function TabTerminalContent({
               <div
                 className={cn(
                   'absolute inset-0 z-30 overflow-hidden border-t backdrop-blur-md md:hidden',
-                  'border-zinc-200/70 bg-gradient-to-b from-white/92 via-white/86 to-white/78',
-                  'dark:border-zinc-800/40 dark:from-zinc-950/96 dark:via-zinc-950/90 dark:to-black/86'
+                  'border-border/60 bg-card/90 text-foreground shadow-2xl'
                 )}
               >
                 <MonitorPanel className="h-full min-h-0 w-full" isLive={isActive} />
