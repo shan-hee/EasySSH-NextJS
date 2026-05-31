@@ -23,6 +23,7 @@ import (
 	"github.com/easyssh/server/internal/domain/auth"
 	"github.com/easyssh/server/internal/domain/batchtask"
 	"github.com/easyssh/server/internal/domain/completion"
+	"github.com/easyssh/server/internal/domain/dashboard"
 	"github.com/easyssh/server/internal/domain/filetransfer"
 	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/monitoring"
@@ -282,6 +283,10 @@ func main() {
 	auditLogRepo := auditlog.NewRepository(database)
 	auditLogService := auditlog.NewService(auditLogRepo)
 
+	// 仪表盘聚合服务
+	dashboardRepo := dashboard.NewRepository(database)
+	dashboardService := dashboard.NewService(dashboardRepo)
+
 	// 监控服务
 	monitoringService := monitoring.NewService(serverService, encryptor)
 
@@ -449,6 +454,7 @@ func main() {
 	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService, securityService, cfg.Server.WebDevPort, completionService, systemConfigService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService, cfg.Server.WebDevPort)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
+	dashboardHandler := rest.NewDashboardHandler(dashboardService)
 	monitoringHandler := rest.NewMonitoringHandler(monitoringService, authService)
 	ticketHandler := rest.NewTicketHandler(ticketService)
 	scriptHandler := rest.NewScriptHandler(scriptService)
@@ -783,6 +789,13 @@ func main() {
 			monitoringRoutes.GET("/resources", monitoringHandler.GetAllResources)                 // 所有服务器资源概览
 			monitoringRoutes.GET("/resources/stream", monitoringHandler.StreamResources)          // 流式获取服务器资源（SSE）
 			monitoringRoutes.POST("/datasource/test", monitoringHandler.TestDataSourceConnection) // 测试数据源连接
+		}
+
+		// 仪表盘聚合路由（需要认证）
+		dashboardRoutes := v1.Group("/dashboard")
+		dashboardRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
+		{
+			dashboardRoutes.GET("/overview", dashboardHandler.GetOverview) // 仪表盘聚合概览
 		}
 
 		// 审计日志路由（需要认证）
