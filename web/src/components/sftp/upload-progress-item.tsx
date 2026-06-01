@@ -38,22 +38,22 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
   // 主状态图标
   const getMainStatusIcon = () => {
     if (isCompleted) {
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />
+      return <CheckCircle2 className="h-4 w-4 text-status-connected" />
     }
     if (isFailed) {
-      return <XCircle className="h-4 w-4 text-red-500" />
+      return <XCircle className="h-4 w-4 text-destructive" />
     }
     if (isCancelled) {
-      return <XCircle className="h-4 w-4 text-zinc-400" />
+      return <XCircle className="h-4 w-4 text-muted-foreground" />
     }
     if (isPending) {
-      return <Clock className="h-4 w-4 text-yellow-500" />
+      return <Clock className="h-4 w-4 text-status-warning" />
     }
-    return <Upload className="h-4 w-4 text-blue-500 animate-pulse" />
+    return <Upload className="h-4 w-4 text-primary animate-pulse" />
   }
 
   return (
-    <div className="px-3 py-2.5 border-b last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+    <div className="px-3 py-2.5 border-b last:border-b-0 hover:bg-table-row-hover transition-colors">
       {/* 文件名和状态 */}
       <div className="flex items-center gap-2 mb-2">
         {getMainStatusIcon()}
@@ -78,28 +78,28 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
           <div className="flex items-center gap-1 mb-1.5">
             <div className={cn(
               "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
-              isActive && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-              isCompleted && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-              isFailed && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-              isCancelled && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+              isActive && "bg-primary/10 text-primary",
+              isCompleted && "bg-status-connected/10 text-status-connected",
+              isFailed && "bg-destructive/10 text-destructive",
+              isCancelled && "bg-muted text-muted-foreground"
             )}>
               {isFailed || isCancelled ? (
-                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                <XCircle className={cn("h-3.5 w-3.5", isCancelled ? "text-muted-foreground" : "text-destructive")} />
               ) : isCompleted ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-status-connected" />
               ) : (
-                <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
               )}
               <Upload className="h-3 w-3" />
               <span>{tSftp("uploadStageStream")}</span>
             </div>
           </div>
 
-          <div className="h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 "h-full transition-all duration-300 ease-out",
-                isCompleted ? "bg-green-500" : "bg-blue-500"
+                isCompleted ? "bg-status-connected" : "bg-primary"
               )}
               style={{ width: `${uploadProgress}%` }}
             />
@@ -115,17 +115,17 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
             {/* 阶段一：读取源服务器 */}
             <div className={cn(
               "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
-              task.status === 'transferring' && task.progress < 100 && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-              (isCompleted || task.progress === 100) && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-              isFailed && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-              isCancelled && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+              task.status === 'transferring' && task.progress < 100 && "bg-primary/10 text-primary",
+              (isCompleted || task.progress === 100) && "bg-status-connected/10 text-status-connected",
+              isFailed && "bg-destructive/10 text-destructive",
+              isCancelled && "bg-muted text-muted-foreground"
             )}>
               {isFailed || isCancelled ? (
-                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                <XCircle className={cn("h-3.5 w-3.5", isCancelled ? "text-muted-foreground" : "text-destructive")} />
               ) : isCompleted ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-status-connected" />
               ) : (
-                <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
               )}
               <Server className="h-3 w-3" />
               <span>{tSftp("transferStageRead")}</span>
@@ -134,23 +134,23 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
             {/* 箭头 */}
             <ArrowRight className={cn(
               "h-3 w-3 transition-colors",
-              task.status === 'transferring' || isCompleted ? "text-blue-500" : "text-zinc-300 dark:text-zinc-600"
+              isCompleted ? "text-status-connected" : task.status === 'transferring' ? "text-primary" : "text-muted-foreground/40"
             )} />
 
             {/* 阶段二：写入目标服务器 */}
             <div className={cn(
               "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all",
-              task.status === 'transferring' && task.progress < 100 && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-              isCompleted && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-              isFailed && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-              isCancelled && "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+              task.status === 'transferring' && task.progress < 100 && "bg-primary/10 text-primary",
+              isCompleted && "bg-status-connected/10 text-status-connected",
+              isFailed && "bg-destructive/10 text-destructive",
+              isCancelled && "bg-muted text-muted-foreground"
             )}>
               {isFailed || isCancelled ? (
-                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                <XCircle className={cn("h-3.5 w-3.5", isCancelled ? "text-muted-foreground" : "text-destructive")} />
               ) : isCompleted ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-status-connected" />
               ) : (
-                <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
               )}
               <Server className="h-3 w-3" />
               <span>{tSftp("transferStageWrite")}</span>
@@ -160,21 +160,21 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
           {/* 组合进度条 - 两边同步显示相同进度 */}
           <div className="flex gap-0.5">
             {/* 读取进度 */}
-            <div className="flex-1 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-l-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-muted rounded-l-full overflow-hidden">
               <div
                 className={cn(
                   "h-full transition-all duration-300 ease-out",
-                  isCompleted ? "bg-green-500" : "bg-blue-500"
+                  isCompleted ? "bg-status-connected" : "bg-primary"
                 )}
                 style={{ width: `${task.progress}%` }}
               />
             </div>
             {/* 写入进度 */}
-            <div className="flex-1 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-r-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-muted rounded-r-full overflow-hidden">
               <div
                 className={cn(
                   "h-full transition-all duration-300 ease-out",
-                  isCompleted ? "bg-green-500" : "bg-blue-500"
+                  isCompleted ? "bg-status-connected" : "bg-primary"
                 )}
                 style={{ width: `${task.progress}%` }}
               />
@@ -191,52 +191,52 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
               {task.type === 'upload' && (
                 <span className={cn(
                   "font-medium",
-                  "text-blue-600 dark:text-blue-400"
+                  "text-primary"
                 )}>
                   {tSftp("uploadStageStreamShort")}
                 </span>
               )}
               {task.speed && (
                 <>
-                  <span className="text-zinc-400">•</span>
+                  <span className="text-muted-foreground/60">•</span>
                   <span>{task.speed}</span>
                 </>
               )}
               {task.timeRemaining && (
                 <>
-                  <span className="text-zinc-400">•</span>
+                  <span className="text-muted-foreground/60">•</span>
                   <span>{task.timeRemaining}</span>
                 </>
               )}
             </>
           ) : task.status === "transferring" ? (
             <>
-              <span className="text-blue-600 dark:text-blue-400 font-medium">
+              <span className="text-primary font-medium">
                 {tSftp("transferStatusTransferring")}
               </span>
               {task.speed && (
                 <>
-                  <span className="text-zinc-400">•</span>
+                  <span className="text-muted-foreground/60">•</span>
                   <span>{task.speed}</span>
                 </>
               )}
               {task.timeRemaining && (
                 <>
-                  <span className="text-zinc-400">•</span>
+                  <span className="text-muted-foreground/60">•</span>
                   <span>{task.timeRemaining}</span>
                 </>
               )}
             </>
           ) : isCompleted ? (
-            <span className="text-green-600 dark:text-green-400">
+            <span className="text-status-connected">
               {tSftp("transferStatusCompleted")} {task.fileSize !== '-' && `• ${task.fileSize}`}
             </span>
           ) : isFailed ? (
-            <span className="text-red-600 dark:text-red-400" title={task.error}>
+            <span className="text-destructive" title={task.error}>
               {tSftp("transferStatusFailed")}: {task.error}
             </span>
           ) : isCancelled ? (
-            <span className="text-zinc-500 dark:text-zinc-400">
+            <span className="text-muted-foreground">
               {tSftp("transferStatusCancelled")}
             </span>
           ) : null}
@@ -262,7 +262,7 @@ export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) 
             <button
               type="button"
               onClick={() => onCancel(task.id)}
-              className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-500 transition-colors"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
             >
               <XCircle className="h-3 w-3" />
               <span>{tCommon("cancel")}</span>

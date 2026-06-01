@@ -10,7 +10,18 @@ interface FileProps {
   isFocused?: boolean;
 }
 
+const isHexColor = (color: string): boolean => /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color.trim());
+
+const mixColor = (color: string, mixWith: 'black' | 'white', percent: number): string => {
+  const colorAmount = Math.max(0, Math.min(100, Math.round((1 - percent) * 100)));
+  return `color-mix(in oklab, ${color} ${colorAmount}%, ${mixWith})`;
+};
+
 const darkenColor = (hex: string, percent: number): string => {
+  if (!isHexColor(hex)) {
+    return mixColor(hex, 'black', percent);
+  }
+
   let color = hex.startsWith('#') ? hex.slice(1) : hex;
   if (color.length === 3) {
     color = color
@@ -29,6 +40,10 @@ const darkenColor = (hex: string, percent: number): string => {
 };
 
 const lightenColor = (hex: string, percent: number): string => {
+  if (!isHexColor(hex)) {
+    return mixColor(hex, 'white', percent);
+  }
+
   let color = hex.startsWith('#') ? hex.slice(1) : hex;
   if (color.length === 3) {
     color = color
@@ -47,7 +62,7 @@ const lightenColor = (hex: string, percent: number): string => {
 };
 
 const File: React.FC<FileProps> = ({
-  color = '#6C63FF',
+  color = 'var(--chart-1)',
   size = 1,
   fileType = '',
   icon,

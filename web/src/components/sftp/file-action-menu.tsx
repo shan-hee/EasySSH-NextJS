@@ -39,6 +39,7 @@ interface FileActionMenuProps {
 type FileActionMenuItemProps = {
   mode: "dropdown" | "context"
   className: string
+  variant?: "default" | "destructive"
   onClick: () => void
   children: React.ReactNode
 }
@@ -46,11 +47,12 @@ type FileActionMenuItemProps = {
 function FileActionMenuItem({
   mode,
   className,
+  variant = "default",
   onClick,
   children,
 }: FileActionMenuItemProps) {
   return mode === "dropdown" ? (
-    <DropdownMenuItem className={className} onClick={onClick}>
+    <DropdownMenuItem className={className} variant={variant} onClick={onClick}>
       {children}
     </DropdownMenuItem>
   ) : (
@@ -71,7 +73,7 @@ function FileActionMenuSeparator({ mode, className }: { mode: "dropdown" | "cont
 function KeyboardShortcut({ children }: { children: string }) {
   return (
     <kbd className={cn(
-      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+      "text-[10px] px-1.5 py-0.5 rounded font-mono bg-muted text-muted-foreground",
     )}>
       {children}
     </kbd>
@@ -94,16 +96,16 @@ export function FileActionMenu({
 
   // 通用样式
   const itemClassName = mode === "dropdown"
-    ? cn("focus:bg-blue-500 focus:text-white dark:focus:bg-blue-600")
+    ? cn("focus:bg-accent focus:text-accent-foreground")
     : cn("w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-accent hover:text-accent-foreground rounded-sm")
 
   const separatorClassName = mode === "dropdown"
-    ? cn("bg-zinc-200 dark:bg-zinc-700/50")
-    : cn("h-px mx-2 my-1 bg-zinc-200 dark:bg-zinc-700/50")
+    ? cn("bg-border")
+    : cn("h-px mx-2 my-1 bg-border")
 
   const deleteClassName = mode === "dropdown"
-    ? cn("focus:bg-red-500 focus:text-white text-red-600 dark:text-red-400")
-    : cn("w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 hover:text-destructive rounded-sm")
+    ? cn("")
+    : cn("w-full px-3 py-2 text-left text-sm flex items-center gap-2.5 transition-all text-destructive hover:bg-destructive/10 hover:text-destructive rounded-sm")
 
   return (
     <>
@@ -168,6 +170,7 @@ export function FileActionMenu({
       <FileActionMenuItem
         mode={mode}
         className={deleteClassName}
+        variant="destructive"
         onClick={() => onAction("delete")}
       >
         <Trash2 className="h-4 w-4 mr-2" />

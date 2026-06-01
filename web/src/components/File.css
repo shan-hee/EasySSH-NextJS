@@ -1,8 +1,11 @@
 :root {
-  --file-body-color: #6C63FF;
-  --file-fold-color: #5648CC;
-  --file-accent-color: #8B84FF;
-  --file-shadow-color: #3D3699;
+  --file-body-color: var(--chart-1);
+  --file-fold-color: color-mix(in oklab, var(--chart-1) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--chart-1) 80%, white);
+  --file-shadow-color: color-mix(in oklab, var(--chart-1) 70%, black);
+  --file-mark-color: color-mix(in oklab, var(--foreground) 86%, var(--file-body-color));
+  --file-mark-surface: color-mix(in oklab, var(--background) 24%, transparent);
+  --file-mark-muted: color-mix(in oklab, var(--background) 32%, transparent);
 }
 
 .file-wrapper {
@@ -19,7 +22,7 @@
 
 .file:hover .file__body,
 .file.hover .file__body {
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 16px color-mix(in oklab, var(--file-shadow-color) 26%, transparent);
   transition: box-shadow 0.2s ease-in;
 }
 
@@ -40,7 +43,7 @@
   height: 90px;
   background: var(--file-body-color);
   border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 8px color-mix(in oklab, var(--file-shadow-color) 18%, transparent);
   transition: box-shadow 0.2s ease-in;
   overflow: hidden;
 }
@@ -55,7 +58,7 @@
   background: var(--file-fold-color);
   border-bottom-left-radius: 8px;
   transition: all 0.2s ease-in;
-  box-shadow: -2px 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: -2px 2px 4px color-mix(in oklab, var(--file-shadow-color) 18%, transparent);
 }
 
 .file__fold::before {
@@ -87,7 +90,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--file-mark-color);
   font-size: 16px;
   will-change: auto;
 }
@@ -95,11 +98,11 @@
 .file__type {
   font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--file-mark-color);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--file-mark-surface);
   border-radius: 4px;
   will-change: auto;
 }
@@ -116,7 +119,7 @@
 
 .file__line {
   height: 3px;
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--file-mark-muted);
   border-radius: 2px;
   margin-bottom: 4px;
 }
@@ -135,49 +138,49 @@
 
 /* 不同文件类型的颜色变体 */
 .file--code {
-  --file-body-color: #A66CFF;
-  --file-fold-color: #8B48CC;
-  --file-accent-color: #C084FF;
+  --file-body-color: var(--chart-4);
+  --file-fold-color: color-mix(in oklab, var(--chart-4) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--chart-4) 80%, white);
 }
 
 .file--image {
-  --file-body-color: #FF6C9D;
-  --file-fold-color: #CC4877;
-  --file-accent-color: #FF84B1;
+  --file-body-color: var(--chart-5);
+  --file-fold-color: color-mix(in oklab, var(--chart-5) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--chart-5) 80%, white);
 }
 
 .file--video {
-  --file-body-color: #FF5757;
-  --file-fold-color: #CC3939;
-  --file-accent-color: #FF7575;
+  --file-body-color: var(--status-danger);
+  --file-fold-color: color-mix(in oklab, var(--status-danger) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--status-danger) 80%, white);
 }
 
 .file--audio {
-  --file-body-color: #FFA94D;
-  --file-fold-color: #CC7F2E;
-  --file-accent-color: #FFBD70;
+  --file-body-color: var(--chart-3);
+  --file-fold-color: color-mix(in oklab, var(--chart-3) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--chart-3) 80%, white);
 }
 
 .file--archive {
-  --file-body-color: #FFD93D;
-  --file-fold-color: #CCAD1E;
-  --file-accent-color: #FFE066;
+  --file-body-color: var(--status-warning);
+  --file-fold-color: color-mix(in oklab, var(--status-warning) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--status-warning) 80%, white);
 }
 
 .file--database {
-  --file-body-color: #6BCF7F;
-  --file-fold-color: #4CA65F;
-  --file-accent-color: #88D999;
+  --file-body-color: var(--status-connected);
+  --file-fold-color: color-mix(in oklab, var(--status-connected) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--status-connected) 80%, white);
 }
 
 .file--text {
-  --file-body-color: #4D96FF;
-  --file-fold-color: #2E6FCC;
-  --file-accent-color: #70AAFF;
+  --file-body-color: var(--chart-1);
+  --file-fold-color: color-mix(in oklab, var(--chart-1) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--chart-1) 80%, white);
 }
 
 .file--default {
-  --file-body-color: #95A5A6;
-  --file-fold-color: #7F8C8D;
-  --file-accent-color: #AAB7B8;
+  --file-body-color: var(--muted-foreground);
+  --file-fold-color: color-mix(in oklab, var(--muted-foreground) 85%, black);
+  --file-accent-color: color-mix(in oklab, var(--muted-foreground) 80%, white);
 }

@@ -256,13 +256,13 @@ const SortableSession = React.memo(({ session, children, onCrossSessionDrop, dro
  {childElement}
  {/* 跨会话拖拽遮罩层 */}
  {isValidDropTarget && (
-   <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-[2px] border-2 border-dashed border-blue-500 m-1 rounded-lg pointer-events-none animate-in fade-in-0 duration-200">
+   <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-[2px] border-2 border-dashed border-primary/60 m-1 rounded-lg pointer-events-none animate-in fade-in-0 duration-200">
      <div className="text-center">
-       <Upload className="h-10 w-10 text-blue-500 mx-auto mb-3 animate-bounce" />
-       <p className="text-base font-semibold text-blue-600 dark:text-blue-400">
+       <Upload className="h-10 w-10 text-primary mx-auto mb-3 animate-bounce" />
+       <p className="text-base font-semibold text-primary">
          {dropOverlayTexts?.title ?? "Drop here to transfer"}
        </p>
-       <p className="text-xs text-blue-500/70 dark:text-blue-400/70 mt-1">
+       <p className="text-xs text-primary/70 mt-1">
          {dropOverlayTexts?.description ?? "Release to transfer files to this server"}
        </p>
      </div>
@@ -277,12 +277,12 @@ SortableSession.displayName = "SortableSession"
 
 // 会话标识颜色列表（常量）
 const SESSION_COLORS = [
-  "#3B82F6", // blue
-  "#10B981", // green
-  "#F59E0B", // amber
-  "#EF4444", // red
-  "#8B5CF6", // violet
-  "#EC4899", // pink
+  "var(--chart-1)",
+  "var(--status-connected)",
+  "var(--status-warning)",
+  "var(--status-danger)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ]
 
 interface SftpSessionContentProps {
@@ -369,8 +369,8 @@ const SftpSessionContent = React.memo(function SftpSessionContent({
       <div className="h-full flex flex-col rounded-xl border bg-card overflow-hidden">
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3 py-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg border bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/30">
-              <Server className="h-6 w-6 text-blue-500 animate-pulse" />
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg border border-border bg-muted/60">
+              <Server className="h-6 w-6 text-primary animate-pulse" />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium">{connectingText}</p>
@@ -1052,7 +1052,7 @@ const offlineServers = servers.filter(s => s.status !== "online")
  {onlineServers.length > 0 && (
  <>
  <DropdownMenuLabel className="flex items-center gap-2 text-xs">
- <div className="w-2 h-2 rounded-full bg-green-500" />
+ <div className="w-2 h-2 rounded-full bg-status-connected" />
  {tSftp("onlineServers")}
  </DropdownMenuLabel>
  {onlineServers.map(server => (
@@ -1061,7 +1061,7 @@ const offlineServers = servers.filter(s => s.status !== "online")
  onClick={() => handleQuickConnect(server.id)}
  className="gap-2 cursor-pointer"
  >
- <Server className="h-4 w-4 text-green-500" />
+ <Server className="h-4 w-4 text-status-connected" />
  <div className="flex-1 min-w-0">
  <div className="font-medium text-sm truncate">{server.name || server.host}</div>
  <div className="text-xs text-muted-foreground font-mono truncate">
@@ -1078,7 +1078,7 @@ const offlineServers = servers.filter(s => s.status !== "online")
  <>
  {onlineServers.length > 0 && <DropdownMenuSeparator />}
  <DropdownMenuLabel className="flex items-center gap-2 text-xs">
- <div className="w-2 h-2 rounded-full bg-zinc-400" />
+ <div className="w-2 h-2 rounded-full bg-muted-foreground/60" />
  {tSftp("offlineServers")}
  </DropdownMenuLabel>
  {offlineServers.map(server => (
@@ -1087,7 +1087,7 @@ const offlineServers = servers.filter(s => s.status !== "online")
  onClick={() => handleQuickConnect(server.id)}
  className="gap-2 opacity-70 hover:opacity-100"
  >
- <Server className="h-4 w-4 text-zinc-400" />
+ <Server className="h-4 w-4 text-muted-foreground" />
  <div className="flex-1 min-w-0">
  <div className="font-medium text-sm truncate">{server.name || server.host}</div>
  <div className="text-xs text-muted-foreground font-mono truncate">
@@ -1115,8 +1115,8 @@ const offlineServers = servers.filter(s => s.status !== "online")
  // 初始欢迎页 - 首次打开
  <div className="h-full flex flex-col">
  <div className="text-center py-12 space-y-4">
- <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl border bg-gradient-to-b from-zinc-100 to-zinc-200 dark:from-zinc-800/90 dark:to-zinc-900/90 border-zinc-300 dark:border-zinc-700/50">
- <FolderOpen className="h-8 w-8 text-blue-500" />
+ <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl border border-border bg-muted">
+ <FolderOpen className="h-8 w-8 text-primary" />
  </div>
  <div className="space-y-2">
  <h1 className="text-2xl font-semibold">{tSftp("title")}</h1>
@@ -1130,10 +1130,10 @@ const offlineServers = servers.filter(s => s.status !== "online")
  {loading ? (
  // 加载中 - 与快速连接界面一致的加载动画
  <div className="space-y-4">
-   <div className="h-px bg-gradient-to-r from-transparent to-transparent via-zinc-300 dark:via-zinc-800" />
+   <div className="h-px bg-border" />
    <div className="flex flex-col items-center justify-center py-12 gap-4">
-     <Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600" />
-     <p className="text-sm text-zinc-500 dark:text-zinc-600">
+     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+     <p className="text-sm text-muted-foreground">
        {tCommon("loading")}
      </p>
    </div>
@@ -1145,7 +1145,7 @@ const offlineServers = servers.filter(s => s.status !== "online")
  {onlineServers.length > 0 && (
  <div className="space-y-3">
  <div className="flex items-center gap-2 px-2">
- <div className="w-2 h-2 rounded-full bg-green-500" />
+ <div className="w-2 h-2 rounded-full bg-status-connected" />
  <h2 className="text-sm font-medium text-muted-foreground">
  {tSftp("onlineServers")} ({onlineServers.length})
  </h2>
@@ -1155,16 +1155,16 @@ const offlineServers = servers.filter(s => s.status !== "online")
  <div
  key={server.id}
  onClick={() => handleQuickConnect(server.id)}
- className="group rounded-lg border cursor-pointer transition-all duration-200 p-4 flex flex-col items-center text-center space-y-2.5 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/30 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700/40"
+ className="group rounded-lg border border-border bg-card cursor-pointer transition-all duration-200 p-4 flex flex-col items-center text-center space-y-2.5 hover:bg-accent hover:text-accent-foreground hover:border-primary/30"
  >
- <div className="w-12 h-12 rounded-lg flex items-center justify-center transition-all bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900">
- <Server className="h-6 w-6 transition-colors text-zinc-600 dark:text-zinc-400 group-hover:text-green-500 dark:group-hover:text-green-400" />
+ <div className="w-12 h-12 rounded-lg flex items-center justify-center transition-all bg-muted">
+ <Server className="h-6 w-6 transition-colors text-muted-foreground group-hover:text-status-connected" />
  </div>
  <div className="space-y-0.5 w-full">
- <h3 className="font-medium text-xs truncate transition-colors text-zinc-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400">
+ <h3 className="font-medium text-xs truncate transition-colors text-card-foreground group-hover:text-status-connected">
  {server.name || server.host}
  </h3>
- <p className="text-[10px] text-zinc-600 dark:text-zinc-600 font-mono truncate">
+ <p className="text-[10px] text-muted-foreground font-mono truncate">
  {server.host}
  </p>
  </div>
@@ -1178,7 +1178,7 @@ const offlineServers = servers.filter(s => s.status !== "online")
  {offlineServers.length > 0 && (
  <div className="space-y-3">
  <div className="flex items-center gap-2 px-2">
- <div className="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-600" />
+ <div className="w-2 h-2 rounded-full bg-muted-foreground/60" />
  <h2 className="text-sm font-medium text-muted-foreground">
  {tSftp("offlineServers")} ({offlineServers.length})
  </h2>
@@ -1188,16 +1188,16 @@ const offlineServers = servers.filter(s => s.status !== "online")
  <div
  key={server.id}
  onClick={() => handleQuickConnect(server.id)}
- className="group rounded-lg border bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/30 p-4 flex flex-col items-center text-center space-y-2.5 opacity-70 hover:opacity-100 cursor-pointer transition-all hover:border-zinc-300 dark:hover:border-zinc-700"
+ className="group rounded-lg border border-border bg-card p-4 flex flex-col items-center text-center space-y-2.5 opacity-70 hover:opacity-100 cursor-pointer transition-all hover:bg-accent hover:text-accent-foreground hover:border-primary/20"
  >
- <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900">
- <Server className="h-6 w-6 text-zinc-400 dark:text-zinc-600" />
+ <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-muted">
+ <Server className="h-6 w-6 text-muted-foreground" />
  </div>
  <div className="space-y-0.5 w-full">
- <h3 className="font-medium text-xs truncate text-zinc-600 dark:text-zinc-400">
+ <h3 className="font-medium text-xs truncate text-muted-foreground group-hover:text-foreground">
  {server.name || server.host}
  </h3>
- <p className="text-[10px] text-zinc-600 dark:text-zinc-600 font-mono truncate">
+ <p className="text-[10px] text-muted-foreground font-mono truncate">
  {server.host}
  </p>
  </div>

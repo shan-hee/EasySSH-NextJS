@@ -9,7 +9,18 @@ interface FolderProps {
   isFocused?: boolean;
 }
 
+const isHexColor = (color: string): boolean => /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color.trim());
+
+const mixColor = (color: string, mixWith: 'black' | 'white', percent: number): string => {
+  const colorAmount = Math.max(0, Math.min(100, Math.round((1 - percent) * 100)));
+  return `color-mix(in oklab, ${color} ${colorAmount}%, ${mixWith})`;
+};
+
 const darkenColor = (hex: string, percent: number): string => {
+  if (!isHexColor(hex)) {
+    return mixColor(hex, 'black', percent);
+  }
+
   let color = hex.startsWith('#') ? hex.slice(1) : hex;
   if (color.length === 3) {
     color = color
@@ -27,7 +38,7 @@ const darkenColor = (hex: string, percent: number): string => {
   return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
 };
 
-const Folder: React.FC<FolderProps> = ({ color = '#5227FF', size = 1, items = [], className = '', isFocused = false }) => {
+const Folder: React.FC<FolderProps> = ({ color = 'var(--chart-1)', size = 1, items = [], className = '', isFocused = false }) => {
   const maxItems = 3;
   const papers = items.slice(0, maxItems);
   while (papers.length < maxItems) {
@@ -38,9 +49,9 @@ const Folder: React.FC<FolderProps> = ({ color = '#5227FF', size = 1, items = []
   const open = false;
 
   const folderBackColor = darkenColor(color, 0.08);
-  const paper1 = darkenColor('#ffffff', 0.1);
-  const paper2 = darkenColor('#ffffff', 0.05);
-  const paper3 = '#ffffff';
+  const paper1 = 'color-mix(in oklab, var(--card) 82%, var(--muted))';
+  const paper2 = 'color-mix(in oklab, var(--card) 90%, var(--muted))';
+  const paper3 = 'var(--card)';
 
   const folderStyle: React.CSSProperties = {
     '--folder-color': color,

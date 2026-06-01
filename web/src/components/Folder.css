@@ -1,9 +1,9 @@
 :root {
-  --folder-color: #70a1ff;
-  --folder-back-color: #4785ff;
-  --paper-1: #e6e6e6;
-  --paper-2: #f2f2f2;
-  --paper-3: #ffffff;
+  --folder-color: var(--chart-1);
+  --folder-back-color: color-mix(in oklab, var(--chart-1) 92%, black);
+  --paper-1: color-mix(in oklab, var(--card) 82%, var(--muted));
+  --paper-2: color-mix(in oklab, var(--card) 90%, var(--muted));
+  --paper-3: var(--card);
 }
 
 .folder {

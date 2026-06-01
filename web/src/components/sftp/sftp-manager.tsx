@@ -1103,77 +1103,77 @@ export function SftpManager(props: SftpManagerProps) {
 
     // 代码文件
     if (['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'sh', 'bash'].includes(ext)) {
-      return { color: '#A66CFF', label: ext.toUpperCase(), icon: <FileCode className="h-4 w-4" /> }
+      return { color: 'var(--chart-4)', label: ext.toUpperCase(), icon: <FileCode className="h-4 w-4" /> }
     }
     // 图片文件
     if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(ext)) {
-      return { color: '#FF6C9D', label: ext.toUpperCase(), icon: <FileImage className="h-4 w-4" /> }
+      return { color: 'var(--chart-5)', label: ext.toUpperCase(), icon: <FileImage className="h-4 w-4" /> }
     }
     // 视频文件
     if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'].includes(ext)) {
-      return { color: '#FF5757', label: ext.toUpperCase(), icon: <FileVideo className="h-4 w-4" /> }
+      return { color: 'var(--status-danger)', label: ext.toUpperCase(), icon: <FileVideo className="h-4 w-4" /> }
     }
     // 音频文件
     if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'].includes(ext)) {
-      return { color: '#FFA94D', label: ext.toUpperCase(), icon: <FileAudio className="h-4 w-4" /> }
+      return { color: 'var(--chart-3)', label: ext.toUpperCase(), icon: <FileAudio className="h-4 w-4" /> }
     }
     // 压缩文件
     if (['zip', 'tar', 'gz', 'rar', '7z', 'bz2', 'xz'].includes(ext)) {
-      return { color: '#FFD93D', label: ext.toUpperCase(), icon: <FileArchive className="h-4 w-4" /> }
+      return { color: 'var(--status-warning)', label: ext.toUpperCase(), icon: <FileArchive className="h-4 w-4" /> }
     }
     // 数据库文件
     if (['sql', 'db', 'sqlite', 'mdb'].includes(ext)) {
-      return { color: '#6BCF7F', label: ext.toUpperCase(), icon: <Database className="h-4 w-4" /> }
+      return { color: 'var(--status-connected)', label: ext.toUpperCase(), icon: <Database className="h-4 w-4" /> }
     }
     // 文本文件
     if (['txt', 'md', 'json', 'xml', 'yaml', 'yml', 'csv', 'log'].includes(ext)) {
-      return { color: '#4D96FF', label: ext.toUpperCase(), icon: <FileText className="h-4 w-4" /> }
+      return { color: 'var(--chart-1)', label: ext.toUpperCase(), icon: <FileText className="h-4 w-4" /> }
     }
     // 默认文件
-    return { color: '#95A5A6', label: ext.toUpperCase() || 'FILE', icon: <FileText className="h-4 w-4" /> }
+    return { color: 'var(--muted-foreground)', label: ext.toUpperCase() || 'FILE', icon: <FileText className="h-4 w-4" /> }
   }, [])
 
   // 文件图标 - Mac 风格（用于列表视图）- 使用 useCallback 优化
   const getFileIcon = useCallback((file: FileItem) => {
     if (file.type === "directory") {
-      return <FolderOpen className="h-4 w-4 text-blue-500" />
+      return <FolderOpen className="h-4 w-4 text-chart-1" />
     }
 
     const ext = file.name.split('.').pop()?.toLowerCase()
 
     // 代码文件
     if (['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'sh', 'bash'].includes(ext || '')) {
-      return <FileCode className="h-4 w-4 text-purple-500" />
+      return <FileCode className="h-4 w-4 text-chart-4" />
     }
 
     // 图片文件
     if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(ext || '')) {
-      return <FileImage className="h-4 w-4 text-pink-500" />
+      return <FileImage className="h-4 w-4 text-chart-5" />
     }
 
     // 视频文件
     if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'].includes(ext || '')) {
-      return <FileVideo className="h-4 w-4 text-red-500" />
+      return <FileVideo className="h-4 w-4 text-status-danger" />
     }
 
     // 音频文件
     if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'].includes(ext || '')) {
-      return <FileAudio className="h-4 w-4 text-orange-500" />
+      return <FileAudio className="h-4 w-4 text-chart-3" />
     }
 
     // 压缩文件
     if (['zip', 'tar', 'gz', 'rar', '7z', 'bz2', 'xz'].includes(ext || '')) {
-      return <FileArchive className="h-4 w-4 text-yellow-500" />
+      return <FileArchive className="h-4 w-4 text-status-warning" />
     }
 
     // 数据库文件
     if (['sql', 'db', 'sqlite', 'mdb'].includes(ext || '')) {
-      return <Database className="h-4 w-4 text-green-500" />
+      return <Database className="h-4 w-4 text-status-connected" />
     }
 
     // 文本文件
     if (['txt', 'md', 'json', 'xml', 'yaml', 'yml', 'csv', 'log'].includes(ext || '')) {
-      return <FileText className="h-4 w-4 text-blue-400" />
+      return <FileText className="h-4 w-4 text-chart-1" />
     }
 
     // 默认文件
@@ -1266,7 +1266,7 @@ export function SftpManager(props: SftpManagerProps) {
     username,
   ])
 
-  const stickyHeaderCellClass = "sticky top-0 z-20 bg-background supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
+  const stickyHeaderCellClass = "sticky top-0 z-20 bg-table-header supports-[backdrop-filter]:backdrop-blur-sm shadow-sm"
 
   // 处理修改权限
   const handleChmod = async (mode: string) => {
@@ -1338,7 +1338,7 @@ export function SftpManager(props: SftpManagerProps) {
               }}
               onBlur={finishEditSessionLabel}
               className={cn(
-                "h-6 text-xs font-semibold px-2 max-w-[150px] bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                "h-6 text-xs font-semibold px-2 max-w-[150px] bg-background text-foreground",
               )}
             />
           ) : (
@@ -1346,7 +1346,7 @@ export function SftpManager(props: SftpManagerProps) {
               onClick={startEditSessionLabel}
               onDoubleClick={startEditSessionLabel}
               className={cn(
-                "text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-zinc-200 text-zinc-800 dark:hover:bg-zinc-800/60 dark:text-zinc-200",
+                "text-xs font-semibold px-2 py-1 rounded transition-colors text-foreground hover:bg-accent hover:text-accent-foreground",
               )}
               title={tSftp("sessionEditTitle")}
             >
@@ -1355,7 +1355,7 @@ export function SftpManager(props: SftpManagerProps) {
           )}
 
           <div className={cn(
-            "h-4 w-px mx-1 bg-zinc-300 dark:bg-zinc-800/50",
+            "h-4 w-px mx-1 bg-border",
           )} />
 
           {/* 路径导航/编辑框 - 混合模式 */}
@@ -1373,8 +1373,8 @@ export function SftpManager(props: SftpManagerProps) {
                     }}
                     className={cn(
                       "absolute left-2 top-1/2 -translate-y-1/2 z-10 p-0.5 rounded-md",
-                      "text-zinc-600 dark:text-zinc-400",
-                      "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                      "text-muted-foreground",
+                      "hover:bg-accent hover:text-accent-foreground",
                       "transition-all duration-200"
                     )}
                     title="Root directory"
@@ -1412,8 +1412,8 @@ export function SftpManager(props: SftpManagerProps) {
                     autoFocus
                     placeholder={tSftp("pathInputPlaceholder")}
                     className={cn(
-                      "h-7 text-xs font-mono pl-8 pr-3 py-1 border-0 bg-zinc-100 dark:bg-zinc-900/50",
-                      "placeholder:text-zinc-400 dark:placeholder:text-zinc-600",
+                      "h-7 text-xs font-mono pl-8 pr-3 py-1 border-0 bg-muted",
+                      "placeholder:text-muted-foreground",
                     )}
                   />
                 </>
@@ -1425,9 +1425,9 @@ export function SftpManager(props: SftpManagerProps) {
                     setIsEditingPath(true)
                   }}
                   className={cn(
-                    "h-7 flex items-center gap-1 pl-8 pr-3 py-1 border-0 bg-zinc-100 dark:bg-zinc-900/50",
+                    "h-7 flex items-center gap-1 pl-8 pr-3 py-1 border-0 bg-muted",
                     "text-xs font-mono cursor-text rounded-md overflow-x-auto scrollbar-custom",
-                    "hover:bg-zinc-200 dark:hover:bg-zinc-800/60 transition-colors"
+                    "hover:bg-accent transition-colors"
                   )}
                   title={tSftp("pathClickToEdit")}
                 >
@@ -1442,8 +1442,8 @@ export function SftpManager(props: SftpManagerProps) {
                     }}
                     className={cn(
                       "absolute left-2 top-1/2 -translate-y-1/2 p-0.5 rounded-md",
-                      "text-zinc-600 dark:text-zinc-400",
-                      "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                      "text-muted-foreground",
+                      "hover:bg-accent hover:text-accent-foreground",
                       "transition-all duration-200"
                     )}
                     title={tSftp("pathRootTooltip")}
@@ -1462,8 +1462,8 @@ export function SftpManager(props: SftpManagerProps) {
                     }}
                     className={cn(
                       "px-1.5 py-0.5 rounded-md whitespace-nowrap",
-                      "text-zinc-600 dark:text-zinc-400",
-                      "hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                      "text-muted-foreground",
+                      "hover:bg-accent hover:text-accent-foreground",
                       "transition-all duration-200",
                     )}
                   >
@@ -1491,13 +1491,13 @@ export function SftpManager(props: SftpManagerProps) {
                           className={cn(
                             "px-1.5 py-0.5 rounded-md whitespace-nowrap transition-all duration-200",
                             isFileName
-                              ? "font-semibold text-blue-600 dark:text-blue-400 cursor-default"
-                              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                              ? "font-semibold text-primary cursor-default"
+                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                           )}
                         >
                           {segment}
                         </button>
-                        {index < pathSegments.length - 1 && <span className="text-zinc-400">/</span>}
+                        {index < pathSegments.length - 1 && <span className="text-muted-foreground/70">/</span>}
                       </div>
                     )
                   })}
@@ -1516,8 +1516,8 @@ export function SftpManager(props: SftpManagerProps) {
             className={cn(
               "h-7 w-7 rounded-md transition-all duration-200",
               viewMode === "grid"
-                ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
             onClick={() => {
               // 使用 startTransition 避免阻塞 UI
@@ -1535,8 +1535,8 @@ export function SftpManager(props: SftpManagerProps) {
             className={cn(
               "h-7 w-7 rounded-md transition-all duration-200",
               viewMode === "list"
-                ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
-                : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
             onClick={() => {
               // 使用 startTransition 避免阻塞 UI
@@ -1557,13 +1557,13 @@ export function SftpManager(props: SftpManagerProps) {
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-7 w-7 rounded-md transition-all duration-200 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400 relative",
+                    "h-7 w-7 rounded-md transition-all duration-200 text-muted-foreground hover:bg-accent hover:text-accent-foreground relative",
                   )}
                   title={tSftp("transferPanelButtonTitle")}
                 >
                   <Upload className="h-3.5 w-3.5" />
                   {effectiveTransferTasks.filter(t => t.status !== "completed" && t.status !== "failed" && t.status !== "cancelled").length > 0 && (
-                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-blue-500 text-white text-[10px] font-medium flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] font-medium flex items-center justify-center">
                       {effectiveTransferTasks.filter(t => t.status !== "completed" && t.status !== "failed" && t.status !== "cancelled").length}
                     </span>
                   )}
@@ -1573,7 +1573,7 @@ export function SftpManager(props: SftpManagerProps) {
                 {/* 头部 */}
                 <div className="px-3 py-2 flex items-center justify-between border-b">
                   <div className="flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-blue-500" />
+                    <Activity className="h-4 w-4 text-primary" />
                     <span className="text-sm font-medium">
                       {tSftp("transferPanelTitle", { count: effectiveTransferTasks.length })}
                     </span>
@@ -1616,7 +1616,7 @@ export function SftpManager(props: SftpManagerProps) {
               variant="ghost"
               size="icon"
             className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+              "h-7 w-7 rounded-md transition-all duration-200 text-muted-foreground hover:scale-105 hover:bg-accent hover:text-accent-foreground",
             )}
               onClick={onToggleFullscreen}
               title={isFullscreen ? tSftp("fullscreenExit") : tSftp("fullscreen")}
@@ -1633,7 +1633,7 @@ export function SftpManager(props: SftpManagerProps) {
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7 rounded-md transition-all duration-200 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+              "h-7 w-7 rounded-md transition-all duration-200 text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
             onClick={onDisconnect}
             title={tSftp("close")}
@@ -1664,7 +1664,7 @@ export function SftpManager(props: SftpManagerProps) {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+                  "h-7 w-7 rounded-md transition-all duration-200 text-muted-foreground hover:scale-105 hover:bg-accent hover:text-accent-foreground",
                 )}
                 onClick={() => {
                   if (canNavigateBack && onNavigateBack) {
@@ -1688,12 +1688,12 @@ export function SftpManager(props: SftpManagerProps) {
 
             <div className="relative flex-1 max-w-xs">
               <Search className={cn(
-                "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500",
+                "absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground",
               )} />
               <Input
                 placeholder={tSftp("searchPlaceholder")}
                 className={cn(
-                  "h-7 pl-8 pr-2 text-xs border-0 bg-zinc-100 dark:bg-zinc-900/50",
+                  "h-7 pl-8 pr-2 text-xs border-0 bg-muted",
                 )}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -1707,8 +1707,8 @@ export function SftpManager(props: SftpManagerProps) {
               className={cn(
                 "h-7 w-7 rounded-md transition-all duration-200",
                 showHidden
-                  ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800/60 dark:text-white"
-                  : "hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               )}
               onClick={() => {
                 // 使用 startTransition 避免阻塞 UI
@@ -1726,7 +1726,7 @@ export function SftpManager(props: SftpManagerProps) {
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7 rounded-md transition-all duration-200 hover:scale-105 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-600 dark:hover:bg-zinc-800/60 dark:hover:text-white dark:text-zinc-400",
+                "h-7 w-7 rounded-md transition-all duration-200 text-muted-foreground hover:scale-105 hover:bg-accent hover:text-accent-foreground",
               )}
               onClick={onRefresh}
               title={tSftp("contextRefresh")}
@@ -1738,7 +1738,7 @@ export function SftpManager(props: SftpManagerProps) {
             {selectedFiles.length > 0 && (
               <div
                 className={cn(
-                  "flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                  "flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-primary/10 text-primary",
                 )}
               >
                 <span>{tSftp("selectedCount", { count: selectedFiles.length })}</span>
@@ -1752,7 +1752,7 @@ export function SftpManager(props: SftpManagerProps) {
             className={cn(
               "flex-1 relative min-h-0",
               viewMode === "grid" ? "overflow-auto scrollbar-custom" : "",
-              isDragging && "bg-blue-500/10"
+              isDragging && "bg-primary/10"
             )}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
@@ -1763,13 +1763,13 @@ export function SftpManager(props: SftpManagerProps) {
           >
             {/* 拖拽遮罩 */}
             {isDragging && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-[2px] border-2 border-dashed border-blue-500 m-1 rounded-lg pointer-events-none animate-in fade-in-0 duration-200">
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-[2px] border-2 border-dashed border-primary/60 m-1 rounded-lg pointer-events-none animate-in fade-in-0 duration-200">
                 <div className="text-center">
-                  <Upload className="h-10 w-10 text-blue-500 mx-auto mb-3 animate-bounce" />
-                  <p className="text-base font-semibold text-blue-600 dark:text-blue-400">
+                  <Upload className="h-10 w-10 text-primary mx-auto mb-3 animate-bounce" />
+                  <p className="text-base font-semibold text-primary">
                     {tSftp("overlayDropTitle")}
                   </p>
-                  <p className="text-xs text-blue-500/70 dark:text-blue-400/70 mt-1">
+                  <p className="text-xs text-primary/70 mt-1">
                     {tSftp("overlayDropDescription")}
                   </p>
                 </div>
@@ -1784,10 +1784,10 @@ export function SftpManager(props: SftpManagerProps) {
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <FolderOpen className={cn(
-                "h-16 w-16 mx-auto mb-4 text-zinc-300 dark:text-zinc-700",
+                "h-16 w-16 mx-auto mb-4 text-muted-foreground/30",
               )} />
               <h3 className={cn(
-                "text-lg font-semibold mb-2 text-zinc-600 dark:text-zinc-500",
+                "text-lg font-semibold mb-2 text-muted-foreground",
               )}>
                 {tSftp("emptyDirTitle")}
               </h3>
@@ -1807,16 +1807,16 @@ export function SftpManager(props: SftpManagerProps) {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-3">
                   <div
                     className={cn(
-                      "group relative rounded-lg p-3 cursor-pointer select-none transition-all bg-zinc-200/60 dark:bg-zinc-800/60",
+                      "group relative rounded-lg p-3 cursor-pointer select-none transition-all bg-table-row-selected",
                     )}
                   >
                     <div className="flex flex-col items-center gap-2">
                       <div className="flex items-center justify-center h-16 w-16">
                         {creatingNew === "folder" ? (
-                          <Folder color="#5BA4FC" size={0.6} isFocused={true} />
+                          <Folder color="var(--chart-1)" size={0.6} isFocused={true} />
                         ) : (
                           <FileIcon
-                            color="#4D96FF"
+                            color="var(--chart-1)"
                             size={0.6}
                             fileType="TXT"
                             isFocused={true}
@@ -1837,7 +1837,7 @@ export function SftpManager(props: SftpManagerProps) {
                           }}
                           onBlur={handleCreateBlur}
                           className={cn(
-                            "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                            "h-6 text-xs text-center px-1 bg-background text-foreground",
                           )}
                         />
                         <div className="text-[10px] text-muted-foreground truncate mt-1">
@@ -1898,8 +1898,8 @@ export function SftpManager(props: SftpManagerProps) {
                               }}
                               onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
                               className={cn(
-                                "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
-                                (isSelected || (isDraggedOver && file.type === "directory")) && "bg-zinc-200/60 dark:bg-zinc-800/60",
+                                "group relative rounded-lg p-3 cursor-pointer select-none transition-all hover:bg-table-row-hover",
+                                (isSelected || (isDraggedOver && file.type === "directory")) && "bg-table-row-selected hover:bg-table-row-selected",
                                 draggedFileName === file.name && "opacity-50"
                               )}
                               title={file.name}
@@ -1907,7 +1907,7 @@ export function SftpManager(props: SftpManagerProps) {
                               <div className="flex flex-col items-center gap-2">
                                 <div className="flex items-center justify-center h-16 w-16">
                                   {file.type === "directory" ? (
-                                    <Folder color="#5BA4FC" size={0.6} isFocused={isSelected} />
+                                    <Folder color="var(--chart-1)" size={0.6} isFocused={isSelected} />
                                   ) : (() => {
                                     const fileTypeInfo = getFileTypeInfo(file.name)
                                     return (
@@ -1935,12 +1935,12 @@ export function SftpManager(props: SftpManagerProps) {
                                       }}
                                       onBlur={handleRenameBlur}
                                       className={cn(
-                                        "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                        "h-6 text-xs text-center px-1 bg-background text-foreground",
                                       )}
                                     />
                                   ) : (
                                     <div className={cn(
-                                      "text-xs font-medium truncate text-zinc-800 dark:text-zinc-200",
+                                      "text-xs font-medium truncate text-foreground",
                                     )}>
                                       {file.name}
                                     </div>
@@ -1988,8 +1988,8 @@ export function SftpManager(props: SftpManagerProps) {
                         }}
                         onContextMenu={(e) => handleContextMenu(e, file.name, file.type)}
                         className={cn(
-                          "group relative rounded-lg p-3 cursor-pointer select-none transition-all",
-                          (isSelected || (isDraggedOver && file.type === "directory")) && "bg-zinc-200/60 dark:bg-zinc-800/60",
+                          "group relative rounded-lg p-3 cursor-pointer select-none transition-all hover:bg-table-row-hover",
+                          (isSelected || (isDraggedOver && file.type === "directory")) && "bg-table-row-selected hover:bg-table-row-selected",
                           draggedFileName === file.name && "opacity-50"
                         )}
                         title={file.name}
@@ -1997,7 +1997,7 @@ export function SftpManager(props: SftpManagerProps) {
                         <div className="flex flex-col items-center gap-2">
                           <div className="flex items-center justify-center h-16 w-16">
                             {file.type === "directory" ? (
-                              <Folder color="#5BA4FC" size={0.6} isFocused={isSelected} />
+                              <Folder color="var(--chart-1)" size={0.6} isFocused={isSelected} />
                             ) : (() => {
                               const fileTypeInfo = getFileTypeInfo(file.name)
                               return (
@@ -2025,12 +2025,12 @@ export function SftpManager(props: SftpManagerProps) {
                                 }}
                                 onBlur={handleRenameBlur}
                                 className={cn(
-                                  "h-6 text-xs text-center px-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                  "h-6 text-xs text-center px-1 bg-background text-foreground",
                                 )}
                               />
                             ) : (
                               <div className={cn(
-                                "text-xs font-medium truncate text-zinc-800 dark:text-zinc-200",
+                                "text-xs font-medium truncate text-foreground",
                               )}>
                                 {file.name}
                               </div>
@@ -2052,9 +2052,9 @@ export function SftpManager(props: SftpManagerProps) {
             <Table
               className="sftp-table text-xs [&_th]:h-9 [&_th]:px-3 [&_th]:text-xs [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle"
             >
-              <TableHeader className="sticky top-0 z-20 bg-background supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
+              <TableHeader className="sticky top-0 z-20 bg-table-header supports-[backdrop-filter]:backdrop-blur-sm shadow-sm">
                 <TableRow className={cn(
-                  "border-b border-zinc-200 dark:border-zinc-800/50 text-xs",
+                  "border-b border-border text-xs",
                 )}>
                   <TableHead
                     className={cn(stickyHeaderCellClass, "cursor-pointer hover:text-foreground")}
@@ -2108,15 +2108,15 @@ export function SftpManager(props: SftpManagerProps) {
                 {creatingNew && (
                   <TableRow
                     className={cn(
-                      "cursor-pointer transition-colors bg-zinc-100 dark:bg-zinc-800/50 border-b-0",
+                      "cursor-pointer transition-colors bg-table-row-selected border-b-0",
                     )}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {creatingNew === "folder" ? (
-                          <FolderOpen className="h-4 w-4 text-blue-500" />
+                          <FolderOpen className="h-4 w-4 text-chart-1" />
                         ) : (
-                          <FileText className="h-4 w-4 text-blue-400" />
+                          <FileText className="h-4 w-4 text-chart-1" />
                         )}
                         <Input
                           ref={editInputRef}
@@ -2133,7 +2133,7 @@ export function SftpManager(props: SftpManagerProps) {
                           onBlur={handleCreateBlur}
                           onClick={(e) => e.stopPropagation()}
                           className={cn(
-                            "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                            "h-7 text-sm px-2 flex-1 bg-background text-foreground",
                           )}
                         />
                       </div>
@@ -2189,8 +2189,8 @@ export function SftpManager(props: SftpManagerProps) {
                           onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
                           className={cn(
                             "cursor-pointer transition-colors border-b-0",
-                            (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-zinc-100 dark:bg-zinc-800/50",
-                            "hover:bg-zinc-50 dark:hover:bg-zinc-800/30",
+                            (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-table-row-selected hover:bg-table-row-selected",
+                            "hover:bg-table-row-hover",
                             draggedFileName === file.name && "opacity-50"
                           )}
                           onClick={e => {
@@ -2220,7 +2220,7 @@ export function SftpManager(props: SftpManagerProps) {
                                   onBlur={handleRenameBlur}
                                   onClick={(e) => e.stopPropagation()}
                                   className={cn(
-                                    "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                    "h-7 text-sm px-2 flex-1 bg-background text-foreground",
                                   )}
                                 />
                               ) : (
@@ -2259,7 +2259,7 @@ export function SftpManager(props: SftpManagerProps) {
                                   variant="ghost"
                                   size="sm"
                                   className={cn(
-                                    "h-7 w-7 p-0 transition-all hover:bg-zinc-200 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                                    "h-7 w-7 p-0 transition-all text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                                   )}
                                 >
                                   <MoreHorizontal className="h-4 w-4" />
@@ -2268,7 +2268,7 @@ export function SftpManager(props: SftpManagerProps) {
                               <DropdownMenuContent
                                 align="end"
                                 className={cn(
-                                  "min-w-[180px] rounded-lg backdrop-blur-xl bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
+                                  "min-w-[180px] rounded-lg border-border/60 bg-popover/95 text-popover-foreground backdrop-blur-xl",
                                 )}
                               >
                                 <FileActionMenu
@@ -2344,8 +2344,8 @@ export function SftpManager(props: SftpManagerProps) {
                         onDrop={(e) => handleNativeDrop(e, file.name, file.type)}
                         className={cn(
                           "cursor-pointer transition-colors border-b-0",
-                          (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-zinc-100 dark:bg-zinc-800/50",
-                          "hover:bg-zinc-50 dark:hover:bg-zinc-800/30",
+                          (selectedFiles.includes(file.name) || (isDraggedOver && file.type === "directory")) && "bg-table-row-selected hover:bg-table-row-selected",
+                          "hover:bg-table-row-hover",
                           draggedFileName === file.name && "opacity-50"
                         )}
                         onClick={e => {
@@ -2375,7 +2375,7 @@ export function SftpManager(props: SftpManagerProps) {
                                 onBlur={handleRenameBlur}
                                 onClick={(e) => e.stopPropagation()}
                                 className={cn(
-                                  "h-7 text-sm px-2 flex-1 bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+                                  "h-7 text-sm px-2 flex-1 bg-background text-foreground",
                                 )}
                               />
                             ) : (
@@ -2414,7 +2414,7 @@ export function SftpManager(props: SftpManagerProps) {
                                 variant="ghost"
                                 size="sm"
                                 className={cn(
-                                  "h-7 w-7 p-0 transition-all hover:bg-zinc-200 dark:hover:bg-zinc-800/60 dark:hover:text-white",
+                                  "h-7 w-7 p-0 transition-all text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                                 )}
                               >
                                 <MoreHorizontal className="h-4 w-4" />
@@ -2423,7 +2423,7 @@ export function SftpManager(props: SftpManagerProps) {
                             <DropdownMenuContent
                               align="end"
                               className={cn(
-                                "min-w-[180px] rounded-lg backdrop-blur-xl bg-white/95 border-zinc-200/50 dark:bg-zinc-900/95 dark:border-zinc-700/50",
+                                "min-w-[180px] rounded-lg border-border/60 bg-popover/95 text-popover-foreground backdrop-blur-xl",
                               )}
                             >
                               <FileActionMenu
@@ -2575,12 +2575,12 @@ export function SftpManager(props: SftpManagerProps) {
               <>
                 <div
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400",
+                    "px-3 py-1.5 text-xs font-medium text-muted-foreground",
                   )}
                 >
                   {tSftp("contextSelectedTitle", { count: selectedFiles.length })}
                 </div>
-                <div className={cn("h-px mx-2 mb-1 bg-zinc-200 dark:bg-zinc-700/50")} />
+                <div className={cn("h-px mx-2 mb-1 bg-border")} />
               </>
             )}
 
@@ -2598,7 +2598,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <FolderPlus className="h-4 w-4" />
                   <span className="flex-1">{tSftp("contextNewFolder")}</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-muted text-muted-foreground",
                   )}>
                     ⌘⇧N
                   </kbd>
@@ -2615,7 +2615,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <FileText className="h-4 w-4" />
                   <span className="flex-1">{tSftp("contextNewFile")}</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-muted text-muted-foreground",
                   )}>
                     ⌘N
                   </kbd>
@@ -2632,7 +2632,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <Upload className="h-4 w-4" />
                   <span className="flex-1">{tSftp("contextUploadFile")}</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-muted text-muted-foreground",
                   )}>
                     ⌘U
                   </kbd>
@@ -2649,7 +2649,7 @@ export function SftpManager(props: SftpManagerProps) {
                   <RefreshCw className="h-4 w-4" />
                   <span className="flex-1">{tSftp("contextRefresh")}</span>
                   <kbd className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                    "text-[10px] px-1.5 py-0.5 rounded font-mono bg-muted text-muted-foreground",
                   )}>
                     ⌘R
                   </kbd>
