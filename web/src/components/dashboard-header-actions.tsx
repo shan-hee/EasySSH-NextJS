@@ -1,14 +1,12 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { useTranslations } from "next-intl"
 import {
   Check,
   Github,
   Languages,
   Loader2,
-  Settings as SettingsIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -78,17 +76,6 @@ export function DashboardHeaderActions() {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">{t("githubTooltip")}</TooltipContent>
-      </Tooltip>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button asChild variant="ghost" size="icon-sm" aria-label={t("settingsTooltip")}>
-            <Link href="/dashboard/settings">
-              <SettingsIcon />
-            </Link>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">{t("settingsTooltip")}</TooltipContent>
       </Tooltip>
 
       <DropdownMenu>
