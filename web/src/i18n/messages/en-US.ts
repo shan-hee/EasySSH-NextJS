@@ -211,6 +211,8 @@ const messages = {
     quickFileManager: "File manager",
     quickFileManagerDesc: "Upload & download files",
     serverDistribution: "Server distribution",
+    mapZoomIn: "Zoom map in",
+    mapZoomOut: "Zoom map out",
     noData: "No data",
     unknownRegion: "Unknown region",
     serverOverview: "Server overview",

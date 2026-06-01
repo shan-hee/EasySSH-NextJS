@@ -224,12 +224,12 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="flex flex-1 flex-col gap-5 p-4 pt-0">
+      <div className="flex flex-1 flex-col gap-4 p-3 pt-0 sm:gap-5 sm:p-4 sm:pt-0">
         {/* 欢迎区 */}
         <WelcomeHeader />
 
         {/* 5 个统计卡 */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
           <StatCard
             title={t("statsOnlineServers")}
             value={`${onlineCount} / ${stats?.total_servers ?? 0}`}
@@ -273,8 +273,8 @@ export default function DashboardPage() {
         </div>
 
         {/* 趋势图 + 快捷操作 + 分布 */}
-        <div className="grid gap-4 lg:grid-cols-4">
-          <div className="lg:col-span-2">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)_minmax(360px,1fr)]">
+          <div>
             <ConnectionTrendChart
               dates={trend?.dates ?? []}
               series={trend?.series ?? {}}
@@ -289,8 +289,8 @@ export default function DashboardPage() {
         </div>
 
         {/* 服务器概览表 + 最近活动 + 资源分布 */}
-        <div className="grid gap-4 lg:grid-cols-4">
-          <div className="lg:col-span-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)_minmax(320px,1fr)]">
+          <div className="md:col-span-2 xl:col-span-1">
             <ServerOverviewTable servers={sortedServers} loading={loadingServers} />
           </div>
           <RecentActivity

@@ -86,8 +86,99 @@ export function ServerOverviewTable({ servers, loading }: ServerOverviewTablePro
         <CardTitle className="text-base">{t("serverOverview")}</CardTitle>
       </CardHeader>
       <CardContent className="pt-2">
-        <div className="scrollbar-custom max-h-[340px] overflow-y-auto overflow-x-auto">
-          <Table>
+        <div className="space-y-3 md:hidden">
+          {loading && servers.length === 0 ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-md border p-3">
+                <div className="h-5 w-2/3 animate-pulse rounded bg-primary/10" />
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {Array.from({ length: 4 }).map((__, j) => (
+                    <div key={j} className="h-8 animate-pulse rounded bg-primary/5" />
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : servers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-md border py-8 text-sm text-muted-foreground">
+              <ServerOff className="mb-2 h-8 w-8 opacity-40" />
+              {t("noServers")}
+            </div>
+          ) : (
+            servers.map((s) => {
+              const cfg = statusConfig[s.status] ?? statusConfig.offline
+              const isOffline = s.status === "offline" || s.status === "error"
+              return (
+                <div key={s.id} className="rounded-md border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{s.name}</div>
+                      {s.location && <div className="truncate text-xs text-muted-foreground">{s.location}</div>}
+                    </div>
+                    <Badge variant="outline" className={cn("shrink-0 gap-1 text-xs", cfg.className)}>
+                      <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
+                      {cfg.label}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">{t("thCpu")}</div>
+                      {isOffline ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <>
+                          <div className="tabular-nums">{s.cpu}%</div>
+                          <Progress value={s.cpu} className="h-1.5" indicatorClassName={usageColor(s.cpu)} />
+                        </>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">{t("thMemory")}</div>
+                      {isOffline ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <>
+                          <div className="truncate tabular-nums">
+                            {s.memory.used}/{s.memory.total}GB · {s.memory.usage}%
+                          </div>
+                          <Progress
+                            value={s.memory.usage}
+                            className="h-1.5"
+                            indicatorClassName={usageColor(s.memory.usage)}
+                          />
+                        </>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">{t("thDisk")}</div>
+                      {isOffline ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <>
+                          <div className="truncate tabular-nums">
+                            {s.disk.used}/{s.disk.total}GB · {s.disk.usage}%
+                          </div>
+                          <Progress
+                            value={s.disk.usage}
+                            className="h-1.5"
+                            indicatorClassName={usageColor(s.disk.usage)}
+                          />
+                        </>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">{t("thUptime")}</div>
+                      <div className="tabular-nums">{s.uptime}</div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="scrollbar-custom hidden max-h-[340px] overflow-y-auto overflow-x-auto md:block">
+          <Table className="min-w-[760px]">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="hover:bg-transparent">
                 <TableHead>{t("thServer")}</TableHead>

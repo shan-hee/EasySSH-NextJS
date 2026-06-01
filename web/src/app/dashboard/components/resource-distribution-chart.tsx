@@ -106,7 +106,7 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
         <CardTitle className="text-base">{t("resourceDistribution")}</CardTitle>
       </CardHeader>
       <CardContent className="pt-2">
-        <div className="relative h-[200px] w-full">
+        <div className="relative h-[180px] w-full sm:h-[200px]">
           {loading ? (
             <div className="h-full w-full animate-pulse rounded-lg bg-primary/5" />
           ) : slices.length === 0 ? (
@@ -127,8 +127,8 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
               </ChartContainer>
               {/* 中心总量 */}
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xs text-muted-foreground">{t("totalMemory")}</span>
-                <span className="text-2xl font-bold tabular-nums">{total.toFixed(1)}</span>
+                <span className="text-[11px] text-muted-foreground sm:text-xs">{t("totalMemory")}</span>
+                <span className="text-xl font-bold tabular-nums sm:text-2xl">{total.toFixed(1)}</span>
                 <span className="text-xs text-muted-foreground">GB</span>
               </div>
             </>
@@ -143,12 +143,12 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
               const color = usePalette[i % usePalette.length]
               const pct = total > 0 ? Math.round((s.value / total) * 100) : 0
               return (
-                <li key={`${s.name}-${i}`} className="flex items-center justify-between text-sm">
-                  <span className="flex min-w-0 items-center gap-2">
+                <li key={`${s.name}-${i}`} className="flex items-start justify-between gap-3 text-sm">
+                  <span className="flex min-w-0 items-center gap-2 pt-0.5">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color }} />
                     <span className="truncate text-muted-foreground">{s.name}</span>
                   </span>
-                  <span className="shrink-0 tabular-nums">
+                  <span className="shrink-0 text-right text-xs tabular-nums leading-5 sm:text-sm">
                     {s.value}GB · {pct}%
                   </span>
                 </li>

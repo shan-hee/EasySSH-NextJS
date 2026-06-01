@@ -127,23 +127,26 @@ export function RecentActivity({ items, loading }: RecentActivityProps) {
                     <Icon className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">
+                    <p className="break-words text-sm leading-5 sm:truncate">
                       <span className="font-medium">{item.username || t("systemActor")}</span>{" "}
                       <span className="text-muted-foreground">{actionLabel(item.action)}</span>
                       {item.resource && (
                         <span className="text-muted-foreground"> · {item.resource}</span>
                       )}
                     </p>
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      {isFailure ? (
-                        <ShieldAlert className="h-3 w-3 text-rose-500" />
-                      ) : (
-                        <ShieldCheck className="h-3 w-3 text-emerald-500" />
-                      )}
-                      {item.ip || "-"}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {isFailure ? (
+                          <ShieldAlert className="h-3 w-3 shrink-0 text-rose-500" />
+                        ) : (
+                          <ShieldCheck className="h-3 w-3 shrink-0 text-emerald-500" />
+                        )}
+                        <span className="truncate">{item.ip || "-"}</span>
+                      </span>
+                      <time className="shrink-0 tabular-nums sm:hidden">{formatTime(item.created_at)}</time>
                     </p>
                   </div>
-                  <time className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  <time className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">
                     {formatTime(item.created_at)}
                   </time>
                 </li>

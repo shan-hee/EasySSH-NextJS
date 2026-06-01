@@ -202,6 +202,8 @@ const messages = {
     quickFileManager: "文件管理",
     quickFileManagerDesc: "上传、下载文件",
     serverDistribution: "服务器分布",
+    mapZoomIn: "放大地图",
+    mapZoomOut: "缩小地图",
     noData: "暂无数据",
     unknownRegion: "未知区域",
     serverOverview: "服务器概览",

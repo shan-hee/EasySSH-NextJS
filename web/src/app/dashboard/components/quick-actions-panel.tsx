@@ -65,7 +65,7 @@ export function QuickActionsPanel() {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{t("quickActions")}</CardTitle>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-2 pt-2">
+      <CardContent className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
         {ACTIONS.map((action, i) => {
           const Icon = action.icon
           // 第 5 项（文件管理）跨整行
@@ -76,15 +76,15 @@ export function QuickActionsPanel() {
               href={action.href}
               className={cn(
                 "group flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent",
-                isLast && "col-span-2"
+                isLast && "sm:col-span-2 xl:col-span-1 2xl:col-span-2"
               )}
             >
-              <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", action.tone)}>
+              <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg xl:h-8 xl:w-8 2xl:h-9 2xl:w-9", action.tone)}>
                 <Icon className="h-4 w-4" />
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">{t(action.titleKey as never)}</span>
-                <span className="block truncate text-xs text-muted-foreground">
+                <span className="block truncate text-xs text-muted-foreground xl:hidden 2xl:block">
                   {t(action.descKey as never)}
                 </span>
               </span>

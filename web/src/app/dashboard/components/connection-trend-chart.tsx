@@ -143,10 +143,10 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
 
   return (
     <Card className="gap-0">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle className="text-base">{t("connectionTrend")}</CardTitle>
+      <CardHeader className="flex flex-col items-start gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
+        <CardTitle className="text-base leading-6">{t("connectionTrend")}</CardTitle>
         <Select value={metric} onValueChange={(v) => setMetric(v as MetricKey)}>
-          <SelectTrigger size="sm" className="w-[130px]">
+          <SelectTrigger size="sm" className="w-full sm:w-[130px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -159,7 +159,7 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
         </Select>
       </CardHeader>
       <CardContent className="pt-2">
-        <div className="h-[260px] w-full">
+        <div className="h-[220px] w-full sm:h-[260px]">
           {loading ? (
             <div className="h-full w-full animate-pulse rounded-lg bg-primary/5" />
           ) : (
