@@ -275,7 +275,7 @@ export function DataTable<TData, TValue = unknown>({
         <div
           ref={scrollContainerRef}
           className={cn(
-            "flex-1 scrollbar-custom relative bg-accent",
+            "flex-1 scrollbar-custom relative bg-table",
             loading ? "overflow-hidden" : "overflow-auto"
           )}
         >
@@ -284,13 +284,13 @@ export function DataTable<TData, TValue = unknown>({
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
                   key={headerGroup.id}
-                  className="bg-accent border-0 hover:bg-accent hover:text-inherit"
+                  className="border-0 bg-table-header hover:bg-table-header"
                 >
                   {headerGroup.headers.map((header) => (
                     <TableHead
                       key={header.id}
                       className={cn(
-                        "bg-accent sticky top-0 z-[1] whitespace-nowrap",
+                        "sticky top-0 z-[1] whitespace-nowrap bg-table-header",
                         densityClasses.header
                       )}
                     >
@@ -418,6 +418,9 @@ export function DataTable<TData, TValue = unknown>({
                         variant={currentPage === 1 ? "default" : "outline"}
                         size="sm"
                         onClick={() => handlePageChange(1)}
+                        className={cn(
+                          currentPage === 1 && "border-border bg-table-row-selected text-foreground hover:bg-table-row-selected/90"
+                        )}
                       >
                         1
                       </Button>
@@ -444,6 +447,9 @@ export function DataTable<TData, TValue = unknown>({
                         variant={currentPage === pageNum ? "default" : "outline"}
                         size="sm"
                         onClick={() => handlePageChange(pageNum)}
+                        className={cn(
+                          currentPage === pageNum && "border-border bg-table-row-selected text-foreground hover:bg-table-row-selected/90"
+                        )}
                       >
                         {pageNum}
                       </Button>
@@ -457,6 +463,9 @@ export function DataTable<TData, TValue = unknown>({
                         variant={currentPage === totalPages ? "default" : "outline"}
                         size="sm"
                         onClick={() => handlePageChange(totalPages)}
+                        className={cn(
+                          currentPage === totalPages && "border-border bg-table-row-selected text-foreground hover:bg-table-row-selected/90"
+                        )}
                       >
                         {totalPages}
                       </Button>

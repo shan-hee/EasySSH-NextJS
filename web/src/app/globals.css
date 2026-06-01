@@ -42,6 +42,10 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-table: var(--table);
+  --color-table-header: var(--table-header);
+  --color-table-row-hover: var(--table-row-hover);
+  --color-table-row-selected: var(--table-row-selected);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -102,6 +106,10 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --table: color-mix(in oklab, var(--card) 96%, var(--muted));
+  --table-header: color-mix(in oklab, var(--card) 88%, var(--muted));
+  --table-row-hover: color-mix(in oklab, var(--card) 82%, var(--muted));
+  --table-row-selected: color-mix(in oklab, var(--card) 88%, var(--primary));
   /* 状态色（固定，不随主题变化） */
   /* 连接: 稍沉的终端绿；警告: 柔和琥珀；危险: 稳定红 */
   --status-connected: oklch(0.809 0.174 142.0);
@@ -141,6 +149,10 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --table: color-mix(in oklab, var(--card) 95%, var(--background));
+  --table-header: color-mix(in oklab, var(--card) 82%, var(--muted));
+  --table-row-hover: color-mix(in oklab, var(--card) 74%, var(--muted));
+  --table-row-selected: color-mix(in oklab, var(--card) 88%, var(--primary));
   /* 状态色（深色主题同样固定） */
   --status-connected: oklch(0.809 0.174 142.0);
   --status-warning: oklch(0.905 0.173 102.0);
