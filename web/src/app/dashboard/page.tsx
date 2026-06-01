@@ -189,12 +189,12 @@ export default function DashboardPage() {
     return [...servers].sort((a, b) => order[a.status] - order[b.status])
   }, [servers])
 
-  // 资源分布环形图数据（按已用内存）
+  // 资源分布环形图数据（分片按已用内存，中心显示总内存）
   const resourceShares = useMemo<ResourceShare[]>(
     () =>
       servers
         .filter((s) => s.status === "online" || s.status === "warning")
-        .map((s) => ({ name: s.name, used: s.memory.used })),
+        .map((s) => ({ name: s.name, used: s.memory.used, total: s.memory.total })),
     [servers]
   )
 

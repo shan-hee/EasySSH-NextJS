@@ -9,10 +9,17 @@ import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
 import { useEchartsColors } from "@/lib/echarts-theme"
 import { useMonitorChartTheme } from "@/components/terminal/monitor/hooks/useMonitorChartTheme"
 
-/** 资源分布项（每台服务器的内存占用，GB） */
+/** 资源分布项（每台服务器的内存容量与占用，GB） */
 export interface ResourceShare {
   name: string
   used: number // 已用内存 GB
+  total: number // 总内存 GB
+}
+
+type ResourceSlice = {
+  name: string
+  value: number
+  kind?: "used" | "unused"
 }
 
 interface ResourceDistributionChartProps {
@@ -30,7 +37,7 @@ const chartConfig = {
 
 /**
  * 资源分布环形图
- * 展示各服务器内存占用比例，中心显示总内存。
+ * 展示各服务器内存占用比例与剩余内存，中心显示已用 / 总内存。
  * 超过 5 台时合并尾部为「其他」。
  */
 export function ResourceDistributionChart({ items, loading }: ResourceDistributionChartProps) {
@@ -45,17 +52,22 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
   const fallbackPalette = chartTheme.diskPalette
 
   // 取前 4 台 + 合并其余为「其他」
-  const { slices, total } = React.useMemo(() => {
+  const { legendSlices, chartSlices, totalMemory, totalUsed } = React.useMemo(() => {
     const sorted = [...items].filter((i) => i.used > 0).sort((a, b) => b.used - a.used)
     const totalUsed = sorted.reduce((acc, i) => acc + i.used, 0)
+    const totalMemory = items.reduce((acc, i) => acc + i.total, 0)
     const head = sorted.slice(0, 4)
     const rest = sorted.slice(4)
-    const result = head.map((i) => ({ name: i.name, value: Number(i.used.toFixed(1)) }))
+    const result: ResourceSlice[] = head.map((i) => ({ name: i.name, value: Number(i.used.toFixed(1)) }))
     if (rest.length > 0) {
       const restSum = rest.reduce((acc, i) => acc + i.used, 0)
       result.push({ name: t("othersLabel"), value: Number(restSum.toFixed(1)) })
     }
-    return { slices: result, total: totalUsed }
+    const unused = Math.max(totalMemory - totalUsed, 0)
+    const chartResult = unused > 0
+      ? [...result, { name: t("unusedMemory"), value: Number(unused.toFixed(1)), kind: "unused" as const }]
+      : result
+    return { legendSlices: result, chartSlices: chartResult, totalMemory, totalUsed }
   }, [items, t])
 
   const option: EChartsOption = React.useMemo(() => {
@@ -64,11 +76,13 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
       color: usePalette,
       tooltip: {
         trigger: "item",
+        confine: true,
         borderRadius: 6,
         padding: 8,
         backgroundColor: chartTheme.tooltipBackground,
         borderColor: chartTheme.tooltipBorder,
         borderWidth: 1,
+        extraCssText: `background-color: ${chartTheme.tooltipBackground}; color: ${chartTheme.tooltipText}; border: 1px solid ${chartTheme.tooltipBorder}; box-shadow: 0 8px 20px ${chartTheme.shadow};`,
         textStyle: { fontSize: 12, color: chartTheme.tooltipText },
         formatter: (params: unknown) => {
           const p = params as { name?: string; value?: number; percent?: number }
@@ -83,22 +97,26 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
           center: ["50%", "50%"],
           avoidLabelOverlap: false,
           itemStyle: {
-            borderColor: chartTheme.pointFill,
-            borderWidth: 2,
-            borderRadius: 4,
+            borderColor: chartTheme.freeSegmentStrong,
+            borderWidth: 1,
+            borderRadius: 3,
           },
           label: { show: false },
           emphasis: {
             scale: true,
-            scaleSize: 4,
+            scaleSize: 2,
             label: { show: false },
           },
           labelLine: { show: false },
-          data: slices,
+          data: chartSlices.map((slice) => ({
+            ...slice,
+            itemStyle: slice.kind === "unused" ? { color: chartTheme.freeSegment } : undefined,
+            emphasis: slice.kind === "unused" ? { disabled: true } : undefined,
+          })),
         },
       ],
     }
-  }, [slices, palette, fallbackPalette, chartTheme])
+  }, [chartSlices, palette, fallbackPalette, chartTheme])
 
   return (
     <Card className="gap-0">
@@ -109,7 +127,7 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
         <div className="relative h-[180px] w-full sm:h-[200px]">
           {loading ? (
             <div className="h-full w-full animate-pulse rounded-lg bg-primary/5" />
-          ) : slices.length === 0 ? (
+          ) : chartSlices.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               {t("noData")}
             </div>
@@ -128,20 +146,20 @@ export function ResourceDistributionChart({ items, loading }: ResourceDistributi
               {/* 中心总量 */}
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-[11px] text-muted-foreground sm:text-xs">{t("totalMemory")}</span>
-                <span className="text-xl font-bold tabular-nums sm:text-2xl">{total.toFixed(1)}</span>
-                <span className="text-xs text-muted-foreground">GB</span>
+                <span className="text-xl font-bold tabular-nums sm:text-2xl">{totalUsed.toFixed(1)} GB</span>
+                <span className="text-xs text-muted-foreground">/ {totalMemory.toFixed(1)} GB</span>
               </div>
             </>
           )}
         </div>
 
         {/* 图例 */}
-        {!loading && slices.length > 0 && (
+        {!loading && legendSlices.length > 0 && (
           <ul className="mt-3 space-y-1.5 border-t pt-3">
-            {slices.map((s, i) => {
+            {legendSlices.map((s, i) => {
               const usePalette = palette.length > 0 ? palette : fallbackPalette
               const color = usePalette[i % usePalette.length]
-              const pct = total > 0 ? Math.round((s.value / total) * 100) : 0
+              const pct = totalUsed > 0 ? Math.round((s.value / totalUsed) * 100) : 0
               return (
                 <li key={`${s.name}-${i}`} className="flex items-start justify-between gap-3 text-sm">
                   <span className="flex min-w-0 items-center gap-2 pt-0.5">

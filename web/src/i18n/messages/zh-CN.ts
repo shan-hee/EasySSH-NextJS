@@ -240,6 +240,7 @@ const messages = {
     actionMonitoringQuery: "执行了监控查询",
     resourceDistribution: "资源分布",
     totalMemory: "总内存",
+    unusedMemory: "未使用",
     othersLabel: "其他",
   },
   nav: {

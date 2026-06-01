@@ -154,6 +154,15 @@ function buildWorldDotMatrixData(geoJson: WorldGeoJson): DotMatrixPoint[] {
   return dots
 }
 
+function escapeTooltipText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 /**
  * 服务器分布
  * 左：ECharts world 点阵地图 + effectScatter 按国家打点
@@ -219,29 +228,46 @@ export function ServerDistribution({ distribution, loading }: ServerDistribution
   )
 
   const option: EChartsOption = React.useMemo(() => {
+    const tooltipBoxStyle = [
+      `background:${chartTheme.tooltipBackground}`,
+      `color:${chartTheme.tooltipText}`,
+      `border:1px solid ${chartTheme.tooltipBorder}`,
+      `box-shadow:0 8px 20px ${chartTheme.shadow}`,
+      "border-radius:6px",
+      "padding:8px 10px",
+      "font-size:12px",
+      "line-height:1.4",
+      "white-space:nowrap",
+    ].join(";")
+
+    const formatServerTooltip = (params: unknown) => {
+      const p = params as { name?: string; value?: number[]; seriesType?: string }
+      if (p.seriesType === "effectScatter" && Array.isArray(p.value)) {
+        return `<div style="${tooltipBoxStyle}">${escapeTooltipText(p.name)}: ${escapeTooltipText(p.value[2])}</div>`
+      }
+      return ""
+    }
+
     return {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item",
+        confine: true,
         borderRadius: 6,
-        padding: 8,
-        backgroundColor: chartTheme.tooltipBackground,
-        borderColor: chartTheme.tooltipBorder,
-        borderWidth: 1,
+        padding: 0,
+        backgroundColor: "transparent",
+        borderColor: "transparent",
+        borderWidth: 0,
+        extraCssText: "background: transparent; border: 0; box-shadow: none;",
         textStyle: { fontSize: 12, color: chartTheme.tooltipText },
-        formatter: (params: unknown) => {
-          const p = params as { name?: string; value?: number[]; seriesType?: string }
-          if (p.seriesType === "effectScatter" && Array.isArray(p.value)) {
-            return `${p.name}: ${p.value[2]}`
-          }
-          return p.name ?? ""
-        },
+        formatter: formatServerTooltip,
       },
       geo: {
         map: "world",
         roam: true,
         roamTrigger: "global",
         silent: false,
+        tooltip: { show: false },
         scaleLimit: {
           min: MIN_MAP_ZOOM,
           max: MAX_MAP_ZOOM,
@@ -269,7 +295,7 @@ export function ServerDistribution({ distribution, loading }: ServerDistribution
           coordinateSystem: "geo",
           data: dotMatrixData,
           symbol: "circle",
-          symbolSize: 1.6,
+          symbolSize: 2.2,
           silent: true,
           tooltip: { show: false },
           animation: false,
@@ -289,14 +315,33 @@ export function ServerDistribution({ distribution, loading }: ServerDistribution
           data: scatterData,
           symbolSize: (val: number[]) => {
             const count = val[2] ?? 1
-            return 4 + (count / maxCount) * 8
+            return 3 + (count / maxCount) * 5.5
           },
           showEffectOn: "render",
-          rippleEffect: { brushType: "stroke", scale: 2.15 },
+          rippleEffect: { brushType: "stroke", scale: 1.85 },
+          tooltip: {
+            show: true,
+            confine: true,
+            borderRadius: 6,
+            padding: 0,
+            backgroundColor: "transparent",
+            borderColor: "transparent",
+            borderWidth: 0,
+            extraCssText: "background: transparent; border: 0; box-shadow: none;",
+            textStyle: { fontSize: 12, color: chartTheme.tooltipText },
+            formatter: formatServerTooltip,
+          },
           itemStyle: {
             color: chartTheme.upload,
-            shadowBlur: 6,
+            shadowBlur: 4,
             shadowColor: chartTheme.upload,
+          },
+          emphasis: {
+            itemStyle: {
+              color: chartTheme.upload,
+              shadowBlur: 4,
+              shadowColor: chartTheme.upload,
+            },
           },
           zlevel: 1,
         },
@@ -389,7 +434,7 @@ export function ServerDistribution({ distribution, loading }: ServerDistribution
               distribution.slice(0, 6).map((item, i) => (
                 <div
                   key={`${item.country_code}-${i}`}
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
+                  className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/50"
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     <span

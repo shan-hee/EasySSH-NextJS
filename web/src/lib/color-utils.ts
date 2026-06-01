@@ -16,7 +16,14 @@ export function colorToHex(color: string): string {
     return value.slice(0, 7)
   }
 
-  const rgb = parseRgb(value) ?? parseHsl(value) ?? parseOklch(value)
+  const rgb =
+    parseRgb(value) ??
+    parseHsl(value) ??
+    parseOklch(value) ??
+    parseOklab(value) ??
+    parseLch(value) ??
+    parseLab(value) ??
+    parseSrgbColor(value)
   if (!rgb) {
     return "#000000"
   }
@@ -180,6 +187,32 @@ function parseOklch(value: string): RGB | null {
   const a = c * Math.cos((h * Math.PI) / 180)
   const b = c * Math.sin((h * Math.PI) / 180)
 
+  return oklabToRgb(l, a, b)
+}
+
+function parseOklab(value: string): RGB | null {
+  const match = /oklab\(([^)]+)\)/i.exec(value)
+  if (!match) {
+    return null
+  }
+
+  const parts = match[1].split("/")[0].trim().split(/\s+/)
+  if (parts.length < 3) {
+    return null
+  }
+
+  const l = parts[0].endsWith("%") ? Number.parseFloat(parts[0]) / 100 : Number.parseFloat(parts[0])
+  const a = Number.parseFloat(parts[1])
+  const b = Number.parseFloat(parts[2])
+
+  if (![l, a, b].every((part) => Number.isFinite(part))) {
+    return null
+  }
+
+  return oklabToRgb(l, a, b)
+}
+
+function oklabToRgb(l: number, a: number, b: number): RGB {
   const lPrime = l + 0.3963377774 * a + 0.2158037573 * b
   const mPrime = l - 0.1055613458 * a - 0.0638541728 * b
   const sPrime = l - 0.0894841775 * a - 1.291485548 * b
@@ -197,6 +230,109 @@ function parseOklch(value: string): RGB | null {
     clamp(Math.round(linearToSrgb(linearG) * 255), 0, 255),
     clamp(Math.round(linearToSrgb(linearB) * 255), 0, 255),
   ]
+}
+
+function parseLch(value: string): RGB | null {
+  const match = /lch\(([^)]+)\)/i.exec(value)
+  if (!match) {
+    return null
+  }
+
+  const parts = match[1].split("/")[0].trim().split(/\s+/)
+  if (parts.length < 3) {
+    return null
+  }
+
+  const l = parts[0].endsWith("%") ? Number.parseFloat(parts[0]) : Number.parseFloat(parts[0])
+  const c = Number.parseFloat(parts[1])
+  const h = parts[2] === "none" ? 0 : Number.parseFloat(parts[2])
+
+  if (![l, c, h].every((part) => Number.isFinite(part))) {
+    return null
+  }
+
+  return labToRgb(l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180))
+}
+
+function parseLab(value: string): RGB | null {
+  const match = /lab\(([^)]+)\)/i.exec(value)
+  if (!match) {
+    return null
+  }
+
+  const parts = match[1].split("/")[0].trim().split(/\s+/)
+  if (parts.length < 3) {
+    return null
+  }
+
+  const l = parts[0].endsWith("%") ? Number.parseFloat(parts[0]) : Number.parseFloat(parts[0])
+  const a = Number.parseFloat(parts[1])
+  const b = Number.parseFloat(parts[2])
+
+  if (![l, a, b].every((part) => Number.isFinite(part))) {
+    return null
+  }
+
+  return labToRgb(l, a, b)
+}
+
+function labToRgb(l: number, a: number, b: number): RGB {
+  const fy = (l + 16) / 116
+  const fx = fy + a / 500
+  const fz = fy - b / 200
+
+  const xr = labPivotInverse(fx)
+  const yr = labPivotInverse(fy)
+  const zr = labPivotInverse(fz)
+
+  // CSS lab() uses D50; convert to D65 before sRGB conversion.
+  const xD50 = xr * 0.96422
+  const yD50 = yr
+  const zD50 = zr * 0.82521
+
+  const x = 0.9555766 * xD50 - 0.0230393 * yD50 + 0.0631636 * zD50
+  const y = -0.0282895 * xD50 + 1.0099416 * yD50 + 0.0210077 * zD50
+  const z = 0.0122982 * xD50 - 0.0204830 * yD50 + 1.3299098 * zD50
+
+  const linearR = 3.2404542 * x - 1.5371385 * y - 0.4985314 * z
+  const linearG = -0.9692660 * x + 1.8760108 * y + 0.0415560 * z
+  const linearB = 0.0556434 * x - 0.2040259 * y + 1.0572252 * z
+
+  return [
+    clamp(Math.round(linearToSrgb(linearR) * 255), 0, 255),
+    clamp(Math.round(linearToSrgb(linearG) * 255), 0, 255),
+    clamp(Math.round(linearToSrgb(linearB) * 255), 0, 255),
+  ]
+}
+
+function parseSrgbColor(value: string): RGB | null {
+  const match = /color\(\s*srgb\s+([^)]+)\)/i.exec(value)
+  if (!match) {
+    return null
+  }
+
+  const parts = match[1].split("/")[0].trim().split(/\s+/)
+  if (parts.length < 3) {
+    return null
+  }
+
+  const channels = parts.slice(0, 3).map((part) => {
+    if (part === "none") {
+      return 0
+    }
+    return part.endsWith("%") ? Number.parseFloat(part) / 100 : Number.parseFloat(part)
+  })
+
+  if (channels.some((channel) => !Number.isFinite(channel))) {
+    return null
+  }
+
+  return channels.map((channel) => clamp(Math.round(channel * 255), 0, 255)) as RGB
+}
+
+function labPivotInverse(value: number): number {
+  const delta = 6 / 29
+  return value > delta ? value ** 3 : 3 * delta ** 2 * (value - 4 / 29)
 }
 
 function relativeLuminance(rgb: RGB): number {

@@ -26,7 +26,7 @@ function resolveCssVarColor(raw: string | undefined, style: CSSStyleDeclaration)
 }
 
 function normalizeEchartsColor(color: string): string {
-  return /^(#|rgb|hsl|oklch)\b/i.test(color.trim()) ? colorToHex(color) : color;
+  return /^(#|rgb|hsl|oklch|oklab|lch|lab)\b|^color\(/i.test(color.trim()) ? colorToHex(color) : color;
 }
 
 function areColorMapsEqual(a: ColorMap, b: ColorMap): boolean {

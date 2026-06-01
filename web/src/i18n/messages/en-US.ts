@@ -249,6 +249,7 @@ const messages = {
     actionMonitoringQuery: "ran a monitoring query",
     resourceDistribution: "Resource distribution",
     totalMemory: "Total memory",
+    unusedMemory: "Unused",
     othersLabel: "Others",
   },
   nav: {
