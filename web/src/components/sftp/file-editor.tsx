@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } fro
 import { createPortal } from "react-dom"
 import Editor from "@monaco-editor/react"
 import { useTheme } from "next-themes"
-import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useWorkspaceSftpTranslator } from "@/components/ssh-workspace/use-workspace-translator"
 import {
   X,
   Save,
@@ -81,7 +81,7 @@ export function FileEditor({
   encodingOptions = DEFAULT_TEXT_ENCODING_OPTIONS,
   onEncodingChange,
 }: FileEditorProps) {
-  const tSftp = useTranslations("sftp")
+  const tSftp = useWorkspaceSftpTranslator()
   const { resolvedTheme } = useTheme()
   const monacoTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'light'
   const [content, setContent] = useState(fileContent || '')

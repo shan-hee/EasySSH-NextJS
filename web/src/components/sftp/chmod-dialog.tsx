@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useTranslations } from "next-intl"
+import {
+  useWorkspaceCommonTranslator,
+  useWorkspaceSftpTranslator,
+} from "@/components/ssh-workspace/use-workspace-translator"
 
 interface ChmodDialogProps {
   open: boolean
@@ -30,8 +33,8 @@ export function ChmodDialog({
   currentPermissions,
   onConfirm,
 }: ChmodDialogProps) {
-  const tSftp = useTranslations("sftp")
-  const tCommon = useTranslations("common")
+  const tSftp = useWorkspaceSftpTranslator()
+  const tCommon = useWorkspaceCommonTranslator()
 
   // 解析当前权限（如 "drwxr-xr-x" 或 "-rw-r--r--"）
   const parsePermissions = (perms: string): number => {

@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback, Suspense, startTransition } from "react"
+import { useEffect, useRef, useState, useCallback, useMemo, Suspense, startTransition } from "react"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
+import { SshWorkspace } from "@/components/ssh-workspace/ssh-workspace"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import type { TerminalSettings } from "@/components/terminal/terminal-settings-dialog"
 import type {
@@ -10,8 +11,11 @@ import type {
   TerminalConnectionPhase,
 } from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"
-import { serversApi, type Server } from "@/lib/api"
-import { useTerminalStore } from "@/stores/terminal-store"
+import { serversApi, sftpApi, type Server } from "@/lib/api"
+import { createAuthTicket } from "@/lib/auth-ticket"
+import { createTerminalWorkspaceSessionStoreAdapter, useTerminalStore } from "@/stores/terminal-store"
+import { createSftpSessionApi } from "@/lib/session/sftp-session-api"
+import { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter } from "@/lib/session/workspace-adapters"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 import { useSystemConfig } from "@/contexts/system-config-context"
@@ -83,7 +87,9 @@ const readTerminalBehaviorSettings = (defaults: { maxTabs: number; inactiveMinut
 function TerminalPageContent() {
   const { ready } = useAuthReady()
   const { config: systemConfig } = useSystemConfig()
+  const tCommon = useTranslations("common")
   const t = useTranslations("terminal")
+  const tSftp = useTranslations("sftp")
   const quickConnectName = t("quickConnectTabName")
   const [servers, setServers] = useState<QuickServer[]>([])
   const [loading, setLoading] = useState(true)
@@ -99,6 +105,54 @@ function TerminalPageContent() {
   const setActiveSessionId = useTerminalStore((state) => state.setActiveSessionId)
   const updateSessionActivity = useTerminalStore((state) => state.updateSessionActivity)
   const getSessionLastActivity = useTerminalStore((state) => state.getSessionLastActivity)
+  const workspaceSessionStore = useMemo(() => createTerminalWorkspaceSessionStoreAdapter(), [])
+  const workspaceAuthTicketProvider = useMemo(() => createWorkspaceAuthTicketProviderAdapter(createAuthTicket), [])
+  const sftpSessionApi = useMemo(() => createSftpSessionApi(sftpApi), [])
+  const workspacePreferences = useMemo(() => createBrowserWorkspacePreferenceAdapter(), [])
+  const workspaceAdapters = useMemo(() => createWorkspaceAdapters({
+    apiClient: {
+      sftp: sftpSessionApi,
+      terminal: {
+        saveVerifiedCredential: ({ serverId, authMethod, secret }) => {
+          const payload = authMethod === "key"
+            ? {
+                auth_method: "key" as const,
+                private_key: secret,
+                verified_connection_credential: true,
+              }
+            : {
+                auth_method: "password" as const,
+                password: secret,
+                verified_connection_credential: true,
+              }
+
+          return serversApi.update(serverId, payload)
+        },
+      },
+    },
+    i18n: createWorkspaceI18nAdapter({
+      common: tCommon,
+      terminal: t,
+      sftp: tSftp,
+    }),
+    notifier: createWorkspaceNotifierAdapter(toast),
+    settings: createWorkspaceSettingsAdapter({
+      sftp: {
+        downloadExcludePatterns: systemConfig?.download_exclude_patterns,
+      },
+    }),
+    preferences: workspacePreferences,
+    authTicketProvider: workspaceAuthTicketProvider,
+    sessionStore: workspaceSessionStore,
+  }), [tCommon, t, tSftp, systemConfig?.download_exclude_patterns, sftpSessionApi, workspaceAuthTicketProvider, workspacePreferences, workspaceSessionStore])
+  const workspaceCapabilities = useMemo(() => ({
+    terminal: true,
+    sftp: true,
+    transfers: true,
+    ai: true,
+    monitor: true,
+    docker: true,
+  }), [])
   const tabPolicyMaxTabs = systemConfig?.tab_session?.max_tabs ?? 50
   const tabPolicyInactiveMinutes = systemConfig?.tab_session?.inactive_minutes ?? 60
 
@@ -529,27 +583,33 @@ function TerminalPageContent() {
   }, [getSessionLastActivity, handleCloseSession, inactiveMinutes, t])
 
   return (
-    <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-      <TerminalComponent
-        sessions={sessions}
-        onNewSession={handleNewSession}
-        onCloseSession={handleCloseSession}
-        onSendCommand={handleSendCommand}
-        onDuplicateSession={handleDuplicateSession}
-        onCloseOthers={handleCloseOthers}
-        onCloseAll={handleCloseAll}
-        onTogglePin={handleTogglePin}
-        onReorderSessions={handleReorder}
-        onStartConnectionFromQuick={handleStartConnectionFromQuick}
-        onAuthCancelled={handleAuthCancelled}
-        servers={servers}
-        serversLoading={loading}
-        externalActiveSessionId={activeSessionId}
-        onActiveSessionChange={setActiveSessionId}
-        onConnectionPhaseChange={handleConnectionPhaseChange}
-        onBehaviorSettingsChange={applyTerminalBehaviorSettings}
-      />
-    </div>
+    <SshWorkspace
+      adapters={workspaceAdapters}
+      capabilities={workspaceCapabilities}
+      layout="web"
+    >
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        <TerminalComponent
+          sessions={sessions}
+          onNewSession={handleNewSession}
+          onCloseSession={handleCloseSession}
+          onSendCommand={handleSendCommand}
+          onDuplicateSession={handleDuplicateSession}
+          onCloseOthers={handleCloseOthers}
+          onCloseAll={handleCloseAll}
+          onTogglePin={handleTogglePin}
+          onReorderSessions={handleReorder}
+          onStartConnectionFromQuick={handleStartConnectionFromQuick}
+          onAuthCancelled={handleAuthCancelled}
+          servers={servers}
+          serversLoading={loading}
+          externalActiveSessionId={activeSessionId}
+          onActiveSessionChange={setActiveSessionId}
+          onConnectionPhaseChange={handleConnectionPhaseChange}
+          onBehaviorSettingsChange={applyTerminalBehaviorSettings}
+        />
+      </div>
+    </SshWorkspace>
   )
 }
 

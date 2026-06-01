@@ -7,7 +7,8 @@ import { create } from 'zustand'
 import type { Terminal } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
 import { TerminalWebSocket } from '@/lib/websocket-terminal'
-import type { TerminalSession } from '@/components/terminal/types'
+import type { TerminalSession } from "@/components/terminal/types"
+import type { SshWorkspaceSessionStoreAdapter, WorkspaceSessionSnapshot, WorkspaceTerminalSession, WorkspaceTransferTask } from "@/lib/session/workspace"
 
 type DisposableAddon = {
   dispose: () => void
@@ -289,4 +290,30 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     useTerminalStore.getState().destroyAll()
   })
+}
+
+export function createTerminalWorkspaceSessionStoreAdapter(
+  getTransferTasks: () => WorkspaceTransferTask[] = () => [],
+): SshWorkspaceSessionStoreAdapter {
+  return {
+    getSnapshot: (): WorkspaceSessionSnapshot => {
+      const state = useTerminalStore.getState()
+      return {
+        terminalSessions: state.sessions as WorkspaceTerminalSession[],
+        sftpSessions: [],
+        transferTasks: getTransferTasks(),
+        activeSessionId: state.activeSessionId,
+      }
+    },
+    subscribe: (listener: (snapshot: WorkspaceSessionSnapshot) => void) => (
+      useTerminalStore.subscribe((state) => {
+        listener({
+          terminalSessions: state.sessions as WorkspaceTerminalSession[],
+          sftpSessions: [],
+          transferTasks: getTransferTasks(),
+          activeSessionId: state.activeSessionId,
+        })
+      })
+    ),
+  }
 }

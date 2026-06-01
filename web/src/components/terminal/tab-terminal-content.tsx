@@ -24,6 +24,8 @@ import { DockerPopover } from './docker'
 import { useSftpSession } from '@/hooks/useSftpSession'
 import { cn } from '@/lib/utils'
 import { useTabUIStore } from '@/stores/tab-ui-store'
+import { useOptionalSshWorkspace } from '@/components/ssh-workspace/ssh-workspace'
+import { createWorkspaceTransferAuthTicketProviderAdapter } from '@/lib/session/workspace-adapters'
 import type { TerminalConnectionPhase, TerminalSession } from './types'
 import type { TerminalSettings } from './terminal-settings-dialog'
 import { useTranslations } from "next-intl"
@@ -166,6 +168,39 @@ export function TabTerminalContent({
     isDesktopMonitorOpen &&
     !!session.serverId
   const canUseMobileMonitor = canUseHeavyPanels && isMobileMonitorOpen && !isDesktopLayout
+  const workspace = useOptionalSshWorkspace()
+  const transferAuthTicketProvider = React.useMemo(
+    () => createWorkspaceTransferAuthTicketProviderAdapter(workspace?.adapters.authTicketProvider),
+    [workspace?.adapters.authTicketProvider]
+  )
+  const sftpFileTransferOptions = React.useMemo(
+    () => ({
+      createTicket: transferAuthTicketProvider,
+    }),
+    [transferAuthTicketProvider]
+  )
+  const sftpTranslate = React.useMemo(
+    () => workspace?.adapters.i18n
+      ? ((key: string, params?: Record<string, string | number>) => (
+          workspace.adapters.i18n.t("sftp", key, params)
+        ))
+      : undefined,
+    [workspace?.adapters.i18n]
+  )
+  const sftpSessionOptions = React.useMemo(
+    () => ({
+      api: workspace?.adapters.apiClient?.sftp,
+      notifier: workspace?.adapters.notifier,
+      t: sftpTranslate,
+      fileTransferOptions: sftpFileTransferOptions,
+    }),
+    [
+      sftpFileTransferOptions,
+      sftpTranslate,
+      workspace?.adapters.apiClient?.sftp,
+      workspace?.adapters.notifier,
+    ]
+  )
   const toggleMonitor = () => {
     setTabState(
       session.id,
@@ -180,7 +215,8 @@ export function TabTerminalContent({
     shouldKeepFileManagerMounted && session.serverId
       ? session.serverId
       : '',
-    '/root'
+    '/root',
+    sftpSessionOptions
   )
 
   // 监控数据源跟随已就绪的终端页签保持订阅。

@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext } from "react"
+import type { ServerConnectionInfo } from "@/lib/session/types"
 
 interface FileItem {
   name: string
@@ -10,15 +11,11 @@ interface FileItem {
   permissions: string
 }
 
-interface SftpSessionContextValue {
+interface SftpSessionContextValue extends ServerConnectionInfo {
   // 会话信息
   sessionId: string
   sessionLabel: string
   sessionColor?: string
-  serverId: string  // 修改为 string 以匹配 SftpManager
-  serverName: string
-  host: string
-  username: string
   isConnected: boolean
   isFullscreen: boolean
 

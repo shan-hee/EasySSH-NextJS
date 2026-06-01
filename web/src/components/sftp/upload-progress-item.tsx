@@ -11,11 +11,14 @@ import {
   ArrowRight,
   Loader2,
 } from "lucide-react"
-import type { TransferTask } from "@/hooks/useFileTransfer"
-import { useTranslations } from "next-intl"
+import type { WorkspaceTransferTask } from "@/lib/session/workspace"
+import {
+  useWorkspaceCommonTranslator,
+  useWorkspaceSftpTranslator,
+} from "@/components/ssh-workspace/use-workspace-translator"
 
-interface UploadProgressItemProps {
-  task: TransferTask
+export interface UploadProgressItemProps {
+  task: WorkspaceTransferTask
   onCancel?: (taskId: string) => void
 }
 
@@ -24,8 +27,8 @@ interface UploadProgressItemProps {
  * 上传入口统一展示为流式上传，旧链路的阶段细节只保留在专属传输任务页。
  */
 export function UploadProgressItem({ task, onCancel }: UploadProgressItemProps) {
-  const tSftp = useTranslations("sftp")
-  const tCommon = useTranslations("common")
+  const tSftp = useWorkspaceSftpTranslator()
+  const tCommon = useWorkspaceCommonTranslator()
 
   // 判断当前阶段
   const isCompleted = task.status === 'completed'

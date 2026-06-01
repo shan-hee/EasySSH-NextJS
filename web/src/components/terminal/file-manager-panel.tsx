@@ -5,13 +5,37 @@ import { createPortal } from "react-dom"
 import { X, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SftpManager } from "@/components/sftp/sftp-manager"
-import type { TransferTask } from "@/hooks/useFileTransfer"
+import { useOptionalSshWorkspace } from "@/components/ssh-workspace/ssh-workspace"
+import type { SshWorkspacePreferenceAdapter, WorkspaceTransferTask } from "@/lib/session/workspace"
 import type { SftpFileItem } from "@/lib/sftp-file-utils"
-import type { BatchDeleteResult } from "@/hooks/useSftpSession"
+import type { BatchDeleteResult } from "@/lib/session/sftp-operations"
 
 const PANEL_ANIMATION_MS = 300
+const DEFAULT_PANEL_WIDTH = 600
+const MIN_PANEL_WIDTH = 400
+const PANEL_VIEWPORT_PADDING = 100
+const FILE_MANAGER_PANEL_WIDTH_PREFERENCE_KEY = "file-manager-panel-width"
 
-interface FileManagerPanelProps {
+function readPanelWidthPreference(
+  preferences: SshWorkspacePreferenceAdapter | undefined,
+  key: string,
+  fallback: number,
+) {
+  let rawValue: string | null | undefined
+  try {
+    rawValue = preferences?.getString(key)
+  } catch {
+    rawValue = null
+  }
+
+  const parsedValue = rawValue ? Number.parseInt(rawValue, 10) : Number.NaN
+
+  return Number.isFinite(parsedValue)
+    ? Math.max(MIN_PANEL_WIDTH, parsedValue)
+    : fallback
+}
+
+export interface FileManagerPanelProps {
   isOpen: boolean
   onClose: () => void
   // SFTP Manager props
@@ -44,13 +68,15 @@ interface FileManagerPanelProps {
   onReadFile?: (fileName: string) => Promise<string>
   onSaveFile?: (fileName: string, content: string) => Promise<void>
   // 传输任务管理
-  transferTasks?: TransferTask[]
+  transferTasks?: WorkspaceTransferTask[]
   onClearCompletedTransfers?: () => void
   onCancelTransfer?: (taskId: string) => void
   // 将文件管理器渲染到指定容器(例如终端内部),而非整个页面
   mountContainer?: HTMLElement | null
   // 面板顶部锚点(用于位于工具栏下方)
   anchorTop?: number
+  widthPreferenceKey?: string
+  defaultWidth?: number
 }
 
 export function FileManagerPanel({
@@ -61,15 +87,17 @@ export function FileManagerPanel({
   transferTasks,
   onClearCompletedTransfers,
   onCancelTransfer,
+  widthPreferenceKey = FILE_MANAGER_PANEL_WIDTH_PREFERENCE_KEY,
+  defaultWidth = DEFAULT_PANEL_WIDTH,
   ...sftpProps
 }: FileManagerPanelProps) {
-  const [width, setWidth] = useState(() => {
-    if (typeof window === "undefined") {
-      return 600
-    }
-    const savedWidth = window.localStorage.getItem("file-manager-panel-width")
-    return savedWidth ? parseInt(savedWidth, 10) : 600
-  })
+  const workspace = useOptionalSshWorkspace()
+  const preferences = workspace?.adapters.preferences
+  const [width, setWidth] = useState(() => readPanelWidthPreference(
+    preferences,
+    widthPreferenceKey,
+    defaultWidth,
+  ))
   const [isResizing, setIsResizing] = useState(false)
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
@@ -92,14 +120,14 @@ export function FileManagerPanel({
     return () => window.cancelAnimationFrame(frame)
   }, [isOpen])
 
-  // 保存宽度到 localStorage
+  // 保存宽度到 Workspace preferences
   useEffect(() => {
     if (isResizing) {
       return
     }
 
-    localStorage.setItem('file-manager-panel-width', width.toString())
-  }, [isResizing, width])
+    void preferences?.setString(widthPreferenceKey, width.toString())
+  }, [isResizing, preferences, width, widthPreferenceKey])
 
   // 快捷键支持 (Ctrl/Cmd + E)
   useEffect(() => {
@@ -133,9 +161,10 @@ export function FileManagerPanel({
     if (!isResizing) return
 
     const deltaX = resizeStartX.current - e.clientX
+    const maxWidth = Math.max(MIN_PANEL_WIDTH, window.innerWidth - PANEL_VIEWPORT_PADDING)
     const newWidth = Math.min(
-      Math.max(400, resizeStartWidth.current + deltaX),
-      window.innerWidth - 100
+      Math.max(MIN_PANEL_WIDTH, resizeStartWidth.current + deltaX),
+      maxWidth
     )
     setWidth(newWidth)
   }, [isResizing])
@@ -240,7 +269,8 @@ export function FileManagerPanel({
                 <SftpManager
                   {...sftpProps}
                   isFullscreen={false}
-                  pageContext="terminal"
+                  viewModeStorageKey="easyssh:sftp:viewMode:terminal"
+                  defaultViewMode="list"
                   onDisconnect={onClose}
                   transferTasks={transferTasks}
                   onClearCompletedTransfers={onClearCompletedTransfers}

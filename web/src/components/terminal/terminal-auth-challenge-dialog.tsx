@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { TerminalAuthMethod, TerminalAuthPrompt } from "@/lib/websocket-terminal"
 
-interface TerminalAuthChallengeDialogProps {
+export interface TerminalAuthChallengeDialogProps {
   prompt: TerminalAuthPrompt | null
   serverName: string
   onSubmit: (answers: string[], authMethod?: TerminalAuthMethod) => void

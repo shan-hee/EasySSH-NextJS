@@ -14,6 +14,9 @@ import {
   type TerminalAuthPromptResponder,
   type TerminalHostKeyPrompt,
   type TerminalHostKeyResponder,
+  type TerminalWebSocketAuthTicketProvider,
+  type TerminalWebSocketConstructor,
+  type TerminalWebSocketUrlResolver,
 } from '@/lib/websocket-terminal'
 import { useTerminalStore } from '@/stores/terminal-store'
 import type { Terminal } from '@xterm/xterm'
@@ -37,6 +40,9 @@ export interface WebSocketConnectionConfig {
   onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   formatErrorMessage?: (error: TerminalConnectionError) => string
   enableCompletionFetch?: boolean
+  createAuthTicket?: TerminalWebSocketAuthTicketProvider
+  createWebSocketUrl?: TerminalWebSocketUrlResolver
+  WebSocketCtor?: TerminalWebSocketConstructor
 }
 
 /**
@@ -60,6 +66,9 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     onConnectionPhase,
     formatErrorMessage,
     enableCompletionFetch,
+    createAuthTicket,
+    createWebSocketUrl,
+    WebSocketCtor,
   } = config
 
   const wsRef = useRef<TerminalWebSocket | null>(null)
@@ -348,6 +357,9 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
           reportConnectionPhase(phase)
         },
         enableCompletionFetch: !!enableCompletionFetch,
+        createAuthTicket,
+        createWebSocketUrl,
+        WebSocketCtor,
       })
 
       ws.connect()
@@ -380,7 +392,7 @@ export function useWebSocketConnection(config: WebSocketConnectionConfig) {
     // - shouldConnect: 连接意图变化时需要处理
     // - terminalReady: 终端实例创建完成时触发连接（关键修复！）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, serverId, shouldConnect, terminalReady, connectionNonce, queueTerminalOutput, flushTerminalOutput])
+  }, [sessionId, serverId, shouldConnect, terminalReady, connectionNonce, queueTerminalOutput, flushTerminalOutput, createAuthTicket, createWebSocketUrl, WebSocketCtor])
 
   // 动态同步补全拉取开关，避免切换配置时必须重建连接
   useEffect(() => {

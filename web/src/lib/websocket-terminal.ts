@@ -64,7 +64,32 @@ export interface TerminalWebSocketOptions {
   onHostKeyPrompt?: (prompt: TerminalHostKeyPrompt, respond: TerminalHostKeyResponder) => void // SSH主机密钥变更确认回调
   onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   enableCompletionFetch?: boolean // 是否在连接成功后自动拉取补全数据
+  createAuthTicket?: TerminalWebSocketAuthTicketProvider
+  createWebSocketUrl?: TerminalWebSocketUrlResolver
+  WebSocketCtor?: TerminalWebSocketConstructor
 }
+
+export interface TerminalWebSocketAuthTicketRequest {
+  type: "ws_terminal"
+  server_id: string
+}
+
+export type TerminalWebSocketAuthTicketProvider = (
+  request: TerminalWebSocketAuthTicketRequest,
+) => Promise<string>
+
+export interface TerminalWebSocketUrlRequest {
+  serverId: string
+  cols: number
+  rows: number
+  ticket: string
+}
+
+export type TerminalWebSocketUrlResolver = (
+  request: TerminalWebSocketUrlRequest,
+) => string | Promise<string>
+
+export type TerminalWebSocketConstructor = new (url: string | URL, protocols?: string | string[]) => WebSocket
 
 export interface TerminalAuthPromptItem {
   text: string
@@ -141,6 +166,24 @@ function getErrorPayload(data: unknown): { code?: string; message: string; detai
   return { code, message, details }
 }
 
+const defaultCreateTerminalAuthTicket: TerminalWebSocketAuthTicketProvider = async (request) => {
+  const { ticket } = await createAuthTicket(request)
+  return ticket
+}
+
+const defaultCreateTerminalWebSocketUrl: TerminalWebSocketUrlResolver = ({
+  serverId,
+  cols,
+  rows,
+  ticket,
+}) => {
+  const params = new URLSearchParams()
+  params.set("cols", String(cols))
+  params.set("rows", String(rows))
+  params.set("ticket", ticket)
+  return getWsUrl(`/api/v1/ssh/terminal/${serverId}?${params.toString()}`)
+}
+
 // 补全数据响应接口
 export interface CompletionDataResponse {
   history: string[]
@@ -178,6 +221,9 @@ export class TerminalWebSocket {
   private onHostKeyPrompt?: (prompt: TerminalHostKeyPrompt, respond: TerminalHostKeyResponder) => void
   private onConnectionPhase?: (phase: TerminalConnectionPhase) => void
   private enableCompletionFetch: boolean
+  private createTerminalAuthTicket: TerminalWebSocketAuthTicketProvider
+  private createTerminalWebSocketUrl: TerminalWebSocketUrlResolver
+  private WebSocketCtor?: TerminalWebSocketConstructor
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
   private reconnectDelay = 2000
@@ -216,6 +262,9 @@ export class TerminalWebSocket {
     this.onHostKeyPrompt = options.onHostKeyPrompt
     this.onConnectionPhase = options.onConnectionPhase
     this.enableCompletionFetch = options.enableCompletionFetch ?? true
+    this.createTerminalAuthTicket = options.createAuthTicket ?? defaultCreateTerminalAuthTicket
+    this.createTerminalWebSocketUrl = options.createWebSocketUrl ?? defaultCreateTerminalWebSocketUrl
+    this.WebSocketCtor = options.WebSocketCtor
   }
 
   private setPhase(phase: TerminalConnectionPhase): void {
@@ -267,8 +316,8 @@ export class TerminalWebSocket {
     // 防止并发重复连接
     if (
       this.ws &&
-      (this.ws.readyState === WebSocket.CONNECTING ||
-        this.ws.readyState === WebSocket.OPEN)
+      (this.ws.readyState === this.ws.CONNECTING ||
+        this.ws.readyState === this.ws.OPEN)
     ) {
       return
     }
@@ -283,20 +332,25 @@ export class TerminalWebSocket {
       this.onConnecting?.()
 
       // 一次性 ticket：用于 WebSocket 握手（避免在 URL 中暴露 access_token）
-      const { ticket } = await createAuthTicket({
+      const ticket = await this.createTerminalAuthTicket({
         type: "ws_terminal",
         server_id: this.serverId,
       })
       if (this.isDestroyed) return
 
       this.setPhase("ws_connecting")
-      const params = new URLSearchParams()
-      params.set("cols", String(this.cols))
-      params.set("rows", String(this.rows))
-      params.set("ticket", ticket)
-      const wsUrl = getWsUrl(`/api/v1/ssh/terminal/${this.serverId}?${params.toString()}`)
+      const wsUrl = await this.createTerminalWebSocketUrl({
+        serverId: this.serverId,
+        cols: this.cols,
+        rows: this.rows,
+        ticket,
+      })
+      const SocketCtor = this.WebSocketCtor ?? globalThis.WebSocket
+      if (!SocketCtor) {
+        throw new Error("WebSocket is not available in this runtime")
+      }
 
-      this.ws = new WebSocket(wsUrl)
+      this.ws = new SocketCtor(wsUrl)
       this.ws.binaryType = "arraybuffer" // 设置为二进制模式
 
       this.ws.onopen = () => {
@@ -380,7 +434,7 @@ export class TerminalWebSocket {
    * 发送输入数据（二进制）
    */
   sendInput(data: string): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       console.warn("[TerminalWS] WebSocket 未连接，无法发送数据")
       return
     }
@@ -405,7 +459,7 @@ export class TerminalWebSocket {
    * 调整终端大小
    */
   resize(cols: number, rows: number): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       return
     }
 
@@ -427,7 +481,7 @@ export class TerminalWebSocket {
    * 请求补全数据
    */
   fetchCompletionData(historyLimit: number = 500): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       console.warn("[TerminalWS] WebSocket 未连接，无法请求补全数据")
       return
     }
@@ -450,7 +504,7 @@ export class TerminalWebSocket {
     if (!newCommand.trim()) {
       return
     }
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       return
     }
 
@@ -474,7 +528,7 @@ export class TerminalWebSocket {
     cancelled: boolean = false,
     authMethod?: TerminalAuthMethod
   ): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       console.warn("[TerminalWS] WebSocket 未连接，无法发送认证响应")
       return
     }
@@ -516,7 +570,7 @@ export class TerminalWebSocket {
     accepted: boolean,
     fingerprint?: string
   ): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       console.warn("[TerminalWS] WebSocket 未连接，无法发送主机密钥确认")
       return
     }
@@ -563,10 +617,10 @@ export class TerminalWebSocket {
       const readyState = this.ws.readyState
 
       // 根据 WebSocket 状态执行不同的清理逻辑
-      if (readyState === WebSocket.OPEN || readyState === WebSocket.CLOSING) {
+      if (readyState === this.ws.OPEN || readyState === this.ws.CLOSING) {
         // 连接已建立或正在关闭,安全关闭连接
         this.ws.close(1000, "客户端主动断开")
-      } else if (readyState === WebSocket.CONNECTING) {
+      } else if (readyState === this.ws.CONNECTING) {
         // 连接正在建立中,清除所有回调防止后续执行
         this.ws.onopen = null
         this.ws.onmessage = null
@@ -585,7 +639,7 @@ export class TerminalWebSocket {
   isConnected(): boolean {
     return (
       this.ws !== null &&
-      this.ws.readyState === WebSocket.OPEN &&
+      this.ws.readyState === this.ws.OPEN &&
       this.phase === "ready"
     )
   }
@@ -711,8 +765,8 @@ export class TerminalWebSocket {
           const socket = this.ws
           this.ws = null
           if (
-            socket.readyState === WebSocket.OPEN ||
-            socket.readyState === WebSocket.CONNECTING
+            socket.readyState === socket.OPEN ||
+            socket.readyState === socket.CONNECTING
           ) {
             socket.close(1000, "服务器关闭连接")
           }
@@ -754,7 +808,7 @@ export class TerminalWebSocket {
   }
 
   private sendPing(): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       return
     }
 

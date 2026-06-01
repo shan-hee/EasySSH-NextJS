@@ -6,6 +6,14 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { getWsUrl } from '@/lib/config';
 import { createAuthTicket } from '@/lib/auth-ticket';
+import {
+  closeTransferWebSocket,
+  createTransferProgressWebSocket,
+  isTransferWebSocketActive,
+  type TransferAuthTicketProvider,
+  type TransferWebSocketConstructor,
+  type TransferWebSocketUrlResolver,
+} from '@/lib/session/transfer-runtime';
 
 // 上传进度消息接口
 export interface UploadProgressMessage {
@@ -19,12 +27,15 @@ export interface UploadProgressMessage {
 }
 
 // Hook 选项接口
-interface UseSftpUploadWebSocketOptions {
+export interface UseSftpUploadWebSocketOptions {
   taskId: string;
   enabled?: boolean;
   onProgress?: (loaded: number, total: number, stage: 'http' | 'sftp' | 'stream', speedBps: number) => void;
   onComplete?: () => void;
   onError?: (error: string) => void;
+  createTicket?: TransferAuthTicketProvider;
+  resolveWebSocketUrl?: TransferWebSocketUrlResolver;
+  WebSocketCtor?: TransferWebSocketConstructor;
 }
 
 // WebSocket 状态
@@ -54,6 +65,9 @@ export function useSftpUploadWebSocket({
   onProgress,
   onComplete,
   onError,
+  createTicket = createAuthTicket,
+  resolveWebSocketUrl = getWsUrl,
+  WebSocketCtor,
 }: UseSftpUploadWebSocketOptions) {
   const [status, setStatus] = useState<WSStatus>(WSStatus.DISCONNECTED);
   const wsRef = useRef<WebSocket | null>(null);
@@ -75,7 +89,11 @@ export function useSftpUploadWebSocket({
     }
 
     if (wsRef.current) {
-      wsRef.current.close(1000, 'Client disconnecting');
+      closeTransferWebSocket(wsRef.current, {
+        code: 1000,
+        reason: 'Client disconnecting',
+        includeConnecting: true,
+      });
       wsRef.current = null;
     }
 
@@ -85,14 +103,13 @@ export function useSftpUploadWebSocket({
   // 连接 WebSocket
   const connect = useCallback(() => {
     // 如果已经连接或正在连接，直接返回
-    if (wsRef.current?.readyState === WebSocket.OPEN ||
-        wsRef.current?.readyState === WebSocket.CONNECTING) {
+    if (isTransferWebSocketActive(wsRef.current)) {
       return;
     }
 
     // 清理旧连接
     if (wsRef.current) {
-      wsRef.current.close();
+      closeTransferWebSocket(wsRef.current, { includeConnecting: true });
       wsRef.current = null;
     }
 
@@ -100,79 +117,85 @@ export function useSftpUploadWebSocket({
 
     void (async () => {
       try {
-        const { ticket } = await createAuthTicket({ type: 'ws_sftp_upload', task_id: taskId })
-        const params = new URLSearchParams()
-        params.set('ticket', ticket)
-        const wsUrl = getWsUrl(`/api/v1/sftp/upload/ws/${taskId}?${params.toString()}`);
-        const ws = new WebSocket(wsUrl);
+        const ws = await createTransferProgressWebSocket({
+          kind: 'upload',
+          taskId,
+          createTicket,
+          resolveWebSocketUrl,
+          WebSocketCtor,
+        });
+        if (!isMountedRef.current) {
+          closeTransferWebSocket(ws, { includeConnecting: true });
+          return;
+        }
         wsRef.current = ws;
 
-      ws.onopen = () => {
-        if (!isMountedRef.current) return;
-        setStatus(WSStatus.CONNECTED);
-      };
+        ws.onopen = () => {
+          if (!isMountedRef.current) return;
+          setStatus(WSStatus.CONNECTED);
+        };
 
-      ws.onmessage = (event) => {
-        if (!isMountedRef.current) return;
+        ws.onmessage = (event) => {
+          if (!isMountedRef.current) return;
 
-        try {
-          const msg: UploadProgressMessage = JSON.parse(event.data);
+          try {
+            const msg: UploadProgressMessage = JSON.parse(event.data);
 
-          if (msg.task_id !== taskId) {
-            console.warn('[SftpUploadWS] Task ID mismatch:', msg.task_id, 'expected:', taskId);
-            return;
+            if (msg.task_id !== taskId) {
+              console.warn('[SftpUploadWS] Task ID mismatch:', msg.task_id, 'expected:', taskId);
+              return;
+            }
+
+            switch (msg.type) {
+              case 'started':
+              case 'progress':
+                if (msg.loaded !== undefined && msg.total !== undefined && msg.stage && msg.speed_bps !== undefined) {
+                  onProgress?.(msg.loaded, msg.total, msg.stage, msg.speed_bps);
+                }
+                break;
+
+              case 'complete':
+                onComplete?.();
+                // 上传完成后自动断开
+                disconnect();
+                break;
+
+              case 'cancelled':
+                onError?.(msg.message || 'Upload cancelled');
+                disconnect();
+                break;
+
+              case 'error':
+                console.error('[SftpUploadWS] Upload error:', msg.message);
+                onError?.(msg.message || 'Unknown error');
+                disconnect();
+                break;
+            }
+          } catch (err) {
+            console.error('[SftpUploadWS] Failed to parse message:', err);
           }
+        };
 
-          switch (msg.type) {
-            case 'started':
-            case 'progress':
-              if (msg.loaded !== undefined && msg.total !== undefined && msg.stage && msg.speed_bps !== undefined) {
-                onProgress?.(msg.loaded, msg.total, msg.stage, msg.speed_bps);
-              }
-              break;
-
-            case 'complete':
-              onComplete?.();
-              // 上传完成后自动断开
-              disconnect();
-              break;
-
-            case 'cancelled':
-              onError?.(msg.message || 'Upload cancelled');
-              disconnect();
-              break;
-
-            case 'error':
-              console.error('[SftpUploadWS] Upload error:', msg.message);
-              onError?.(msg.message || 'Unknown error');
-              disconnect();
-              break;
-          }
-        } catch (err) {
-          console.error('[SftpUploadWS] Failed to parse message:', err);
-        }
-      };
-
-      ws.onerror = (event) => {
-        if (!isMountedRef.current) return;
-        console.error('[SftpUploadWS] WebSocket error:', event);
-        setStatus(WSStatus.ERROR);
-      };
+        ws.onerror = (event) => {
+          if (!isMountedRef.current) return;
+          console.error('[SftpUploadWS] WebSocket error:', event);
+          setStatus(WSStatus.ERROR);
+        };
 
         ws.onclose = (event) => {
-        if (!isMountedRef.current) return;
-        setStatus(WSStatus.DISCONNECTED);
-        wsRef.current = null;
+          if (!isMountedRef.current) return;
+          setStatus(WSStatus.DISCONNECTED);
+          wsRef.current = null;
 
-        // 如果是非正常关闭且仍然 enabled，尝试重连（最多1次）
-        if (event.code !== 1000 && enabledRef.current && !reconnectTimeoutRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            if (enabledRef.current && isMountedRef.current) {
-              reconnectConnectRef.current();
-            }
-          }, 2000);
-        }
+          // 如果是非正常关闭且仍然 enabled，尝试重连（最多1次）
+          if (event.code !== 1000 && enabledRef.current && !reconnectTimeoutRef.current) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              reconnectTimeoutRef.current = null;
+              if (enabledRef.current && isMountedRef.current) {
+                reconnectConnectRef.current();
+              }
+            }, 2000);
+          }
         };
       } catch (err) {
         console.error('[SftpUploadWS] Failed to create WebSocket:', err);
@@ -180,7 +203,7 @@ export function useSftpUploadWebSocket({
         onError?.('Failed to create WebSocket connection');
       }
     })()
-  }, [taskId, onProgress, onComplete, onError, disconnect]);
+  }, [taskId, onProgress, onComplete, onError, disconnect, createTicket, resolveWebSocketUrl, WebSocketCtor]);
 
   useEffect(() => {
     reconnectConnectRef.current = connect;

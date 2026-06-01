@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useRef, useCallback, startTransition } from "react"
 import { PageHeader } from "@/components/page-header"
-import { SftpManager } from "@/components/sftp/sftp-manager"
-import { FolderOpen, Server, Plus, ChevronDown, GripVertical, Loader2, Upload } from "lucide-react"
+import { SshWorkspace } from "@/components/ssh-workspace/ssh-workspace"
+import { SftpSessionCard } from "@/components/sftp/sftp-session-card"
+import { DragPreviewToolbar, SortableSession, type CrossSessionDragData } from "@/components/sftp/sftp-session-sortable"
+import { FolderOpen, Server, Plus, ChevronDown, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -31,10 +33,9 @@ import {
  sortableKeyboardCoordinates,
  rectSortingStrategy,
 } from '@dnd-kit/sortable'
-import { useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { createPortal } from 'react-dom'
 import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
+import { createAuthTicket } from "@/lib/auth-ticket"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import { useFileTransfer } from "@/hooks/useFileTransfer"
@@ -45,235 +46,21 @@ import {
   performRename,
   performSaveFile,
   performBatchDelete,
-  type BatchDeleteResult,
-} from "@/hooks/useSftpSession"
+} from "@/lib/session/sftp-operations"
 import { useAuthReady } from "@/hooks/use-auth-ready"
-	import { useClientAuth } from "@/components/client-auth-provider"
-	import { useSystemConfig } from "@/hooks/use-system-config"
-	import { getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
-	import { useTranslations } from "next-intl"
-	import { convertSftpFileInfo, type SftpFileItem } from "@/lib/sftp-file-utils"
+import { useClientAuth } from "@/components/client-auth-provider"
+import { useSystemConfig } from "@/hooks/use-system-config"
+import { getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
+import { useTranslations } from "next-intl"
+import { convertSftpFileInfo, type SftpFileItem } from "@/lib/sftp-file-utils"
+import { loadSftpDirectory } from "@/lib/session/sftp-directory"
+import { createSftpSessionApi } from "@/lib/session/sftp-session-api"
+import type { SftpWorkspaceSession } from "@/lib/session/workspace"
+import { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferManagerAdapter } from "@/lib/session/workspace-adapters"
+import { createSftpWorkspaceSessionStoreAdapter, useSftpSessionStore } from "@/stores/sftp-session-store"
 
-	type ComponentFile = SftpFileItem
-
-// 定义连接会话接口
-interface SftpSession {
- id: string
- serverId: string
- serverName: string
- host: string
- username: string
- currentPath: string
- files: ComponentFile[]
- isConnected: boolean
- isLoading?: boolean // 是否正在加载文件列表
- label: string // 会话自定义标签
- color?: string // 会话标识颜色
-}
-
-// 跨会话拖拽数据接口
-interface CrossSessionDragData {
- sessionId: string
- fileName: string
- filePath: string
- fileType: 'file' | 'directory'
- sourceSessionId: string
-}
-
-// 从共享模块导入拖拽状态管理函数
-import { getDragSourceSessionId } from "@/lib/drag-state"
-
-// 轻量级工具栏预览组件（VSCode风格）- 使用 memo 避免重复渲染
-interface DragPreviewToolbarProps {
- sessionLabel: string
- sessionColor?: string
- host: string
-}
-
-const DragPreviewToolbar = React.memo(({ sessionLabel, sessionColor, host }: DragPreviewToolbarProps) => {
- return (
- <div className="bg-card border rounded-lg shadow-2xl px-3 py-2 flex items-center gap-2 min-w-[200px] cursor-grabbing">
- <GripVertical className="h-4 w-4 text-muted-foreground" />
- {sessionColor && (
- <div
- className="w-1 h-5 rounded-full"
- style={{ backgroundColor: sessionColor }}
- />
- )}
- <div className="flex flex-col">
- <span className="text-xs font-semibold text-foreground">{sessionLabel}</span>
- <span className="text-[10px] text-muted-foreground font-mono">{host}</span>
- </div>
- </div>
- )
-})
-
-// 可拖拽的会话项组件
-interface SortableSessionProps {
- session: SftpSession
- children: React.ReactNode
- onCrossSessionDrop?: (targetSessionId: string, dragData: CrossSessionDragData) => void
- dropOverlayTexts?: {
-   title: string
-   description: string
- }
-}
-
-const SortableSession = React.memo(({ session, children, onCrossSessionDrop, dropOverlayTexts }: SortableSessionProps) => {
- const {
- attributes,
- listeners,
- setNodeRef,
- transform,
- transition,
- isDragging,
- } = useSortable({ id: session.id })
-
- const [isDragOver, setIsDragOver] = React.useState(false)
- const dragOverTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
-
- // 使用 useMemo 缓存样式对象
- const style = React.useMemo(() => ({
- transform: CSS.Transform.toString(transform),
- transition,
- }), [transform, transition])
-
- // 清理定时器
- React.useEffect(() => {
-   return () => {
-     if (dragOverTimeoutRef.current) {
-       clearTimeout(dragOverTimeoutRef.current)
-     }
-   }
- }, [])
-
- // 处理跨会话文件拖放
- // 核心原理：dragover 在拖拽时会持续触发（约 50ms 一次）
- // 利用这个特性，每次 dragover 都重置定时器，如果 100ms 内没有新事件，说明鼠标已离开
- const handleDragOver = React.useCallback((e: React.DragEvent) => {
-   // 检查是否是文件拖拽(不是会话拖拽)
-   if (!e.dataTransfer.types.includes('application/json')) {
-     return
-   }
-
-   // 不在源会话上显示拖放遮罩
-   const sourceId = getDragSourceSessionId()
-   if (sourceId === session.id) {
-     return
-   }
-
-   e.preventDefault()
-   e.stopPropagation()
-   setIsDragOver(true)
-
-   // 重置定时器
-   if (dragOverTimeoutRef.current) {
-     clearTimeout(dragOverTimeoutRef.current)
-   }
-   dragOverTimeoutRef.current = setTimeout(() => {
-     setIsDragOver(false)
-   }, 100)
- }, [session.id])
-
- // dragenter 简化处理
- const handleDragEnter = React.useCallback((e: React.DragEvent) => {
-   if (e.dataTransfer.types.includes('application/json')) {
-     const sourceId = getDragSourceSessionId()
-     if (sourceId !== session.id) {
-       e.preventDefault()
-       e.stopPropagation()
-     }
-   }
- }, [session.id])
-
- // dragleave 简化，主要依赖 dragover 的定时器机制
- const handleDragLeave = React.useCallback((e: React.DragEvent) => {
-   e.preventDefault()
-   e.stopPropagation()
- }, [])
-
- const handleDrop = React.useCallback((e: React.DragEvent) => {
- e.preventDefault()
- e.stopPropagation()
- setIsDragOver(false)
-
- // 清理定时器
- if (dragOverTimeoutRef.current) {
-   clearTimeout(dragOverTimeoutRef.current)
-   dragOverTimeoutRef.current = null
- }
-
- try {
- const jsonData = e.dataTransfer.getData('application/json')
- if (jsonData) {
- const dragData = JSON.parse(jsonData)
- // 跨会话拖拽
- if (dragData.sourceSessionId !== session.id && onCrossSessionDrop) {
- onCrossSessionDrop(session.id, dragData)
- }
- }
- } catch (error) {
- console.error('解析拖拽数据失败:', error)
- }
- }, [session.id, onCrossSessionDrop])
-
- // 使用 useMemo 缓存 cloneElement 结果
- // 仅在子元素为自定义组件时注入拖拽句柄属性，避免把未知属性传到原生 DOM
- const { childElement, isDomChild } = React.useMemo(() => {
-   const element = children as React.ReactElement
-   const isDom = typeof element?.type === 'string'
-   return {
-     childElement: isDom
-       ? element
-       : React.cloneElement(element, {
-           dragHandleListeners: listeners,
-           dragHandleAttributes: attributes,
-         } as React.Attributes),
-     isDomChild: isDom,
-   }
- }, [children, listeners, attributes])
-
- // 判断是否是有效的跨会话拖拽目标（排除同会话）
- const isValidDropTarget = isDragOver && session.isConnected
-
- return (
- <div
- ref={setNodeRef}
- style={style}
-  className={cn(
-    "min-h-0 relative",
-    // 拖拽时轻微降低透明度，不影响性能
-    isDragging && "opacity-60",
-  )}
-  data-session-id={session.id}
-  // 当子元素是原生 DOM（如欢迎页占位）时，将拖拽监听直接绑定在容器上
-  {...(isDomChild ? { ...attributes, ...listeners } : {})}
-  onDragEnter={handleDragEnter}
-  onDragOver={handleDragOver}
-  onDragLeave={handleDragLeave}
-  onDrop={handleDrop}
->
- {childElement}
- {/* 跨会话拖拽遮罩层 */}
- {isValidDropTarget && (
-   <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-[2px] border-2 border-dashed border-primary/60 m-1 rounded-lg pointer-events-none animate-in fade-in-0 duration-200">
-     <div className="text-center">
-       <Upload className="h-10 w-10 text-primary mx-auto mb-3 animate-bounce" />
-       <p className="text-base font-semibold text-primary">
-         {dropOverlayTexts?.title ?? "Drop here to transfer"}
-       </p>
-       <p className="text-xs text-primary/70 mt-1">
-         {dropOverlayTexts?.description ?? "Release to transfer files to this server"}
-       </p>
-     </div>
-   </div>
- )}
-</div>
- )
-})
-
-DragPreviewToolbar.displayName = "DragPreviewToolbar"
-SortableSession.displayName = "SortableSession"
+type ComponentFile = SftpFileItem
+type SftpSession = SftpWorkspaceSession
 
 // 会话标识颜色列表（常量）
 const SESSION_COLORS = [
@@ -284,144 +71,6 @@ const SESSION_COLORS = [
   "var(--chart-4)",
   "var(--chart-5)",
 ]
-
-interface SftpSessionContentProps {
-  session: SftpSession
-  isFullscreen: boolean
-  connectingText: string
-  transferTasks: ReturnType<typeof useFileTransfer>["tasks"]
-  onClearCompletedTransfers: () => void
-  onCancelTransfer: (taskId: string) => void
-  onNavigateSession: (sessionId: string, path: string) => void
-  onUploadSession: (sessionId: string, files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) => void
-  onDownloadSession: (sessionId: string, fileName: string) => void
-  onDeleteSession: (sessionId: string, fileName: string) => void
-  onBatchDeleteSession: (sessionId: string, fileNames: string[]) => Promise<BatchDeleteResult>
-  onBatchDownloadSession: (sessionId: string, fileNames: string[], excludePatterns?: string[]) => Promise<void>
-  onCreateFolderSession: (sessionId: string, name: string) => void
-  onCreateFileSession: (sessionId: string, name: string) => void
-  onRenameSessionFile: (sessionId: string, oldName: string, newName: string) => void
-  onDisconnectSession: (sessionId: string) => void
-  onRefreshSession: (sessionId: string) => void
-  onReadFileSession: (sessionId: string, fileName: string) => Promise<string>
-  onSaveFileSession: (sessionId: string, fileName: string, content: string) => Promise<void>
-  onRenameSessionLabel: (sessionId: string, newLabel: string) => void
-  onToggleFullscreen: (sessionId: string) => void
-  // 来自 SortableSession 的拖拽句柄注入
-  dragHandleListeners?: React.HTMLAttributes<HTMLDivElement>
-  dragHandleAttributes?: React.HTMLAttributes<HTMLDivElement>
-}
-
-const SftpSessionContent = React.memo(function SftpSessionContent({
-  session,
-  isFullscreen,
-  connectingText,
-  transferTasks,
-  onClearCompletedTransfers,
-  onCancelTransfer,
-  onNavigateSession,
-  onUploadSession,
-  onDownloadSession,
-  onDeleteSession,
-  onBatchDeleteSession,
-  onBatchDownloadSession,
-  onCreateFolderSession,
-  onCreateFileSession,
-  onRenameSessionFile,
-  onDisconnectSession,
-  onRefreshSession,
-  onReadFileSession,
-  onSaveFileSession,
-  onRenameSessionLabel,
-  onToggleFullscreen,
-  dragHandleListeners,
-  dragHandleAttributes,
-}: SftpSessionContentProps) {
-  const onNavigate = React.useCallback((path: string) => onNavigateSession(session.id, path), [onNavigateSession, session.id])
-  const onUpload = React.useCallback(
-    (files: FileList, onProgress?: (fileName: string, loaded: number, total: number) => void) =>
-      onUploadSession(session.id, files, onProgress),
-    [onUploadSession, session.id],
-  )
-  const onDownload = React.useCallback((fileName: string) => onDownloadSession(session.id, fileName), [onDownloadSession, session.id])
-  const onDelete = React.useCallback((fileName: string) => onDeleteSession(session.id, fileName), [onDeleteSession, session.id])
-  const onBatchDelete = React.useCallback((fileNames: string[]) => onBatchDeleteSession(session.id, fileNames), [onBatchDeleteSession, session.id])
-  const onBatchDownload = React.useCallback(
-    (fileNames: string[], excludePatterns?: string[]) =>
-      onBatchDownloadSession(session.id, fileNames, excludePatterns),
-    [onBatchDownloadSession, session.id],
-  )
-  const onCreateFolder = React.useCallback((name: string) => onCreateFolderSession(session.id, name), [onCreateFolderSession, session.id])
-  const onCreateFile = React.useCallback((name: string) => onCreateFileSession(session.id, name), [onCreateFileSession, session.id])
-  const onRename = React.useCallback((oldName: string, newName: string) => onRenameSessionFile(session.id, oldName, newName), [onRenameSessionFile, session.id])
-  const onDisconnect = React.useCallback(() => onDisconnectSession(session.id), [onDisconnectSession, session.id])
-  const onRefresh = React.useCallback(() => onRefreshSession(session.id), [onRefreshSession, session.id])
-  const onReadFile = React.useCallback((fileName: string) => onReadFileSession(session.id, fileName), [onReadFileSession, session.id])
-  const onSaveFile = React.useCallback(
-    (fileName: string, content: string) => onSaveFileSession(session.id, fileName, content),
-    [onSaveFileSession, session.id],
-  )
-  const onRenameLabel = React.useCallback((newLabel: string) => onRenameSessionLabel(session.id, newLabel), [onRenameSessionLabel, session.id])
-  const onToggleFullscreenBound = React.useCallback(() => onToggleFullscreen(session.id), [onToggleFullscreen, session.id])
-
-  if (!session.isConnected) {
-    return (
-      <div className="h-full flex flex-col rounded-xl border bg-card overflow-hidden">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-3 py-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg border border-border bg-muted/60">
-              <Server className="h-6 w-6 text-primary animate-pulse" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">{connectingText}</p>
-              <p className="text-xs text-muted-foreground font-mono">{session.serverName || session.host}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <SftpManager
-      serverId={session.serverId}
-      serverName={session.serverName}
-      host={session.host}
-      username={session.username}
-      isConnected={session.isConnected}
-      currentPath={session.currentPath}
-      files={session.files}
-      sessionId={session.id}
-      sessionLabel={session.label}
-      sessionColor={session.color}
-      isFullscreen={isFullscreen}
-      pageContext="sftp"
-      isLoading={session.isLoading}
-      onNavigate={onNavigate}
-      onUpload={onUpload}
-      onDownload={onDownload}
-      onDelete={onDelete}
-      onBatchDelete={onBatchDelete}
-      onBatchDownload={onBatchDownload}
-      onCreateFolder={onCreateFolder}
-      onCreateFile={onCreateFile}
-      onRename={onRename}
-      onDisconnect={onDisconnect}
-      onRefresh={onRefresh}
-      onReadFile={onReadFile}
-      onSaveFile={onSaveFile}
-      onRenameSession={onRenameLabel}
-      onToggleFullscreen={onToggleFullscreenBound}
-      dragHandleListeners={dragHandleListeners}
-      dragHandleAttributes={dragHandleAttributes}
-      transferTasks={transferTasks}
-      onClearCompletedTransfers={onClearCompletedTransfers}
-      onCancelTransfer={onCancelTransfer}
-    />
-  )
-})
-
-SftpSessionContent.displayName = "SftpSessionContent"
 
 export default function SftpPage() {
  const { ready } = useAuthReady()
@@ -442,23 +91,113 @@ export default function SftpPage() {
      }),
    [effectiveLocale, effectiveTimezone],
  )
+ const sftpSessionApi = React.useMemo(() => createSftpSessionApi(sftpApi), [])
  const [servers, setServers] = useState<ApiServer[]>([])
  const [loading, setLoading] = useState(true)
  // 认证改为基于 HttpOnly Cookie，不再需要前端 token
 
- // 改用会话数组管理多个连接
- const [sessions, setSessions] = useState<SftpSession[]>([])
- const [nextSessionId, setNextSessionId] = useState(1)
- const [fullscreenSessionId, setFullscreenSessionId] = useState<string | null>(null)
- const [activeId, setActiveId] = useState<string | null>(null) // 当前拖拽的会话ID
+ // SFTP 工作区会话状态进入 runtime store，页面只保留业务编排。
+ const sessions = useSftpSessionStore((state) => state.sessions)
+ const nextSessionId = useSftpSessionStore((state) => state.nextSessionId)
+ const fullscreenSessionId = useSftpSessionStore((state) => state.fullscreenSessionId)
+ const activeId = useSftpSessionStore((state) => state.activeId)
+ const setSessions = useSftpSessionStore((state) => state.setSessions)
+ const setNextSessionId = useSftpSessionStore((state) => state.setNextSessionId)
+ const setFullscreenSessionId = useSftpSessionStore((state) => state.setFullscreenSessionId)
+ const setActiveId = useSftpSessionStore((state) => state.setActiveId)
  const parentRef = useRef<HTMLDivElement>(null)
  const sessionsRef = useRef<SftpSession[]>([])
 
  // 始终保持 ref 指向最新会话，便于稳定回调访问（避免 useEffect 的一帧滞后）
  sessionsRef.current = sessions
 
+ const workspaceAuthTicketProvider = React.useMemo(() => createWorkspaceAuthTicketProviderAdapter(createAuthTicket), [])
+ const transferAuthTicketProvider = React.useMemo(
+   () => createWorkspaceTransferAuthTicketProviderAdapter(workspaceAuthTicketProvider),
+   [workspaceAuthTicketProvider],
+ )
+
  // 文件传输管理
- const { tasks: transferTasks, uploadFile, clearCompleted, cancelTask, directTransfer } = useFileTransfer()
+ const fileTransfer = useFileTransfer({
+   createTicket: transferAuthTicketProvider,
+ })
+ const {
+   tasks: transferTasks,
+   uploadFile,
+   clearCompleted,
+   cancelTask,
+   directTransfer,
+ } = fileTransfer
+ const transferTasksRef = useRef(transferTasks)
+ transferTasksRef.current = transferTasks
+ const workspaceSessionStore = React.useMemo(
+   () => createSftpWorkspaceSessionStoreAdapter(() => transferTasksRef.current),
+   [],
+ )
+ const workspacePreferences = React.useMemo(() => createBrowserWorkspacePreferenceAdapter(), [])
+ const workspaceAdapters = React.useMemo(() => createWorkspaceAdapters({
+   apiClient: {
+     sftp: sftpSessionApi,
+   },
+   i18n: createWorkspaceI18nAdapter({
+     locale: effectiveLocale,
+     timezone: effectiveTimezone,
+     common: tCommon,
+     terminal: tTerminal,
+     sftp: tSftp,
+   }),
+   notifier: createWorkspaceNotifierAdapter(toast),
+   settings: createWorkspaceSettingsAdapter({
+     sftp: {
+       downloadExcludePatterns: systemConfig?.download_exclude_patterns,
+     },
+   }),
+   preferences: workspacePreferences,
+   authTicketProvider: workspaceAuthTicketProvider,
+   sessionStore: workspaceSessionStore,
+   transferManager: createWorkspaceTransferManagerAdapter({
+     tasks: transferTasks,
+     uploadFile,
+     directTransfer,
+     createTransferTask: fileTransfer.createTransferTask,
+     addTask: fileTransfer.addTask,
+     updateTask: fileTransfer.updateTask,
+     removeTask: fileTransfer.removeTask,
+     clearAll: fileTransfer.clearAll,
+     clearCompleted,
+     cancelTask,
+     cancelDirectTransfer: fileTransfer.cancelDirectTransfer,
+   }),
+ }), [
+   cancelTask,
+   clearCompleted,
+   directTransfer,
+   effectiveLocale,
+   effectiveTimezone,
+   fileTransfer.addTask,
+   fileTransfer.cancelDirectTransfer,
+   fileTransfer.clearAll,
+   fileTransfer.createTransferTask,
+   fileTransfer.removeTask,
+   fileTransfer.updateTask,
+   workspaceAuthTicketProvider,
+   systemConfig?.download_exclude_patterns,
+   tCommon,
+   tSftp,
+   tTerminal,
+   sftpSessionApi,
+   transferTasks,
+   uploadFile,
+   workspacePreferences,
+   workspaceSessionStore,
+ ])
+ const workspaceCapabilities = React.useMemo(() => ({
+   terminal: false,
+   sftp: true,
+   transfers: true,
+   fullscreen: true,
+   crossSessionDrag: true,
+ }), [])
 
  // 加载服务器列表
  const loadServers = useCallback(async () => {
@@ -581,28 +320,18 @@ export default function SftpPage() {
 
      // 传输成功后刷新目标会话的文件列表
      try {
-       const dirResponse = await sftpApi.listDirectory(targetSession.serverId, targetPath)
-       const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
-
-       // 添加父目录项
-       const filesWithParent: ComponentFile[] = dirResponse.parent
-         ? [
-	             {
-	               name: "..",
-	               type: "directory" as const,
-	               size: "-",
-	               sizeBytes: 0,
-	               modified: "",
-	               permissions: "drwxr-xr-x",
-	             },
-             ...convertedFiles,
-           ]
-         : convertedFiles
+       const directory = await loadSftpDirectory({
+         serverId: targetSession.serverId,
+         path: targetPath,
+         convertFileInfo,
+         withParentEntry: true,
+         api: sftpSessionApi,
+       })
 
        setSessions(prev =>
          prev.map(s =>
            s.id === targetSessionId
-             ? { ...s, files: filesWithParent }
+             ? { ...s, files: directory.files }
              : s
          )
        )
@@ -617,7 +346,7 @@ export default function SftpPage() {
    } catch (err) {
      toast.error(getErrorMessage(err, tSftp("toastTransferFailed")))
    }
- }, [tSftp, convertFileInfo, directTransfer])
+ }, [tSftp, convertFileInfo, directTransfer, sftpSessionApi])
 
  // 快速创建并连接到服务器
  const handleQuickConnect = async (serverId: string) => {
@@ -649,28 +378,18 @@ export default function SftpPage() {
 
  // 连接并加载文件列表
  try {
- const dirResponse = await sftpApi.listDirectory(serverId, initialPath)
- const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
-
- // 添加父目录项
- const filesWithParent: ComponentFile[] = dirResponse.parent
- ? [
-	{
-	name: "..",
-	type: "directory" as const,
-	size: "-",
-	sizeBytes: 0,
-	modified: "",
-	permissions: "drwxr-xr-x",
-	},
- ...convertedFiles,
- ]
- : convertedFiles
+ const directory = await loadSftpDirectory({
+ serverId,
+ path: initialPath,
+ convertFileInfo,
+ withParentEntry: true,
+ api: sftpSessionApi,
+ })
 
  setSessions(prev =>
  prev.map(s =>
  s.id === sessionId
- ? { ...s, isConnected: true, isLoading: false, files: filesWithParent }
+ ? { ...s, isConnected: true, isLoading: false, files: directory.files }
  : s
  )
  )
@@ -694,27 +413,18 @@ export default function SftpPage() {
  )
 
  try {
- const dirResponse = await sftpApi.listDirectory(session.serverId, session.currentPath)
- const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
-
- const filesWithParent: ComponentFile[] = dirResponse.parent
- ? [
-	{
-	name: "..",
-	type: "directory" as const,
-	size: "-",
-	sizeBytes: 0,
-	modified: "",
-	permissions: "drwxr-xr-x",
-	},
- ...convertedFiles,
- ]
- : convertedFiles
+ const directory = await loadSftpDirectory({
+ serverId: session.serverId,
+ path: session.currentPath,
+ convertFileInfo,
+ withParentEntry: true,
+ api: sftpSessionApi,
+ })
 
  // 使用 startTransition 降低状态更新优先级
  startTransition(() => {
    setSessions(prev =>
-     prev.map(s => (s.id === sessionId ? { ...s, isLoading: false, files: filesWithParent } : s))
+     prev.map(s => (s.id === sessionId ? { ...s, isLoading: false, files: directory.files } : s))
    )
  })
 
@@ -726,12 +436,14 @@ export default function SftpPage() {
  )
  toast.error(getErrorMessage(error, tSftp("toastRefreshFailed")))
  }
- }, [tSftp, convertFileInfo])
+ }, [tSftp, convertFileInfo, sftpSessionApi])
 
  // 断开连接
  const handleDisconnect = useCallback((sessionId: string) => {
- setSessions(prev => prev.filter(session => session.id !== sessionId))
- }, [])
+   setSessions(prev => prev.filter(session => session.id !== sessionId))
+   setFullscreenSessionId(prev => (prev === sessionId ? null : prev))
+   setActiveId(prev => (prev === sessionId ? null : prev))
+ }, [setActiveId, setFullscreenSessionId, setSessions])
 
  // 重命名会话标签
  const handleRenameSession = useCallback((sessionId: string, newLabel: string) => {
@@ -753,29 +465,20 @@ export default function SftpPage() {
  )
 
  try {
- const dirResponse = await sftpApi.listDirectory(session.serverId, path)
- const convertedFiles: ComponentFile[] = dirResponse.files.map(convertFileInfo)
-
- const filesWithParent: ComponentFile[] = dirResponse.parent
- ? [
- {
- name: "..",
- type: "directory" as const,
- size: "-",
- sizeBytes: 0,
- modified: "",
- permissions: "drwxr-xr-x",
- },
- ...convertedFiles,
- ]
- : convertedFiles
+ const directory = await loadSftpDirectory({
+ serverId: session.serverId,
+ path,
+ convertFileInfo,
+ withParentEntry: true,
+ api: sftpSessionApi,
+ })
 
  // 使用 startTransition 降低状态更新优先级,避免阻塞 UI
  startTransition(() => {
    setSessions(prev =>
      prev.map(s =>
        s.id === sessionId
-         ? { ...s, currentPath: path, isLoading: false, files: filesWithParent }
+         ? { ...s, currentPath: path, isLoading: false, files: directory.files }
          : s
      )
    )
@@ -787,7 +490,7 @@ export default function SftpPage() {
  )
  toast.error(getErrorMessage(error, tSftp("toastLoadDirectoryFailed")))
 }
- }, [tSftp, convertFileInfo])
+ }, [tSftp, convertFileInfo, sftpSessionApi])
 
  // 上传文件（接入统一上传任务 UI）
  const handleUpload = useCallback(async (
@@ -841,9 +544,9 @@ export default function SftpPage() {
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
  // 直接触发浏览器下载，由浏览器自带下载管理器处理
- sftpApi.downloadFile(session.serverId, filePath)
+ sftpSessionApi.downloadFile(session.serverId, filePath)
  toast.success(tSftp("toastDownloadStartSingle", { file: fileName }))
- }, [tSftp])
+ }, [tSftp, sftpSessionApi])
 
  /**
   * 创建多会话文件列表更新器
@@ -875,10 +578,12 @@ export default function SftpPage() {
        currentPath: session.currentPath,
        fileName,
        t: tSftp,
+       notifier: toast,
        setFiles: createSessionFilesUpdater(sessionId),
+       api: sftpSessionApi,
      })
    },
-   [tSftp, createSessionFilesUpdater]
+   [tSftp, createSessionFilesUpdater, sftpSessionApi]
  )
 
  // 创建文件夹 (使用通用函数)
@@ -892,11 +597,13 @@ export default function SftpPage() {
        currentPath: session.currentPath,
        name,
        t: tSftp,
+       notifier: toast,
        setFiles: createSessionFilesUpdater(sessionId),
        convertFileInfo,
+       api: sftpSessionApi,
      })
    },
-   [tSftp, createSessionFilesUpdater, convertFileInfo]
+   [tSftp, createSessionFilesUpdater, convertFileInfo, sftpSessionApi]
  )
 
  // 创建文件 (使用通用函数)
@@ -910,11 +617,13 @@ export default function SftpPage() {
        currentPath: session.currentPath,
        name,
        t: tSftp,
+       notifier: toast,
        setFiles: createSessionFilesUpdater(sessionId),
        convertFileInfo,
+       api: sftpSessionApi,
      })
    },
-   [tSftp, createSessionFilesUpdater, convertFileInfo]
+   [tSftp, createSessionFilesUpdater, convertFileInfo, sftpSessionApi]
  )
 
  // 重命名 (使用通用函数)
@@ -929,10 +638,12 @@ export default function SftpPage() {
        oldName,
        newName,
        t: tSftp,
+       notifier: toast,
        setFiles: createSessionFilesUpdater(sessionId),
+       api: sftpSessionApi,
      })
    },
-   [tSftp, createSessionFilesUpdater]
+   [tSftp, createSessionFilesUpdater, sftpSessionApi]
  )
 
  // 读取文件
@@ -945,14 +656,14 @@ export default function SftpPage() {
  const filePath = `${session.currentPath}/${fileName}`.replace("//", "/")
 
  try {
- const content = await sftpApi.readFile(session.serverId, filePath)
+ const content = await sftpSessionApi.readFile(session.serverId, filePath)
  return content
  } catch (error: unknown) {
  console.error("Failed to read file:", error)
  toast.error(getErrorMessage(error, tSftp("toastReadFileFailed")))
  throw error
  }
- }, [tSftp])
+ }, [tSftp, sftpSessionApi])
 
  // 保存文件 (使用通用函数)
  const handleSaveFile = useCallback(
@@ -968,11 +679,13 @@ export default function SftpPage() {
        fileName,
        content,
        t: tSftp,
+       notifier: toast,
        setFiles: createSessionFilesUpdater(sessionId),
        convertFileInfo,
+       api: sftpSessionApi,
      })
    },
-   [tSftp, createSessionFilesUpdater, convertFileInfo]
+   [tSftp, createSessionFilesUpdater, convertFileInfo, sftpSessionApi]
  )
 
  // 批量删除文件 (使用通用函数)
@@ -988,10 +701,12 @@ export default function SftpPage() {
        currentPath: session.currentPath,
        fileNames,
        t: tSftp,
+       notifier: toast,
        setFiles: createSessionFilesUpdater(sessionId),
+       api: sftpSessionApi,
      })
    },
-   [tSftp, createSessionFilesUpdater]
+   [tSftp, createSessionFilesUpdater, sftpSessionApi]
  )
 
  // 批量下载文件（文件管理器固定使用推荐的快速下载方案）
@@ -1011,14 +726,14 @@ export default function SftpPage() {
    )
 
   try {
-    await sftpApi.batchDownload(session.serverId, filePaths, "fast", excludePatterns)
+    await sftpSessionApi.batchDownload(session.serverId, filePaths, "fast", excludePatterns)
     toast.success(tSftp("toastBatchDownloadStart", { count: fileNames.length }))
   } catch (error: unknown) {
     console.error("Failed to batch download:", error)
     toast.error(getErrorMessage(error, tSftp("toastBatchDownloadFailed")))
      throw error
    }
- }, [tSftp])
+ }, [tSftp, sftpSessionApi])
 
  // 获取网格布局类名
  const getGridLayout = (count: number) => {
@@ -1035,7 +750,11 @@ const offlineServers = servers.filter(s => s.status !== "online")
  // 与快速连接界面保持一致，不使用骨架屏
 
  return (
- <>
+ <SshWorkspace
+   adapters={workspaceAdapters}
+   capabilities={workspaceCapabilities}
+   layout="web"
+ >
  <PageHeader title={tSftp("title")}>
  {/* 新建连接下拉菜单 - 仅在有会话时显示 */}
  {sessions.length > 0 && (
@@ -1215,13 +934,10 @@ const offlineServers = servers.filter(s => s.status !== "online")
  <div className="h-full relative">
  {sessions.filter(s => s.id === fullscreenSessionId).map(session => (
  <div key={session.id} className="h-full" data-session-id={session.id}>
- <SftpSessionContent
+ <SftpSessionCard
    session={session}
    isFullscreen={true}
    connectingText={tSftp("connecting")}
-   transferTasks={transferTasks}
-   onClearCompletedTransfers={clearCompleted}
-   onCancelTransfer={cancelTask}
    onNavigateSession={handleNavigate}
    onUploadSession={handleUpload}
    onDownloadSession={handleDownload}
@@ -1279,13 +995,10 @@ const offlineServers = servers.filter(s => s.status !== "online")
    description: tSftp("crossSessionDropDescription"),
  }}
  >
- <SftpSessionContent
+ <SftpSessionCard
    session={session}
    isFullscreen={false}
    connectingText={tSftp("connecting")}
-   transferTasks={transferTasks}
-   onClearCompletedTransfers={clearCompleted}
-   onCancelTransfer={cancelTask}
    onNavigateSession={handleNavigate}
    onUploadSession={handleUpload}
    onDownloadSession={handleDownload}
@@ -1324,6 +1037,6 @@ const offlineServers = servers.filter(s => s.status !== "online")
  </DndContext>
  )}
  </div>
- </>
+ </SshWorkspace>
  )
 }

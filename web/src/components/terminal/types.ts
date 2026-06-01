@@ -4,27 +4,15 @@ import type {
   TerminalWebSocket,
   TerminalConnectionPhase,
 } from '@/lib/websocket-terminal'
+import type { WorkspaceTerminalSession } from "@/lib/session/workspace"
 
 export type { TerminalConnectionPhase } from '@/lib/websocket-terminal'
 
 export type SessionStatus = "connected" | "disconnected" | "reconnecting"
 
-export interface TerminalSession {
-  id: string
-  serverId?: string
-  serverName: string
-  host: string
-  port?: number
-  username: string
-  shouldConnect: boolean
-  connectionPhase: TerminalConnectionPhase
-  status: SessionStatus
+export interface TerminalSession extends WorkspaceTerminalSession {
   lastActivity: number // 时间戳（ms）
-  group?: string
-  tags?: string[]
-  pinned?: boolean
-  // 新增：会话类型，quick 表示快速连接页签（无工具栏）
-  type?: "quick" | "terminal"
+  status: SessionStatus
 }
 
 /**

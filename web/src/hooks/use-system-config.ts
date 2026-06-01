@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { settingsApi } from "@/lib/api/settings"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { parseWorkspaceDownloadExcludePatterns } from "@/lib/session/workspace-settings"
 
 /**
  * 获取系统配置的 Hook
@@ -25,29 +26,8 @@ export function useDownloadExcludePatterns() {
   const { data: config } = useSystemConfig()
 
   if (!config) {
-    // 默认排除规则
-    return [
-      "node_modules",
-      ".git",
-      ".svn",
-      ".hg",
-      "__pycache__",
-      ".pytest_cache",
-      ".next",
-      ".nuxt",
-      "dist",
-      "build",
-      "target",
-      "vendor",
-      ".cache",
-      ".DS_Store",
-      "thumbs.db",
-    ]
+    return parseWorkspaceDownloadExcludePatterns(null)
   }
 
-  // 从配置中解析排除规则
-  return config.download_exclude_patterns
-    .split("\n")
-    .map((p: string) => p.trim())
-    .filter((p: string) => p.length > 0)
+  return parseWorkspaceDownloadExcludePatterns(config.download_exclude_patterns)
 }

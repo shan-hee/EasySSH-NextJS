@@ -1,6 +1,5 @@
 "use client"
 
-import { useTranslations } from "next-intl"
 import {
   Download,
   Trash2,
@@ -8,6 +7,7 @@ import {
   Edit,
   FileText,
 } from "lucide-react"
+import { useWorkspaceSftpTranslator } from "@/components/ssh-workspace/use-workspace-translator"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenuItem,
@@ -90,7 +90,7 @@ export function FileActionMenu({
   selectedFilesCount = 0,
   onAction,
 }: FileActionMenuProps) {
-  const t = useTranslations("sftp")
+  const t = useWorkspaceSftpTranslator()
   const isMultiSelect = selectedFilesCount > 1
   const isSingleSelect = selectedFilesCount === 1
 
