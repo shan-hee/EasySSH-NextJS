@@ -1173,6 +1173,8 @@ const messages = {
     tooltipDelete: "删除服务器",
     searchPlaceholder: "搜索服务器名称、地址或用户名...",
     addServer: "添加服务器",
+    viewGridTooltip: "网格视图",
+    viewListTooltip: "列表视图",
     tabAll: "全部",
     loadingList: "加载服务器列表...",
     emptyFilteredTitle: "未找到匹配的服务器",

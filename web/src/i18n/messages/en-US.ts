@@ -1225,6 +1225,8 @@ const messages = {
     tooltipDelete: "Delete server",
     searchPlaceholder: "Search by server name, host or username...",
     addServer: "Add server",
+    viewGridTooltip: "Grid view",
+    viewListTooltip: "List view",
     tabAll: "All",
     loadingList: "Loading server list...",
     emptyFilteredTitle: "No matching servers found",

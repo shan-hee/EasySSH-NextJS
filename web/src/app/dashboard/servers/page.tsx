@@ -5,11 +5,13 @@ import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AddServerDialog } from "@/components/servers/add-server-dialog"
 import { EditServerDialog } from "@/components/servers/edit-server-dialog"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { ServerFormData } from "@/components/servers/add-server-dialog"
 import { serversApi, type Server, type AuthMethod } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import {
  Search,
  Plus,
@@ -18,6 +20,8 @@ import {
  Terminal,
  Edit,
  Trash2,
+ LayoutGrid,
+ List,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -35,6 +39,7 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
+  rectSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -42,14 +47,176 @@ import { AnimatedList } from "@/components/ui/animated-list"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 
-// 可排序的服务器项组件
-function SortableServerItem({
+type ViewMode = "grid" | "list"
+
+function getServerItemClassName(viewMode: ViewMode, sortable = true) {
+  return cn(
+    "group rounded-lg border bg-card text-card-foreground border-border hover:bg-accent/60 hover:border-primary/40 outline-none focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/20 transition-colors duration-200",
+    sortable && "cursor-grab active:cursor-grabbing",
+    viewMode === "grid"
+      ? "flex h-full min-h-[168px] flex-col items-start gap-3 p-4"
+      : "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-4 sm:flex sm:items-center"
+  )
+}
+
+function ServerItemBody({
   server,
+  viewMode,
+  showActions = true,
   onConnect,
   onEdit,
   onDelete,
 }: {
   server: Server
+  viewMode: ViewMode
+  showActions?: boolean
+  onConnect?: (id: string) => void
+  onEdit?: (server: Server) => void
+  onDelete?: (id: string) => void
+}) {
+  const t = useTranslations("servers")
+
+  return (
+    <>
+      <ServerIcon className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+
+      <div
+        className={cn(
+          "min-w-0",
+          viewMode === "grid"
+            ? "w-full flex-1 space-y-2"
+            : "flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-4"
+        )}
+      >
+        <div className={cn("min-w-0", viewMode === "list" && "sm:w-52 sm:flex-none md:w-56")}>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="truncate text-sm font-medium text-foreground transition-colors group-hover:text-primary">
+              {server.name || server.host}
+            </div>
+          </div>
+          <div className="truncate text-xs font-mono text-muted-foreground">
+            {server.username}@{server.host}:{server.port}
+          </div>
+        </div>
+
+        {server.description && (
+          <div
+            className={cn(
+              "text-xs text-muted-foreground/80",
+              viewMode === "grid"
+                ? "line-clamp-2"
+                : "line-clamp-2 sm:line-clamp-1 sm:flex-1 sm:text-left"
+            )}
+          >
+            {server.description}
+          </div>
+        )}
+      </div>
+
+      {server.tags && server.tags.length > 0 && (
+        <div
+          className={cn(
+            "flex max-w-full flex-wrap gap-1 overflow-hidden",
+            viewMode === "grid"
+              ? "w-full"
+              : "col-start-2 sm:col-start-auto sm:max-w-[12rem] sm:flex-shrink-0 md:max-w-[16rem]"
+          )}
+        >
+          {server.tags.map((tag) => (
+            <Badge key={tag} variant="outline" className="max-w-[8rem] truncate text-xs">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {showActions && onConnect && onEdit && onDelete && (
+        <div
+          className={cn(
+            "flex items-center gap-1",
+            viewMode === "grid"
+              ? "mt-auto w-full justify-end border-t border-border/70 pt-2"
+              : "col-start-2 justify-end sm:col-start-auto sm:flex-shrink-0"
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+            onClick={() => onConnect(server.id)}
+            title={t("tooltipConnect")}
+            aria-label={t("tooltipConnect")}
+          >
+            <Terminal className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+            onClick={() => onEdit(server)}
+            title={t("tooltipEdit")}
+            aria-label={t("tooltipEdit")}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => onDelete(server.id)}
+            title={t("tooltipDelete")}
+            aria-label={t("tooltipDelete")}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+    </>
+  )
+}
+
+function ServerDragPreview({ server, viewMode }: { server: Server; viewMode: ViewMode }) {
+  return (
+    <div
+      className={cn(
+        "group rounded-lg border bg-card text-card-foreground border-border shadow-lg opacity-90",
+        viewMode === "grid"
+          ? "flex min-h-[150px] w-[260px] flex-col items-start gap-3 p-4"
+          : "flex w-[min(560px,calc(100vw-2rem))] items-center gap-3 p-4"
+      )}
+    >
+      <ServerIcon className="h-5 w-5 flex-shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium text-foreground">
+          {server.name || server.host}
+        </div>
+        <div className="truncate text-xs font-mono text-muted-foreground">
+          {server.username}@{server.host}:{server.port}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ServerStaticItem({ server, viewMode }: { server: Server; viewMode: ViewMode }) {
+  return (
+    <div className={getServerItemClassName(viewMode, false)}>
+      <ServerItemBody server={server} viewMode={viewMode} showActions={false} />
+    </div>
+  )
+}
+
+// 可排序的服务器项组件
+function SortableServerItem({
+  server,
+  viewMode,
+  onConnect,
+  onEdit,
+  onDelete,
+}: {
+  server: Server
+  viewMode: ViewMode
   onConnect: (id: string) => void
   onEdit: (server: Server) => void
   onDelete: (id: string) => void
@@ -69,73 +236,21 @@ function SortableServerItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  const t = useTranslations("servers")
-
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className="group flex items-center gap-3 p-4 rounded-lg border bg-card text-card-foreground border-border hover:bg-accent/60 hover:border-primary/40 cursor-grab active:cursor-grabbing outline-none focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/20 transition-colors duration-200"
+      className={getServerItemClassName(viewMode)}
     >
-      <ServerIcon className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-
-      <div className="flex-1 min-w-0 flex items-center gap-4">
-        <div className="flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-foreground transition-colors truncate group-hover:text-primary">
-              {server.name || server.host}
-            </div>
-          </div>
-          <div className={"text-xs font-mono whitespace-nowrap text-muted-foreground"}>
-            {server.username}@{server.host}:{server.port}
-          </div>
-        </div>
-        {server.description && (
-          <div className={"flex-1 text-xs truncate text-muted-foreground/80 text-left"}>
-            {server.description}
-          </div>
-        )}
-      </div>
-
-      {server.tags && server.tags.length > 0 && (
-        <div className="flex gap-1 flex-shrink-0">
-          {server.tags.map((tag) => (
-            <Badge key={tag} variant="outline" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      {/* 操作按钮组 */}
-      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-          onClick={() => onConnect(server.id)}
-          title={t("tooltipConnect")}>
-          <Terminal className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-          onClick={() => onEdit(server)}
-          title={t("tooltipEdit")}>
-          <Edit className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => onDelete(server.id)}
-          title={t("tooltipDelete")}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
+      <ServerItemBody
+        server={server}
+        viewMode={viewMode}
+        onConnect={onConnect}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
     </div>
   )
 }
@@ -153,6 +268,7 @@ export default function ServersPage() {
  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
  const [loading, setLoading] = useState(true)
  const [activeGroup, setActiveGroup] = useState<string>('all')
+ const [viewMode, setViewMode] = useState<ViewMode>("list")
  const [draggedServer, setDraggedServer] = useState<Server | null>(null)
  const [isMounted, setIsMounted] = useState(false)
 
@@ -439,14 +555,14 @@ export default function ServersPage() {
  <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-background text-foreground"}>
  <div className={"absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"} />
 
- <div className="flex-1 flex flex-col items-center px-8 py-8 overflow-y-auto">
- <div className="max-w-3xl w-full space-y-3">
+ <div className="flex-1 flex flex-col items-center px-4 py-6 sm:px-6 lg:px-8 lg:py-8 overflow-y-auto">
+ <div className={cn("w-full space-y-3 transition-[max-width] duration-200", viewMode === "grid" ? "max-w-6xl" : "max-w-3xl")}>
  {/* 搜索栏和添加按钮 - 始终显示（有服务器时） */}
  {(loading || servers.length > 0) && (
  <div className="space-y-3">
- <div className="flex items-center justify-between gap-4">
+ <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
  {/* 左侧：搜索框 */}
- <div className="relative flex-1 max-w-md">
+ <div className="relative w-full sm:max-w-md sm:flex-1">
  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
  <Input
  placeholder={t("searchPlaceholder")}
@@ -456,11 +572,48 @@ export default function ServersPage() {
  />
  </div>
 
- {/* 右侧：添加按钮 */}
- <Button onClick={() => setIsAddDialogOpen(true)} className="shadow-sm flex-shrink-0">
+ {/* 右侧：视图切换和添加按钮 */}
+ <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+ <div className="flex items-center rounded-md border bg-card p-0.5">
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <Button
+ type="button"
+ variant={viewMode === "grid" ? "secondary" : "ghost"}
+ size="icon-sm"
+ className="h-8 w-8"
+ onClick={() => setViewMode("grid")}
+ aria-label={t("viewGridTooltip")}
+ aria-pressed={viewMode === "grid"}
+ >
+ <LayoutGrid className="h-4 w-4" />
+ </Button>
+ </TooltipTrigger>
+ <TooltipContent side="bottom">{t("viewGridTooltip")}</TooltipContent>
+ </Tooltip>
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <Button
+ type="button"
+ variant={viewMode === "list" ? "secondary" : "ghost"}
+ size="icon-sm"
+ className="h-8 w-8"
+ onClick={() => setViewMode("list")}
+ aria-label={t("viewListTooltip")}
+ aria-pressed={viewMode === "list"}
+ >
+ <List className="h-4 w-4" />
+ </Button>
+ </TooltipTrigger>
+ <TooltipContent side="bottom">{t("viewListTooltip")}</TooltipContent>
+ </Tooltip>
+ </div>
+
+ <Button onClick={() => setIsAddDialogOpen(true)} className="flex-1 shadow-sm sm:flex-none">
  <Plus className="mr-2 h-4 w-4" />
  {t("addServer")}
  </Button>
+ </div>
  </div>
 
  {/* 分组切换 - 始终显示 */}
@@ -515,13 +668,14 @@ export default function ServersPage() {
  >
  <SortableContext
  items={filteredServers.map(s => s.id)}
- strategy={verticalListSortingStrategy}
+ strategy={viewMode === "grid" ? rectSortingStrategy : verticalListSortingStrategy}
  >
- <AnimatedList className="space-y-2">
+ <AnimatedList className={viewMode === "grid" ? "grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "space-y-2"}>
  {filteredServers.map((server) => (
  <SortableServerItem
  key={server.id}
  server={server}
+ viewMode={viewMode}
  onConnect={handleConnect}
  onEdit={handleEdit}
  onDelete={handleRequestDelete}
@@ -532,44 +686,15 @@ export default function ServersPage() {
 
  <DragOverlay>
  {draggedServer ? (
- <div className="flex items-center gap-3 p-4 rounded-lg border bg-card text-card-foreground border-border shadow-lg opacity-80">
- <div className="flex-1 min-w-0">
- <div className="text-sm font-medium text-foreground">
- {draggedServer.name || draggedServer.host}
- </div>
- </div>
- </div>
+ <ServerDragPreview server={draggedServer} viewMode={viewMode} />
  ) : null}
  </DragOverlay>
  </DndContext>
  ) : (
  // 服务端渲染时的静态列表
- <AnimatedList className="space-y-2">
+ <AnimatedList className={viewMode === "grid" ? "grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "space-y-2"}>
  {filteredServers.map((server) => (
- <div
- key={server.id}
- className={"group flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 bg-card text-card-foreground border-border hover:bg-accent/60 hover:border-primary/40 outline-none focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/20"}
- >
- <ServerIcon className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-
- <div className="flex-1 min-w-0 flex items-center gap-4">
- <div className="flex-shrink-0">
- <div className="flex items-center gap-2">
- <div className="text-sm font-medium text-foreground transition-colors truncate group-hover:text-primary">
- {server.name || server.host}
- </div>
- </div>
- <div className={"text-xs font-mono whitespace-nowrap text-muted-foreground"}>
- {server.username}@{server.host}:{server.port}
- </div>
- </div>
- {server.description && (
- <div className={"flex-1 text-xs truncate text-muted-foreground/80 text-left"}>
- {server.description}
- </div>
- )}
- </div>
- </div>
+ <ServerStaticItem key={server.id} server={server} viewMode={viewMode} />
  ))}
  </AnimatedList>
  )}
