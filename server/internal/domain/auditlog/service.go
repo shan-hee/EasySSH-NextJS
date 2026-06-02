@@ -26,7 +26,7 @@ type Service interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*AuditLog, error)
 
 	// GetStatistics 获取统计信息
-	GetStatistics(ctx context.Context, userID *uuid.UUID, days int) (*AuditLogStatistics, error)
+	GetStatistics(ctx context.Context, req *AuditLogStatisticsRequest) (*AuditLogStatistics, error)
 
 	// CleanupOldLogs 清理旧日志
 	CleanupOldLogs(ctx context.Context, retentionDays int) (int64, error)
@@ -51,6 +51,7 @@ func (s *service) Log(ctx context.Context, req *CreateAuditLogRequest) error {
 		Username:  req.Username,
 		ServerID:  req.ServerID,
 		Action:    req.Action,
+		Category:  CategoryOf(req.Action),
 		Resource:  req.Resource,
 		Status:    req.Status,
 		IP:        req.IP,
@@ -109,15 +110,18 @@ func (s *service) GetByID(ctx context.Context, id uuid.UUID) (*AuditLog, error) 
 }
 
 // GetStatistics 获取统计信息
-func (s *service) GetStatistics(ctx context.Context, userID *uuid.UUID, days int) (*AuditLogStatistics, error) {
-	if days <= 0 {
-		days = 30 // 默认最近 30 天
+func (s *service) GetStatistics(ctx context.Context, req *AuditLogStatisticsRequest) (*AuditLogStatistics, error) {
+	if req == nil {
+		req = &AuditLogStatisticsRequest{}
 	}
-	if days > 365 {
-		days = 365 // 最多查询 1 年
+	if req.Days <= 0 && req.StartTime == nil {
+		req.Days = 30 // 默认最近 30 天
+	}
+	if req.Days > 365 {
+		req.Days = 365 // 最多查询 1 年
 	}
 
-	return s.repo.GetStatistics(ctx, userID, days)
+	return s.repo.GetStatistics(ctx, req)
 }
 
 // CleanupOldLogs 清理旧日志
@@ -127,5 +131,5 @@ func (s *service) CleanupOldLogs(ctx context.Context, retentionDays int) (int64,
 	}
 
 	before := time.Now().AddDate(0, 0, -retentionDays)
-	return s.repo.DeleteOldLogs(ctx, before)
+	return s.repo.DeleteOldLogs(ctx, before, CategoryAudit)
 }

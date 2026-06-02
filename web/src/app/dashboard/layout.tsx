@@ -49,6 +49,10 @@ export default function DashboardLayout({
   const { authStatus, isLoading } = useSystemConfig()
   const { runtime, isLoading: isRuntimeLoading } = useRuntime()
   const disableOuterScroll = pathname?.startsWith("/dashboard/ai-assistant")
+  const initialUser: User | null =
+    authStatus && authStatus.is_authenticated && authStatus.user
+      ? authStatus.user
+      : null
 
   useEffect(() => {
     if (isLoading) return
@@ -61,16 +65,12 @@ export default function DashboardLayout({
   }, [authStatus, isLoading, pathname, router])
 
   useEffect(() => {
-    if (isRuntimeLoading || !runtime) return
-    if (isRouteAllowed(runtime, pathname)) return
+    if (isLoading || isRuntimeLoading || !runtime) return
+    const isAdmin = initialUser?.role === "admin" || runtime.principal.role === "owner"
+    if (isRouteAllowed(runtime, pathname, isAdmin)) return
 
     router.replace(getRouteFallback(pathname))
-  }, [isRuntimeLoading, pathname, router, runtime])
-
-  const initialUser: User | null =
-    authStatus && authStatus.is_authenticated && authStatus.user
-      ? authStatus.user
-      : null
+  }, [initialUser?.role, isLoading, isRuntimeLoading, pathname, router, runtime])
 
   // 乐观渲染：立即显示界面，后台验证
   // 如果验证失败，会自动跳转到登录页

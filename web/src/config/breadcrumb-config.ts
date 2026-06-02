@@ -109,6 +109,12 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   // 日志审计
   // ===================
+  '/dashboard/activity': {
+    showTitle: true,
+  },
+  '/dashboard/audit': {
+    showTitle: true,
+  },
   '/dashboard/logs': {
     // 仅显示系统名称 + 当前页面标题
     showTitle: true,

@@ -2,9 +2,10 @@
 
 import React, { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, XCircle, Activity, User, Trash2, Loader2 } from "lucide-react"
+import { AlertTriangle, CheckCircle, XCircle, Activity, User, Trash2, Loader2 } from "lucide-react"
 import { SkeletonStatsCard } from "@/components/ui/loading"
 import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
+import { activityLogsApi } from "@/lib/api/activity-logs"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
@@ -39,13 +40,19 @@ interface AuditLogsPageData {
 
 interface AuditLogsClientProps {
   initialData?: AuditLogsPageData
+  scope?: "activity" | "audit"
+  defaultAction?: string
 }
 
 /**
  * 操作日志客户端组件
  * 纯 CSR 模式：在客户端加载数据
  */
-export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
+export function AuditLogsClient({
+  initialData,
+  scope = "audit",
+  defaultAction,
+}: AuditLogsClientProps) {
   const { ready } = useAuthReady()
   const { user } = useClientAuth()
   const t = useTranslations("logsAudit")
@@ -82,10 +89,12 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   // 加载统计数据
   const loadStatistics = async () => {
     try {
-      const statsResponse = await auditLogsApi.getStatistics()
+      const statsResponse = scope === "activity"
+        ? await activityLogsApi.getMineStatistics()
+        : await auditLogsApi.getStatistics()
       setStatistics(statsResponse)
     } catch (error: unknown) {
-      console.error("操作日志统计加载失败:", error)
+      console.error("日志统计加载失败:", error)
       toast.error(getErrorMessage(error, t("toastLoadFailed")))
     }
   }
@@ -101,16 +110,20 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
         setTableLoading(true)
       }
 
-      const logsResponse = await auditLogsApi.list({
+      const listParams = {
         page: currentPage,
         page_size: currentPageSize,
-      })
+        action: defaultAction,
+      }
+      const logsResponse = scope === "activity"
+        ? await activityLogsApi.listMine(listParams)
+        : await auditLogsApi.list(listParams)
 
       setLogs(logsResponse.logs || [])
       setTotalPages(logsResponse.total_pages || 1)
       setTotalRows(logsResponse.total || 0)
     } catch (error: unknown) {
-      console.error("操作日志加载失败:", error)
+      console.error("日志加载失败:", error)
       toast.error(getErrorMessage(error, t("toastLoadFailed")))
     } finally {
       if (options.showTableLoading) {
@@ -138,7 +151,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
 
     loadInitialData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, initialData])
+  }, [ready, initialData, scope, defaultAction])
 
   // 页码变化
   const handlePageChange = (newPage: number) => {
@@ -155,7 +168,10 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
 
   // 刷新数据
   const handleRefresh = () => {
-    loadLogs(page, pageSize, { showTableLoading: true })
+    void Promise.all([
+      loadLogs(page, pageSize, { showTableLoading: true }),
+      loadStatistics(),
+    ])
   }
 
   // 筛选选项配置
@@ -166,6 +182,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
     return {
       status: [
         { label: t("filterStatusSuccessLabel"), value: "success", icon: CheckCircle },
+        { label: t("filterStatusWarningLabel"), value: "warning", icon: AlertTriangle },
         { label: t("filterStatusFailureLabel"), value: "failure", icon: XCircle },
       ],
       users: uniqueUsers.map((user) => ({
@@ -191,6 +208,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
   )
 
   const isAdmin = user?.role === "admin"
+  const canCleanup = scope === "audit" && isAdmin
 
   const handleCleanupLogs = async () => {
     const parsedRetentionDays = Number(retentionDays)
@@ -214,7 +232,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
         loadStatistics(),
       ])
     } catch (error: unknown) {
-      console.error("操作日志清理失败:", error)
+      console.error("日志清理失败:", error)
       toast.error(getErrorMessage(error, t("cleanupFailed")))
     } finally {
       setCleanupLoading(false)
@@ -323,7 +341,7 @@ export function AuditLogsClient({ initialData }: AuditLogsClientProps) {
             onRefresh={handleRefresh}
             showRefresh={true}
           >
-            {isAdmin && (
+            {canCleanup && (
               <Button
                 variant="outline"
                 size="sm"

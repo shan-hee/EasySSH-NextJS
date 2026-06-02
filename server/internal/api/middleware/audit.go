@@ -185,6 +185,9 @@ func determineAction(method, path string) auditlog.ActionType {
 	if method == "DELETE" && path == "/api/v1/servers/:id" {
 		return auditlog.ActionServerDelete
 	}
+	if method == "POST" && (path == "/api/v1/servers/:id/test" || path == "/api/v1/servers/test") {
+		return auditlog.ActionServerTest
+	}
 
 	// SSH 连接
 	if path == "/ws/terminal/:server_id" {

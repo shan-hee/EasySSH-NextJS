@@ -10,11 +10,11 @@ import (
 
 // Repository 仪表盘数据访问接口
 type Repository interface {
-	// GetAuditLogsSince 查询时间窗内的审计日志（轻量字段），按时间正序返回，供 service 在内存中按天分桶
-	GetAuditLogsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]auditLogRow, error)
+	// GetActivityLogsSince 查询时间窗内的活动记录（轻量字段），按时间正序返回，供 service 在内存中按天分桶
+	GetActivityLogsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]activityLogRow, error)
 
-	// GetRecentActivity 查询最近的审计日志（用于活动时间线）
-	GetRecentActivity(ctx context.Context, userID *uuid.UUID, limit int) ([]auditLogRow, error)
+	// GetRecentActivity 查询最近活动记录（用于活动时间线）
+	GetRecentActivity(ctx context.Context, userID *uuid.UUID, limit int) ([]activityLogRow, error)
 
 	// CountActiveSessions 统计活跃 SSH 会话数
 	CountActiveSessions(ctx context.Context, userID *uuid.UUID) (int64, error)
@@ -35,37 +35,38 @@ func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-// GetAuditLogsSince 查询时间窗内的审计日志
-func (r *repository) GetAuditLogsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]auditLogRow, error) {
+// GetActivityLogsSince 查询时间窗内的活动记录
+func (r *repository) GetActivityLogsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]activityLogRow, error) {
 	query := r.db.WithContext(ctx).
 		Table("audit_logs").
 		Select("id, action, username, resource, status, ip, created_at").
-		Where("created_at >= ?", since)
+		Where("category = ? AND created_at >= ?", "activity", since)
 
 	if userID != nil {
 		query = query.Where("user_id = ?", *userID)
 	}
 
-	var rows []auditLogRow
+	var rows []activityLogRow
 	err := query.Order("created_at ASC").Scan(&rows).Error
 	return rows, err
 }
 
-// GetRecentActivity 查询最近的审计日志
-func (r *repository) GetRecentActivity(ctx context.Context, userID *uuid.UUID, limit int) ([]auditLogRow, error) {
+// GetRecentActivity 查询最近活动记录
+func (r *repository) GetRecentActivity(ctx context.Context, userID *uuid.UUID, limit int) ([]activityLogRow, error) {
 	if limit <= 0 {
 		limit = 8
 	}
 
 	query := r.db.WithContext(ctx).
 		Table("audit_logs").
-		Select("id, action, username, resource, status, ip, created_at")
+		Select("id, action, username, resource, status, ip, created_at").
+		Where("category = ?", "activity")
 
 	if userID != nil {
 		query = query.Where("user_id = ?", *userID)
 	}
 
-	var rows []auditLogRow
+	var rows []activityLogRow
 	err := query.Order("created_at DESC").Limit(limit).Scan(&rows).Error
 	return rows, err
 }

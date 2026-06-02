@@ -15,6 +15,7 @@ export interface SshWorkspaceCapabilities {
   ai?: boolean
   monitor?: boolean
   docker?: boolean
+  activityLog?: boolean
 }
 
 export interface WorkspaceSessionSeed extends ServerConnectionInfo {
@@ -259,6 +260,61 @@ export interface SshWorkspaceTransferHistoryAdapter {
   delete?: (id: string) => Promise<unknown>
 }
 
+export type WorkspaceActivityLogStatus = "success" | "failure" | "warning"
+
+export interface WorkspaceActivityLogItem {
+  id: string
+  action: string
+  resource: string
+  status: WorkspaceActivityLogStatus
+  serverId?: string
+  durationMs?: number
+  detail?: string
+  createdAt: string
+}
+
+export interface WorkspaceActivityLogListParams {
+  page?: number
+  limit?: number
+  action?: string
+  serverId?: string
+  status?: WorkspaceActivityLogStatus
+  startDate?: string
+  endDate?: string
+}
+
+export interface WorkspaceActivityLogListResult {
+  items: WorkspaceActivityLogItem[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface WorkspaceActivityLogStatistics {
+  total: number
+  successCount: number
+  failureCount: number
+  byAction: Record<string, number>
+}
+
+export interface WorkspaceActivityLogRecordInput {
+  action: string
+  resource: string
+  status: WorkspaceActivityLogStatus
+  serverId?: string
+  durationMs?: number
+  detail?: string
+}
+
+export interface SshWorkspaceActivityLogAdapter {
+  list: (params?: WorkspaceActivityLogListParams) => Promise<WorkspaceActivityLogListResult>
+  getById?: (id: string) => Promise<WorkspaceActivityLogItem>
+  getStatistics?: (params?: Pick<WorkspaceActivityLogListParams, "startDate" | "endDate">) => Promise<WorkspaceActivityLogStatistics>
+  record?: (input: WorkspaceActivityLogRecordInput) => Promise<unknown>
+  clear?: (before?: string) => Promise<unknown>
+}
+
 export interface SshWorkspaceTransferManager {
   tasks: WorkspaceTransferTask[]
   downloadFile?: (serverId: string, remotePath: string, fileName?: string) => Promise<void> | void
@@ -315,6 +371,7 @@ export interface SshWorkspaceAdapters {
   preferences?: SshWorkspacePreferenceAdapter
   serverPicker?: SshWorkspaceServerPicker
   transferManager?: SshWorkspaceTransferManager
+  activityLog?: SshWorkspaceActivityLogAdapter
   sessionStore?: SshWorkspaceSessionStoreAdapter
   sessionController?: SshWorkspaceSessionController
 }

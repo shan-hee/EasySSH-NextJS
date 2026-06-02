@@ -24,6 +24,7 @@ const (
 	CapabilityMonitoring     Capability = "monitoring"
 	CapabilityDocker         Capability = "docker"
 	CapabilityAI             Capability = "ai"
+	CapabilityActivityLog    Capability = "activity_log"
 	CapabilityBackup         Capability = "backup"
 	CapabilitySettings       Capability = "settings"
 	CapabilityUsers          Capability = "users"
@@ -98,6 +99,7 @@ func NewRuntimeInfo(options RuntimeOptions) RuntimeInfo {
 				CapabilityMonitoring,
 				CapabilityDocker,
 				CapabilityAI,
+				CapabilityActivityLog,
 				CapabilityBackup,
 				CapabilitySettings,
 				CapabilityDesktopDataDir,
@@ -125,6 +127,7 @@ func NewRuntimeInfo(options RuntimeOptions) RuntimeInfo {
 			CapabilityMonitoring,
 			CapabilityDocker,
 			CapabilityAI,
+			CapabilityActivityLog,
 			CapabilityBackup,
 			CapabilitySettings,
 			CapabilityUsers,

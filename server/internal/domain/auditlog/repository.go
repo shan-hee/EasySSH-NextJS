@@ -20,10 +20,10 @@ type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*AuditLog, error)
 
 	// GetStatistics 获取统计信息
-	GetStatistics(ctx context.Context, userID *uuid.UUID, days int) (*AuditLogStatistics, error)
+	GetStatistics(ctx context.Context, req *AuditLogStatisticsRequest) (*AuditLogStatistics, error)
 
 	// DeleteOldLogs 删除旧日志（数据清理）
-	DeleteOldLogs(ctx context.Context, before time.Time) (int64, error)
+	DeleteOldLogs(ctx context.Context, before time.Time, category LogCategory) (int64, error)
 }
 
 // repository 审计日志仓储实现
@@ -54,6 +54,9 @@ func (r *repository) List(ctx context.Context, req *ListAuditLogsRequest) ([]*Au
 	}
 	if req.Action != "" {
 		query = query.Where("action = ?", req.Action)
+	}
+	if req.Category != "" {
+		query = query.Where("category = ?", req.Category)
 	}
 	if req.Status != "" {
 		query = query.Where("status = ?", req.Status)
@@ -105,56 +108,55 @@ func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*AuditLog, erro
 }
 
 // GetStatistics 获取统计信息
-func (r *repository) GetStatistics(ctx context.Context, userID *uuid.UUID, days int) (*AuditLogStatistics, error) {
+func (r *repository) GetStatistics(ctx context.Context, req *AuditLogStatisticsRequest) (*AuditLogStatistics, error) {
 	stats := &AuditLogStatistics{
 		ActionStats: make(map[ActionType]int64),
 	}
 
-	query := r.db.WithContext(ctx).Model(&AuditLog{})
-
-	// 时间范围过滤
-	if days > 0 {
-		startTime := time.Now().AddDate(0, 0, -days)
-		query = query.Where("created_at >= ?", startTime)
-	}
-
-	// 用户过滤
-	if userID != nil {
-		query = query.Where("user_id = ?", *userID)
-	}
+	query := r.statisticsQuery(ctx, req)
 
 	// 总日志数
-	query.Count(&stats.TotalLogs)
+	if err := query.Count(&stats.TotalLogs).Error; err != nil {
+		return nil, err
+	}
 
 	// 成功和失败统计
-	r.db.WithContext(ctx).Model(&AuditLog{}).
+	if err := r.statisticsQuery(ctx, req).
 		Where("status = ?", StatusSuccess).
-		Count(&stats.SuccessCount)
+		Count(&stats.SuccessCount).Error; err != nil {
+		return nil, err
+	}
 
-	r.db.WithContext(ctx).Model(&AuditLog{}).
+	if err := r.statisticsQuery(ctx, req).
 		Where("status = ?", StatusFailure).
-		Count(&stats.FailureCount)
+		Count(&stats.FailureCount).Error; err != nil {
+		return nil, err
+	}
 
 	// 按操作类型统计
 	var actionResults []struct {
 		Action ActionType
 		Count  int64
 	}
-	r.db.WithContext(ctx).Model(&AuditLog{}).
+	if err := r.statisticsQuery(ctx, req).
 		Select("action, count(*) as count").
 		Group("action").
-		Find(&actionResults)
+		Find(&actionResults).Error; err != nil {
+		return nil, err
+	}
 
 	for _, result := range actionResults {
 		stats.ActionStats[result.Action] = result.Count
 	}
 
 	// 最近失败的操作（最多 10 条）
-	r.db.WithContext(ctx).
+	if err := r.statisticsQuery(ctx, req).
 		Where("status = ?", StatusFailure).
 		Order("created_at DESC").
 		Limit(10).
-		Find(&stats.RecentFailures)
+		Find(&stats.RecentFailures).Error; err != nil {
+		return nil, err
+	}
 
 	// 操作最多的用户（前 5 名）
 	var userResults []struct {
@@ -162,12 +164,14 @@ func (r *repository) GetStatistics(ctx context.Context, userID *uuid.UUID, days 
 		Username string
 		Count    int64
 	}
-	r.db.WithContext(ctx).Model(&AuditLog{}).
+	if err := r.statisticsQuery(ctx, req).
 		Select("user_id, username, count(*) as count").
 		Group("user_id, username").
 		Order("count DESC").
 		Limit(5).
-		Find(&userResults)
+		Find(&userResults).Error; err != nil {
+		return nil, err
+	}
 
 	stats.TopUsers = make([]UserActionCount, len(userResults))
 	for i, result := range userResults {
@@ -181,11 +185,36 @@ func (r *repository) GetStatistics(ctx context.Context, userID *uuid.UUID, days 
 	return stats, nil
 }
 
+func (r *repository) statisticsQuery(ctx context.Context, req *AuditLogStatisticsRequest) *gorm.DB {
+	query := r.db.WithContext(ctx).Model(&AuditLog{})
+	if req == nil {
+		return query
+	}
+	if req.UserID != nil {
+		query = query.Where("user_id = ?", *req.UserID)
+	}
+	if req.Category != "" {
+		query = query.Where("category = ?", req.Category)
+	}
+	if req.StartTime != nil {
+		query = query.Where("created_at >= ?", *req.StartTime)
+	} else if req.Days > 0 {
+		query = query.Where("created_at >= ?", time.Now().AddDate(0, 0, -req.Days))
+	}
+	if req.EndTime != nil {
+		query = query.Where("created_at <= ?", *req.EndTime)
+	}
+	return query
+}
+
 // DeleteOldLogs 删除旧日志
-func (r *repository) DeleteOldLogs(ctx context.Context, before time.Time) (int64, error) {
-	result := r.db.WithContext(ctx).
-		Where("created_at < ?", before).
-		Delete(&AuditLog{})
+func (r *repository) DeleteOldLogs(ctx context.Context, before time.Time, category LogCategory) (int64, error) {
+	query := r.db.WithContext(ctx).Where("created_at < ?", before)
+	if category != "" {
+		query = query.Where("category = ?", category)
+	}
+
+	result := query.Delete(&AuditLog{})
 
 	return result.RowsAffected, result.Error
 }

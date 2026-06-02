@@ -1,10 +1,17 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  Archive,
+  CalendarClock,
+  ClipboardList,
+  FileClock,
   FileText,
   FolderOpen,
+  History,
   Monitor,
+  ScrollText,
   Server,
   Settings,
+  ShieldCheck,
   Terminal,
   Users,
 } from "lucide-react"
@@ -21,7 +28,6 @@ export interface NavigationItemDefinition {
   profiles?: RuntimeProfile[]
   adminOnly?: boolean
   isActive?: boolean
-  items?: NavigationItemDefinition[]
 }
 
 export interface NavigationItem {
@@ -29,14 +35,14 @@ export interface NavigationItem {
   url: string
   icon?: LucideIcon
   isActive?: boolean
-  items?: NavigationItem[]
 }
 
 export interface NavigationGroups {
   workbench: NavigationItem[]
-  core: NavigationItem[]
-  observeAudit: NavigationItem[]
-  settings: NavigationItem[]
+  session: NavigationItem[]
+  automation: NavigationItem[]
+  records: NavigationItem[]
+  governance: NavigationItem[]
 }
 
 const workbench: NavigationItemDefinition[] = [
@@ -48,16 +54,12 @@ const workbench: NavigationItemDefinition[] = [
   },
 ]
 
-const core: NavigationItemDefinition[] = [
+const session: NavigationItemDefinition[] = [
   {
-    titleKey: "connections",
-    url: "#",
+    titleKey: "connectionConfigs",
+    url: "/dashboard/servers",
     icon: Server,
     requiredCapabilities: ["servers"],
-    items: [
-      { titleKey: "connectionConfigs", url: "/dashboard/servers", requiredCapabilities: ["servers"] },
-      { titleKey: "connectionHistory", url: "/dashboard/servers/history", requiredCapabilities: ["servers"] },
-    ],
   },
   {
     titleKey: "terminal",
@@ -66,48 +68,76 @@ const core: NavigationItemDefinition[] = [
     requiredCapabilities: ["terminal"],
   },
   {
-    titleKey: "automation",
-    url: "#",
-    icon: Terminal,
-    requiredCapabilities: ["scripts"],
-    items: [
-      { titleKey: "scripts", url: "/dashboard/scripts", requiredCapabilities: ["scripts"] },
-      { titleKey: "schedules", url: "/dashboard/automation/schedules", requiredCapabilities: ["automation"] },
-      { titleKey: "executions", url: "/dashboard/automation/history", requiredCapabilities: ["automation"] },
-    ],
-  },
-  {
-    titleKey: "file",
-    url: "#",
+    titleKey: "fileManager",
+    url: "/dashboard/sftp",
     icon: FolderOpen,
     requiredCapabilities: ["sftp"],
-    items: [
-      { titleKey: "fileManager", url: "/dashboard/sftp", requiredCapabilities: ["sftp"] },
-      { titleKey: "transferHistory", url: "/dashboard/transfers/history", requiredCapabilities: ["transfers"] },
-      { titleKey: "trash", url: "/dashboard/storage", requiredCapabilities: ["sftp"] },
-    ],
   },
 ]
 
-const observeAudit: NavigationItemDefinition[] = [
+const automation: NavigationItemDefinition[] = [
   {
-    titleKey: "logs",
-    url: "#",
-    icon: FileText,
-    requiredCapabilities: ["audit"],
-    items: [
-      { titleKey: "logsOperations", url: "/dashboard/logs", requiredCapabilities: ["audit"] },
-      { titleKey: "logsLogin", url: "/dashboard/logs/login", requiredCapabilities: ["login_logs"] },
-    ],
+    titleKey: "scripts",
+    url: "/dashboard/scripts",
+    icon: ScrollText,
+    requiredCapabilities: ["scripts"],
+  },
+  {
+    titleKey: "schedules",
+    url: "/dashboard/automation/schedules",
+    icon: CalendarClock,
+    requiredCapabilities: ["automation"],
   },
 ]
 
-const settings: NavigationItemDefinition[] = [
+const records: NavigationItemDefinition[] = [
+  {
+    titleKey: "connectionHistory",
+    url: "/dashboard/servers/history",
+    icon: History,
+    requiredCapabilities: ["servers"],
+  },
+  {
+    titleKey: "transferHistory",
+    url: "/dashboard/transfers/history",
+    icon: FileClock,
+    requiredCapabilities: ["transfers"],
+  },
+  {
+    titleKey: "executions",
+    url: "/dashboard/automation/history",
+    icon: ClipboardList,
+    requiredCapabilities: ["automation"],
+  },
+  {
+    titleKey: "activity",
+    url: "/dashboard/activity",
+    icon: FileText,
+    requiredCapabilities: ["activity_log"],
+  },
+  {
+    titleKey: "trash",
+    url: "/dashboard/storage",
+    icon: Archive,
+    requiredCapabilities: ["sftp"],
+  },
+]
+
+const governance: NavigationItemDefinition[] = [
+  {
+    titleKey: "audit",
+    url: "/dashboard/audit",
+    icon: ShieldCheck,
+    adminOnly: true,
+    profiles: ["web"],
+    requiredCapabilities: ["audit"],
+  },
   {
     titleKey: "userManagement",
     url: "/dashboard/users",
     icon: Users,
     adminOnly: true,
+    profiles: ["web"],
     requiredCapabilities: ["users"],
   },
   {
@@ -115,6 +145,7 @@ const settings: NavigationItemDefinition[] = [
     url: "/dashboard/settings",
     icon: Settings,
     adminOnly: true,
+    profiles: ["web"],
     requiredCapabilities: ["settings"],
   },
 ]
@@ -130,9 +161,10 @@ export function buildNavigationGroups({
 }): NavigationGroups {
   return {
     workbench: translateNavigationItems(workbench, runtime, isAdmin, t),
-    core: translateNavigationItems(core, runtime, isAdmin, t),
-    observeAudit: translateNavigationItems(observeAudit, runtime, isAdmin, t),
-    settings: translateNavigationItems(settings, runtime, isAdmin, t),
+    session: translateNavigationItems(session, runtime, isAdmin, t),
+    automation: translateNavigationItems(automation, runtime, isAdmin, t),
+    records: translateNavigationItems(records, runtime, isAdmin, t),
+    governance: translateNavigationItems(governance, runtime, isAdmin, t),
   }
 }
 
@@ -153,19 +185,11 @@ function translateNavigationItems(
       return []
     }
 
-    const children = item.items
-      ? translateNavigationItems(item.items, runtime, isAdmin, t)
-      : undefined
-    if (item.items && (!children || children.length === 0)) {
-      return []
-    }
-
     return [{
       title: t(item.titleKey),
       url: item.url,
       icon: item.icon,
       isActive: item.isActive,
-      items: children,
     }]
   })
 }

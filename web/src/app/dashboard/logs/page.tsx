@@ -1,19 +1,19 @@
 "use client"
 
-import { PageHeader } from "@/components/page-header"
-import { AuditLogsClient } from "./components/audit-logs-client"
-import { useTranslations } from "next-intl"
+import * as React from "react"
+import { useRouter } from "next/navigation"
+import { useClientAuth } from "@/components/client-auth-provider"
 
-/**
- * 操作日志页面（纯 CSR 模式）
- * 数据在客户端获取
- */
-export default function AuditLogsPage() {
-  const t = useTranslations("logsAudit")
-  return (
-    <>
-      <PageHeader title={t("pageTitle")} />
-      <AuditLogsClient />
-    </>
-  )
+export default function LegacyLogsPage() {
+  const router = useRouter()
+  const { user } = useClientAuth()
+
+  React.useEffect(() => {
+    if (!user) {
+      return
+    }
+    router.replace(user?.role === "admin" ? "/dashboard/audit" : "/dashboard/activity")
+  }, [router, user])
+
+  return null
 }

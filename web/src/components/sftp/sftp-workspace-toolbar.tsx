@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { TransferTaskPanel } from "@/components/sftp/transfer-task-panel"
+import { ActivityLogPane } from "@/components/ssh-workspace/activity-log-pane"
 import { useWorkspaceSftpTranslator } from "@/components/ssh-workspace/use-workspace-translator"
 import type { WorkspaceTransferTask } from "@/lib/session/workspace"
 
@@ -286,6 +287,8 @@ export function SftpWorkspaceToolbar({
             onCancelTransfer={onCancelTransfer}
           />
         )}
+
+        <ActivityLogPane compact />
 
         {onToggleFullscreen && (
           <Button

@@ -53,6 +53,7 @@ import (
 	"github.com/easyssh/server/internal/platform"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -122,6 +123,9 @@ func main() {
 		&runtime.AISessionRecord{}, // AI 会话持久化表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
+	}
+	if err := backfillAuditLogCategories(database); err != nil {
+		log.Fatalf("❌ Failed to backfill audit log categories: %v", err)
 	}
 	log.Println("✅ Database migrated successfully")
 
@@ -808,13 +812,21 @@ func main() {
 			dashboardRoutes.GET("/overview", dashboardHandler.GetOverview) // 仪表盘聚合概览
 		}
 
-		// 审计日志路由（需要认证）
+		// 活动记录路由（当前用户个人历史，仅需认证）
+		activityLogRoutes := v1.Group("/activity-logs")
+		activityLogRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
+		{
+			activityLogRoutes.GET("/me", auditLogHandler.ListMyActivity)
+			activityLogRoutes.GET("/me/statistics", auditLogHandler.GetMyActivityStatistics)
+			activityLogRoutes.GET("/me/items/:id", auditLogHandler.GetMyActivityByID)
+		}
+
+		// 审计日志路由（团队治理，需要管理员审计权限）
 		auditLogRoutes := v1.Group("/audit-logs")
 		auditLogRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
 		auditLogRoutes.Use(middleware.RequirePermission(permissionService, "audit:view"))
 		{
 			auditLogRoutes.GET("", auditLogHandler.List)                      // 查询日志列表
-			auditLogRoutes.GET("/me", auditLogHandler.GetMyLogs)              // 我的日志
 			auditLogRoutes.GET("/statistics", auditLogHandler.GetStatistics)  // 统计信息
 			auditLogRoutes.GET("/:id", auditLogHandler.GetByID)               // 日志详情
 			auditLogRoutes.DELETE("/cleanup", auditLogHandler.CleanupOldLogs) // 清理旧日志（管理员）
@@ -1164,4 +1176,23 @@ func runtimeDataDir(driver string, dsn string) string {
 	}
 
 	return filepath.Dir(pathValue)
+}
+
+func backfillAuditLogCategories(database *gorm.DB) error {
+	return database.Exec(`
+UPDATE audit_logs
+SET category = CASE
+  WHEN action IN (
+    'ssh_connect',
+    'ssh_disconnect',
+    'sftp_upload',
+    'sftp_download',
+    'sftp_delete',
+    'sftp_rename',
+    'sftp_mkdir',
+    'monitoring_query'
+  ) THEN 'activity'
+  ELSE 'audit'
+END
+`).Error
 }

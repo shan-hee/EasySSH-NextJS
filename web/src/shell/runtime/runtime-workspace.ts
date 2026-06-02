@@ -18,6 +18,7 @@ export function createWorkspaceCapabilitiesFromRuntime(
     ai: resolveRuntimeCapability(runtime, "ai", defaults.ai),
     monitor: resolveRuntimeCapability(runtime, "monitoring", defaults.monitor),
     docker: resolveRuntimeCapability(runtime, "docker", defaults.docker),
+    activityLog: resolveRuntimeCapability(runtime, "activity_log", defaults.activityLog),
     fullscreen: defaults.fullscreen,
     crossSessionDrag: defaults.crossSessionDrag,
   }

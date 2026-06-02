@@ -38,6 +38,14 @@ export const pageMetadata = {
     title: "操作日志",
     description: "查看系统操作审计日志和用户行为记录",
   },
+  activity: {
+    title: "活动记录",
+    description: "查看当前用户的连接、传输和监控活动历史",
+  },
+  audit: {
+    title: "安全审计",
+    description: "查看团队治理、安全审计和系统变更记录",
+  },
   logsLogin: {
     title: "登录日志",
     description: "查看用户登录记录、IP 地址和登录状态",

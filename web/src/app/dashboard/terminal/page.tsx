@@ -12,10 +12,11 @@ import type {
 } from "@/components/terminal/types"
 import type { QuickServer } from "@/components/terminal/quick-connect"
 import { serversApi, sftpApi, type Server } from "@/lib/api"
+import { activityLogsApi } from "@/lib/api/activity-logs"
 import { createAuthTicket } from "@/lib/auth-ticket"
 import { createTerminalWorkspaceSessionControllerAdapter, createTerminalWorkspaceSessionStoreAdapter, useTerminalStore } from "@/stores/terminal-store"
 import { createSftpSessionApi } from "@/lib/session/sftp-session-api"
-import { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter } from "@/lib/session/workspace-adapters"
+import { createBrowserWorkspacePreferenceAdapter, createWorkspaceActivityLogAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter } from "@/lib/session/workspace-adapters"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 import { useSystemConfig } from "@/contexts/system-config-context"
@@ -112,6 +113,7 @@ function TerminalPageContent() {
   const workspaceAuthTicketProvider = useMemo(() => createWorkspaceAuthTicketProviderAdapter(createAuthTicket), [])
   const sftpSessionApi = useMemo(() => createSftpSessionApi(sftpApi), [])
   const workspacePreferences = useMemo(() => createBrowserWorkspacePreferenceAdapter(), [])
+  const workspaceActivityLog = useMemo(() => createWorkspaceActivityLogAdapter(activityLogsApi), [])
   const workspaceAdapters = useMemo(() => createWorkspaceAdapters({
     apiClient: {
       sftp: sftpSessionApi,
@@ -146,9 +148,10 @@ function TerminalPageContent() {
     }),
     preferences: workspacePreferences,
     authTicketProvider: workspaceAuthTicketProvider,
+    activityLog: workspaceActivityLog,
     sessionStore: workspaceSessionStore,
     sessionController: workspaceSessionController,
-  }), [tCommon, t, tSftp, systemConfig?.download_exclude_patterns, sftpSessionApi, workspaceAuthTicketProvider, workspacePreferences, workspaceSessionController, workspaceSessionStore])
+  }), [tCommon, t, tSftp, systemConfig?.download_exclude_patterns, sftpSessionApi, workspaceActivityLog, workspaceAuthTicketProvider, workspacePreferences, workspaceSessionController, workspaceSessionStore])
   const workspaceCapabilities = useMemo(() => createWorkspaceCapabilitiesFromRuntime(runtime, {
     defaults: {
       terminal: true,
@@ -157,6 +160,7 @@ function TerminalPageContent() {
       ai: true,
       monitor: true,
       docker: true,
+      activityLog: true,
       fullscreen: true,
     },
   }), [runtime])

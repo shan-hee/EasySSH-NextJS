@@ -41,6 +41,27 @@ const (
 	ActionUserDelete ActionType = "user_delete"
 )
 
+// LogCategory 日志类别
+type LogCategory string
+
+const (
+	CategoryActivity LogCategory = "activity"
+	CategoryAudit    LogCategory = "audit"
+)
+
+// CategoryOf 返回 action 对应的日志类别，是 activity/audit 切分的单一事实源。
+func CategoryOf(action ActionType) LogCategory {
+	switch action {
+	case ActionSSHConnect, ActionSSHDisconnect,
+		ActionSFTPUpload, ActionSFTPDownload, ActionSFTPDelete,
+		ActionSFTPRename, ActionSFTPMkdir,
+		ActionMonitoringQuery:
+		return CategoryActivity
+	default:
+		return CategoryAudit
+	}
+}
+
 // Status 操作状态
 type Status string
 
@@ -52,19 +73,20 @@ const (
 
 // AuditLog 审计日志模型
 type AuditLog struct {
-	ID        uuid.UUID  `gorm:"type:char(36);primary_key" json:"id"`
-	UserID    uuid.UUID  `gorm:"type:char(36);index;not null;index:idx_audit_user_time,priority:1" json:"user_id"`
-	Username  string     `gorm:"size:50" json:"username"`                        // 冗余字段，方便查询
-	ServerID  *uuid.UUID `gorm:"type:char(36);index" json:"server_id,omitempty"` // 关联的服务器 ID（可选）
-	Action    ActionType `gorm:"type:varchar(50);not null;index;index:idx_audit_action_time,priority:1" json:"action"`
-	Resource  string     `gorm:"size:255" json:"resource"` // 操作的资源，如文件路径、服务器名称等
-	Status    Status     `gorm:"type:varchar(20);not null;index" json:"status"`
-	IP        string     `gorm:"size:45;index:idx_audit_ip_time,priority:1" json:"ip"`                                                                                                                 // 客户端 IP 地址，添加索引用于安全分析
-	UserAgent string     `gorm:"size:500" json:"user_agent"`                                                                                                                                           // 用户代理
-	Details   string     `gorm:"type:text" json:"details"`                                                                                                                                             // 详细信息（JSON 格式）
-	ErrorMsg  string     `gorm:"type:text" json:"error_msg,omitempty"`                                                                                                                                 // 错误信息（失败时）
-	Duration  int64      `gorm:"default:0" json:"duration"`                                                                                                                                            // 操作耗时（毫秒）
-	CreatedAt time.Time  `gorm:"index;index:idx_audit_user_time,priority:2,sort:desc;index:idx_audit_action_time,priority:2,sort:desc;index:idx_audit_ip_time,priority:2,sort:desc" json:"created_at"` // 复合索引优化时间范围查询
+	ID        uuid.UUID   `gorm:"type:char(36);primary_key" json:"id"`
+	UserID    uuid.UUID   `gorm:"type:char(36);index;not null;index:idx_audit_user_time,priority:1" json:"user_id"`
+	Username  string      `gorm:"size:50" json:"username"`                        // 冗余字段，方便查询
+	ServerID  *uuid.UUID  `gorm:"type:char(36);index" json:"server_id,omitempty"` // 关联的服务器 ID（可选）
+	Action    ActionType  `gorm:"type:varchar(50);not null;index;index:idx_audit_action_time,priority:1" json:"action"`
+	Category  LogCategory `gorm:"type:varchar(20);not null;default:audit;index;index:idx_audit_category_time,priority:1" json:"category"`
+	Resource  string      `gorm:"size:255" json:"resource"` // 操作的资源，如文件路径、服务器名称等
+	Status    Status      `gorm:"type:varchar(20);not null;index" json:"status"`
+	IP        string      `gorm:"size:45;index:idx_audit_ip_time,priority:1" json:"ip"`                                                                                                                                                                    // 客户端 IP 地址，添加索引用于安全分析
+	UserAgent string      `gorm:"size:500" json:"user_agent"`                                                                                                                                                                                              // 用户代理
+	Details   string      `gorm:"type:text" json:"details"`                                                                                                                                                                                                // 详细信息（JSON 格式）
+	ErrorMsg  string      `gorm:"type:text" json:"error_msg,omitempty"`                                                                                                                                                                                    // 错误信息（失败时）
+	Duration  int64       `gorm:"default:0" json:"duration"`                                                                                                                                                                                               // 操作耗时（毫秒）
+	CreatedAt time.Time   `gorm:"index;index:idx_audit_user_time,priority:2,sort:desc;index:idx_audit_action_time,priority:2,sort:desc;index:idx_audit_category_time,priority:2,sort:desc;index:idx_audit_ip_time,priority:2,sort:desc" json:"created_at"` // 复合索引优化时间范围查询
 }
 
 // TableName 指定表名
@@ -79,6 +101,9 @@ func (a *AuditLog) BeforeCreate(tx *gorm.DB) error {
 	}
 	if a.CreatedAt.IsZero() {
 		a.CreatedAt = time.Now()
+	}
+	if a.Category == "" {
+		a.Category = CategoryOf(a.Action)
 	}
 	return nil
 }
@@ -100,14 +125,24 @@ type CreateAuditLogRequest struct {
 
 // ListAuditLogsRequest 查询审计日志请求
 type ListAuditLogsRequest struct {
-	UserID    *uuid.UUID `form:"user_id"`
-	ServerID  *uuid.UUID `form:"server_id"`
-	Action    ActionType `form:"action"`
-	Status    Status     `form:"status"`
-	StartTime *time.Time `form:"start_time"`
-	EndTime   *time.Time `form:"end_time"`
-	Page      int        `form:"page,default=1"`
-	PageSize  int        `form:"page_size,default=20"`
+	UserID    *uuid.UUID  `form:"user_id"`
+	ServerID  *uuid.UUID  `form:"server_id"`
+	Action    ActionType  `form:"action"`
+	Category  LogCategory `form:"category"`
+	Status    Status      `form:"status"`
+	StartTime *time.Time  `form:"start_time"`
+	EndTime   *time.Time  `form:"end_time"`
+	Page      int         `form:"page,default=1"`
+	PageSize  int         `form:"page_size,default=20"`
+}
+
+// AuditLogStatisticsRequest 审计日志统计请求
+type AuditLogStatisticsRequest struct {
+	UserID    *uuid.UUID
+	Category  LogCategory
+	Days      int
+	StartTime *time.Time
+	EndTime   *time.Time
 }
 
 // AuditLogStatistics 审计日志统计

@@ -16,7 +16,7 @@ type StatsBlock struct {
 	OnlineServers MetricWithTrend `json:"online_servers"` // 在线服务器数（趋势暂用今日值占位）
 	TotalServers  int             `json:"total_servers"`  // 服务器总数
 	ActiveConns   MetricWithTrend `json:"active_conns"`   // 活跃连接数（来自 ssh_sessions active）
-	TodayCommands MetricWithTrend `json:"today_commands"` // 今日命令数（来自 audit_logs）
+	TodayCommands MetricWithTrend `json:"today_commands"` // 今日命令数（来自活动记录）
 }
 
 // TrendBlock 近 N 天趋势数据块
@@ -33,7 +33,7 @@ type RegionCount struct {
 	Count       int    `json:"count"`
 }
 
-// ActivityItem 最近活动项（取自审计日志）
+// ActivityItem 最近活动项（取自活动记录）
 type ActivityItem struct {
 	ID        string    `json:"id"`
 	Action    string    `json:"action"`
@@ -52,8 +52,8 @@ type Overview struct {
 	RecentActivity  []ActivityItem `json:"recent_activity"`
 }
 
-// auditLogRow 内部查询用的轻量行结构（仅取聚合所需字段，避免拉全表大字段）
-type auditLogRow struct {
+// activityLogRow 内部查询用的轻量行结构（仅取聚合所需字段，避免拉全表大字段）
+type activityLogRow struct {
 	ID        string
 	Action    string
 	Username  string

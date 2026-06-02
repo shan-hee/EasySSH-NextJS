@@ -35,6 +35,7 @@ func (s *DesktopService) RuntimeInfo() DesktopRuntimeInfo {
 			"monitoring":       true,
 			"docker":           true,
 			"ai":               true,
+			"activity_log":     true,
 			"settings":         true,
 			"desktop_data_dir": true,
 			"open_data_dir":    true,

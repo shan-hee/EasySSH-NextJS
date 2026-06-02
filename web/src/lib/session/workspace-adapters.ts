@@ -13,6 +13,10 @@ import type {
   SshWorkspaceThemeAdapter,
   SshWorkspaceTransferHistoryAdapter,
   SshWorkspaceTransferManager,
+  SshWorkspaceActivityLogAdapter,
+  WorkspaceActivityLogItem,
+  WorkspaceActivityLogListResult,
+  WorkspaceActivityLogStatistics,
   WorkspaceSessionSnapshot,
   WorkspaceTransferHistoryItem,
   WorkspaceTransferHistoryListResult,
@@ -28,6 +32,15 @@ import type {
 } from "@/lib/api/file-transfers"
 import type { TransferAuthTicketProvider } from "./transfer-runtime"
 import type { TerminalWebSocketAuthTicketProvider } from "@/lib/websocket-terminal"
+import type {
+  ActivityLogListParams,
+  ActivityLogStatisticsParams,
+} from "@/lib/api/activity-logs"
+import type {
+  AuditLog,
+  AuditLogListResponse,
+  AuditLogStatisticsResponse,
+} from "@/lib/api/audit-logs"
 import {
   parseWorkspaceDownloadExcludePatterns,
   type WorkspaceDownloadExcludePatternSource,
@@ -330,6 +343,76 @@ export function createWorkspaceTransferHistoryAdapter(
   }
 }
 
+export interface ActivityLogsApiLike {
+  listMine: (params?: ActivityLogListParams) => Promise<AuditLogListResponse>
+  getMineById: (id: string) => Promise<AuditLog>
+  getMineStatistics: (params?: ActivityLogStatisticsParams) => Promise<AuditLogStatisticsResponse>
+}
+
+export function mapAuditLogToWorkspaceActivityLogItem(log: AuditLog): WorkspaceActivityLogItem {
+  return {
+    id: log.id,
+    action: log.action,
+    resource: log.resource,
+    status: log.status,
+    serverId: log.server_id,
+    durationMs: log.duration,
+    detail: log.error_msg || log.details,
+    createdAt: log.created_at,
+  }
+}
+
+export function mapAuditLogListToWorkspaceActivityResult(
+  response: AuditLogListResponse,
+): WorkspaceActivityLogListResult {
+  return {
+    items: response.logs.map(mapAuditLogToWorkspaceActivityLogItem),
+    total: response.total,
+    page: response.page,
+    pageSize: response.page_size,
+    totalPages: response.total_pages,
+  }
+}
+
+export function mapAuditLogStatisticsToWorkspaceActivityStatistics(
+  statistics: AuditLogStatisticsResponse,
+): WorkspaceActivityLogStatistics {
+  return {
+    total: statistics.total_logs,
+    successCount: statistics.success_count,
+    failureCount: statistics.failure_count,
+    byAction: statistics.action_stats,
+  }
+}
+
+export function createWorkspaceActivityLogAdapter(
+  api: ActivityLogsApiLike,
+): SshWorkspaceActivityLogAdapter {
+  return {
+    async list(params) {
+      const response = await api.listMine({
+        page: params?.page,
+        page_size: params?.limit,
+        action: params?.action,
+        server_id: params?.serverId,
+        status: params?.status,
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      })
+      return mapAuditLogListToWorkspaceActivityResult(response)
+    },
+    async getById(id) {
+      return mapAuditLogToWorkspaceActivityLogItem(await api.getMineById(id))
+    },
+    async getStatistics(params) {
+      return mapAuditLogStatisticsToWorkspaceActivityStatistics(await api.getMineStatistics({
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      }))
+    },
+  }
+}
+
 export interface CreateCompositeWorkspaceSessionStoreAdapterOptions {
   stores: SshWorkspaceSessionStoreAdapter[]
   getTransferTasks?: () => WorkspaceTransferTask[]
@@ -470,6 +553,7 @@ export interface CreateWorkspaceAdaptersOptions {
   preferences?: SshWorkspacePreferenceAdapter
   serverPicker?: SshWorkspaceServerPicker
   transferManager?: SshWorkspaceTransferManager
+  activityLog?: SshWorkspaceActivityLogAdapter
   sessionStore?: SshWorkspaceSessionStoreAdapter
   sessionController?: SshWorkspaceSessionController
 }
@@ -485,6 +569,7 @@ export function createWorkspaceAdapters({
   preferences,
   serverPicker,
   transferManager,
+  activityLog,
   sessionStore,
   sessionController,
 }: CreateWorkspaceAdaptersOptions): SshWorkspaceAdapters {
@@ -499,6 +584,7 @@ export function createWorkspaceAdapters({
     preferences,
     serverPicker,
     transferManager,
+    activityLog,
     sessionStore,
     sessionController,
   }

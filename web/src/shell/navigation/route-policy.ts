@@ -5,13 +5,15 @@ export interface RoutePolicy {
   pattern: RegExp
   requiredCapabilities: AppCapability[]
   profiles?: RuntimeProfile[]
+  adminOnly?: boolean
   fallbackPath: string
 }
 
 export const routePolicies: RoutePolicy[] = [
-  { pattern: /^\/dashboard\/users(?:\/|$)/, requiredCapabilities: ["users"], fallbackPath: "/dashboard/servers" },
-  { pattern: /^\/dashboard\/logs(?:\/|$)/, requiredCapabilities: ["audit"], fallbackPath: "/dashboard/servers" },
-  { pattern: /^\/dashboard\/settings(?:\/|$)/, requiredCapabilities: ["settings"], fallbackPath: "/dashboard/servers" },
+  { pattern: /^\/dashboard\/activity(?:\/|$)/, requiredCapabilities: ["activity_log"], fallbackPath: "/dashboard/servers" },
+  { pattern: /^\/dashboard\/audit(?:\/|$)/, requiredCapabilities: ["audit"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/activity" },
+  { pattern: /^\/dashboard\/users(?:\/|$)/, requiredCapabilities: ["users"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/activity" },
+  { pattern: /^\/dashboard\/settings(?:\/|$)/, requiredCapabilities: ["settings"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/activity" },
   { pattern: /^\/dashboard\/automation(?:\/|$)/, requiredCapabilities: ["automation"], fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/scripts(?:\/|$)/, requiredCapabilities: ["scripts"], fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/sftp(?:\/|$)/, requiredCapabilities: ["sftp"], fallbackPath: "/dashboard/servers" },
@@ -28,10 +30,17 @@ export function getRoutePolicy(pathname: string | null | undefined) {
   return routePolicies.find((policy) => policy.pattern.test(pathname)) ?? null
 }
 
-export function isRouteAllowed(runtime: RuntimeInfo | null | undefined, pathname: string | null | undefined) {
+export function isRouteAllowed(
+  runtime: RuntimeInfo | null | undefined,
+  pathname: string | null | undefined,
+  isAdmin = false,
+) {
   const policy = getRoutePolicy(pathname)
   if (!policy || !runtime) {
     return true
+  }
+  if (policy.adminOnly && !isAdmin) {
+    return false
   }
   if (policy.profiles && !policy.profiles.includes(runtime.profile)) {
     return false

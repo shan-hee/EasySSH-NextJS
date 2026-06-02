@@ -188,12 +188,16 @@ server/
 - `GET /api/v1/monitoring/:server_id/network` - 网络信息
 - `GET /api/v1/monitoring/:server_id/processes` - 进程列表
 
-### 审计日志 (5 个)
-- `GET /api/v1/audit-logs` - 日志列表
-- `GET /api/v1/audit-logs/me` - 我的日志
-- `GET /api/v1/audit-logs/statistics` - 统计信息
-- `GET /api/v1/audit-logs/:id` - 日志详情
-- `DELETE /api/v1/audit-logs/cleanup` - 清理旧日志
+### 活动记录 (3 个)
+- `GET /api/v1/activity-logs/me` - 我的活动记录
+- `GET /api/v1/activity-logs/me/statistics` - 我的活动统计
+- `GET /api/v1/activity-logs/me/items/:id` - 我的活动详情
+
+### 审计日志 (4 个)
+- `GET /api/v1/audit-logs` - 安全审计列表
+- `GET /api/v1/audit-logs/statistics` - 安全审计统计
+- `GET /api/v1/audit-logs/:id` - 安全审计详情
+- `DELETE /api/v1/audit-logs/cleanup` - 清理旧审计日志
 
 ---
 

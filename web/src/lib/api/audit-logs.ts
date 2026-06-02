@@ -9,8 +9,9 @@ export interface AuditLog {
   username: string
   server_id?: string
   action: string
+  category: "activity" | "audit"
   resource: string
-  status: "success" | "failure"
+  status: "success" | "failure" | "warning"
   ip: string
   user_agent: string
   details?: string
@@ -85,27 +86,6 @@ export const auditLogsApi = {
     if (params?.end_date) queryParams.set("end_date", params.end_date)
 
     const url = `/audit-logs${queryParams.toString() ? `?${queryParams}` : ""}`
-    return apiFetch<AuditLogListResponse>(url)
-  },
-
-  /**
-   * 获取当前用户的审计日志
-   */
-  async getMyLogs(params?: {
-    page?: number
-    page_size?: number
-    action?: string
-    start_date?: string
-    end_date?: string
-  }): Promise<AuditLogListResponse> {
-    const queryParams = new URLSearchParams()
-    if (params?.page) queryParams.set("page", params.page.toString())
-    if (params?.page_size) queryParams.set("page_size", params.page_size.toString())
-    if (params?.action) queryParams.set("action", params.action)
-    if (params?.start_date) queryParams.set("start_date", params.start_date)
-    if (params?.end_date) queryParams.set("end_date", params.end_date)
-
-    const url = `/audit-logs/me${queryParams.toString() ? `?${queryParams}` : ""}`
     return apiFetch<AuditLogListResponse>(url)
   },
 

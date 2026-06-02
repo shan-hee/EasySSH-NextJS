@@ -10,7 +10,7 @@ import (
 // 趋势窗口天数
 const trendDays = 7
 
-// 审计日志 action → 趋势维度的映射
+// 活动记录 action → 趋势维度的映射
 // connections: SSH 连接；commands: 监控/查询类；uploads: 文件传输
 var actionDimension = map[string]string{
 	"ssh_connect":    "connections",
@@ -41,7 +41,7 @@ func (s *service) GetOverview(ctx context.Context, userID *uuid.UUID) (*Overview
 	// 趋势需要覆盖「当前周期 + 上一周期」用于环比，故回看 2*trendDays 天
 	windowStart := startOfDay(now.AddDate(0, 0, -(2*trendDays - 1)))
 
-	logs, err := s.repo.GetAuditLogsSince(ctx, userID, windowStart)
+	logs, err := s.repo.GetActivityLogsSince(ctx, userID, windowStart)
 	if err != nil {
 		return nil, err
 	}

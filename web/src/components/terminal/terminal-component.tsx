@@ -11,6 +11,7 @@ import type {
 import { cn } from "@/lib/utils"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { PageHeader } from "@/components/page-header"
+import { ActivityLogPane } from "@/components/ssh-workspace/activity-log-pane"
 import {
   TerminalSettingsDialog,
   type TerminalSettings,
@@ -656,7 +657,9 @@ export function TerminalComponent({
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
       {!isFullscreen && (
-        <PageHeader title={active?.serverName || tTerminal("quickConnectTabName")} />
+        <PageHeader title={active?.serverName || tTerminal("quickConnectTabName")}>
+          <ActivityLogPane />
+        </PageHeader>
       )}
 
       <div className="flex-1 flex flex-col min-h-0 p-4 pt-0">

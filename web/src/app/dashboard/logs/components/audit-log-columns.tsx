@@ -22,6 +22,21 @@ function getActionLabel(
   const labelMap: Record<string, string> = {
     login: t("actionLogin"),
     logout: t("actionLogout"),
+    ssh_connect: t("actionConnect"),
+    ssh_disconnect: t("actionDisconnect"),
+    sftp_upload: t("actionUpload"),
+    sftp_download: t("actionDownload"),
+    sftp_delete: t("actionDelete"),
+    sftp_rename: t("actionRename"),
+    sftp_mkdir: t("actionMkdir"),
+    monitoring_query: t("actionMonitoringQuery"),
+    server_create: t("actionServerCreate"),
+    server_update: t("actionServerUpdate"),
+    server_delete: t("actionServerDelete"),
+    server_test: t("actionServerTest"),
+    user_create: t("actionUserCreate"),
+    user_update: t("actionUserUpdate"),
+    user_delete: t("actionUserDelete"),
     connect: t("actionConnect"),
     disconnect: t("actionDisconnect"),
     upload: t("actionUpload"),
@@ -49,9 +64,11 @@ function getResourceLabel(
 
 function formatDurationWithI18n(
   t: I18nT,
-  seconds: number | undefined,
+  milliseconds: number | undefined,
 ): string {
-  if (!seconds) return "-"
+  if (!milliseconds) return "-"
+  if (milliseconds < 1000) return t("durationMilliseconds", { milliseconds })
+  const seconds = Math.round(milliseconds / 1000)
   if (seconds < 60) return t("durationSeconds", { seconds })
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
@@ -227,10 +244,13 @@ export function createAuditLogColumns(
     cell: ({ row }) => {
       const status = row.getValue("status") as string
       const isSuccess = status === "success"
+      const isWarning = status === "warning"
       return (
         <div className="flex items-center gap-2">
           {isSuccess ? (
             <CheckCircle className="h-4 w-4 text-green-600" />
+          ) : isWarning ? (
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
           ) : (
             <AlertTriangle className="h-4 w-4 text-red-600" />
           )}
@@ -238,10 +258,16 @@ export function createAuditLogColumns(
             className={
               isSuccess
                 ? "bg-green-100 text-green-800 border-green-200"
+                : isWarning
+                  ? "bg-amber-100 text-amber-800 border-amber-200"
                 : "bg-red-100 text-red-800 border-red-200"
             }
           >
-            {isSuccess ? t("filterStatusSuccessLabel") : t("filterStatusFailureLabel")}
+            {isSuccess
+              ? t("filterStatusSuccessLabel")
+              : isWarning
+                ? t("filterStatusWarningLabel")
+                : t("filterStatusFailureLabel")}
           </Badge>
         </div>
       )

@@ -10,6 +10,7 @@ export type AppCapability =
   | "monitoring"
   | "docker"
   | "ai"
+  | "activity_log"
   | "backup"
   | "settings"
   | "users"
