@@ -261,6 +261,7 @@ const messages = {
     observeAudit: "Monitoring & Audit",
     settings: "System Settings",
     console: "Console",
+    aiAssistant: "AI Assistant",
     connections: "Connections",
     connectionConfigs: "Connection Configs",
     automation: "Automation",

@@ -65,9 +65,6 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       <SidebarContent>
         <QuickAccess />
         {navigationGroups.workbench.length > 0 && <NavMain label={tNav("workbench")} items={navigationGroups.workbench} />}
-        {navigationGroups.session.length > 0 && <NavMain label={tNav("session")} items={navigationGroups.session} />}
-        {navigationGroups.automation.length > 0 && <NavMain label={tNav("automation")} items={navigationGroups.automation} />}
-        {navigationGroups.records.length > 0 && <NavMain label={tNav("records")} items={navigationGroups.records} />}
         {navigationGroups.governance.length > 0 && <NavMain label={tNav("governance")} items={navigationGroups.governance} />}
       </SidebarContent>
       <SidebarFooter>

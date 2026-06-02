@@ -252,6 +252,7 @@ const messages = {
     observeAudit: "监控与审计",
     settings: "系统设置",
     console: "控制台",
+    aiAssistant: "AI 助手",
     connections: "连接管理",
     connectionConfigs: "连接配置",
     automation: "自动化",

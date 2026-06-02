@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  Bot,
   CalendarClock,
   FileText,
   FolderOpen,
@@ -34,9 +35,6 @@ export interface NavigationItem {
 
 export interface NavigationGroups {
   workbench: NavigationItem[]
-  session: NavigationItem[]
-  automation: NavigationItem[]
-  records: NavigationItem[]
   governance: NavigationItem[]
 }
 
@@ -47,9 +45,12 @@ const workbench: NavigationItemDefinition[] = [
     icon: Monitor,
     isActive: true,
   },
-]
-
-const session: NavigationItemDefinition[] = [
+  {
+    titleKey: "aiAssistant",
+    url: "/dashboard/ai-assistant",
+    icon: Bot,
+    requiredCapabilities: ["ai"],
+  },
   {
     titleKey: "connectionConfigs",
     url: "/dashboard/servers",
@@ -68,9 +69,6 @@ const session: NavigationItemDefinition[] = [
     icon: FolderOpen,
     requiredCapabilities: ["sftp"],
   },
-]
-
-const automation: NavigationItemDefinition[] = [
   {
     titleKey: "scripts",
     url: "/dashboard/scripts",
@@ -83,9 +81,14 @@ const automation: NavigationItemDefinition[] = [
     icon: CalendarClock,
     requiredCapabilities: ["automation"],
   },
-]
-
-const records: NavigationItemDefinition[] = [
+  {
+    titleKey: "operationLogs",
+    url: "/dashboard/operation-logs",
+    icon: ScrollText,
+    adminOnly: true,
+    profiles: ["web"],
+    requiredCapabilities: ["audit"],
+  },
 ]
 
 const governance: NavigationItemDefinition[] = [
@@ -101,14 +104,6 @@ const governance: NavigationItemDefinition[] = [
     titleKey: "logs",
     url: "/dashboard/logs",
     icon: FileText,
-    adminOnly: true,
-    profiles: ["web"],
-    requiredCapabilities: ["audit"],
-  },
-  {
-    titleKey: "operationLogs",
-    url: "/dashboard/operation-logs",
-    icon: ScrollText,
     adminOnly: true,
     profiles: ["web"],
     requiredCapabilities: ["audit"],
@@ -134,9 +129,6 @@ export function buildNavigationGroups({
 }): NavigationGroups {
   return {
     workbench: translateNavigationItems(workbench, runtime, isAdmin, t),
-    session: translateNavigationItems(session, runtime, isAdmin, t),
-    automation: translateNavigationItems(automation, runtime, isAdmin, t),
-    records: translateNavigationItems(records, runtime, isAdmin, t),
     governance: translateNavigationItems(governance, runtime, isAdmin, t),
   }
 }
