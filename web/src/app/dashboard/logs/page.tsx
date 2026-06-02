@@ -1,19 +1,19 @@
 "use client"
 
-import * as React from "react"
-import { useRouter } from "next/navigation"
-import { useClientAuth } from "@/components/client-auth-provider"
+import { PageHeader } from "@/components/page-header"
+import { useSearchParams } from "next/navigation"
+import { useTranslations } from "next-intl"
+import { LogsClient } from "./components/logs-client"
 
-export default function LegacyLogsPage() {
-  const router = useRouter()
-  const { user } = useClientAuth()
+export default function LogsPage() {
+  const t = useTranslations("logsAudit")
+  const searchParams = useSearchParams()
+  const action = searchParams.get("action") || undefined
 
-  React.useEffect(() => {
-    if (!user) {
-      return
-    }
-    router.replace(user?.role === "admin" ? "/dashboard/audit" : "/dashboard/activity")
-  }, [router, user])
-
-  return null
+  return (
+    <>
+      <PageHeader title={t("logsPageTitle")} />
+      <LogsClient defaultAction={action} />
+    </>
+  )
 }

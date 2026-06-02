@@ -22,9 +22,9 @@ func NewAuditLogHandler(auditService auditlog.Service) *AuditLogHandler {
 	}
 }
 
-// List 查询安全审计列表（管理员）
-// GET /api/v1/audit-logs?page=1&page_size=20&action=login&status=success
-func (h *AuditLogHandler) List(c *gin.Context) {
+// ListAll 查询全部日志列表（管理员）
+// GET /api/v1/logs?page=1&page_size=20&category=activity
+func (h *AuditLogHandler) ListAll(c *gin.Context) {
 	if !requireAdmin(c) {
 		return
 	}
@@ -33,7 +33,9 @@ func (h *AuditLogHandler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	req.Category = auditlog.CategoryAudit
+	if category := c.Query("category"); category != "" {
+		req.Category = auditlog.LogCategory(category)
+	}
 
 	logs, total, err := h.auditService.List(c.Request.Context(), req)
 	if err != nil {
@@ -44,9 +46,9 @@ func (h *AuditLogHandler) List(c *gin.Context) {
 	respondLogList(c, logs, total, req)
 }
 
-// GetByID 获取单条安全审计日志（管理员）
-// GET /api/v1/audit-logs/:id
-func (h *AuditLogHandler) GetByID(c *gin.Context) {
+// GetAnyByID 获取单条日志（管理员）
+// GET /api/v1/logs/:id
+func (h *AuditLogHandler) GetAnyByID(c *gin.Context) {
 	if !requireAdmin(c) {
 		return
 	}
@@ -55,17 +57,13 @@ func (h *AuditLogHandler) GetByID(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if log.Category != auditlog.CategoryAudit {
-		RespondError(c, http.StatusNotFound, "log_not_found", "Audit log not found")
-		return
-	}
 
 	RespondSuccess(c, log)
 }
 
-// GetStatistics 获取安全审计统计（管理员）
-// GET /api/v1/audit-logs/statistics?days=30
-func (h *AuditLogHandler) GetStatistics(c *gin.Context) {
+// GetAllStatistics 获取全部日志统计（管理员）
+// GET /api/v1/logs/statistics?days=30&category=activity
+func (h *AuditLogHandler) GetAllStatistics(c *gin.Context) {
 	if !requireAdmin(c) {
 		return
 	}
@@ -74,7 +72,9 @@ func (h *AuditLogHandler) GetStatistics(c *gin.Context) {
 	if !ok {
 		return
 	}
-	req.Category = auditlog.CategoryAudit
+	if category := c.Query("category"); category != "" {
+		req.Category = auditlog.LogCategory(category)
+	}
 
 	stats, err := h.auditService.GetStatistics(c.Request.Context(), req)
 	if err != nil {
@@ -86,7 +86,7 @@ func (h *AuditLogHandler) GetStatistics(c *gin.Context) {
 }
 
 // CleanupOldLogs 清理旧日志（管理员）
-// DELETE /api/v1/audit-logs/cleanup?retention_days=90
+// DELETE /api/v1/logs/cleanup?retention_days=90
 func (h *AuditLogHandler) CleanupOldLogs(c *gin.Context) {
 	if !requireAdmin(c) {
 		return
@@ -112,77 +112,6 @@ func (h *AuditLogHandler) CleanupOldLogs(c *gin.Context) {
 		"deleted_count":  deletedCount,
 		"retention_days": retentionDays,
 	}, "Old logs cleaned up successfully")
-}
-
-// ListMyActivity 获取当前用户活动记录
-// GET /api/v1/activity-logs/me?page=1&page_size=20
-func (h *AuditLogHandler) ListMyActivity(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	req, ok := parseAuditLogListRequest(c, false)
-	if !ok {
-		return
-	}
-	req.UserID = &userID
-	req.Category = auditlog.CategoryActivity
-
-	logs, total, err := h.auditService.List(c.Request.Context(), req)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "query_failed", err.Error())
-		return
-	}
-
-	respondLogList(c, logs, total, req)
-}
-
-// GetMyActivityByID 获取当前用户单条活动记录
-// GET /api/v1/activity-logs/me/items/:id
-func (h *AuditLogHandler) GetMyActivityByID(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	log, ok := h.getLogByID(c)
-	if !ok {
-		return
-	}
-	if log.Category != auditlog.CategoryActivity || log.UserID != userID {
-		RespondError(c, http.StatusNotFound, "log_not_found", "Activity log not found")
-		return
-	}
-
-	RespondSuccess(c, log)
-}
-
-// GetMyActivityStatistics 获取当前用户活动统计
-// GET /api/v1/activity-logs/me/statistics?days=30
-func (h *AuditLogHandler) GetMyActivityStatistics(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
-		return
-	}
-
-	req, ok := parseAuditLogStatisticsRequest(c, false)
-	if !ok {
-		return
-	}
-	req.UserID = &userID
-	req.Category = auditlog.CategoryActivity
-
-	stats, err := h.auditService.GetStatistics(c.Request.Context(), req)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "statistics_failed", err.Error())
-		return
-	}
-
-	RespondSuccess(c, stats)
 }
 
 func (h *AuditLogHandler) getLogByID(c *gin.Context) (*auditlog.AuditLog, bool) {

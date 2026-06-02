@@ -1,17 +1,12 @@
 import type { LucideIcon } from "lucide-react"
 import {
-  Archive,
   CalendarClock,
-  ClipboardList,
-  FileClock,
   FileText,
   FolderOpen,
-  History,
   Monitor,
   ScrollText,
   Server,
   Settings,
-  ShieldCheck,
   Terminal,
   Users,
 } from "lucide-react"
@@ -91,47 +86,9 @@ const automation: NavigationItemDefinition[] = [
 ]
 
 const records: NavigationItemDefinition[] = [
-  {
-    titleKey: "connectionHistory",
-    url: "/dashboard/servers/history",
-    icon: History,
-    requiredCapabilities: ["servers"],
-  },
-  {
-    titleKey: "transferHistory",
-    url: "/dashboard/transfers/history",
-    icon: FileClock,
-    requiredCapabilities: ["transfers"],
-  },
-  {
-    titleKey: "executions",
-    url: "/dashboard/automation/history",
-    icon: ClipboardList,
-    requiredCapabilities: ["automation"],
-  },
-  {
-    titleKey: "activity",
-    url: "/dashboard/activity",
-    icon: FileText,
-    requiredCapabilities: ["activity_log"],
-  },
-  {
-    titleKey: "trash",
-    url: "/dashboard/storage",
-    icon: Archive,
-    requiredCapabilities: ["sftp"],
-  },
 ]
 
 const governance: NavigationItemDefinition[] = [
-  {
-    titleKey: "audit",
-    url: "/dashboard/audit",
-    icon: ShieldCheck,
-    adminOnly: true,
-    profiles: ["web"],
-    requiredCapabilities: ["audit"],
-  },
   {
     titleKey: "userManagement",
     url: "/dashboard/users",
@@ -139,6 +96,22 @@ const governance: NavigationItemDefinition[] = [
     adminOnly: true,
     profiles: ["web"],
     requiredCapabilities: ["users"],
+  },
+  {
+    titleKey: "logs",
+    url: "/dashboard/logs",
+    icon: FileText,
+    adminOnly: true,
+    profiles: ["web"],
+    requiredCapabilities: ["audit"],
+  },
+  {
+    titleKey: "operationLogs",
+    url: "/dashboard/operation-logs",
+    icon: ScrollText,
+    adminOnly: true,
+    profiles: ["web"],
+    requiredCapabilities: ["audit"],
   },
   {
     titleKey: "systemSettings",

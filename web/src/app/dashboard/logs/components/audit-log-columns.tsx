@@ -2,7 +2,7 @@ import { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowUpDown, ArrowUp, ArrowDown, Clock, User, Server, Globe, AlertTriangle, CheckCircle } from "lucide-react"
-import { AuditLog } from "@/lib/api/audit-logs"
+import { AuditLog } from "@/lib/api/logs"
 import {
   getActionColor,
   formatTimestamp,
@@ -82,6 +82,21 @@ export function createAuditLogColumns(
   t: I18nT,
 ): ColumnDef<AuditLog>[] {
   return [
+  // 类别列
+  {
+    id: "category",
+    accessorKey: "category",
+    header: t("columnCategory"),
+    cell: ({ row }) => {
+      const category = row.getValue("category") as string
+      return (
+        <Badge variant="outline">
+          {category === "activity" ? t("categoryActivity") : t("categoryAudit")}
+        </Badge>
+      )
+    },
+  },
+
   // 时间列
   {
     id: "created_at",

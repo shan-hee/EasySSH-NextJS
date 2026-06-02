@@ -8,16 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/pkg/logger"
-	"github.com/google/uuid"
 	"github.com/pkg/sftp"
 )
-
-var ErrTrashPathNotAllowed = errors.New("trash path not allowed")
 
 // Client SFTP 客户端封装
 type Client struct {
@@ -305,54 +301,7 @@ func (c *Client) RemoveFile(path string) error {
 	return nil
 }
 
-// MoveToTrash 将目标（文件/目录）移动到同级 .trash 下，并返回 trashDir/trashPath
-func (c *Client) MoveToTrash(path string) (trashDir string, trashPath string, err error) {
-	if isTrashSelfOrChild(path) {
-		return "", "", fmt.Errorf("%w: %s", ErrTrashPathNotAllowed, path)
-	}
-
-	parent := filepath.Dir(path)
-	trashDir = filepath.Join(parent, ".trash")
-
-	// 尝试创建回收站目录（存在即略过）
-	_ = c.sftpClient.Mkdir(trashDir)
-	if info, statErr := c.sftpClient.Stat(trashDir); statErr != nil || !info.IsDir() {
-		return "", "", fmt.Errorf("trash directory invalid: %s", trashDir)
-	}
-
-	base := filepath.Base(path)
-	uniq := fmt.Sprintf("%s-%s-%s", base, time.Now().Format("20060102-150405"), uuid.NewString()[:8])
-	trashPath = filepath.Join(trashDir, uniq)
-
-	if renameErr := c.sftpClient.Rename(path, trashPath); renameErr != nil {
-		return "", "", fmt.Errorf("failed to move to trash: %w", renameErr)
-	}
-
-	// 尝试把"删除时间"写入 mtime（否则可能沿用原文件 mtime，导致回收站保留期与 UI 展示不准确）
-	now := time.Now()
-	if chtErr := c.sftpClient.Chtimes(trashPath, now, now); chtErr != nil {
-		// Chtimes 失败不应阻止删除操作，但记录警告以便调试
-		logger.Warn("failed to update mtime for trash path (using original file mtime)",
-			logger.String("trashPath", trashPath),
-			logger.Err(chtErr))
-	}
-
-	logger.Debug("moved to trash",
-		logger.String("from", path),
-		logger.String("to", trashPath))
-	return trashDir, trashPath, nil
-}
-
-func isTrashSelfOrChild(p string) bool {
-	p = filepath.Clean(p)
-	if p == ".trash" || filepath.Base(p) == ".trash" {
-		return true
-	}
-	sep := string(filepath.Separator)
-	return strings.Contains(p, sep+".trash"+sep)
-}
-
-// RemoveAll 永久递归删除目录（类似 rm -rf），用于回收站清理/半文件清理等
+// RemoveAll 永久递归删除目录（类似 rm -rf）。
 func (c *Client) RemoveAll(path string) error {
 	return c.removeAll(path)
 }

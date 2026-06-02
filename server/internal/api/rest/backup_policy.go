@@ -39,8 +39,7 @@ var backupTablePolicies = map[string]backupTablePolicy{
 	"ai_config":           singletonConfigPolicy("ai_config"),
 
 	// User-owned configuration is business data because each row belongs to a user.
-	"user_ai_config":      entityPolicy("user_ai_config", [][]string{{"user_id"}}, true),
-	"sftp_trash_settings": entityPolicy("sftp_trash_settings", [][]string{{"user_id"}}, true),
+	"user_ai_config": entityPolicy("user_ai_config", [][]string{{"user_id"}}, true),
 
 	// Core business entities.
 	"users":           entityPolicy("users", [][]string{{"email"}, {"google_sub"}}, false),
@@ -55,14 +54,13 @@ var backupTablePolicies = map[string]backupTablePolicy{
 	// Operational history and append-like records. They remain in the database section but keep
 	// explicit policy metadata so later UI can expose them separately without touching restore logic.
 	"audit_logs":             historyPolicy("audit_logs", nil, true),
+	"operation_records":      historyPolicy("operation_records", [][]string{{"source_table", "source_id"}}, true),
 	"ssh_sessions":           historyPolicy("ssh_sessions", [][]string{{"session_id"}}, true),
 	"file_transfers":         historyPolicy("file_transfers", nil, true),
 	"task_executions":        historyPolicy("task_executions", nil, true),
 	"task_execution_servers": historyPolicy("task_execution_servers", nil, false),
 	"login_attempts":         historyPolicy("login_attempts", [][]string{{"id"}}, false),
 	"login_alerts":           historyPolicy("login_alerts", nil, true),
-	"sftp_trash_dirs":        historyPolicy("sftp_trash_dirs", [][]string{{"user_id", "server_id", "path_hash"}}, true),
-	"sftp_trash_items":       historyPolicy("sftp_trash_items", [][]string{{"user_id", "server_id", "trash_hash"}}, true),
 	"ai_sessions":            historyPolicy("ai_sessions", nil, true),
 
 	// Runtime/security state should not travel with backup restore. Sessions, trusted devices,
@@ -70,10 +68,6 @@ var backupTablePolicies = map[string]backupTablePolicy{
 	"user_sessions":   ignoredRuntimePolicy("user_sessions"),
 	"trusted_devices": ignoredRuntimePolicy("trusted_devices"),
 	"rsa_key_pairs":   ignoredRuntimePolicy("rsa_key_pairs"),
-
-	// Legacy tables that are no longer part of the current migration set are named here so stale
-	// development databases do not silently leak obsolete data into new backups.
-	"tab_session_settings": ignoredRuntimePolicy("tab_session_settings"),
 }
 
 func singletonConfigPolicy(table string) backupTablePolicy {

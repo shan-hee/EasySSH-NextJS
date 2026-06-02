@@ -487,21 +487,21 @@ func (s *ToolExecutorService) executeDeleteFile(ctx context.Context, userID uuid
 		return result, nil
 	}
 
-	// 删除（移入回收站）
+	// 删除
 	if info.IsDir {
 		if err := client.DeleteDirectory(args.Path); err != nil {
 			result.Content = fmt.Sprintf("删除目录失败: %v", err)
 			result.IsError = true
 			return result, nil
 		}
-		result.Content = fmt.Sprintf("目录已移入回收站: %s", args.Path)
+		result.Content = fmt.Sprintf("目录已删除: %s", args.Path)
 	} else {
 		if err := client.DeleteFile(args.Path); err != nil {
 			result.Content = fmt.Sprintf("删除文件失败: %v", err)
 			result.IsError = true
 			return result, nil
 		}
-		result.Content = fmt.Sprintf("文件已移入回收站: %s", args.Path)
+		result.Content = fmt.Sprintf("文件已删除: %s", args.Path)
 	}
 
 	return result, nil

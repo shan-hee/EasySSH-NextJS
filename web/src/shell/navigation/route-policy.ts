@@ -10,15 +10,13 @@ export interface RoutePolicy {
 }
 
 export const routePolicies: RoutePolicy[] = [
-  { pattern: /^\/dashboard\/activity(?:\/|$)/, requiredCapabilities: ["activity_log"], fallbackPath: "/dashboard/servers" },
-  { pattern: /^\/dashboard\/audit(?:\/|$)/, requiredCapabilities: ["audit"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/activity" },
-  { pattern: /^\/dashboard\/users(?:\/|$)/, requiredCapabilities: ["users"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/activity" },
-  { pattern: /^\/dashboard\/settings(?:\/|$)/, requiredCapabilities: ["settings"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/activity" },
+  { pattern: /^\/dashboard\/logs(?:\/|$)/, requiredCapabilities: ["audit"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/servers" },
+  { pattern: /^\/dashboard\/operation-logs(?:\/|$)/, requiredCapabilities: ["audit"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/servers" },
+  { pattern: /^\/dashboard\/users(?:\/|$)/, requiredCapabilities: ["users"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/servers" },
+  { pattern: /^\/dashboard\/settings(?:\/|$)/, requiredCapabilities: ["settings"], profiles: ["web"], adminOnly: true, fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/automation(?:\/|$)/, requiredCapabilities: ["automation"], fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/scripts(?:\/|$)/, requiredCapabilities: ["scripts"], fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/sftp(?:\/|$)/, requiredCapabilities: ["sftp"], fallbackPath: "/dashboard/servers" },
-  { pattern: /^\/dashboard\/storage(?:\/|$)/, requiredCapabilities: ["sftp"], fallbackPath: "/dashboard/servers" },
-  { pattern: /^\/dashboard\/transfers(?:\/|$)/, requiredCapabilities: ["transfers"], fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/terminal(?:\/|$)/, requiredCapabilities: ["terminal"], fallbackPath: "/dashboard/servers" },
 ]
 

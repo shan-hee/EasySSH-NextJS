@@ -188,7 +188,7 @@ func (s *ToolExecutorService) BuildToolRegistry() *registry.ToolRegistry {
 		{
 			Name:        "delete_file",
 			DisplayName: "删除文件",
-			Description: "删除服务器上的文件或目录。目录会被递归删除，文件会移入回收站。",
+			Description: "删除服务器上的文件或目录。目录会被递归删除。",
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{

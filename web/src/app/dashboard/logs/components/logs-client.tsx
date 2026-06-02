@@ -4,8 +4,7 @@ import React, { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, CheckCircle, XCircle, Activity, User, Trash2, Loader2 } from "lucide-react"
 import { SkeletonStatsCard } from "@/components/ui/loading"
-import { auditLogsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/audit-logs"
-import { activityLogsApi } from "@/lib/api/activity-logs"
+import { logsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/logs"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/sonner"
 import { DataTable } from "@/components/ui/data-table"
@@ -29,7 +28,7 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useTranslations } from "next-intl"
 
-interface AuditLogsPageData {
+interface LogsPageData {
   logs: AuditLog[]
   statistics: AuditLogStatisticsResponse | null
   totalPages: number
@@ -38,9 +37,8 @@ interface AuditLogsPageData {
   pageSize: number
 }
 
-interface AuditLogsClientProps {
-  initialData?: AuditLogsPageData
-  scope?: "activity" | "audit"
+interface LogsClientProps {
+  initialData?: LogsPageData
   defaultAction?: string
 }
 
@@ -48,11 +46,10 @@ interface AuditLogsClientProps {
  * 操作日志客户端组件
  * 纯 CSR 模式：在客户端加载数据
  */
-export function AuditLogsClient({
+export function LogsClient({
   initialData,
-  scope = "audit",
   defaultAction,
-}: AuditLogsClientProps) {
+}: LogsClientProps) {
   const { ready } = useAuthReady()
   const { user } = useClientAuth()
   const t = useTranslations("logsAudit")
@@ -71,6 +68,7 @@ export function AuditLogsClient({
   const [retentionDays, setRetentionDays] = useState("90")
   const [columnVisibility, setColumnVisibility] = useState({
     created_at: true,
+    category: true,
     username: true,
     action: true,
     resource: true,
@@ -89,9 +87,7 @@ export function AuditLogsClient({
   // 加载统计数据
   const loadStatistics = async () => {
     try {
-      const statsResponse = scope === "activity"
-        ? await activityLogsApi.getMineStatistics()
-        : await auditLogsApi.getStatistics()
+      const statsResponse = await logsApi.getStatistics()
       setStatistics(statsResponse)
     } catch (error: unknown) {
       console.error("日志统计加载失败:", error)
@@ -115,9 +111,7 @@ export function AuditLogsClient({
         page_size: currentPageSize,
         action: defaultAction,
       }
-      const logsResponse = scope === "activity"
-        ? await activityLogsApi.listMine(listParams)
-        : await auditLogsApi.list(listParams)
+      const logsResponse = await logsApi.list(listParams)
 
       setLogs(logsResponse.logs || [])
       setTotalPages(logsResponse.total_pages || 1)
@@ -151,7 +145,7 @@ export function AuditLogsClient({
 
     loadInitialData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, initialData, scope, defaultAction])
+  }, [ready, initialData, defaultAction])
 
   // 页码变化
   const handlePageChange = (newPage: number) => {
@@ -208,7 +202,7 @@ export function AuditLogsClient({
   )
 
   const isAdmin = user?.role === "admin"
-  const canCleanup = scope === "audit" && isAdmin
+  const canCleanup = isAdmin
 
   const handleCleanupLogs = async () => {
     const parsedRetentionDays = Number(retentionDays)
@@ -223,7 +217,7 @@ export function AuditLogsClient({
 
     try {
       setCleanupLoading(true)
-      const result = await auditLogsApi.cleanup(parsedRetentionDays)
+      const result = await logsApi.cleanup(parsedRetentionDays)
       toast.success(t("cleanupSuccess", { count: result.deleted_count }))
       setCleanupOpen(false)
       setPage(1)
@@ -355,6 +349,7 @@ export function AuditLogsClient({
             <ColumnVisibility
               columns={[
                 { id: "created_at", label: t("columnTime") },
+                { id: "category", label: t("columnCategory") },
                 { id: "username", label: t("columnUser") },
                 { id: "action", label: t("columnAction") },
                 { id: "resource", label: t("columnResource") },

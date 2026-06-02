@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client"
 import type { ServerListResponse } from "./servers"
-import type { AuditLogStatisticsResponse } from "./audit-logs"
+import type { AuditLogStatisticsResponse } from "./logs"
 
 /**
  * 仪表盘统计数据
@@ -22,7 +22,7 @@ async function getStats(): Promise<DashboardStats> {
     // 并行加载服务器统计和审计日志统计
     const [serversResponse, logsStats] = await Promise.all([
       apiFetch<ServerListResponse>("/servers?page=1&limit=1000"),
-      apiFetch<AuditLogStatisticsResponse>("/audit-logs/statistics").catch(() => null),
+      apiFetch<AuditLogStatisticsResponse>("/logs/statistics").catch(() => null),
     ])
 
     // 处理服务器数据

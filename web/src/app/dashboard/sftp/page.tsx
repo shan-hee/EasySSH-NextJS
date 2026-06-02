@@ -35,7 +35,6 @@ import {
 } from '@dnd-kit/sortable'
 import { createPortal } from 'react-dom'
 import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
-import { activityLogsApi } from "@/lib/api/activity-logs"
 import { fileTransfersApi } from "@/lib/api/file-transfers"
 import { createAuthTicket } from "@/lib/auth-ticket"
 import { toast } from "@/components/ui/sonner"
@@ -58,7 +57,7 @@ import { convertSftpFileInfo, type SftpFileItem } from "@/lib/sftp-file-utils"
 import { loadSftpDirectory } from "@/lib/session/sftp-directory"
 import { createSftpSessionApi } from "@/lib/session/sftp-session-api"
 import type { SftpWorkspaceSession } from "@/lib/session/workspace"
-import { createBrowserWorkspacePreferenceAdapter, createWorkspaceActivityLogAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferHistoryAdapter, createWorkspaceTransferManagerAdapter } from "@/lib/session/workspace-adapters"
+import { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferHistoryAdapter, createWorkspaceTransferManagerAdapter } from "@/lib/session/workspace-adapters"
 import { createSftpWorkspaceSessionControllerAdapter, createSftpWorkspaceSessionStoreAdapter, useSftpSessionStore } from "@/stores/sftp-session-store"
 import { createWorkspaceCapabilitiesFromRuntime, useRuntime } from "@/shell/runtime"
 
@@ -141,7 +140,6 @@ export default function SftpPage() {
  const workspaceSessionController = React.useMemo(() => createSftpWorkspaceSessionControllerAdapter(), [])
  const workspacePreferences = React.useMemo(() => createBrowserWorkspacePreferenceAdapter(), [])
  const workspaceTransferHistory = React.useMemo(() => createWorkspaceTransferHistoryAdapter(fileTransfersApi), [])
- const workspaceActivityLog = React.useMemo(() => createWorkspaceActivityLogAdapter(activityLogsApi), [])
  const workspaceAdapters = React.useMemo(() => createWorkspaceAdapters({
    apiClient: {
      sftp: sftpSessionApi,
@@ -161,7 +159,6 @@ export default function SftpPage() {
    }),
    preferences: workspacePreferences,
    authTicketProvider: workspaceAuthTicketProvider,
-   activityLog: workspaceActivityLog,
    sessionStore: workspaceSessionStore,
    sessionController: workspaceSessionController,
    transferManager: createWorkspaceTransferManagerAdapter({
@@ -197,7 +194,6 @@ export default function SftpPage() {
    fileTransfer.removeTask,
    fileTransfer.updateTask,
    workspaceAuthTicketProvider,
-   workspaceActivityLog,
    systemConfig?.download_exclude_patterns,
    tCommon,
    tSftp,
@@ -214,7 +210,7 @@ export default function SftpPage() {
    defaults: {
      sftp: true,
      transfers: true,
-     activityLog: true,
+     activityLog: false,
      fullscreen: true,
      crossSessionDrag: true,
    },

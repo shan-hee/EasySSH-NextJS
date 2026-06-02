@@ -3,7 +3,6 @@ package sftp
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -145,8 +144,6 @@ type Pool struct {
 	maxLifeTime     time.Duration
 	maxSftpSessions int
 	semaphores      map[string]chan struct{}
-	trashRepo       TrashDirRepository
-	trashItemRepo   TrashItemRepository
 
 	stopCh   chan struct{}
 	stopped  chan struct{}
@@ -201,19 +198,6 @@ func NewPool(
 
 	go p.cleanupLoop()
 	return p
-}
-
-// SetTrashRepository 设置 .trash 持久化登记仓库（用于独立后台清理）
-func (p *Pool) SetTrashRepository(repo TrashDirRepository) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.trashRepo = repo
-}
-
-func (p *Pool) SetTrashItemRepository(repo TrashItemRepository) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.trashItemRepo = repo
 }
 
 // PoolConfig 连接池配置
@@ -556,9 +540,9 @@ func (p *Pool) cleanupOnce() {
 				if !conn.lifeWarned {
 					conn.lifeWarned = true
 					p.log.Warn("连接寿命超限但仍在使用",
-					logger.String("key", key),
-					logger.Duration("age", now.Sub(conn.createdAt)),
-					logger.Int("refCount", refCount))
+						logger.String("key", key),
+						logger.Duration("age", now.Sub(conn.createdAt)),
+						logger.Int("refCount", refCount))
 				}
 				conn.mu.Unlock()
 			}
@@ -680,85 +664,6 @@ func (p *Pool) releasePermit(key string) {
 	select {
 	case <-sem:
 	default:
-	}
-}
-
-func (p *Pool) registerTrashDir(userID, serverID uuid.UUID, dir string) {
-	if dir == "" {
-		return
-	}
-	if p.trashRepo == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), p.connTimeout)
-	defer cancel()
-	if err := p.trashRepo.UpsertSeen(ctx, userID, serverID, dir, time.Now()); err != nil {
-		p.log.Error("failed to register trash dir",
-			logger.String("userID", userID.String()),
-			logger.String("serverID", serverID.String()),
-			logger.String("dir", dir),
-			logger.Err(err))
-	}
-}
-
-func (p *Pool) registerTrashItem(userID, serverID uuid.UUID, originalPath, trashDir, trashPath string, info *FileInfo, deletedAt time.Time) {
-	if p.trashItemRepo == nil || trashPath == "" {
-		return
-	}
-	parentDir := filepath.Dir(originalPath)
-
-	// 从 info 中安全提取字段，避免 nil 时字段为零值
-	var isDir bool
-	var size int64
-	var mode uint32
-	if info != nil {
-		isDir = info.IsDir
-		size = info.Size
-		mode = uint32(info.Mode)
-	}
-
-	item := TrashItem{
-		UserID:       userID,
-		ServerID:     serverID,
-		ParentDir:    parentDir,
-		OriginalPath: originalPath,
-		OriginalName: filepath.Base(originalPath),
-		TrashDir:     trashDir,
-		TrashPath:    trashPath,
-		TrashName:    filepath.Base(trashPath),
-		IsDir:        isDir,
-		Size:         size,
-		Mode:         mode,
-		DeletedAt:    deletedAt,
-		Status:       TrashItemStatusActive,
-		Version:      1, // 显式初始化版本号，确保乐观锁正常工作
-		RestoredPath: "",
-		RestoredAt:   nil,
-		PurgedAt:     nil,
-	}
-
-	// 审计日志：记录文件移动到回收站
-	itemType := "file"
-	if isDir {
-		itemType = "directory"
-	}
-	p.log.Info("item moved to trash",
-		logger.String("type", itemType),
-		logger.String("userID", userID.String()),
-		logger.String("serverID", serverID.String()),
-		logger.String("originalPath", originalPath),
-		logger.String("trashPath", trashPath),
-		logger.Int64("size", size),
-		logger.Time("timestamp", deletedAt))
-
-	ctx, cancel := context.WithTimeout(context.Background(), p.connTimeout)
-	defer cancel()
-	if err := p.trashItemRepo.UpsertActive(ctx, item); err != nil {
-		p.log.Error("failed to register trash item",
-			logger.String("userID", userID.String()),
-			logger.String("serverID", serverID.String()),
-			logger.String("trashPath", trashPath),
-			logger.Err(err))
 	}
 }
 

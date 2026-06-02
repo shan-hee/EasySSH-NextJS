@@ -1,8 +1,5 @@
 import { apiFetch } from "@/lib/api-client"
 
-/**
- * 审计日志信息
- */
 export interface AuditLog {
   id: string
   user_id: string
@@ -20,10 +17,6 @@ export interface AuditLog {
   created_at: string
 }
 
-/**
- * 审计日志列表响应
- * 注意: apiFetch 会自动解包 data 字段，所以这里的结构是解包后的
- */
 export interface AuditLogListResponse {
   logs: AuditLog[]
   total: number
@@ -32,9 +25,6 @@ export interface AuditLogListResponse {
   total_pages: number
 }
 
-/**
- * 审计日志统计响应
- */
 export interface AuditLogStatisticsResponse {
   total_logs: number
   success_count: number
@@ -48,28 +38,19 @@ export interface AuditLogStatisticsResponse {
   }>
 }
 
-/**
- * 审计日志清理响应
- */
 export interface AuditLogCleanupResponse {
   deleted_count: number
   retention_days: number
 }
 
-/**
- * 审计日志 API 服务
- */
-export const auditLogsApi = {
-  /**
-   * 获取审计日志列表
-   */
+export const logsApi = {
   async list(params?: {
     page?: number
     page_size?: number
     user_id?: string
     server_id?: string
     action?: string
-    resource?: string
+    category?: "activity" | "audit"
     status?: string
     start_date?: string
     end_date?: string
@@ -80,45 +61,38 @@ export const auditLogsApi = {
     if (params?.user_id) queryParams.set("user_id", params.user_id)
     if (params?.server_id) queryParams.set("server_id", params.server_id)
     if (params?.action) queryParams.set("action", params.action)
-    if (params?.resource) queryParams.set("resource", params.resource)
+    if (params?.category) queryParams.set("category", params.category)
     if (params?.status) queryParams.set("status", params.status)
     if (params?.start_date) queryParams.set("start_date", params.start_date)
     if (params?.end_date) queryParams.set("end_date", params.end_date)
 
-    const url = `/audit-logs${queryParams.toString() ? `?${queryParams}` : ""}`
+    const url = `/logs${queryParams.toString() ? `?${queryParams}` : ""}`
     return apiFetch<AuditLogListResponse>(url)
   },
 
-  /**
-   * 获取审计日志详情
-   */
   async getById(id: string): Promise<AuditLog> {
-    return apiFetch<AuditLog>(`/audit-logs/${id}`)
+    return apiFetch<AuditLog>(`/logs/${id}`)
   },
 
-  /**
-   * 获取审计日志统计信息
-   */
   async getStatistics(params?: {
+    category?: "activity" | "audit"
     start_date?: string
     end_date?: string
   }): Promise<AuditLogStatisticsResponse> {
     const queryParams = new URLSearchParams()
+    if (params?.category) queryParams.set("category", params.category)
     if (params?.start_date) queryParams.set("start_date", params.start_date)
     if (params?.end_date) queryParams.set("end_date", params.end_date)
 
-    const url = `/audit-logs/statistics${queryParams.toString() ? `?${queryParams}` : ""}`
+    const url = `/logs/statistics${queryParams.toString() ? `?${queryParams}` : ""}`
     return apiFetch<AuditLogStatisticsResponse>(url)
   },
 
-  /**
-   * 清理旧日志
-   */
   async cleanup(retentionDays: number): Promise<AuditLogCleanupResponse> {
     const queryParams = new URLSearchParams()
     queryParams.set("retention_days", retentionDays.toString())
 
-    return apiFetch<AuditLogCleanupResponse>(`/audit-logs/cleanup?${queryParams.toString()}`, {
+    return apiFetch<AuditLogCleanupResponse>(`/logs/cleanup?${queryParams.toString()}`, {
       method: "DELETE",
       retry: false,
     })

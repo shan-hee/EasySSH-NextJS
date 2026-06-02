@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Download, Trash2, Eye, Copy, MoreHorizontal } from "lucide-react"
-import { AuditLog } from "@/lib/api/audit-logs"
+import { AuditLog } from "@/lib/api/logs"
 import { useClientAuth } from "@/components/client-auth-provider"
 import { useSystemConfig } from "@/hooks/use-system-config"
 import { formatInTimezone } from "@/utils/datetime"

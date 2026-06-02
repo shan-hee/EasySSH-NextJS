@@ -29,6 +29,7 @@ import (
 	"github.com/easyssh/server/internal/domain/monitoring"
 	"github.com/easyssh/server/internal/domain/notification"
 	"github.com/easyssh/server/internal/domain/notificationconfig"
+	"github.com/easyssh/server/internal/domain/operationrecord"
 	"github.com/easyssh/server/internal/domain/permission"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
 	"github.com/easyssh/server/internal/domain/script"
@@ -53,7 +54,6 @@ import (
 	"github.com/easyssh/server/internal/platform"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -94,11 +94,12 @@ func main() {
 		&auth.Session{}, // 用户会话表
 		&server.Server{},
 		&auditlog.AuditLog{},
-		&script.Script{},               // 脚本表
-		&batchtask.BatchTask{},         // 批量任务表
-		&scheduledtask.ScheduledTask{}, // 定时任务表
-		&sshsession.SSHSession{},       // SSH会话表
-		&filetransfer.FileTransfer{},   // 文件传输表
+		&script.Script{},                   // 脚本表
+		&batchtask.BatchTask{},             // 批量任务表
+		&scheduledtask.ScheduledTask{},     // 定时任务表
+		&sshsession.SSHSession{},           // SSH会话表
+		&filetransfer.FileTransfer{},       // 文件传输表
+		&operationrecord.OperationRecord{}, // 统一操作记录表
 		// 新的配置表
 		&systemconfig.SystemConfig{},             // 系统配置表
 		&security.SecurityConfig{},               // 安全配置表
@@ -111,9 +112,6 @@ func main() {
 		// 任务执行相关表
 		&taskexecution.TaskExecution{},       // 任务执行历史表
 		&taskexecution.TaskExecutionServer{}, // 任务执行服务器结果表
-		&sftp.TrashDir{},                     // SFTP .trash 清理登记表
-		&sftp.TrashItem{},                    // SFTP 回收站索引表
-		&sftp.TrashSettings{},                // SFTP 回收站用户设置表
 		// 安全增强相关表
 		&auth.LoginAttempt{},       // 登录尝试记录表
 		&auth.TrustedDevice{},      // 可信设备表
@@ -123,9 +121,6 @@ func main() {
 		&runtime.AISessionRecord{}, // AI 会话持久化表
 	); err != nil {
 		log.Fatalf("❌ Failed to migrate database: %v", err)
-	}
-	if err := backfillAuditLogCategories(database); err != nil {
-		log.Fatalf("❌ Failed to backfill audit log categories: %v", err)
 	}
 	log.Println("✅ Database migrated successfully")
 
@@ -322,6 +317,10 @@ func main() {
 	scheduledTaskRepo := scheduledtask.NewRepository(database)
 	scheduledTaskService := scheduledtask.NewService(scheduledTaskRepo)
 
+	// 统一操作记录服务
+	operationRecordRepo := operationrecord.NewRepository(database)
+	operationRecordService := operationrecord.NewService(operationRecordRepo)
+
 	// 任务执行历史服务
 	taskExecutionRepo := taskexecution.NewRepository(database)
 	taskExecutionService := taskexecution.NewService(taskExecutionRepo)
@@ -334,6 +333,7 @@ func main() {
 		taskExecutionRepo,
 		encryptor,
 		10, // 最大并发数
+		operationRecordService,
 	)
 	taskExecutor.SetHostKeyCallback(sshHostKeyService.GetHostKeyCallback())
 
@@ -355,11 +355,11 @@ func main() {
 
 	// SSH会话服务
 	sshSessionRepo := sshsession.NewRepository(database)
-	sshSessionService := sshsession.NewService(sshSessionRepo)
+	sshSessionService := sshsession.NewService(sshSessionRepo, operationRecordService)
 
 	// 文件传输服务
 	fileTransferRepo := filetransfer.NewRepository(database)
-	fileTransferService := filetransfer.NewService(fileTransferRepo)
+	fileTransferService := filetransfer.NewService(fileTransferRepo, operationRecordService)
 
 	// 用户管理服务
 	userRepo := user.NewRepository(database)
@@ -396,8 +396,6 @@ func main() {
 	refreshTokenTTLSeconds := int(refreshIdleDuration.Seconds())
 
 	// 初始化处理器
-	var trashCleaner *sftp.TrashCleaner
-
 	authHandler := rest.NewAuthHandler(
 		authService,
 		jwtService,
@@ -417,9 +415,6 @@ func main() {
 	)
 	serverHandler := rest.NewServerHandler(serverService)
 	sshHandler := rest.NewSSHHandler(sessionManager)
-	trashRepo := sftp.NewTrashDirRepository(database)
-	trashItemRepo := sftp.NewTrashItemRepository(database)
-	trashSettingsRepo := sftp.NewTrashSettingsRepository(database)
 	sftpPoolConfig := &sftp.PoolConfig{
 		MaxIdleTime:            time.Duration(cfg.SFTP.MaxIdleTimeSeconds) * time.Second,
 		CleanupInterval:        time.Duration(cfg.SFTP.CleanupIntervalSeconds) * time.Second,
@@ -429,38 +424,6 @@ func main() {
 	}
 	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback(), sftpPoolConfig)
 	sftpHandler.SetTransferHandler(sftpTransferWSHandler) // 注入跨服务器传输处理器
-
-	if pool := sftpHandler.GetPool(); pool != nil {
-		pool.SetTrashRepository(trashRepo)
-		pool.SetTrashItemRepository(trashItemRepo)
-	}
-	sftpHandler.SetTrashItemRepository(trashItemRepo)
-	sftpHandler.SetTrashSettingsRepository(trashSettingsRepo)
-
-	trashCleaner = sftp.NewTrashCleaner(sftp.TrashCleanerConfig{
-		Enabled:          cfg.SFTP.TrashCleanerEnabled,
-		Interval:         time.Duration(cfg.SFTP.TrashCleanIntervalSeconds) * time.Second,
-		SuccessCooldown:  time.Duration(cfg.SFTP.TrashSuccessCooldownSeconds) * time.Second,
-		Retention:        time.Duration(cfg.SFTP.TrashRetentionHours) * time.Hour,
-		MaxEntries:       cfg.SFTP.TrashMaxEntriesPerTrashDir,
-		MaxBytes:         int64(cfg.SFTP.TrashMaxBytesPerTrashDirMB) * 1024 * 1024,
-		MaxDeletesPerDir: cfg.SFTP.TrashMaxDeletesPerDirPerRun,
-		MaxFailCount:     cfg.SFTP.TrashMaxFailCount,
-		BatchSize:        cfg.SFTP.TrashBatchSize,
-		Concurrency:      cfg.SFTP.TrashConcurrency,
-		ConnectTimeout:   time.Duration(cfg.SFTP.TrashConnectTimeoutSeconds) * time.Second,
-		JobTimeout:       time.Duration(cfg.SFTP.TrashJobTimeoutSeconds) * time.Second,
-		BaseRetryDelay:   time.Duration(cfg.SFTP.TrashRetryBaseDelaySeconds) * time.Second,
-		MaxRetryDelay:    time.Duration(cfg.SFTP.TrashRetryMaxDelaySeconds) * time.Second,
-	}, sftp.TrashCleanerDeps{
-		Repo:            trashRepo,
-		ItemRepo:        trashItemRepo,
-		SettingsRepo:    trashSettingsRepo,
-		ServerService:   serverService,
-		Encryptor:       encryptor,
-		HostKeyCallback: sshHostKeyService.GetHostKeyCallback(),
-	})
-	trashCleaner.Start()
 
 	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService, securityService, cfg.Server.WebDevPort, completionService, systemConfigService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService, cfg.Server.WebDevPort)
@@ -474,6 +437,7 @@ func main() {
 	taskExecutionHandler := rest.NewTaskExecutionHandler(taskExecutionService)
 	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
 	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
+	operationRecordHandler := rest.NewOperationRecordHandler(operationRecordService)
 	userHandler := rest.NewUserHandler(userService, accountLockService)
 	permissionHandler := rest.NewPermissionHandler(permissionService)
 	// 新的配置处理器
@@ -725,12 +689,6 @@ func main() {
 			sftpRoutes.GET("/read", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ReadFile)      // 读取文件
 			sftpRoutes.POST("/write", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.WriteFile) // 写入文件
 
-			// 回收站（.trash）
-			sftpRoutes.GET("/trash/list", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ListTrash)
-			sftpRoutes.POST("/trash/restore", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.RestoreTrash)
-			sftpRoutes.DELETE("/trash/purge", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.PurgeTrash)
-			sftpRoutes.POST("/trash/empty", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.EmptyTrash)
-
 			// 连接管理
 			sftpRoutes.POST("/close", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.CloseConnection) // 关闭连接（用户关闭 SFTP 面板时调用）
 		}
@@ -741,22 +699,6 @@ func main() {
 		sftpPoolRoutes.Use(middleware.RequirePermission(permissionService, "file:view"))
 		{
 			sftpPoolRoutes.GET("/stats", sftpHandler.GetPoolStats) // 连接池统计
-		}
-
-		// 全局回收站索引（需要认证）
-		sftpTrashRoutes := v1.Group("/sftp/trash")
-		sftpTrashRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
-		{
-			sftpTrashRoutes.GET("/items", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.ListTrashItems)
-			sftpTrashRoutes.POST("/items/:item_id/restore", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.RestoreTrashItem)
-			sftpTrashRoutes.DELETE("/items/:item_id", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.PurgeTrashItem)
-			sftpTrashRoutes.POST("/items/empty", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.EmptyTrashItems)
-			sftpTrashRoutes.POST("/items/batch-restore", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.BatchRestoreTrashItems)
-			sftpTrashRoutes.POST("/items/batch-purge", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.BatchPurgeTrashItems)
-			// 回收站设置
-			sftpTrashRoutes.GET("/settings", middleware.RequirePermission(permissionService, "file:view"), sftpHandler.GetTrashSettings)
-			sftpTrashRoutes.PUT("/settings", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.UpdateTrashSettings)
-			sftpTrashRoutes.DELETE("/settings", middleware.RequirePermission(permissionService, "file:manage"), sftpHandler.ResetTrashSettings)
 		}
 
 		// SFTP 上传进度 WebSocket 路由（需要认证）
@@ -812,24 +754,25 @@ func main() {
 			dashboardRoutes.GET("/overview", dashboardHandler.GetOverview) // 仪表盘聚合概览
 		}
 
-		// 活动记录路由（当前用户个人历史，仅需认证）
-		activityLogRoutes := v1.Group("/activity-logs")
-		activityLogRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
+		// 全部日志路由（团队治理，需要管理员审计权限）
+		logRoutes := v1.Group("/logs")
+		logRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
+		logRoutes.Use(middleware.RequirePermission(permissionService, "audit:view"))
 		{
-			activityLogRoutes.GET("/me", auditLogHandler.ListMyActivity)
-			activityLogRoutes.GET("/me/statistics", auditLogHandler.GetMyActivityStatistics)
-			activityLogRoutes.GET("/me/items/:id", auditLogHandler.GetMyActivityByID)
+			logRoutes.GET("", auditLogHandler.ListAll)
+			logRoutes.GET("/statistics", auditLogHandler.GetAllStatistics)
+			logRoutes.DELETE("/cleanup", auditLogHandler.CleanupOldLogs)
+			logRoutes.GET("/:id", auditLogHandler.GetAnyByID)
 		}
 
-		// 审计日志路由（团队治理，需要管理员审计权限）
-		auditLogRoutes := v1.Group("/audit-logs")
-		auditLogRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
-		auditLogRoutes.Use(middleware.RequirePermission(permissionService, "audit:view"))
+		// 统一操作记录路由（团队治理，需要管理员审计权限）
+		operationRecordRoutes := v1.Group("/operation-records")
+		operationRecordRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
+		operationRecordRoutes.Use(middleware.RequirePermission(permissionService, "audit:view"))
 		{
-			auditLogRoutes.GET("", auditLogHandler.List)                      // 查询日志列表
-			auditLogRoutes.GET("/statistics", auditLogHandler.GetStatistics)  // 统计信息
-			auditLogRoutes.GET("/:id", auditLogHandler.GetByID)               // 日志详情
-			auditLogRoutes.DELETE("/cleanup", auditLogHandler.CleanupOldLogs) // 清理旧日志（管理员）
+			operationRecordRoutes.GET("", operationRecordHandler.List)
+			operationRecordRoutes.GET("/statistics", operationRecordHandler.GetStatistics)
+			operationRecordRoutes.GET("/:id", operationRecordHandler.GetByID)
 		}
 
 		// 脚本管理路由（需要认证）
@@ -1108,12 +1051,6 @@ func main() {
 	taskScheduler.Stop()
 	log.Println("✅ Task scheduler stopped")
 
-	// 停止 .trash 清理 worker
-	if trashCleaner != nil {
-		trashCleaner.Stop()
-		log.Println("✅ Trash cleaner stopped")
-	}
-
 	// 关闭 SFTP 连接池
 	if sftpHandler != nil {
 		sftpHandler.Close()
@@ -1176,23 +1113,4 @@ func runtimeDataDir(driver string, dsn string) string {
 	}
 
 	return filepath.Dir(pathValue)
-}
-
-func backfillAuditLogCategories(database *gorm.DB) error {
-	return database.Exec(`
-UPDATE audit_logs
-SET category = CASE
-  WHEN action IN (
-    'ssh_connect',
-    'ssh_disconnect',
-    'sftp_upload',
-    'sftp_download',
-    'sftp_delete',
-    'sftp_rename',
-    'sftp_mkdir',
-    'monitoring_query'
-  ) THEN 'activity'
-  ELSE 'audit'
-END
-`).Error
 }

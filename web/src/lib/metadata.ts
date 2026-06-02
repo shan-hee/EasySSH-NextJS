@@ -14,10 +14,6 @@ export const pageMetadata = {
     title: "服务器管理",
     description: "管理 SSH 服务器配置、查看服务器状态和连接信息",
   },
-  serversHistory: {
-    title: "历史连接",
-    description: "查看 SSH 服务器历史连接记录和会话详情",
-  },
   terminal: {
     title: "终端",
     description: "Web SSH 终端 - 在浏览器中直接连接服务器",
@@ -30,25 +26,13 @@ export const pageMetadata = {
     title: "文件传输",
     description: "SFTP 文件传输 - 上传下载服务器文件",
   },
-  transfersHistory: {
-    title: "传输任务",
-    description: "创建和查看文件传输任务状态",
-  },
   logs: {
     title: "操作日志",
     description: "查看系统操作审计日志和用户行为记录",
   },
-  activity: {
-    title: "活动记录",
-    description: "查看当前用户的连接、传输和监控活动历史",
-  },
-  audit: {
-    title: "安全审计",
-    description: "查看团队治理、安全审计和系统变更记录",
-  },
-  logsLogin: {
-    title: "登录日志",
-    description: "查看用户登录记录、IP 地址和登录状态",
+  operationLogs: {
+    title: "操作日志",
+    description: "查看连接、传输和执行等统一操作记录",
   },
   settings: {
     title: "系统设置",

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/easyssh/server/internal/domain/operationrecord"
 	"github.com/easyssh/server/internal/domain/scheduledtask"
 	"github.com/easyssh/server/internal/domain/script"
 	"github.com/easyssh/server/internal/domain/server"
@@ -27,13 +28,14 @@ const (
 
 // Executor 任务执行引擎
 type Executor struct {
-	serverService   server.Service
-	scriptService   script.Service
-	taskRepo        scheduledtask.Repository
-	executionRepo   taskexecution.Repository
-	encryptor       *crypto.Encryptor
-	hostKeyCallback gossh.HostKeyCallback
-	maxConcurrency  int
+	serverService    server.Service
+	scriptService    script.Service
+	taskRepo         scheduledtask.Repository
+	executionRepo    taskexecution.Repository
+	operationRecords operationrecord.Service
+	encryptor        *crypto.Encryptor
+	hostKeyCallback  gossh.HostKeyCallback
+	maxConcurrency   int
 }
 
 // NewExecutor 创建执行引擎
@@ -44,18 +46,21 @@ func NewExecutor(
 	executionRepo taskexecution.Repository,
 	encryptor *crypto.Encryptor,
 	maxConcurrency int,
+	operationRecords operationrecord.Service,
 ) *Executor {
 	if maxConcurrency <= 0 {
 		maxConcurrency = 10
 	}
-	return &Executor{
-		serverService:  serverService,
-		scriptService:  scriptService,
-		taskRepo:       taskRepo,
-		executionRepo:  executionRepo,
-		encryptor:      encryptor,
-		maxConcurrency: maxConcurrency,
+	executor := &Executor{
+		serverService:    serverService,
+		scriptService:    scriptService,
+		taskRepo:         taskRepo,
+		executionRepo:    executionRepo,
+		encryptor:        encryptor,
+		maxConcurrency:   maxConcurrency,
+		operationRecords: operationRecords,
 	}
+	return executor
 }
 
 // SetHostKeyCallback 设置主机密钥验证回调
@@ -87,6 +92,7 @@ func (e *Executor) Execute(ctx context.Context, task *scheduledtask.ScheduledTas
 		log.Printf("[TaskExecutor] 创建执行记录失败: %v", err)
 		return
 	}
+	e.syncOperationRecord(execution)
 
 	// 根据任务类型获取要执行的命令
 	command, err := e.resolveCommand(ctx, task)
@@ -102,6 +108,8 @@ func (e *Executor) Execute(ctx context.Context, task *scheduledtask.ScheduledTas
 	e.executionRepo.Update(execution.ID, map[string]interface{}{
 		"command": command,
 	})
+	execution.Command = command
+	e.syncOperationRecord(execution)
 
 	// 并发执行到所有服务器
 	results := e.executeOnServers(ctx, task.UserID, task.ServerIDs, command)
@@ -352,6 +360,65 @@ func (e *Executor) completeExecution(
 	if err := e.executionRepo.Update(execution.ID, updates); err != nil {
 		log.Printf("[TaskExecutor] 更新执行记录失败: %v", err)
 	}
+	execution.Status = status
+	execution.EndTime = &endTime
+	execution.Duration = duration
+	execution.SuccessCount = successCount
+	execution.FailedCount = failedCount
+	execution.ErrorMessage = errorMsg
+	e.syncOperationRecord(execution)
+}
+
+func (e *Executor) syncOperationRecord(execution *taskexecution.TaskExecution) {
+	if execution == nil {
+		return
+	}
+
+	status := operationrecord.StatusRunning
+	switch execution.Status {
+	case taskexecution.StatusPending:
+		status = operationrecord.StatusPending
+	case taskexecution.StatusSuccess:
+		status = operationrecord.StatusSuccess
+	case taskexecution.StatusFailed:
+		status = operationrecord.StatusFailure
+	case taskexecution.StatusPartial:
+		status = operationrecord.StatusPartial
+	case taskexecution.StatusTimeout:
+		status = operationrecord.StatusTimeout
+	case taskexecution.StatusCanceled:
+		status = operationrecord.StatusCanceled
+	}
+
+	record := &operationrecord.OperationRecord{
+		UserID:       execution.UserID,
+		Username:     execution.Username,
+		Type:         operationrecord.TypeExecution,
+		Action:       "task_execute",
+		Status:       status,
+		Title:        execution.TaskName,
+		Resource:     execution.Command,
+		Source:       string(execution.TriggerType),
+		StartedAt:    &execution.StartTime,
+		FinishedAt:   execution.EndTime,
+		DurationMs:   execution.Duration,
+		TotalCount:   execution.TotalServers,
+		SuccessCount: execution.SuccessCount,
+		FailureCount: execution.FailedCount,
+		ErrorMessage: execution.ErrorMessage,
+		SourceTable:  "task_executions",
+		SourceID:     execution.ID.String(),
+		CreatedAt:    execution.CreatedAt,
+		UpdatedAt:    execution.UpdatedAt,
+	}
+	if record.CreatedAt.IsZero() {
+		record.CreatedAt = execution.StartTime
+	}
+	if record.UpdatedAt.IsZero() {
+		record.UpdatedAt = time.Now()
+	}
+
+	_ = e.operationRecords.Upsert(context.Background(), record)
 }
 
 // updateTaskStatus 更新任务状态

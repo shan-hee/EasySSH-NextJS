@@ -1,9 +1,11 @@
 package sshsession
 
 import (
+	"context"
 	"errors"
 	"time"
 
+	"github.com/easyssh/server/internal/domain/operationrecord"
 	"github.com/google/uuid"
 )
 
@@ -28,12 +30,16 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
+	repo             Repository
+	operationRecords operationrecord.Service
 }
 
 // NewService 创建SSH会话服务实例
-func NewService(repo Repository) Service {
-	return &service{repo: repo}
+func NewService(repo Repository, operationRecords operationrecord.Service) Service {
+	return &service{
+		repo:             repo,
+		operationRecords: operationRecords,
+	}
 }
 
 // CreateSSHSession 创建SSH会话记录
@@ -60,6 +66,7 @@ func (s *service) CreateSSHSession(req *CreateSSHSessionRequest) (*SSHSession, e
 	if err := s.repo.Create(session); err != nil {
 		return nil, err
 	}
+	s.syncOperationRecord(session)
 
 	return session, nil
 }
@@ -117,7 +124,12 @@ func (s *service) UpdateSSHSession(userID uuid.UUID, id uuid.UUID, req *UpdateSS
 	}
 
 	// 返回更新后的会话
-	return s.repo.GetByID(id)
+	updatedSession, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	s.syncOperationRecord(updatedSession)
+	return updatedSession, nil
 }
 
 // DeleteSSHSession 删除SSH会话记录
@@ -133,7 +145,11 @@ func (s *service) DeleteSSHSession(userID uuid.UUID, id uuid.UUID) error {
 		return ErrUnauthorized
 	}
 
-	return s.repo.Delete(id)
+	if err := s.repo.Delete(id); err != nil {
+		return err
+	}
+	s.deleteOperationRecord(id)
+	return nil
 }
 
 // GetSSHSession 获取SSH会话详情
@@ -219,7 +235,13 @@ func (s *service) CloseSession(userID uuid.UUID, id uuid.UUID) error {
 		return errors.New("session is not active")
 	}
 
-	return s.repo.CloseSession(id)
+	if err := s.repo.CloseSession(id); err != nil {
+		return err
+	}
+	if updatedSession, err := s.repo.GetByID(id); err == nil {
+		s.syncOperationRecord(updatedSession)
+	}
+	return nil
 }
 
 // UpdateSessionMetrics 更新会话指标（由SSH服务调用）
@@ -234,5 +256,62 @@ func (s *service) UpdateSessionMetrics(sessionID string, bytesSent, bytesReceive
 		"bytes_received": bytesReceived,
 	}
 
-	return s.repo.Update(session.ID, updates)
+	if err := s.repo.Update(session.ID, updates); err != nil {
+		return err
+	}
+	if updatedSession, err := s.repo.GetByID(session.ID); err == nil {
+		s.syncOperationRecord(updatedSession)
+	}
+	return nil
+}
+
+func (s *service) syncOperationRecord(session *SSHSession) {
+	if session == nil {
+		return
+	}
+
+	status := operationrecord.StatusRunning
+	switch session.Status {
+	case "closed":
+		status = operationrecord.StatusSuccess
+	case "timeout":
+		status = operationrecord.StatusTimeout
+	}
+
+	var finishedAt *time.Time
+	if session.DisconnectedAt != nil {
+		finishedAt = session.DisconnectedAt
+	}
+
+	record := &operationrecord.OperationRecord{
+		UserID:         session.UserID,
+		Type:           operationrecord.TypeConnection,
+		Action:         "ssh_session",
+		Status:         status,
+		ServerID:       &session.ServerID,
+		Title:          "SSH session",
+		Resource:       session.SessionID,
+		Source:         "terminal",
+		StartedAt:      &session.ConnectedAt,
+		FinishedAt:     finishedAt,
+		DurationMs:     int64(session.Duration) * 1000,
+		BytesProcessed: session.BytesSent + session.BytesReceived,
+		ErrorMessage:   session.ErrorMessage,
+		SourceTable:    "ssh_sessions",
+		SourceID:       session.ID.String(),
+		CreatedAt:      session.CreatedAt,
+		UpdatedAt:      session.UpdatedAt,
+	}
+	if record.CreatedAt.IsZero() {
+		record.CreatedAt = session.ConnectedAt
+	}
+	if record.UpdatedAt.IsZero() {
+		record.UpdatedAt = time.Now()
+	}
+
+	_ = s.operationRecords.Upsert(context.Background(), record)
+}
+
+func (s *service) deleteOperationRecord(id uuid.UUID) {
+	_ = s.operationRecords.DeleteBySource(context.Background(), "ssh_sessions", id.String())
 }

@@ -260,8 +260,8 @@ const handleExecuteScript = useCallback(async () => {
     toast.success(t("toastExecuteStarted"))
     setIsExecuteDialogOpen(false)
 
-    // 跳转到执行历史页面
-    router.push("/dashboard/automation/history")
+    // 跳转到统一操作日志中的执行记录视图
+    router.push("/dashboard/operation-logs?type=execution")
   } catch (error: unknown) {
     console.error("执行脚本失败:", error)
     toast.error(getErrorMessage(error, t("toastExecuteFailed")))

@@ -33,14 +33,10 @@ import type {
 import type { TransferAuthTicketProvider } from "./transfer-runtime"
 import type { TerminalWebSocketAuthTicketProvider } from "@/lib/websocket-terminal"
 import type {
-  ActivityLogListParams,
-  ActivityLogStatisticsParams,
-} from "@/lib/api/activity-logs"
-import type {
   AuditLog,
   AuditLogListResponse,
   AuditLogStatisticsResponse,
-} from "@/lib/api/audit-logs"
+} from "@/lib/api/logs"
 import {
   parseWorkspaceDownloadExcludePatterns,
   type WorkspaceDownloadExcludePatternSource,
@@ -343,10 +339,24 @@ export function createWorkspaceTransferHistoryAdapter(
   }
 }
 
-export interface ActivityLogsApiLike {
-  listMine: (params?: ActivityLogListParams) => Promise<AuditLogListResponse>
-  getMineById: (id: string) => Promise<AuditLog>
-  getMineStatistics: (params?: ActivityLogStatisticsParams) => Promise<AuditLogStatisticsResponse>
+export interface WorkspaceLogsApiLike {
+  list: (params?: {
+    page?: number
+    page_size?: number
+    user_id?: string
+    server_id?: string
+    action?: string
+    category?: "activity" | "audit"
+    status?: string
+    start_date?: string
+    end_date?: string
+  }) => Promise<AuditLogListResponse>
+  getById: (id: string) => Promise<AuditLog>
+  getStatistics: (params?: {
+    category?: "activity" | "audit"
+    start_date?: string
+    end_date?: string
+  }) => Promise<AuditLogStatisticsResponse>
 }
 
 export function mapAuditLogToWorkspaceActivityLogItem(log: AuditLog): WorkspaceActivityLogItem {
@@ -386,13 +396,14 @@ export function mapAuditLogStatisticsToWorkspaceActivityStatistics(
 }
 
 export function createWorkspaceActivityLogAdapter(
-  api: ActivityLogsApiLike,
+  api: WorkspaceLogsApiLike,
 ): SshWorkspaceActivityLogAdapter {
   return {
     async list(params) {
-      const response = await api.listMine({
+      const response = await api.list({
         page: params?.page,
         page_size: params?.limit,
+        category: "activity",
         action: params?.action,
         server_id: params?.serverId,
         status: params?.status,
@@ -402,10 +413,11 @@ export function createWorkspaceActivityLogAdapter(
       return mapAuditLogListToWorkspaceActivityResult(response)
     },
     async getById(id) {
-      return mapAuditLogToWorkspaceActivityLogItem(await api.getMineById(id))
+      return mapAuditLogToWorkspaceActivityLogItem(await api.getById(id))
     },
     async getStatistics(params) {
-      return mapAuditLogStatisticsToWorkspaceActivityStatistics(await api.getMineStatistics({
+      return mapAuditLogStatisticsToWorkspaceActivityStatistics(await api.getStatistics({
+        category: "activity",
         start_date: params?.startDate,
         end_date: params?.endDate,
       }))

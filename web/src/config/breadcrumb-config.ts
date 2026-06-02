@@ -41,11 +41,6 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     // 连接配置首页：仅显示系统名称 + 当前页面标题
     showTitle: true,
   },
-  '/dashboard/servers/history': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-
   // ===================
   // 终端
   // ===================
@@ -69,11 +64,6 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     // 仅显示系统名称 + 当前页面标题
     showTitle: true,
   },
-  '/dashboard/automation/history': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-
   // ===================
   // 文件管理
   // ===================
@@ -81,15 +71,6 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     // 仅显示系统名称 + 当前页面标题
     showTitle: true,
   },
-  '/dashboard/transfers/history': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-  '/dashboard/storage': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-
   // ===================
   // 监控告警
   // ===================
@@ -109,18 +90,11 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   // ===================
   // 日志审计
   // ===================
-  '/dashboard/activity': {
-    showTitle: true,
-  },
-  '/dashboard/audit': {
-    showTitle: true,
-  },
   '/dashboard/logs': {
     // 仅显示系统名称 + 当前页面标题
     showTitle: true,
   },
-  '/dashboard/logs/login': {
-    // 仅显示系统名称 + 当前页面标题
+  '/dashboard/operation-logs': {
     showTitle: true,
   },
   '/dashboard/logs/commands': {

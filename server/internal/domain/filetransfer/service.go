@@ -1,9 +1,11 @@
 package filetransfer
 
 import (
+	"context"
 	"errors"
 	"time"
 
+	"github.com/easyssh/server/internal/domain/operationrecord"
 	"github.com/google/uuid"
 )
 
@@ -27,12 +29,16 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
+	repo             Repository
+	operationRecords operationrecord.Service
 }
 
 // NewService 创建文件传输服务实例
-func NewService(repo Repository) Service {
-	return &service{repo: repo}
+func NewService(repo Repository, operationRecords operationrecord.Service) Service {
+	return &service{
+		repo:             repo,
+		operationRecords: operationRecords,
+	}
 }
 
 // CreateFileTransfer 创建文件传输记录
@@ -70,6 +76,7 @@ func (s *service) CreateFileTransfer(req *CreateFileTransferRequest) (*FileTrans
 	if err := s.repo.Create(transfer); err != nil {
 		return nil, err
 	}
+	s.syncOperationRecord(transfer)
 
 	return transfer, nil
 }
@@ -140,7 +147,12 @@ func (s *service) UpdateFileTransfer(userID uuid.UUID, id uuid.UUID, req *Update
 	}
 
 	// 返回更新后的传输记录
-	return s.repo.GetByID(id)
+	updatedTransfer, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	s.syncOperationRecord(updatedTransfer)
+	return updatedTransfer, nil
 }
 
 // UpdateProgress 更新传输进度（用于实时更新）
@@ -154,7 +166,13 @@ func (s *service) UpdateProgress(id uuid.UUID, bytesTransferred int64, progress 
 		"progress":          progress,
 	}
 
-	return s.repo.Update(id, updates)
+	if err := s.repo.Update(id, updates); err != nil {
+		return err
+	}
+	if transfer, err := s.repo.GetByID(id); err == nil {
+		s.syncOperationRecord(transfer)
+	}
+	return nil
 }
 
 // CompleteTransfer 完成传输
@@ -182,7 +200,13 @@ func (s *service) CompleteTransfer(id uuid.UUID) error {
 		}
 	}
 
-	return s.repo.Update(id, updates)
+	if err := s.repo.Update(id, updates); err != nil {
+		return err
+	}
+	if updatedTransfer, err := s.repo.GetByID(id); err == nil {
+		s.syncOperationRecord(updatedTransfer)
+	}
+	return nil
 }
 
 // FailTransfer 标记传输失败
@@ -200,7 +224,13 @@ func (s *service) FailTransfer(id uuid.UUID, errorMsg string) error {
 		updates["duration"] = duration
 	}
 
-	return s.repo.Update(id, updates)
+	if err := s.repo.Update(id, updates); err != nil {
+		return err
+	}
+	if updatedTransfer, err := s.repo.GetByID(id); err == nil {
+		s.syncOperationRecord(updatedTransfer)
+	}
+	return nil
 }
 
 // DeleteFileTransfer 删除文件传输记录
@@ -216,7 +246,11 @@ func (s *service) DeleteFileTransfer(userID uuid.UUID, id uuid.UUID) error {
 		return ErrUnauthorized
 	}
 
-	return s.repo.Delete(id)
+	if err := s.repo.Delete(id); err != nil {
+		return err
+	}
+	s.deleteOperationRecord(id)
+	return nil
 }
 
 // GetFileTransfer 获取文件传输详情
@@ -270,4 +304,79 @@ func (s *service) ListFileTransfers(userID uuid.UUID, req *ListFileTransfersRequ
 // GetStatistics 获取文件传输统计信息
 func (s *service) GetStatistics(userID uuid.UUID) (*FileTransferStatistics, error) {
 	return s.repo.GetStatistics(userID)
+}
+
+func (s *service) syncOperationRecord(transfer *FileTransfer) {
+	if transfer == nil {
+		return
+	}
+
+	status := operationrecord.StatusRunning
+	switch transfer.Status {
+	case "pending":
+		status = operationrecord.StatusPending
+	case "completed":
+		status = operationrecord.StatusSuccess
+	case "failed":
+		status = operationrecord.StatusFailure
+	case "cancelled":
+		status = operationrecord.StatusCanceled
+	}
+
+	action := "sftp_transfer"
+	if transfer.TransferType == "upload" {
+		action = "sftp_upload"
+	} else if transfer.TransferType == "download" {
+		action = "sftp_download"
+	}
+
+	var durationMs int64
+	if transfer.Duration > 0 {
+		durationMs = int64(transfer.Duration) * 1000
+	}
+
+	record := &operationrecord.OperationRecord{
+		UserID:         transfer.UserID,
+		Type:           operationrecord.TypeTransfer,
+		Action:         action,
+		Status:         status,
+		ServerID:       &transfer.ServerID,
+		Title:          transfer.FileName,
+		Resource:       transfer.DestPath,
+		Source:         "sftp",
+		StartedAt:      transfer.StartedAt,
+		FinishedAt:     transfer.CompletedAt,
+		DurationMs:     durationMs,
+		Progress:       transfer.Progress,
+		TotalCount:     1,
+		SuccessCount:   boolToCount(status == operationrecord.StatusSuccess),
+		FailureCount:   boolToCount(status == operationrecord.StatusFailure),
+		BytesTotal:     transfer.FileSize,
+		BytesProcessed: transfer.BytesTransferred,
+		SpeedBps:       transfer.Speed,
+		ErrorMessage:   transfer.ErrorMessage,
+		SourceTable:    "file_transfers",
+		SourceID:       transfer.ID.String(),
+		CreatedAt:      transfer.CreatedAt,
+		UpdatedAt:      transfer.UpdatedAt,
+	}
+	if record.CreatedAt.IsZero() {
+		record.CreatedAt = time.Now()
+	}
+	if record.UpdatedAt.IsZero() {
+		record.UpdatedAt = time.Now()
+	}
+
+	_ = s.operationRecords.Upsert(context.Background(), record)
+}
+
+func (s *service) deleteOperationRecord(id uuid.UUID) {
+	_ = s.operationRecords.DeleteBySource(context.Background(), "file_transfers", id.String())
+}
+
+func boolToCount(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
