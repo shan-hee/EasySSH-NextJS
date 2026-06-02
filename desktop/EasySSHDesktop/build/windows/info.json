@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "1.0.52"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "1.0.52",
+			"CompanyName": "EasySSH",
+			"FileDescription": "Cross-platform SSH/SFTP workspace",
+			"LegalCopyright": "(c) 2026, EasySSH",
+			"ProductName": "EasySSH Desktop",
+			"Comments": "EasySSH desktop workspace"
+		}
+	}
+}
