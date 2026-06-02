@@ -332,9 +332,9 @@ export function SessionTabBar(props: SessionTabBarProps) {
                 {activeSession && (
                   <>
                     <BreadcrumbSeparator className="hidden md:block" />
-                    {activeSession.type === "quick" ? (
+                    {activeSession.type === "config" ? (
                       <BreadcrumbItem>
-                        <BreadcrumbPage>{tTerminal("quickConnectTabName")}</BreadcrumbPage>
+                        <BreadcrumbPage>{activeSession.serverName}</BreadcrumbPage>
                       </BreadcrumbItem>
                     ) : (
                       <>

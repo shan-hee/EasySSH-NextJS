@@ -13,7 +13,7 @@ import { FolderOpen, Activity, Bot } from 'lucide-react'
 import { NetworkLatencyPopover } from './network-latency-popover'
 import { MonitorPanel } from './monitor/MonitorPanel'
 import { WebTerminal } from './web-terminal'
-import { QuickConnect, type QuickServer } from './quick-connect'
+import { ServerConnectionConfigs } from "@/components/servers/server-connection-configs"
 import { ConnectionLoader } from './connection-loader'
 import {
   FileManagerPanel,
@@ -28,6 +28,7 @@ import { useOptionalSshWorkspace } from '@/components/ssh-workspace/ssh-workspac
 import { createWorkspaceTransferAuthTicketProviderAdapter } from '@/lib/session/workspace-adapters'
 import type { TerminalConnectionPhase, TerminalSession } from './types'
 import type { TerminalSettings } from './terminal-settings-dialog'
+import type { Server } from "@/lib/api"
 import { useTranslations } from "next-intl"
 import { getTerminalTheme, withTerminalBackgroundOpacity } from './terminal-themes'
 import { useEffectiveThemeMode } from '@/hooks/use-effective-theme-mode'
@@ -82,13 +83,11 @@ interface TabTerminalContentProps {
   loaderState: "entering" | "loading" | "exiting"
   onAnimationComplete: () => void
   isFullscreen: boolean
-  servers: QuickServer[]
-  serversLoading?: boolean
   onCommand: (command: string) => void
   onConnectionPhaseChange: (phase: TerminalConnectionPhase) => void
   onAuthCancelled: () => void
   onToggleFullscreen: () => void
-  onStartConnectionFromQuick: (server: QuickServer) => void
+  onStartConnectionFromConfig: (server: Server) => void
   onInternalBackHandlerChange?: (
     sessionId: string,
     handler: InternalBackHandler | null
@@ -104,13 +103,11 @@ export function TabTerminalContent({
   loaderState,
   onAnimationComplete,
   isFullscreen,
-  servers,
-  serversLoading,
   onCommand,
   onConnectionPhaseChange,
   onAuthCancelled,
   onToggleFullscreen,
-  onStartConnectionFromQuick,
+  onStartConnectionFromConfig,
   onInternalBackHandlerChange,
   onInternalBackAvailabilityChange,
 }: TabTerminalContentProps) {
@@ -162,11 +159,11 @@ export function TabTerminalContent({
   const isAiInputOpen = tabState.isAiInputOpen
 
   const isTerminalReady = session.connectionPhase === "ready"
-  const hasReadyServer = session.type !== 'quick' && isTerminalReady && !!session.serverId
+  const hasReadyServer = session.type !== 'config' && isTerminalReady && !!session.serverId
   const canUseHeavyPanels = isActive && hasReadyServer
   const canUseFileManager = canUseSftpCapability && canUseHeavyPanels && isFileManagerOpen
   const shouldKeepFileManagerMounted = canUseSftpCapability && canUseHeavyPanels && shouldRenderFileManager
-  const canMountAi = canUseAiCapability && isActive && session.type !== 'quick' && !effectiveIsLoading
+  const canMountAi = canUseAiCapability && isActive && session.type !== 'config' && !effectiveIsLoading
   const canUseAi = canMountAi && isAiInputOpen
   const shouldReserveInlineMonitor =
     canUseMonitorCapability &&
@@ -246,14 +243,14 @@ export function TabTerminalContent({
   const monitorEnabled = canUseMonitorCapability && hasReadyServer
   const tTerminal = useTranslations("terminal")
   const { mode: effectiveAppTheme } = useEffectiveThemeMode()
-  const shouldUseTerminalSurface = session.type !== 'quick'
+  const shouldUseTerminalSurface = session.type !== 'config'
   const pageTheme = getTerminalTheme(settings.theme, effectiveAppTheme)
   const pageBackgroundColor = shouldUseTerminalSurface
     ? settings.opacity < 100
       ? withTerminalBackgroundOpacity(pageTheme.background, settings.opacity / 100)
       : pageTheme.background
     : 'transparent'
-  const hasBackgroundImage = session.type !== 'quick' && settings.backgroundImage.trim().length > 0
+  const hasBackgroundImage = session.type !== 'config' && settings.backgroundImage.trim().length > 0
   const enableTerminalWebgl = true
   const connectionLoaderServerName =
     session.username && session.host
@@ -382,7 +379,7 @@ export function TabTerminalContent({
         )}
 
         {/* 加载动画覆盖层 - 覆盖整个页签内容 */}
-        {effectiveIsLoading && session.type !== 'quick' && (
+        {effectiveIsLoading && session.type !== 'config' && (
           <div className="absolute inset-0 z-[60]">
             <ConnectionLoader
               serverName={connectionLoaderServerName}
@@ -395,8 +392,7 @@ export function TabTerminalContent({
         )}
 
         <div className="relative z-10 flex flex-1 min-h-0 flex-col">
-          {/* 工具栏 - 只在非快速连接且非加载时显示 */}
-          {session.type !== 'quick' && !effectiveIsLoading && (
+          {session.type !== 'config' && !effectiveIsLoading && (
             <div
               className={cn(
                 'border-b text-sm flex items-center px-3 py-1.5 backdrop-blur-md transition-colors',
@@ -465,7 +461,7 @@ export function TabTerminalContent({
           {/* 内容区域：监控面板 + 终端 */}
           <div className="flex-1 min-h-0 relative flex">
             {/* 监控面板 - 左侧固定 280px */}
-            {session.type !== 'quick' && isDesktopLayout && (
+            {session.type !== 'config' && isDesktopLayout && (
               <div
                 className={cn(
                   'transition-all duration-300 ease-out overflow-hidden border-r backdrop-blur-md',
@@ -486,11 +482,9 @@ export function TabTerminalContent({
                 <div ref={setFloatingPanelRoot} className="absolute inset-0 pointer-events-none" />
               )}
 
-              {session.type === 'quick' ? (
-                <QuickConnect
-                  servers={servers}
-                  isLoading={serversLoading}
-                  onSelectServer={onStartConnectionFromQuick}
+              {session.type === 'config' ? (
+                <ServerConnectionConfigs
+                  onConnect={onStartConnectionFromConfig}
                 />
               ) : (
                 <WebTerminal

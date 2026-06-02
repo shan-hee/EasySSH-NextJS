@@ -6,7 +6,6 @@ import {
   FolderOpen,
   Monitor,
   ScrollText,
-  Server,
   Settings,
   Terminal,
   Users,
@@ -35,7 +34,7 @@ export interface NavigationItem {
 
 export interface NavigationGroups {
   workbench: NavigationItem[]
-  governance: NavigationItem[]
+  systemOrg: NavigationItem[]
 }
 
 const workbench: NavigationItemDefinition[] = [
@@ -52,16 +51,10 @@ const workbench: NavigationItemDefinition[] = [
     requiredCapabilities: ["ai"],
   },
   {
-    titleKey: "connectionConfigs",
-    url: "/dashboard/servers",
-    icon: Server,
-    requiredCapabilities: ["servers"],
-  },
-  {
     titleKey: "terminal",
     url: "/dashboard/terminal",
     icon: Terminal,
-    requiredCapabilities: ["terminal"],
+    requiredCapabilities: ["servers", "terminal"],
   },
   {
     titleKey: "fileManager",
@@ -91,7 +84,7 @@ const workbench: NavigationItemDefinition[] = [
   },
 ]
 
-const governance: NavigationItemDefinition[] = [
+const systemOrg: NavigationItemDefinition[] = [
   {
     titleKey: "userManagement",
     url: "/dashboard/users",
@@ -129,7 +122,7 @@ export function buildNavigationGroups({
 }): NavigationGroups {
   return {
     workbench: translateNavigationItems(workbench, runtime, isAdmin, t),
-    governance: translateNavigationItems(governance, runtime, isAdmin, t),
+    systemOrg: translateNavigationItems(systemOrg, runtime, isAdmin, t),
   }
 }
 

@@ -14,7 +14,7 @@ export function QuickActions() {
     <div className="bg-card border rounded-xl p-6 flex-1">
       <h3 className="text-xl font-semibold mb-4">{t("quickActions")}</h3>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Link href="/dashboard/servers">
+        <Link href="/dashboard/terminal">
           <button className="bg-primary text-primary-foreground p-4 rounded-lg hover:bg-primary/90 transition-colors w-full">
             <div className="text-center">
               <div className="text-2xl mb-2">🖥️</div>

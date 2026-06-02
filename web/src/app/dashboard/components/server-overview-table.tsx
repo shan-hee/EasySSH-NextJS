@@ -300,7 +300,7 @@ export function ServerOverviewTable({ servers, loading }: ServerOverviewTablePro
         {/* 查看全部 */}
         <div className="mt-3 flex justify-center border-t pt-3">
           <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-            <Link href="/dashboard/servers">
+            <Link href="/dashboard/terminal">
               {t("viewAllServers")}
               <ArrowRight className="ml-1 h-4 w-4" />
             </Link>

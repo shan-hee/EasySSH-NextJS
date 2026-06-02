@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo, Suspense, startTransition } from "react"
 import { toast } from "@/components/ui/sonner"
-import { getErrorMessage } from "@/lib/error-utils"
 import { SshWorkspace } from "@easyssh/ssh-workspace"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import type { TerminalSettings } from "@/components/terminal/terminal-settings-dialog"
@@ -10,7 +9,6 @@ import type {
   TerminalSession,
   TerminalConnectionPhase,
 } from "@/components/terminal/types"
-import type { QuickServer } from "@/components/terminal/quick-connect"
 import { serversApi, sftpApi, type Server } from "@/lib/api"
 import { createAuthTicket } from "@/lib/auth-ticket"
 import { createTerminalWorkspaceSessionControllerAdapter, createTerminalWorkspaceSessionStoreAdapter, useTerminalStore } from "@/stores/terminal-store"
@@ -27,15 +25,15 @@ const statusFromConnectionPhase = (phase: TerminalConnectionPhase) => {
   return "reconnecting" as const
 }
 
-const createQuickSession = (
-  quickConnectName: string,
-  id: string = "quick-initial"
+const createConfigSession = (
+  sessionName: string,
+  id: string = "config-initial"
 ): TerminalSession => {
   const now = Date.now()
 
   return {
     id,
-    serverName: quickConnectName,
+    serverName: sessionName,
     host: "",
     port: undefined,
     username: "",
@@ -43,7 +41,7 @@ const createQuickSession = (
     connectionPhase: "idle",
     status: "disconnected",
     lastActivity: now,
-    type: "quick",
+    type: "config",
     pinned: false,
   }
 }
@@ -91,15 +89,13 @@ function TerminalPageContent() {
   const { runtime } = useRuntime()
   const tCommon = useTranslations("common")
   const t = useTranslations("terminal")
+  const tServers = useTranslations("servers")
   const tSftp = useTranslations("sftp")
-  const quickConnectName = t("quickConnectTabName")
-  const [servers, setServers] = useState<QuickServer[]>([])
-  const [loading, setLoading] = useState(true)
+  const connectionConfigName = tServers("pageTitle")
   const [maxTabs, setMaxTabs] = useState(50)
   const [inactiveMinutes, setInactiveMinutes] = useState(60)
   const inactivityNotifiedRef = useRef<Set<string>>(new Set())
   const initializedRef = useRef(false)
-  const missingServerToastRef = useRef<Set<string>>(new Set())
 
   const sessions = useTerminalStore((state) => state.sessions)
   const activeSessionId = useTerminalStore((state) => state.activeSessionId)
@@ -172,84 +168,23 @@ function TerminalPageContent() {
     [tabPolicyMaxTabs, tabPolicyInactiveMinutes]
   )
 
-  const resetToQuickSession = useCallback(() => {
-    const quickSession = createQuickSession(quickConnectName, `quick-${Date.now()}`)
-    setSessions([quickSession])
-    setActiveSessionId(quickSession.id)
-    updateSessionActivity(quickSession.id, quickSession.lastActivity)
-  }, [quickConnectName, setActiveSessionId, setSessions, updateSessionActivity])
+  const resetToConfigSession = useCallback(() => {
+    const configSession = createConfigSession(connectionConfigName, `config-${Date.now()}`)
+    setSessions([configSession])
+    setActiveSessionId(configSession.id)
+    updateSessionActivity(configSession.id, configSession.lastActivity)
+  }, [connectionConfigName, setActiveSessionId, setSessions, updateSessionActivity])
 
   // 初始化终端页签元数据。切换到其他菜单再回来时，如果 store 里已有页签，不重建快速连接。
   useEffect(() => {
     if (!ready || initializedRef.current) return
     initializedRef.current = true
 
-    let pendingServerId: string | null = null
-    let pendingServerName = ""
-
-    if (typeof window !== "undefined") {
-      const pendingConnection = sessionStorage.getItem("pendingConnection")
-      if (pendingConnection) {
-        try {
-          const data = JSON.parse(pendingConnection)
-          pendingServerId = data.server
-          pendingServerName = data.name || ""
-          sessionStorage.removeItem("pendingConnection")
-        } catch (error) {
-          console.error("Failed to parse pending connection:", error)
-        }
-      }
-    }
-
-    if (pendingServerId) {
-      const now = Date.now()
-      const reusableQuickSession = sessions.find(
-        (session) => session.type === "quick" && session.id === activeSessionId
-      ) ?? sessions.find((session) => session.type === "quick")
-      const reusableQuickSessionId = reusableQuickSession?.id
-      const sessionId = reusableQuickSessionId ?? `auto-${pendingServerId}-${now}`
-      const pendingSession: TerminalSession = {
-        id: sessionId,
-        serverId: pendingServerId,
-        serverName: pendingServerName,
-        host: "",
-        port: undefined,
-        username: "",
-        shouldConnect: false,
-        connectionPhase: "idle",
-        status: "reconnecting",
-        lastActivity: now,
-        type: "terminal",
-        pinned: false,
-      }
-
-      setSessions((prev) => {
-        if (!reusableQuickSessionId) {
-          return [...prev, pendingSession]
-        }
-
-        let replaced = false
-        const next = prev.map((session) => {
-          if (session.id !== reusableQuickSessionId) {
-            return session
-          }
-
-          replaced = true
-          return pendingSession
-        })
-
-        return replaced ? next : [...prev, pendingSession]
-      })
-      setActiveSessionId(sessionId)
-      updateSessionActivity(sessionId, now)
-      return
-    }
-
     if (sessions.length === 0) {
-      const quickSession = createQuickSession(quickConnectName)
-      setSessions([quickSession])
-      setActiveSessionId(quickSession.id)
-      updateSessionActivity(quickSession.id, quickSession.lastActivity)
+      const configSession = createConfigSession(connectionConfigName)
+      setSessions([configSession])
+      setActiveSessionId(configSession.id)
+      updateSessionActivity(configSession.id, configSession.lastActivity)
       return
     }
 
@@ -258,110 +193,13 @@ function TerminalPageContent() {
     }
   }, [
     activeSessionId,
-    quickConnectName,
+    connectionConfigName,
     ready,
     sessions,
     setActiveSessionId,
     setSessions,
     updateSessionActivity,
   ])
-
-  // 加载服务器列表
-  const loadServers = useCallback(async () => {
-    try {
-      setLoading(true)
-
-      const response = await serversApi.list({
-        page: 1,
-        limit: 100,
-      })
-
-      const serverList = Array.isArray(response)
-        ? response
-        : (response?.data || [])
-
-      const quickServers: QuickServer[] = serverList.map((server: Server) => ({
-        id: String(server.id),
-        name: server.name || `${server.username}@${server.host}:${server.port}`,
-        host: server.host,
-        port: server.port,
-        username: server.username,
-        status: server.status === "online" ? "online" : "offline",
-        group: server.group,
-        tags: server.tags,
-        last_connected: server.last_connected,
-      }))
-
-      startTransition(() => {
-        setServers(quickServers)
-        setLoading(false)
-      })
-    } catch (error: unknown) {
-      console.error("Failed to load servers:", error)
-      toast.error(getErrorMessage(error, t("errorLoadServers")))
-      setLoading(false)
-    }
-  }, [t])
-
-  useEffect(() => {
-    if (!ready) return
-    const timer = setTimeout(() => {
-      void loadServers()
-    }, 0)
-
-    return () => clearTimeout(timer)
-  }, [loadServers, ready])
-
-  // 待连接会话先以 serverId 占位创建，服务器列表加载后补齐连接信息。
-  useEffect(() => {
-    if (loading || servers.length === 0) return
-
-    setSessions((prev) => {
-      let changed = false
-
-      const next = prev.map((session) => {
-        if (
-          session.type !== "terminal" ||
-          !session.serverId ||
-          session.host
-        ) {
-          return session
-        }
-
-        const server = servers.find((item) => item.id === String(session.serverId))
-        if (!server) {
-          if (!missingServerToastRef.current.has(session.id)) {
-            missingServerToastRef.current.add(session.id)
-            toast.error(t("errorServerNotFound"))
-          }
-
-          changed = true
-          return {
-            ...createQuickSession(quickConnectName),
-            id: session.id,
-            lastActivity: session.lastActivity,
-          }
-        }
-
-        changed = true
-        return {
-          ...session,
-          serverId: server.id,
-          serverName: server.name || `${server.username}@${server.host}:${server.port}`,
-          host: server.host,
-          port: server.port,
-          username: server.username,
-          shouldConnect: true,
-          connectionPhase: "idle" as const,
-          status: "reconnecting" as const,
-          group: server.group,
-          tags: server.tags,
-        }
-      })
-
-      return changed ? next : prev
-    })
-  }, [loading, quickConnectName, servers, setSessions, t])
 
   // 读取终端行为设置，和终端设置弹窗使用同一个 localStorage key。
   useEffect(() => {
@@ -387,17 +225,17 @@ function TerminalPageContent() {
     }
 
     const now = Date.now()
-    const id = `quick-${now}`
+    const id = `config-${now}`
     const newTab: TerminalSession = {
       id,
-      serverName: quickConnectName,
+      serverName: connectionConfigName,
       host: "",
       username: "",
       shouldConnect: false,
       connectionPhase: "idle",
       status: "disconnected",
       lastActivity: now,
-      type: "quick",
+      type: "config",
       pinned: false,
     }
 
@@ -407,7 +245,7 @@ function TerminalPageContent() {
     return id
   }
 
-  const handleStartConnectionFromQuick = (sessionId: string, server: QuickServer) => {
+  const handleStartConnectionFromConfig = (sessionId: string, server: Server) => {
     const now = Date.now()
     const terminalStore = useTerminalStore.getState()
 
@@ -439,18 +277,12 @@ function TerminalPageContent() {
 
       setActiveSessionId(sessionId)
       updateSessionActivity(sessionId, now)
-
-      setTimeout(() => {
-        startTransition(() => {
-          void loadServers()
-        })
-      }, 1000)
     })
   }
 
   const handleCloseSession = useCallback((sessionId: string) => {
     if (sessions.length <= 1) {
-      resetToQuickSession()
+      resetToConfigSession()
       return
     }
 
@@ -465,7 +297,7 @@ function TerminalPageContent() {
     setSessions((prev) => prev.filter((session) => session.id !== sessionId))
   }, [
     activeSessionId,
-    resetToQuickSession,
+    resetToConfigSession,
     sessions,
     setActiveSessionId,
     setSessions,
@@ -502,7 +334,7 @@ function TerminalPageContent() {
   const handleCloseAll = () => {
     const next = sessions.filter((session) => session.pinned)
     if (next.length === 0) {
-      resetToQuickSession()
+      resetToConfigSession()
       return
     }
 
@@ -543,12 +375,12 @@ function TerminalPageContent() {
       if (session.id !== sessionId) return session
 
       return {
-        ...createQuickSession(quickConnectName, sessionId),
+        ...createConfigSession(connectionConfigName, sessionId),
         lastActivity: now,
       }
     }))
     updateSessionActivity(sessionId, now)
-  }, [quickConnectName, setSessions, updateSessionActivity])
+  }, [connectionConfigName, setSessions, updateSessionActivity])
 
   const handleReorder = (newOrderIds: string[]) => {
     const map = new Map(sessions.map((session) => [session.id, session]))
@@ -607,10 +439,8 @@ function TerminalPageContent() {
           onCloseAll={handleCloseAll}
           onTogglePin={handleTogglePin}
           onReorderSessions={handleReorder}
-          onStartConnectionFromQuick={handleStartConnectionFromQuick}
+          onStartConnectionFromConfig={handleStartConnectionFromConfig}
           onAuthCancelled={handleAuthCancelled}
-          servers={servers}
-          serversLoading={loading}
           externalActiveSessionId={activeSessionId}
           onActiveSessionChange={setActiveSessionId}
           onConnectionPhaseChange={handleConnectionPhaseChange}

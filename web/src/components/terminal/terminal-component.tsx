@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import type { QuickServer } from "./quick-connect"
 import { SessionTabBar } from "@/components/tabs/session-tab-bar"
 import type {
   TerminalSession,
   TerminalConnectionPhase,
 } from "@/components/terminal/types"
+import type { Server } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useTerminalStore } from "@/stores/terminal-store"
 import { PageHeader } from "@/components/page-header"
@@ -99,7 +99,7 @@ const shouldShowConnectionLoader = (session?: TerminalSession) => {
 
   return !!(
     session &&
-    session.type !== "quick" &&
+    session.type !== "config" &&
     (session.shouldConnect || isResolvingConnectionTarget) &&
     CONNECTION_LOADER_PHASES.has(session.connectionPhase)
   )
@@ -130,11 +130,9 @@ interface TerminalComponentProps {
   onCloseAll: () => void
   onTogglePin: (sessionId: string) => void
   onReorderSessions: (newOrderIds: string[]) => void
-  // 快速连接：在当前页签中选择服务器以开始终端
-  onStartConnectionFromQuick: (sessionId: string, server: QuickServer) => void
+  // 连接配置：在当前页签中选择服务器以开始终端
+  onStartConnectionFromConfig: (sessionId: string, server: Server) => void
   onAuthCancelled?: (sessionId: string) => void
-  servers: QuickServer[]
-  serversLoading?: boolean
   // 外部控制激活的会话 ID
   externalActiveSessionId?: string | null
   onActiveSessionChange?: (sessionId: string) => void
@@ -152,10 +150,8 @@ export function TerminalComponent({
   onCloseAll,
   onTogglePin,
   onReorderSessions,
-  onStartConnectionFromQuick,
+  onStartConnectionFromConfig,
   onAuthCancelled,
-  servers,
-  serversLoading,
   externalActiveSessionId,
   onActiveSessionChange,
   onConnectionPhaseChange,
@@ -657,7 +653,7 @@ export function TerminalComponent({
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
       {!isFullscreen && (
-        <PageHeader title={active?.serverName || tTerminal("quickConnectTabName")}>
+        <PageHeader title={active?.serverName || tTerminal("connectionConfigTitle")}>
           <ActivityLogPane />
         </PageHeader>
       )}
@@ -688,7 +684,7 @@ export function TerminalComponent({
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {sessions.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                暂无活动会话，使用右上角 + 新建
+                {tTerminal("emptySessionHint")}
               </div>
             ) : (
               <Tabs value={active?.id || sessions[0]?.id || ''} className="flex-1 flex flex-col gap-0">
@@ -718,13 +714,11 @@ export function TerminalComponent({
                         loaderState={loaderStates[session.id] || "entering"}
                         onAnimationComplete={() => handleAnimationComplete(session.id)}
                         isFullscreen={isFullscreen}
-                        servers={servers}
-                        serversLoading={serversLoading}
                         onCommand={(command) => handleCommand(session.id, command)}
                         onConnectionPhaseChange={(phase) => onConnectionPhaseChange?.(session.id, phase)}
                         onAuthCancelled={() => onAuthCancelled?.(session.id)}
                         onToggleFullscreen={handleToggleFullscreen}
-                        onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}
+                        onStartConnectionFromConfig={(server) => onStartConnectionFromConfig(session.id, server)}
                         onInternalBackHandlerChange={handleInternalBackHandlerChange}
                         onInternalBackAvailabilityChange={handleInternalBackAvailabilityChange}
                       />

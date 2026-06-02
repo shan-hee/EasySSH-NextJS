@@ -10,13 +10,9 @@ export const pageMetadata = {
     title: "仪表盘",
     description: "查看服务器状态、连接统计和系统概览",
   },
-  servers: {
-    title: "服务器管理",
-    description: "管理 SSH 服务器配置、查看服务器状态和连接信息",
-  },
   terminal: {
     title: "终端",
-    description: "Web SSH 终端 - 在浏览器中直接连接服务器",
+    description: "管理 SSH 服务器配置，并在浏览器中直接连接服务器",
   },
   terminalSessions: {
     title: "终端会话",

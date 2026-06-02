@@ -35,17 +35,10 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
   },
 
   // ===================
-  // 连接管理
-  // ===================
-  '/dashboard/servers': {
-    // 连接配置首页：仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-  // ===================
   // 终端
   // ===================
   '/dashboard/terminal': {
-    // 终端主页无 PageHeader，此配置保留用于未来可能的改动
+    // 终端页内显示连接配置列表和会话页签，不显示面包屑标题。
     showTitle: false,
   },
   '/dashboard/terminal/sessions': {

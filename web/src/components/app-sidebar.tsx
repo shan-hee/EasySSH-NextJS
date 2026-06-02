@@ -65,7 +65,7 @@ export const AppSidebar = React.memo(function AppSidebar({ ...props }: React.Com
       <SidebarContent>
         <QuickAccess />
         {navigationGroups.workbench.length > 0 && <NavMain label={tNav("workbench")} items={navigationGroups.workbench} />}
-        {navigationGroups.governance.length > 0 && <NavMain label={tNav("governance")} items={navigationGroups.governance} />}
+        {navigationGroups.systemOrg.length > 0 && <NavMain label={tNav("systemOrg")} items={navigationGroups.systemOrg} />}
       </SidebarContent>
       <SidebarFooter>
         {/* 用户信息区域：加载时显示占位，加载完成后显示真实内容 */}

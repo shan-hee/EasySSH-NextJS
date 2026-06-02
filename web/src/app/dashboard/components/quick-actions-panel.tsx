@@ -24,7 +24,7 @@ const ACTIONS: QuickAction[] = [
     tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-400",
   },
   {
-    href: "/dashboard/servers",
+    href: "/dashboard/terminal",
     icon: Plus,
     titleKey: "quickAddServer",
     descKey: "quickAddServerDesc",
@@ -38,7 +38,7 @@ const ACTIONS: QuickAction[] = [
     tone: "text-violet-600 bg-violet-500/10 dark:text-violet-400",
   },
   {
-    href: "/dashboard/automation",
+    href: "/dashboard/automation/schedules",
     icon: Workflow,
     titleKey: "quickAutomation",
     descKey: "quickAutomationDesc",

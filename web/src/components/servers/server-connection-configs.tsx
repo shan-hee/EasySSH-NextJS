@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { PageHeader } from "@/components/page-header"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -17,18 +17,17 @@ import {
  Plus,
  Server as ServerIcon,
  Loader2,
- Terminal,
  Edit,
  Trash2,
  LayoutGrid,
  List,
 } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import {
   DndContext,
-  DragEndEvent,
+  type DragEndEvent,
+  type DragStartEvent,
   DragOverlay,
   PointerSensor,
   useSensor,
@@ -48,6 +47,11 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 
 type ViewMode = "grid" | "list"
+type DragOverlaySize = { width: number; height: number } | null
+
+interface ServerConnectionConfigsProps {
+ onConnect?: (server: Server) => void
+}
 
 function getServerItemClassName(viewMode: ViewMode, sortable = true) {
   return cn(
@@ -63,14 +67,12 @@ function ServerItemBody({
   server,
   viewMode,
   showActions = true,
-  onConnect,
   onEdit,
   onDelete,
 }: {
   server: Server
   viewMode: ViewMode
   showActions?: boolean
-  onConnect?: (id: string) => void
   onEdit?: (server: Server) => void
   onDelete?: (id: string) => void
 }) {
@@ -130,7 +132,7 @@ function ServerItemBody({
         </div>
       )}
 
-      {showActions && onConnect && onEdit && onDelete && (
+      {showActions && onEdit && onDelete && (
         <div
           className={cn(
             "flex items-center gap-1",
@@ -138,18 +140,10 @@ function ServerItemBody({
               ? "mt-auto w-full justify-end border-t border-border/70 pt-2"
               : "col-start-2 justify-end sm:col-start-auto sm:flex-shrink-0"
           )}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
         >
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-            onClick={() => onConnect(server.id)}
-            title={t("tooltipConnect")}
-            aria-label={t("tooltipConnect")}
-          >
-            <Terminal className="h-4 w-4" />
-          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -176,32 +170,46 @@ function ServerItemBody({
   )
 }
 
-function ServerDragPreview({ server, viewMode }: { server: Server; viewMode: ViewMode }) {
+function ServerDragPreview({
+  server,
+  viewMode,
+  size,
+}: {
+  server: Server
+  viewMode: ViewMode
+  size: DragOverlaySize
+}) {
   return (
     <div
-      className={cn(
-        "group rounded-lg border bg-card text-card-foreground border-border shadow-lg opacity-90",
-        viewMode === "grid"
-          ? "flex min-h-[150px] w-[260px] flex-col items-start gap-3 p-4"
-          : "flex w-[min(560px,calc(100vw-2rem))] items-center gap-3 p-4"
-      )}
+      className={cn(getServerItemClassName(viewMode, false), "pointer-events-none shadow-lg opacity-95")}
+      style={size ? { width: size.width, height: size.height } : undefined}
     >
-      <ServerIcon className="h-5 w-5 flex-shrink-0 text-primary" />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-foreground">
-          {server.name || server.host}
-        </div>
-        <div className="truncate text-xs font-mono text-muted-foreground">
-          {server.username}@{server.host}:{server.port}
-        </div>
-      </div>
+      <ServerItemBody server={server} viewMode={viewMode} showActions={false} />
     </div>
   )
 }
 
-function ServerStaticItem({ server, viewMode }: { server: Server; viewMode: ViewMode }) {
+function ServerStaticItem({
+  server,
+  viewMode,
+  onConnect,
+}: {
+  server: Server
+  viewMode: ViewMode
+  onConnect?: (id: string) => void
+}) {
   return (
-    <div className={getServerItemClassName(viewMode, false)}>
+    <div
+      className={getServerItemClassName(viewMode, !!onConnect)}
+      role={onConnect ? "button" : undefined}
+      tabIndex={onConnect ? 0 : undefined}
+      onDoubleClick={() => onConnect?.(server.id)}
+      onKeyDown={(event) => {
+        if (!onConnect || (event.key !== "Enter" && event.key !== " ")) return
+        event.preventDefault()
+        onConnect(server.id)
+      }}
+    >
       <ServerItemBody server={server} viewMode={viewMode} showActions={false} />
     </div>
   )
@@ -243,11 +251,16 @@ function SortableServerItem({
       {...attributes}
       {...listeners}
       className={getServerItemClassName(viewMode)}
+      onDoubleClick={() => onConnect(server.id)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.preventDefault()
+        onConnect(server.id)
+      }}
     >
       <ServerItemBody
         server={server}
         viewMode={viewMode}
-        onConnect={onConnect}
         onEdit={onEdit}
         onDelete={onDelete}
       />
@@ -255,8 +268,9 @@ function SortableServerItem({
   )
 }
 
-export default function ServersPage() {
- const router = useRouter()
+export function ServerConnectionConfigs({
+ onConnect,
+}: ServerConnectionConfigsProps) {
  const { ready } = useAuthReady()
  const t = useTranslations("servers")
  const [servers, setServers] = useState<Server[]>([])
@@ -270,6 +284,7 @@ export default function ServersPage() {
  const [activeGroup, setActiveGroup] = useState<string>('all')
  const [viewMode, setViewMode] = useState<ViewMode>("list")
  const [draggedServer, setDraggedServer] = useState<Server | null>(null)
+ const [dragOverlaySize, setDragOverlaySize] = useState<DragOverlaySize>(null)
  const [isMounted, setIsMounted] = useState(false)
 
  const groupFilters = useMemo(() => {
@@ -376,15 +391,10 @@ export default function ServersPage() {
  }, [ready, loadServers])
 
  const handleConnect = (serverId: string) => {
- // 查找服务器以获取名称
  const server = servers.find(s => s.id === serverId)
- const serverName = server?.name || server?.host || ""
- // 优化：使用 sessionStorage 传递参数，避免 URL 参数导致的二次跳转
- sessionStorage.setItem("pendingConnection", JSON.stringify({
-   server: serverId,
-   name: serverName
- }))
- router.push("/dashboard/terminal")
+ if (server) {
+ onConnect?.(server)
+ }
  }
 
  const handleEdit = (server: Server) => {
@@ -413,15 +423,21 @@ export default function ServersPage() {
  }
 
  // 拖拽开始
- const handleDragStart = (event: { active: { id: string | number } }) => {
+ const handleDragStart = (event: DragStartEvent) => {
  const server = servers.find(s => s.id === String(event.active.id))
  setDraggedServer(server || null)
+ const initialRect = event.active.rect.current.initial
+ setDragOverlaySize(initialRect
+ ? { width: initialRect.width, height: initialRect.height }
+ : null
+ )
  }
 
  // 拖拽结束
  const handleDragEnd = async (event: DragEndEvent) => {
  const { active, over } = event
  setDraggedServer(null)
+ setDragOverlaySize(null)
 
  if (!over || active.id === over.id) return
 
@@ -448,6 +464,11 @@ export default function ServersPage() {
  await loadServers()
  }
  }
+ }
+
+ const handleDragCancel = () => {
+ setDraggedServer(null)
+ setDragOverlaySize(null)
  }
 
  const handleAddServer = async (data: ServerFormData) => {
@@ -550,8 +571,6 @@ export default function ServersPage() {
 
  return (
  <>
- <PageHeader title={t("pageTitle")} />
-
  <div className={"h-full flex flex-col overflow-hidden relative transition-colors bg-background text-foreground"}>
  <div className={"absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"} />
 
@@ -665,6 +684,7 @@ export default function ServersPage() {
  collisionDetection={closestCenter}
  onDragStart={handleDragStart}
  onDragEnd={handleDragEnd}
+ onDragCancel={handleDragCancel}
  >
  <SortableContext
  items={filteredServers.map(s => s.id)}
@@ -684,17 +704,20 @@ export default function ServersPage() {
  </AnimatedList>
  </SortableContext>
 
- <DragOverlay>
+ {createPortal(
+ <DragOverlay adjustScale={false}>
  {draggedServer ? (
- <ServerDragPreview server={draggedServer} viewMode={viewMode} />
+ <ServerDragPreview server={draggedServer} viewMode={viewMode} size={dragOverlaySize} />
  ) : null}
- </DragOverlay>
+ </DragOverlay>,
+ document.body
+ )}
  </DndContext>
  ) : (
  // 服务端渲染时的静态列表
  <AnimatedList className={viewMode === "grid" ? "grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "space-y-2"}>
  {filteredServers.map((server) => (
- <ServerStaticItem key={server.id} server={server} viewMode={viewMode} />
+ <ServerStaticItem key={server.id} server={server} viewMode={viewMode} onConnect={handleConnect} />
  ))}
  </AnimatedList>
  )}
