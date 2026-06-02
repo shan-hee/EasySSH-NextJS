@@ -23,8 +23,8 @@ export const pageMetadata = {
     description: "SFTP 文件传输 - 上传下载服务器文件",
   },
   logs: {
-    title: "操作日志",
-    description: "查看系统操作审计日志和用户行为记录",
+    title: "活动日志",
+    description: "查看系统活动日志、审计事件和用户行为记录",
   },
   operationLogs: {
     title: "操作日志",
