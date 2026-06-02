@@ -8,7 +8,15 @@ import type { Terminal } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
 import { TerminalWebSocket } from '@/lib/websocket-terminal'
 import type { TerminalSession } from "@/components/terminal/types"
-import type { SshWorkspaceSessionStoreAdapter, WorkspaceSessionSnapshot, WorkspaceTerminalSession, WorkspaceTransferTask } from "@/lib/session/workspace"
+import type {
+  SshWorkspaceSessionController,
+  SshWorkspaceSessionStoreAdapter,
+  SshWorkspaceTerminalSessionController,
+  WorkspaceSessionListUpdater,
+  WorkspaceSessionSnapshot,
+  WorkspaceTerminalSession,
+  WorkspaceTransferTask,
+} from "@/lib/session/workspace"
 
 type DisposableAddon = {
   dispose: () => void
@@ -315,5 +323,60 @@ export function createTerminalWorkspaceSessionStoreAdapter(
         })
       })
     ),
+  }
+}
+
+const applyTerminalSessionUpdater = (
+  updater: WorkspaceSessionListUpdater<WorkspaceTerminalSession>,
+): SessionUpdater => (
+  typeof updater === "function"
+    ? (sessions) => updater(sessions) as TerminalSession[]
+    : updater as TerminalSession[]
+)
+
+export function createTerminalWorkspaceSessionController(): SshWorkspaceTerminalSessionController {
+  return {
+    getSessions: () => useTerminalStore.getState().sessions,
+    getActiveSessionId: () => useTerminalStore.getState().activeSessionId,
+    setSessions: (updater) => {
+      useTerminalStore.getState().setSessions(applyTerminalSessionUpdater(updater))
+    },
+    addSession: (session) => {
+      useTerminalStore.getState().setSessions((sessions) => [...sessions, session as TerminalSession])
+    },
+    updateSession: (sessionId, update) => {
+      useTerminalStore.getState().setSessions((sessions) => sessions.map((session) => (
+        session.id === sessionId
+          ? { ...session, ...update }
+          : session
+      )))
+    },
+    activateSession: (sessionId) => {
+      useTerminalStore.getState().setActiveSessionId(sessionId)
+    },
+    closeSession: (sessionId) => {
+      const state = useTerminalStore.getState()
+      const sessions = state.sessions
+      const currentIndex = sessions.findIndex((session) => session.id === sessionId)
+      const isClosingActive = state.activeSessionId === sessionId
+
+      state.destroySession(sessionId)
+      state.setSessions((currentSessions) => currentSessions.filter((session) => session.id !== sessionId))
+
+      if (isClosingActive) {
+        const nextIndex = currentIndex < sessions.length - 1 ? currentIndex + 1 : currentIndex - 1
+        state.setActiveSessionId(sessions[nextIndex]?.id ?? null)
+      }
+    },
+    reset: () => {
+      useTerminalStore.getState().resetAll()
+    },
+  }
+}
+
+export function createTerminalWorkspaceSessionControllerAdapter(): SshWorkspaceSessionController {
+  return {
+    terminal: createTerminalWorkspaceSessionController(),
+    resetAll: () => useTerminalStore.getState().resetAll(),
   }
 }

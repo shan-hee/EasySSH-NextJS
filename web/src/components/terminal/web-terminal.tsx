@@ -14,7 +14,9 @@ import { useTerminalContainerApi } from "./use-terminal-container-api"
 import { useTerminalInputActions } from "./use-terminal-input-actions"
 import {
   formatTerminalFontFamily,
+  resolveTerminalAppThemeMode,
   resolveTerminalRendererTheme,
+  resolveTerminalThemeName,
   useTerminalRendererSettings,
   type TerminalCursorStyle,
   type TerminalThemeName,
@@ -102,18 +104,21 @@ export function WebTerminal({
   const workspace = useOptionalSshWorkspace()
   const { completionConfig, globalConfig } = useCompletionConfig()
   const { mode: effectiveAppTheme, version: themeModeVersion } = useEffectiveThemeMode()
+  const workspaceTheme = workspace?.adapters.theme
+  const effectiveTerminalTheme = resolveTerminalThemeName(workspaceTheme?.terminalTheme, theme)
+  const effectiveTerminalAppTheme = resolveTerminalAppThemeMode(workspaceTheme?.mode, effectiveAppTheme)
   const effectiveCompletionEnabled = completionEnabled && completionConfig.enabled
 
   const terminalFontFamily = formatTerminalFontFamily(fontFamily)
   const { terminalTheme, terminalRendererTheme } = useMemo(() => {
     void themeModeVersion
     return resolveTerminalRendererTheme({
-      theme,
-      appTheme: effectiveAppTheme,
+      theme: effectiveTerminalTheme,
+      appTheme: effectiveTerminalAppTheme,
       transparentBackground,
       backgroundOpacity,
     })
-  }, [backgroundOpacity, effectiveAppTheme, theme, themeModeVersion, transparentBackground])
+  }, [backgroundOpacity, effectiveTerminalAppTheme, effectiveTerminalTheme, themeModeVersion, transparentBackground])
 
   const { terminal, fitAddon, terminalReady, containerRef, isClient } = useTerminalInstance(
     sessionId,

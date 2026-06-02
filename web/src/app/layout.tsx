@@ -7,6 +7,7 @@ import { SystemConfigProvider } from "@/contexts/system-config-context";
 import { DynamicHeadUpdater } from "@/components/dynamic-head-updater";
 import { QueryProvider } from "@/providers/query-provider";
 import { SessionRefreshProvider } from "@/providers/session-refresh-provider";
+import { RuntimeProvider } from "@/shell/runtime/runtime-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -90,12 +91,14 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <QueryProvider>
-            <SystemConfigProvider>
-              <SessionRefreshProvider>
-                <DynamicHeadUpdater />
-                {children}
-              </SessionRefreshProvider>
-            </SystemConfigProvider>
+            <RuntimeProvider>
+              <SystemConfigProvider>
+                <SessionRefreshProvider>
+                  <DynamicHeadUpdater />
+                  {children}
+                </SessionRefreshProvider>
+              </SystemConfigProvider>
+            </RuntimeProvider>
           </QueryProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>

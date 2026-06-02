@@ -102,6 +102,7 @@ export function FileManagerPanel({
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
   const internalContainer = mountContainer || null
+  const portalContainer = internalContainer ?? (typeof document !== 'undefined' ? document.body : null)
   const topOffset = anchorTop ?? 0
   const [isPanelVisible, setIsPanelVisible] = useState(false)
 
@@ -298,11 +299,10 @@ export function FileManagerPanel({
     </>
   )
 
-  // 仅在提供挂载容器时渲染（终端内部悬浮，位于工具栏下方）
-  if (!internalContainer) {
+  if (!portalContainer) {
     return null
   }
-  return createPortal(panelContent, internalContainer)
+  return createPortal(panelContent, portalContainer)
 }
 
 export { PANEL_ANIMATION_MS as FILE_MANAGER_PANEL_ANIMATION_MS }

@@ -1,5 +1,12 @@
 import { create } from "zustand"
-import type { SftpWorkspaceSession, SshWorkspaceSessionStoreAdapter, WorkspaceSessionSnapshot, WorkspaceTransferTask } from "@/lib/session/workspace"
+import type {
+  SftpWorkspaceSession,
+  SshWorkspaceSessionController,
+  SshWorkspaceSessionStoreAdapter,
+  SshWorkspaceSftpSessionController,
+  WorkspaceSessionSnapshot,
+  WorkspaceTransferTask,
+} from "@/lib/session/workspace"
 
 export type { SftpWorkspaceSession } from "@/lib/session/workspace"
 
@@ -92,5 +99,47 @@ export function createSftpWorkspaceSessionStoreAdapter(
         })
       })
     ),
+  }
+}
+
+export function createSftpWorkspaceSessionController(): SshWorkspaceSftpSessionController {
+  return {
+    getSessions: () => useSftpSessionStore.getState().sessions,
+    getActiveSessionId: () => useSftpSessionStore.getState().activeId,
+    setSessions: (updater) => {
+      useSftpSessionStore.getState().setSessions(updater)
+    },
+    addSession: (session) => {
+      useSftpSessionStore.getState().setSessions((sessions) => [...sessions, session])
+    },
+    updateSession: (sessionId, update) => {
+      useSftpSessionStore.getState().setSessions((sessions) => sessions.map((session) => (
+        session.id === sessionId
+          ? { ...session, ...update }
+          : session
+      )))
+    },
+    activateSession: (sessionId) => {
+      useSftpSessionStore.getState().setActiveId(sessionId)
+    },
+    closeSession: (sessionId) => {
+      const state = useSftpSessionStore.getState()
+      state.setSessions((sessions) => sessions.filter((session) => session.id !== sessionId))
+      state.setActiveId((activeId) => activeId === sessionId ? null : activeId)
+      state.setFullscreenSessionId((fullscreenSessionId) => fullscreenSessionId === sessionId ? null : fullscreenSessionId)
+    },
+    setFullscreenSession: (sessionId) => {
+      useSftpSessionStore.getState().setFullscreenSessionId(sessionId)
+    },
+    reset: () => {
+      useSftpSessionStore.getState().resetWorkspaceState()
+    },
+  }
+}
+
+export function createSftpWorkspaceSessionControllerAdapter(): SshWorkspaceSessionController {
+  return {
+    sftp: createSftpWorkspaceSessionController(),
+    resetAll: () => useSftpSessionStore.getState().resetWorkspaceState(),
   }
 }

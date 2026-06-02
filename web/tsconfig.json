@@ -23,6 +23,9 @@
       }
     ],
     "paths": {
+      "@easyssh/ssh-workspace": [
+        "./packages/ssh-workspace/src/index.ts"
+      ],
       "@/*": [
         "./src/*"
       ]

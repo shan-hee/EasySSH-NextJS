@@ -86,6 +86,35 @@ export type {
 } from "./transfer-tasks"
 
 export {
+  appendTransferTask,
+  applyTransferTaskUpdate,
+  clearSettledTransferTasks,
+  findTransferTask,
+  getActiveTransferTasks,
+  getSettledTransferTaskIds,
+  getTransferTaskIds,
+  isTransferTaskActiveStatus,
+  isTransferTaskSettledStatus,
+  markTransferTaskCancelled,
+  mergeRestoredTransferTasks,
+  removeTransferTaskById,
+  TRANSFER_ACTIVE_STATUSES,
+  TRANSFER_SETTLED_STATUSES,
+} from "./transfer-controller"
+export type { ApplyTransferTaskUpdateOptions } from "./transfer-controller"
+
+export { createFileTransferController } from "./transfer-manager-controller"
+export type {
+  CreateFileTransferControllerOptions,
+  FileTransferController,
+  FileTransferSftpApi,
+  RestoreUploadTasksOptions,
+  TransferTaskStateUpdater,
+} from "./transfer-manager-controller"
+
+export {
+  bindServerTransferProgressSocket,
+  bindUploadTransferProgressSocket,
   cancelTransferRuntimeTask,
   clearTransferRuntimeTaskHandles,
   closeTransferWebSocket,
@@ -93,6 +122,7 @@ export {
   createTransferConcurrencyLimiter,
   createTransferRuntimeHandleStore,
   createTransferProgressWebSocket,
+  createUploadHttpProgressHandler,
   DEFAULT_TRANSFER_CONCURRENCY_LIMIT,
   isTransferCancellationRequested,
   isTransferRuntimeTaskActive,
@@ -105,15 +135,19 @@ export {
   waitForTransferWebSocketOpen,
 } from "./transfer-runtime"
 export type {
+  BindServerTransferProgressSocketOptions,
+  BindUploadTransferProgressSocketOptions,
   CancelTransferRuntimeTaskOptions,
   ClearTransferRuntimeTaskHandlesOptions,
   CloseTransferWebSocketOptions,
   CreateTransferConcurrencyLimiterOptions,
   CreateTransferProgressWebSocketOptions,
+  CreateUploadHttpProgressHandlerOptions,
   ReleaseTransferRuntimeTaskHandlesOptions,
   ReleaseTransferRuntimeSlot,
   TransferAuthTicketProvider,
   TransferConcurrencyLimiter,
+  ServerTransferProgressSocketWatcher,
   TransferAuthTicketRequest,
   TransferAuthTicketResponse,
   TransferProgressSocketKind,
@@ -134,18 +168,30 @@ export type {
   SshWorkspaceI18n,
   SshWorkspaceLayout,
   SshWorkspaceNotifier,
+  SshWorkspacePaneAdapter,
   SshWorkspacePreferenceAdapter,
   SshWorkspaceProps,
   SshWorkspaceServerPicker,
+  SshWorkspaceSessionController,
   SshWorkspaceSessionStoreAdapter,
   SshWorkspaceSettingsAdapter,
+  SshWorkspaceSftpSessionController,
   SshWorkspaceThemeAdapter,
+  SshWorkspaceTerminalSessionController,
+  SshWorkspaceTransferHistoryAdapter,
   SshWorkspaceTransferManager,
   WorkspaceNotifierActionOptions,
+  WorkspaceSessionListUpdater,
   WorkspaceSessionSeed,
   WorkspaceSessionSnapshot,
   WorkspaceTerminalCredentialSaveRequest,
   WorkspaceTerminalSession,
+  WorkspaceTransferHistoryItem,
+  WorkspaceTransferHistoryListParams,
+  WorkspaceTransferHistoryListResult,
+  WorkspaceTransferHistoryStatistics,
+  WorkspaceTransferHistoryStatus,
+  WorkspaceTransferHistoryType,
   WorkspaceTransferStatus,
   WorkspaceTransferTask,
 } from "./workspace"
@@ -153,5 +199,5 @@ export type {
 export { DEFAULT_SFTP_DOWNLOAD_EXCLUDE_PATTERNS, parseWorkspaceDownloadExcludePatterns } from "./workspace-settings"
 export type { WorkspaceDownloadExcludePatternSource } from "./workspace-settings"
 
-export { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTerminalAuthTicketProviderAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferManagerAdapter } from "./workspace-adapters"
-export type { CreateBrowserWorkspacePreferenceAdapterOptions, CreateWorkspaceAdaptersOptions, CreateWorkspaceI18nAdapterOptions, CreateWorkspaceSettingsAdapterOptions, CreateWorkspaceTransferManagerAdapterOptions, WorkspaceNotifierLike, WorkspacePreferenceStorageLike, WorkspaceTranslator, WorkspaceTranslatorLike } from "./workspace-adapters"
+export { createBrowserWorkspacePreferenceAdapter, createCompositeWorkspaceSessionController, createCompositeWorkspaceSessionStoreAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTerminalAuthTicketProviderAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferHistoryAdapter, createWorkspaceTransferManagerAdapter, mapFileTransferListToWorkspaceHistoryResult, mapFileTransferStatisticsToWorkspaceStatistics, mapFileTransferToWorkspaceHistoryItem } from "./workspace-adapters"
+export type { CreateBrowserWorkspacePreferenceAdapterOptions, CreateCompositeWorkspaceSessionStoreAdapterOptions, CreateWorkspaceAdaptersOptions, CreateWorkspaceI18nAdapterOptions, CreateWorkspaceSettingsAdapterOptions, CreateWorkspaceTransferManagerAdapterOptions, FileTransfersApiLike, WorkspaceNotifierLike, WorkspacePreferenceStorageLike, WorkspaceTranslator, WorkspaceTranslatorLike } from "./workspace-adapters"

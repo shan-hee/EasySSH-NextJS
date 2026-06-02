@@ -4,15 +4,28 @@ import type {
   SshWorkspaceAuthTicketProvider,
   SshWorkspaceI18n,
   SshWorkspaceNotifier,
+  SshWorkspacePaneAdapter,
   SshWorkspacePreferenceAdapter,
   SshWorkspaceServerPicker,
+  SshWorkspaceSessionController,
   SshWorkspaceSessionStoreAdapter,
   SshWorkspaceSettingsAdapter,
   SshWorkspaceThemeAdapter,
   SshWorkspaceTransferManager,
+  WorkspaceSessionSnapshot,
+  WorkspaceTransferHistoryAdapter,
+  WorkspaceTransferHistoryItem,
+  WorkspaceTransferHistoryListResult,
+  WorkspaceTransferHistoryStatistics,
   WorkspaceNotifierActionOptions,
   WorkspaceTransferTask,
 } from "./workspace"
+import type {
+  FileTransfer,
+  FileTransferStatistics,
+  ListFileTransfersParams,
+  ListFileTransfersResponse,
+} from "@/lib/api/file-transfers"
 import type { TransferAuthTicketProvider } from "./transfer-runtime"
 import type { TerminalWebSocketAuthTicketProvider } from "@/lib/websocket-terminal"
 import {
@@ -157,6 +170,8 @@ export function createWorkspaceTransferAuthTicketProviderAdapter(
 
 export interface CreateWorkspaceTransferManagerAdapterOptions {
   tasks: WorkspaceTransferTask[]
+  downloadFile?: SshWorkspaceTransferManager["downloadFile"]
+  batchDownload?: SshWorkspaceTransferManager["batchDownload"]
   uploadFile?: SshWorkspaceTransferManager["uploadFile"]
   directTransfer?: SshWorkspaceTransferManager["directTransfer"]
   createTransferTask?: SshWorkspaceTransferManager["createTransferTask"]
@@ -167,10 +182,13 @@ export interface CreateWorkspaceTransferManagerAdapterOptions {
   clearCompleted?: () => void
   cancelTask?: (taskId: string) => void
   cancelDirectTransfer?: SshWorkspaceTransferManager["cancelDirectTransfer"]
+  history?: SshWorkspaceTransferManager["history"]
 }
 
 export function createWorkspaceTransferManagerAdapter({
   tasks,
+  downloadFile,
+  batchDownload,
   uploadFile,
   directTransfer,
   createTransferTask,
@@ -181,11 +199,18 @@ export function createWorkspaceTransferManagerAdapter({
   clearCompleted,
   cancelTask,
   cancelDirectTransfer,
+  history,
 }: CreateWorkspaceTransferManagerAdapterOptions): SshWorkspaceTransferManager {
   const transferManager: SshWorkspaceTransferManager = {
     tasks,
   }
 
+  if (downloadFile) {
+    transferManager.downloadFile = downloadFile
+  }
+  if (batchDownload) {
+    transferManager.batchDownload = batchDownload
+  }
   if (uploadFile) {
     transferManager.uploadFile = uploadFile
   }
@@ -216,8 +241,157 @@ export function createWorkspaceTransferManagerAdapter({
   if (cancelDirectTransfer) {
     transferManager.cancelDirectTransfer = cancelDirectTransfer
   }
+  if (history) {
+    transferManager.history = history
+  }
 
   return transferManager
+}
+
+export interface FileTransfersApiLike {
+  list: (params?: ListFileTransfersParams) => Promise<ListFileTransfersResponse>
+  getById: (id: string) => Promise<FileTransfer>
+  getStatistics: () => Promise<FileTransferStatistics>
+  delete: (id: string) => Promise<unknown>
+}
+
+export function mapFileTransferToWorkspaceHistoryItem(
+  transfer: FileTransfer,
+): WorkspaceTransferHistoryItem {
+  return {
+    id: transfer.id,
+    serverId: transfer.server_id,
+    sessionId: transfer.session_id,
+    transferType: transfer.transfer_type,
+    sourcePath: transfer.source_path,
+    destPath: transfer.dest_path,
+    fileName: transfer.file_name,
+    fileSizeBytes: transfer.file_size,
+    status: transfer.status,
+    progress: transfer.progress,
+    bytesTransferred: transfer.bytes_transferred,
+    startedAt: transfer.started_at,
+    completedAt: transfer.completed_at,
+    durationSeconds: transfer.duration,
+    speedBytesPerSecond: transfer.speed,
+    errorMessage: transfer.error_message,
+    createdAt: transfer.created_at,
+    updatedAt: transfer.updated_at,
+  }
+}
+
+export function mapFileTransferListToWorkspaceHistoryResult(
+  response: ListFileTransfersResponse,
+): WorkspaceTransferHistoryListResult {
+  return {
+    items: response.data.map(mapFileTransferToWorkspaceHistoryItem),
+    total: response.total,
+    page: response.page,
+    pageSize: response.page_size,
+    totalPages: response.total_pages,
+  }
+}
+
+export function mapFileTransferStatisticsToWorkspaceStatistics(
+  statistics: FileTransferStatistics,
+): WorkspaceTransferHistoryStatistics {
+  return {
+    totalTransfers: statistics.total_transfers,
+    completedTransfers: statistics.completed_transfers,
+    failedTransfers: statistics.failed_transfers,
+    totalBytesUploaded: statistics.total_bytes_uploaded,
+    totalBytesDownloaded: statistics.total_bytes_downloaded,
+    byType: statistics.by_type,
+    byStatus: statistics.by_status,
+  }
+}
+
+export function createWorkspaceTransferHistoryAdapter(
+  api: FileTransfersApiLike,
+): WorkspaceTransferHistoryAdapter {
+  return {
+    async list(params) {
+      const response = await api.list({
+        page: params?.page,
+        limit: params?.limit,
+        status: params?.status,
+        transfer_type: params?.transferType,
+        server_id: params?.serverId,
+      })
+      return mapFileTransferListToWorkspaceHistoryResult(response)
+    },
+    async getById(id) {
+      return mapFileTransferToWorkspaceHistoryItem(await api.getById(id))
+    },
+    async getStatistics() {
+      return mapFileTransferStatisticsToWorkspaceStatistics(await api.getStatistics())
+    },
+    delete: api.delete,
+  }
+}
+
+export interface CreateCompositeWorkspaceSessionStoreAdapterOptions {
+  stores: SshWorkspaceSessionStoreAdapter[]
+  getTransferTasks?: () => WorkspaceTransferTask[]
+  getActiveSessionId?: (snapshots: readonly WorkspaceSessionSnapshot[]) => string | null | undefined
+}
+
+export function createCompositeWorkspaceSessionStoreAdapter({
+  stores,
+  getTransferTasks,
+  getActiveSessionId,
+}: CreateCompositeWorkspaceSessionStoreAdapterOptions): SshWorkspaceSessionStoreAdapter {
+  const readSnapshots = () => stores.map((store) => store.getSnapshot())
+  const mergeSnapshots = (snapshots: readonly WorkspaceSessionSnapshot[]): WorkspaceSessionSnapshot => ({
+    terminalSessions: snapshots.flatMap((snapshot) => snapshot.terminalSessions),
+    sftpSessions: snapshots.flatMap((snapshot) => snapshot.sftpSessions),
+    transferTasks: getTransferTasks?.() ?? snapshots.flatMap((snapshot) => snapshot.transferTasks),
+    activeSessionId:
+      getActiveSessionId?.(snapshots)
+      ?? snapshots.find((snapshot) => snapshot.activeSessionId)?.activeSessionId
+      ?? null,
+  })
+
+  return {
+    getSnapshot: () => mergeSnapshots(readSnapshots()),
+    subscribe: (listener) => {
+      const emit = () => listener(mergeSnapshots(readSnapshots()))
+      const unsubscribers = stores
+        .map((store) => store.subscribe?.(emit))
+        .filter((unsubscribe): unsubscribe is () => void => typeof unsubscribe === "function")
+
+      return () => {
+        unsubscribers.forEach((unsubscribe) => unsubscribe())
+      }
+    },
+  }
+}
+
+export function createCompositeWorkspaceSessionController(
+  ...controllers: Array<SshWorkspaceSessionController | undefined | null>
+): SshWorkspaceSessionController {
+  const merged: SshWorkspaceSessionController = {}
+
+  for (const controller of controllers) {
+    if (!controller) {
+      continue
+    }
+
+    if (controller.terminal) {
+      merged.terminal = controller.terminal
+    }
+    if (controller.sftp) {
+      merged.sftp = controller.sftp
+    }
+  }
+
+  if (controllers.some((controller) => controller?.resetAll)) {
+    merged.resetAll = () => {
+      controllers.forEach((controller) => controller?.resetAll?.())
+    }
+  }
+
+  return merged
 }
 
 export interface CreateWorkspaceSettingsAdapterOptions {
@@ -291,11 +465,13 @@ export interface CreateWorkspaceAdaptersOptions {
   i18n: SshWorkspaceI18n
   notifier: SshWorkspaceNotifier
   theme?: SshWorkspaceThemeAdapter
+  panes?: SshWorkspacePaneAdapter
   settings?: SshWorkspaceSettingsAdapter
   preferences?: SshWorkspacePreferenceAdapter
   serverPicker?: SshWorkspaceServerPicker
   transferManager?: SshWorkspaceTransferManager
   sessionStore?: SshWorkspaceSessionStoreAdapter
+  sessionController?: SshWorkspaceSessionController
 }
 
 export function createWorkspaceAdapters({
@@ -304,11 +480,13 @@ export function createWorkspaceAdapters({
   i18n,
   notifier,
   theme,
+  panes,
   settings,
   preferences,
   serverPicker,
   transferManager,
   sessionStore,
+  sessionController,
 }: CreateWorkspaceAdaptersOptions): SshWorkspaceAdapters {
   return {
     apiClient,
@@ -316,10 +494,12 @@ export function createWorkspaceAdapters({
     i18n,
     notifier,
     theme,
+    panes,
     settings,
     preferences,
     serverPicker,
     transferManager,
     sessionStore,
+    sessionController,
   }
 }

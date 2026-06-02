@@ -148,27 +148,48 @@ export function TabTerminalContent({
   // 从 Store 获取当前页签的 UI 状态
   const tabState = useTabUIStore((state) => state.getTabState(session.id))
   const setTabState = useTabUIStore((state) => state.setTabState)
+  const workspace = useOptionalSshWorkspace()
+  const workspaceCapabilities = workspace?.capabilities
+  const canUseSftpCapability = workspaceCapabilities?.sftp !== false
+  const canUseMonitorCapability = workspaceCapabilities?.monitor !== false
+  const canUseAiCapability = workspaceCapabilities?.ai !== false
+  const canUseDockerCapability = workspaceCapabilities?.docker !== false
+  const canUseFullscreenCapability = workspaceCapabilities?.fullscreen !== false
 
   const isDesktopMonitorOpen = tabState.isMonitorOpen
   const isMobileMonitorOpen = tabState.isMobileMonitorOpen ?? false
-  const isMonitorButtonActive = isDesktopLayout ? isDesktopMonitorOpen : isMobileMonitorOpen
+  const isMonitorButtonActive = canUseMonitorCapability && (
+    isDesktopLayout ? isDesktopMonitorOpen : isMobileMonitorOpen
+  )
   const isFileManagerOpen = tabState.isFileManagerOpen
   const isAiInputOpen = tabState.isAiInputOpen
 
   const isTerminalReady = session.connectionPhase === "ready"
   const hasReadyServer = session.type !== 'quick' && isTerminalReady && !!session.serverId
   const canUseHeavyPanels = isActive && hasReadyServer
-  const canUseFileManager = canUseHeavyPanels && isFileManagerOpen
-  const shouldKeepFileManagerMounted = canUseHeavyPanels && shouldRenderFileManager
-  const canMountAi = isActive && session.type !== 'quick' && !effectiveIsLoading
+  const canUseFileManager = canUseSftpCapability && canUseHeavyPanels && isFileManagerOpen
+  const shouldKeepFileManagerMounted = canUseSftpCapability && canUseHeavyPanels && shouldRenderFileManager
+  const canMountAi = canUseAiCapability && isActive && session.type !== 'quick' && !effectiveIsLoading
   const canUseAi = canMountAi && isAiInputOpen
   const shouldReserveInlineMonitor =
+    canUseMonitorCapability &&
     isDesktopLayout &&
     hasReadyServer &&
     isDesktopMonitorOpen &&
     !!session.serverId
-  const canUseMobileMonitor = canUseHeavyPanels && isMobileMonitorOpen && !isDesktopLayout
-  const workspace = useOptionalSshWorkspace()
+  const canUseMobileMonitor = canUseMonitorCapability && canUseHeavyPanels && isMobileMonitorOpen && !isDesktopLayout
+  const fileManagerPaneConfig = workspace?.adapters.panes?.fileManager
+  const shouldMountFileManagerInTerminal = fileManagerPaneConfig?.mountMode !== 'page'
+  const fileManagerMountContainer = shouldMountFileManagerInTerminal
+    ? floatingPanelRoot || undefined
+    : undefined
+
+  useEffect(() => {
+    if (!shouldMountFileManagerInTerminal) {
+      setFloatingPanelRoot(null)
+    }
+  }, [shouldMountFileManagerInTerminal])
+
   const transferAuthTicketProvider = React.useMemo(
     () => createWorkspaceTransferAuthTicketProviderAdapter(workspace?.adapters.authTicketProvider),
     [workspace?.adapters.authTicketProvider]
@@ -225,7 +246,7 @@ export function TabTerminalContent({
     hasReadyServer && session.serverId
       ? session.serverId
       : ''
-  const monitorEnabled = hasReadyServer
+  const monitorEnabled = canUseMonitorCapability && hasReadyServer
   const tTerminal = useTranslations("terminal")
   const { mode: effectiveAppTheme } = useEffectiveThemeMode()
   const shouldUseTerminalSurface = session.type !== 'quick'
@@ -387,36 +408,40 @@ export function TabTerminalContent({
             >
               {/* 左侧工具图标组 */}
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
-                  aria-label={tTerminal("ariaFileManager")}
-                  title={tTerminal("titleFileManagerWithShortcut")}
-                  onClick={() => setTabState(session.id, { isFileManagerOpen: !isFileManagerOpen })}
-                >
-                  <FolderOpen className="h-3.5 w-3.5" />
-                </Button>
+                {canUseSftpCapability && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                    aria-label={tTerminal("ariaFileManager")}
+                    title={tTerminal("titleFileManagerWithShortcut")}
+                    onClick={() => setTabState(session.id, { isFileManagerOpen: !isFileManagerOpen })}
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                  </Button>
+                )}
 
-                <NetworkLatencyPopover sessionId={session.id} />
+                {canUseMonitorCapability && <NetworkLatencyPopover sessionId={session.id} />}
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "h-7 w-7 rounded-md transition-colors hover:bg-accent/80 hover:text-accent-foreground",
-                    isMonitorButtonActive
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground"
-                  )}
-                  aria-label={tTerminal("ariaMonitor")}
-                  title={tTerminal("titleMonitor")}
-                  onClick={toggleMonitor}
-                >
-                  <Activity className="h-3.5 w-3.5" />
-                </Button>
+                {canUseMonitorCapability && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-7 w-7 rounded-md transition-colors hover:bg-accent/80 hover:text-accent-foreground",
+                      isMonitorButtonActive
+                        ? "bg-accent text-accent-foreground"
+                        : "text-foreground"
+                    )}
+                    aria-label={tTerminal("ariaMonitor")}
+                    title={tTerminal("titleMonitor")}
+                    onClick={toggleMonitor}
+                  >
+                    <Activity className="h-3.5 w-3.5" />
+                  </Button>
+                )}
 
-                {isActive && (
+                {canUseDockerCapability && isActive && (
                   <DockerPopover
                     serverId={session.serverId ?? ''}
                     sessionId={session.id}
@@ -424,33 +449,37 @@ export function TabTerminalContent({
                   />
                 )}
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
-                  aria-label={tTerminal("ariaAiAssistant")}
-                  title={tTerminal("titleAiAssistantWithShortcut")}
-                  onClick={() => setTabState(session.id, { isAiInputOpen: !isAiInputOpen })}
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                </Button>
+                {canUseAiCapability && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                    aria-label={tTerminal("ariaAiAssistant")}
+                    title={tTerminal("titleAiAssistantWithShortcut")}
+                    onClick={() => setTabState(session.id, { isAiInputOpen: !isAiInputOpen })}
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
 
               {/* 右侧工具按钮 */}
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
-                  onClick={onToggleFullscreen}
-                  title={
-                    isFullscreen
-                      ? tTerminal("titleExitFullscreen")
-                      : tTerminal("titleEnterFullscreen")
-                  }
-                >
-                  {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                </Button>
+                {canUseFullscreenCapability && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                    onClick={onToggleFullscreen}
+                    title={
+                      isFullscreen
+                        ? tTerminal("titleExitFullscreen")
+                        : tTerminal("titleEnterFullscreen")
+                    }
+                  >
+                    {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -484,7 +513,9 @@ export function TabTerminalContent({
             {/* 终端区域 */}
             <div className="flex-1 min-w-0 relative">
               {/* 文件管理器悬浮挂载根，位于终端容器内部 */}
-              <div ref={setFloatingPanelRoot} className="absolute inset-0 pointer-events-none" />
+              {shouldMountFileManagerInTerminal && (
+                <div ref={setFloatingPanelRoot} className="absolute inset-0 pointer-events-none" />
+              )}
 
               {session.type === 'quick' ? (
                 <QuickConnect
@@ -554,7 +585,8 @@ export function TabTerminalContent({
           <FileManagerPanel
             isOpen={canUseFileManager}
             onClose={() => setTabState(session.id, { isFileManagerOpen: false })}
-            mountContainer={floatingPanelRoot || undefined}
+            mountContainer={fileManagerMountContainer}
+            anchorTop={fileManagerPaneConfig?.anchorTop}
             serverId={session.serverId ?? ''}
             serverName={session.serverName || ''}
             host={session.host || ''}

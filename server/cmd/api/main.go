@@ -50,6 +50,7 @@ import (
 	"github.com/easyssh/server/internal/infra/db"
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/easyssh/server/internal/pkg/geoip"
+	"github.com/easyssh/server/internal/platform"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -70,6 +71,12 @@ func main() {
 	if cfg.Server.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	runtimeInfo := platform.NewRuntimeInfo(platform.RuntimeOptions{
+		Profile: platform.ProfileFromEnvironment(),
+		DataDir: runtimeDataDir(cfg.Database.Driver, cfg.Database.DSN),
+		Version: readAppVersion(),
+	})
 
 	// 初始化数据库
 	database, err := db.NewDB(&cfg.Database)
@@ -484,6 +491,7 @@ func main() {
 	sshKeyHandler := rest.NewSSHKeyHandler(sshKeyService)
 	avatarHandler := rest.NewAvatarHandler()
 	backupHandler := rest.NewBackupHandler(database)
+	runtimeHandler := rest.NewRuntimeHandler(runtimeInfo)
 
 	// 创建 Gin 路由
 	r := gin.New()
@@ -515,6 +523,8 @@ func main() {
 	// API v1 路由组
 	v1 := r.Group("/api/v1")
 	{
+		v1.GET("/runtime", runtimeHandler.GetRuntime)
+
 		// 健康检查
 		v1.GET("/health", func(c *gin.Context) {
 			// 检查数据库连接
@@ -1112,4 +1122,46 @@ func main() {
 	}
 
 	log.Println("✅ Server exited properly")
+}
+
+func readAppVersion() string {
+	candidates := []string{"../VERSION", "VERSION"}
+	for _, candidate := range candidates {
+		content, err := os.ReadFile(candidate)
+		if err == nil {
+			version := strings.TrimSpace(string(content))
+			if version != "" {
+				return version
+			}
+		}
+	}
+	return "dev"
+}
+
+func runtimeDataDir(driver string, dsn string) string {
+	if strings.ToLower(strings.TrimSpace(driver)) != "sqlite" {
+		return ""
+	}
+
+	pathValue := strings.TrimSpace(dsn)
+	if pathValue == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(pathValue, "file:") {
+		pathValue = strings.TrimPrefix(pathValue, "file:")
+		if index := strings.Index(pathValue, "?"); index >= 0 {
+			pathValue = pathValue[:index]
+		}
+	}
+
+	if pathValue == "" || pathValue == ":memory:" {
+		return ""
+	}
+
+	if absolutePath, err := filepath.Abs(pathValue); err == nil {
+		pathValue = absolutePath
+	}
+
+	return filepath.Dir(pathValue)
 }

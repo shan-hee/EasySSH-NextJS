@@ -24,6 +24,8 @@ export interface ResolveTerminalRendererThemeOptions {
   backgroundOpacity: number
 }
 
+export type TerminalThemeModePreference = TerminalAppThemeMode | "system"
+
 export interface UseTerminalRendererSettingsOptions {
   terminal: Terminal | null | undefined
   terminalReady: boolean
@@ -38,6 +40,33 @@ export interface UseTerminalRendererSettingsOptions {
 
 export function formatTerminalFontFamily(fontFamily: string) {
   return `'${fontFamily}', 'Fira Code', Monaco, Menlo, 'Ubuntu Mono', monospace`
+}
+
+export function resolveTerminalThemeName(
+  theme: TerminalThemeName | string | null | undefined,
+  fallback: TerminalThemeName = "default",
+): TerminalThemeName {
+  switch (theme) {
+    case "default":
+    case "dark":
+    case "light":
+    case "solarized":
+    case "dracula":
+      return theme
+    default:
+      return fallback
+  }
+}
+
+export function resolveTerminalAppThemeMode(
+  mode: TerminalThemeModePreference | string | null | undefined,
+  fallback: TerminalAppThemeMode,
+): TerminalAppThemeMode {
+  if (mode === "light" || mode === "dark") {
+    return mode
+  }
+
+  return fallback
 }
 
 export function resolveTerminalRendererTheme({

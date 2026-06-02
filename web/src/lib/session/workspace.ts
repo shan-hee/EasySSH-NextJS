@@ -138,7 +138,14 @@ export interface SshWorkspaceApiClient {
 
 export interface SshWorkspaceThemeAdapter {
   mode?: "light" | "dark" | "system"
-  terminalTheme?: string
+  terminalTheme?: "default" | "dark" | "light" | "solarized" | "dracula"
+}
+
+export interface SshWorkspacePaneAdapter {
+  fileManager?: {
+    mountMode?: "terminal" | "page"
+    anchorTop?: number
+  }
 }
 
 export interface SshWorkspaceSettingsAdapter {
@@ -157,13 +164,110 @@ export interface SshWorkspaceServerPicker {
   open: () => Promise<WorkspaceSessionSeed | null>
 }
 
+export type WorkspaceSessionListUpdater<TSession> =
+  | TSession[]
+  | ((sessions: TSession[]) => TSession[])
+
+export interface SshWorkspaceTerminalSessionController {
+  getSessions: () => WorkspaceTerminalSession[]
+  getActiveSessionId: () => string | null
+  setSessions: (updater: WorkspaceSessionListUpdater<WorkspaceTerminalSession>) => void
+  addSession: (session: WorkspaceTerminalSession) => void
+  updateSession: (sessionId: string, update: Partial<WorkspaceTerminalSession>) => void
+  activateSession: (sessionId: string | null) => void
+  closeSession: (sessionId: string) => void
+  reset: () => void
+}
+
+export interface SshWorkspaceSftpSessionController {
+  getSessions: () => SftpWorkspaceSession[]
+  getActiveSessionId: () => string | null
+  setSessions: (updater: WorkspaceSessionListUpdater<SftpWorkspaceSession>) => void
+  addSession: (session: SftpWorkspaceSession) => void
+  updateSession: (sessionId: string, update: Partial<SftpWorkspaceSession>) => void
+  activateSession: (sessionId: string | null) => void
+  closeSession: (sessionId: string) => void
+  setFullscreenSession?: (sessionId: string | null) => void
+  reset: () => void
+}
+
+export interface SshWorkspaceSessionController {
+  terminal?: SshWorkspaceTerminalSessionController
+  sftp?: SshWorkspaceSftpSessionController
+  resetAll?: () => void
+}
+
 export type SshWorkspaceAuthTicketProvider = (
   scope: string,
   payload?: Record<string, unknown>,
 ) => Promise<string>
 
+export type WorkspaceTransferHistoryStatus = "pending" | "transferring" | "completed" | "failed"
+export type WorkspaceTransferHistoryType = "upload" | "download"
+
+export interface WorkspaceTransferHistoryItem {
+  id: string
+  serverId: string
+  sessionId?: string
+  transferType: WorkspaceTransferHistoryType
+  sourcePath: string
+  destPath: string
+  fileName: string
+  fileSizeBytes: number
+  status: WorkspaceTransferHistoryStatus
+  progress: number
+  bytesTransferred: number
+  startedAt?: string
+  completedAt?: string
+  durationSeconds?: number
+  speedBytesPerSecond?: number
+  errorMessage?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkspaceTransferHistoryListParams {
+  page?: number
+  limit?: number
+  status?: WorkspaceTransferHistoryStatus
+  transferType?: WorkspaceTransferHistoryType
+  serverId?: string
+}
+
+export interface WorkspaceTransferHistoryListResult {
+  items: WorkspaceTransferHistoryItem[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface WorkspaceTransferHistoryStatistics {
+  totalTransfers: number
+  completedTransfers: number
+  failedTransfers: number
+  totalBytesUploaded: number
+  totalBytesDownloaded: number
+  byType: Record<string, number>
+  byStatus: Record<string, number>
+}
+
+export interface SshWorkspaceTransferHistoryAdapter {
+  list: (params?: WorkspaceTransferHistoryListParams) => Promise<WorkspaceTransferHistoryListResult>
+  getById?: (id: string) => Promise<WorkspaceTransferHistoryItem>
+  getStatistics?: () => Promise<WorkspaceTransferHistoryStatistics>
+  delete?: (id: string) => Promise<unknown>
+}
+
 export interface SshWorkspaceTransferManager {
   tasks: WorkspaceTransferTask[]
+  downloadFile?: (serverId: string, remotePath: string, fileName?: string) => Promise<void> | void
+  batchDownload?: (
+    serverId: string,
+    remotePaths: string[],
+    mode?: SftpBatchDownloadMode,
+    excludePatterns?: string[],
+  ) => Promise<void>
   uploadFile?: (
     serverId: string,
     remotePath: string,
@@ -192,6 +296,7 @@ export interface SshWorkspaceTransferManager {
   clearCompleted?: () => void
   cancelTask?: (taskId: string) => void
   cancelDirectTransfer?: (taskId: string) => Promise<void>
+  history?: SshWorkspaceTransferHistoryAdapter
 }
 
 export interface SshWorkspaceSessionStoreAdapter {
@@ -205,11 +310,13 @@ export interface SshWorkspaceAdapters {
   i18n: SshWorkspaceI18n
   notifier: SshWorkspaceNotifier
   theme?: SshWorkspaceThemeAdapter
+  panes?: SshWorkspacePaneAdapter
   settings?: SshWorkspaceSettingsAdapter
   preferences?: SshWorkspacePreferenceAdapter
   serverPicker?: SshWorkspaceServerPicker
   transferManager?: SshWorkspaceTransferManager
   sessionStore?: SshWorkspaceSessionStoreAdapter
+  sessionController?: SshWorkspaceSessionController
 }
 
 export interface SshWorkspaceProps {

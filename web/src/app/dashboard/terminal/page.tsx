@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, Suspense, startTransition } from "react"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
-import { SshWorkspace } from "@/components/ssh-workspace/ssh-workspace"
+import { SshWorkspace } from "@easyssh/ssh-workspace"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
 import type { TerminalSettings } from "@/components/terminal/terminal-settings-dialog"
 import type {
@@ -13,12 +13,13 @@ import type {
 import type { QuickServer } from "@/components/terminal/quick-connect"
 import { serversApi, sftpApi, type Server } from "@/lib/api"
 import { createAuthTicket } from "@/lib/auth-ticket"
-import { createTerminalWorkspaceSessionStoreAdapter, useTerminalStore } from "@/stores/terminal-store"
+import { createTerminalWorkspaceSessionControllerAdapter, createTerminalWorkspaceSessionStoreAdapter, useTerminalStore } from "@/stores/terminal-store"
 import { createSftpSessionApi } from "@/lib/session/sftp-session-api"
 import { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter } from "@/lib/session/workspace-adapters"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useTranslations } from "next-intl"
 import { useSystemConfig } from "@/contexts/system-config-context"
+import { createWorkspaceCapabilitiesFromRuntime, useRuntime } from "@/shell/runtime"
 
 const statusFromConnectionPhase = (phase: TerminalConnectionPhase) => {
   if (phase === "ready") return "connected" as const
@@ -87,6 +88,7 @@ const readTerminalBehaviorSettings = (defaults: { maxTabs: number; inactiveMinut
 function TerminalPageContent() {
   const { ready } = useAuthReady()
   const { config: systemConfig } = useSystemConfig()
+  const { runtime } = useRuntime()
   const tCommon = useTranslations("common")
   const t = useTranslations("terminal")
   const tSftp = useTranslations("sftp")
@@ -106,6 +108,7 @@ function TerminalPageContent() {
   const updateSessionActivity = useTerminalStore((state) => state.updateSessionActivity)
   const getSessionLastActivity = useTerminalStore((state) => state.getSessionLastActivity)
   const workspaceSessionStore = useMemo(() => createTerminalWorkspaceSessionStoreAdapter(), [])
+  const workspaceSessionController = useMemo(() => createTerminalWorkspaceSessionControllerAdapter(), [])
   const workspaceAuthTicketProvider = useMemo(() => createWorkspaceAuthTicketProviderAdapter(createAuthTicket), [])
   const sftpSessionApi = useMemo(() => createSftpSessionApi(sftpApi), [])
   const workspacePreferences = useMemo(() => createBrowserWorkspacePreferenceAdapter(), [])
@@ -144,15 +147,19 @@ function TerminalPageContent() {
     preferences: workspacePreferences,
     authTicketProvider: workspaceAuthTicketProvider,
     sessionStore: workspaceSessionStore,
-  }), [tCommon, t, tSftp, systemConfig?.download_exclude_patterns, sftpSessionApi, workspaceAuthTicketProvider, workspacePreferences, workspaceSessionStore])
-  const workspaceCapabilities = useMemo(() => ({
-    terminal: true,
-    sftp: true,
-    transfers: true,
-    ai: true,
-    monitor: true,
-    docker: true,
-  }), [])
+    sessionController: workspaceSessionController,
+  }), [tCommon, t, tSftp, systemConfig?.download_exclude_patterns, sftpSessionApi, workspaceAuthTicketProvider, workspacePreferences, workspaceSessionController, workspaceSessionStore])
+  const workspaceCapabilities = useMemo(() => createWorkspaceCapabilitiesFromRuntime(runtime, {
+    defaults: {
+      terminal: true,
+      sftp: true,
+      transfers: true,
+      ai: true,
+      monitor: true,
+      docker: true,
+      fullscreen: true,
+    },
+  }), [runtime])
   const tabPolicyMaxTabs = systemConfig?.tab_session?.max_tabs ?? 50
   const tabPolicyInactiveMinutes = systemConfig?.tab_session?.inactive_minutes ?? 60
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, startTransition } from "react"
 import { PageHeader } from "@/components/page-header"
-import { SshWorkspace } from "@/components/ssh-workspace/ssh-workspace"
+import { SshWorkspace } from "@easyssh/ssh-workspace"
 import { SftpSessionCard } from "@/components/sftp/sftp-session-card"
 import { DragPreviewToolbar, SortableSession, type CrossSessionDragData } from "@/components/sftp/sftp-session-sortable"
 import { FolderOpen, Server, Plus, ChevronDown, Loader2 } from "lucide-react"
@@ -35,6 +35,7 @@ import {
 } from '@dnd-kit/sortable'
 import { createPortal } from 'react-dom'
 import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
+import { fileTransfersApi } from "@/lib/api/file-transfers"
 import { createAuthTicket } from "@/lib/auth-ticket"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
@@ -56,8 +57,9 @@ import { convertSftpFileInfo, type SftpFileItem } from "@/lib/sftp-file-utils"
 import { loadSftpDirectory } from "@/lib/session/sftp-directory"
 import { createSftpSessionApi } from "@/lib/session/sftp-session-api"
 import type { SftpWorkspaceSession } from "@/lib/session/workspace"
-import { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferManagerAdapter } from "@/lib/session/workspace-adapters"
-import { createSftpWorkspaceSessionStoreAdapter, useSftpSessionStore } from "@/stores/sftp-session-store"
+import { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferHistoryAdapter, createWorkspaceTransferManagerAdapter } from "@/lib/session/workspace-adapters"
+import { createSftpWorkspaceSessionControllerAdapter, createSftpWorkspaceSessionStoreAdapter, useSftpSessionStore } from "@/stores/sftp-session-store"
+import { createWorkspaceCapabilitiesFromRuntime, useRuntime } from "@/shell/runtime"
 
 type ComponentFile = SftpFileItem
 type SftpSession = SftpWorkspaceSession
@@ -74,6 +76,7 @@ const SESSION_COLORS = [
 
 export default function SftpPage() {
  const { ready } = useAuthReady()
+ const { runtime } = useRuntime()
  const { user } = useClientAuth()
  const { data: systemConfig } = useSystemConfig()
  const effectiveLocale = getEffectiveLocale(user, systemConfig || null)
@@ -134,7 +137,9 @@ export default function SftpPage() {
    () => createSftpWorkspaceSessionStoreAdapter(() => transferTasksRef.current),
    [],
  )
+ const workspaceSessionController = React.useMemo(() => createSftpWorkspaceSessionControllerAdapter(), [])
  const workspacePreferences = React.useMemo(() => createBrowserWorkspacePreferenceAdapter(), [])
+ const workspaceTransferHistory = React.useMemo(() => createWorkspaceTransferHistoryAdapter(fileTransfersApi), [])
  const workspaceAdapters = React.useMemo(() => createWorkspaceAdapters({
    apiClient: {
      sftp: sftpSessionApi,
@@ -155,8 +160,15 @@ export default function SftpPage() {
    preferences: workspacePreferences,
    authTicketProvider: workspaceAuthTicketProvider,
    sessionStore: workspaceSessionStore,
+   sessionController: workspaceSessionController,
    transferManager: createWorkspaceTransferManagerAdapter({
      tasks: transferTasks,
+     downloadFile: (serverId, remotePath) => {
+       sftpSessionApi.downloadFile(serverId, remotePath)
+     },
+     batchDownload: (serverId, remotePaths, mode, excludePatterns) => (
+       sftpSessionApi.batchDownload(serverId, remotePaths, mode, excludePatterns)
+     ),
      uploadFile,
      directTransfer,
      createTransferTask: fileTransfer.createTransferTask,
@@ -167,6 +179,7 @@ export default function SftpPage() {
      clearCompleted,
      cancelTask,
      cancelDirectTransfer: fileTransfer.cancelDirectTransfer,
+     history: workspaceTransferHistory,
    }),
  }), [
    cancelTask,
@@ -189,15 +202,21 @@ export default function SftpPage() {
    transferTasks,
    uploadFile,
    workspacePreferences,
+   workspaceSessionController,
    workspaceSessionStore,
+   workspaceTransferHistory,
  ])
- const workspaceCapabilities = React.useMemo(() => ({
-   terminal: false,
-   sftp: true,
-   transfers: true,
-   fullscreen: true,
-   crossSessionDrag: true,
- }), [])
+ const workspaceCapabilities = React.useMemo(() => createWorkspaceCapabilitiesFromRuntime(runtime, {
+   defaults: {
+     sftp: true,
+     transfers: true,
+     fullscreen: true,
+     crossSessionDrag: true,
+   },
+   overrides: {
+     terminal: false,
+   },
+ }), [runtime])
 
  // 加载服务器列表
  const loadServers = useCallback(async () => {

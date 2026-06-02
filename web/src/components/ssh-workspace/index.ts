@@ -4,20 +4,24 @@ export { SshWorkspace, useOptionalSshWorkspace, useSshWorkspace } from "@/compon
 export type { SshWorkspaceContextValue, SshWorkspaceRootProps, SshWorkspaceSnapshotUpdater } from "@/components/ssh-workspace/ssh-workspace"
 export { useWorkspaceCommonTranslator, useWorkspaceSftpTranslator, useWorkspaceTranslator } from "@/components/ssh-workspace/use-workspace-translator"
 export type { WorkspaceTranslationParams, WorkspaceUiTranslator } from "@/components/ssh-workspace/use-workspace-translator"
-export { createBrowserWorkspacePreferenceAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTerminalAuthTicketProviderAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferManagerAdapter } from "@/lib/session/workspace-adapters"
-export type { CreateBrowserWorkspacePreferenceAdapterOptions, CreateWorkspaceAdaptersOptions, CreateWorkspaceI18nAdapterOptions, CreateWorkspaceSettingsAdapterOptions, CreateWorkspaceTransferManagerAdapterOptions, WorkspaceNotifierLike, WorkspacePreferenceStorageLike, WorkspaceTranslator, WorkspaceTranslatorLike } from "@/lib/session/workspace-adapters"
+export { createBrowserWorkspacePreferenceAdapter, createCompositeWorkspaceSessionController, createCompositeWorkspaceSessionStoreAdapter, createWorkspaceAdapters, createWorkspaceAuthTicketProviderAdapter, createWorkspaceI18nAdapter, createWorkspaceNotifierAdapter, createWorkspaceSettingsAdapter, createWorkspaceTerminalAuthTicketProviderAdapter, createWorkspaceTransferAuthTicketProviderAdapter, createWorkspaceTransferHistoryAdapter, createWorkspaceTransferManagerAdapter, mapFileTransferListToWorkspaceHistoryResult, mapFileTransferStatisticsToWorkspaceStatistics, mapFileTransferToWorkspaceHistoryItem } from "@/lib/session/workspace-adapters"
+export type { CreateBrowserWorkspacePreferenceAdapterOptions, CreateCompositeWorkspaceSessionStoreAdapterOptions, CreateWorkspaceAdaptersOptions, CreateWorkspaceI18nAdapterOptions, CreateWorkspaceSettingsAdapterOptions, CreateWorkspaceTransferManagerAdapterOptions, FileTransfersApiLike, WorkspaceNotifierLike, WorkspacePreferenceStorageLike, WorkspaceTranslator, WorkspaceTranslatorLike } from "@/lib/session/workspace-adapters"
 export { DEFAULT_SFTP_DOWNLOAD_EXCLUDE_PATTERNS, parseWorkspaceDownloadExcludePatterns } from "@/lib/session/workspace-settings"
 export type { WorkspaceDownloadExcludePatternSource } from "@/lib/session/workspace-settings"
 export { createServerTransferTask, createUploadTransferTask, mapTransferProgressMessageToTaskUpdate, mapUploadProgressMessageToTransferUpdate, mapUploadTaskStatusToTransferTask, mergeTransferTaskUpdate, normalizeTransferStage } from "@/lib/session/transfer-tasks"
 export type { CreateServerTransferTaskOptions, CreateUploadTransferTaskOptions, MappedUploadProgressMessage, MapUploadProgressMessageOptions, TransferTask, TransferTaskUpdate, UploadProgressMessageLike } from "@/lib/session/transfer-tasks"
-export { cancelTransferRuntimeTask, clearTransferRuntimeTaskHandles, closeTransferWebSocket, consumeTransferCancelledBeforeStart, createTransferConcurrencyLimiter, createTransferProgressWebSocket, createTransferRuntimeHandleStore, DEFAULT_TRANSFER_CONCURRENCY_LIMIT, isTransferCancellationRequested, isTransferRuntimeTaskActive, isTransferWebSocketActive, markTransferCancelledBeforeStart, registerTransferWebSocket, registerTransferXhr, releaseTransferRuntimeTaskHandles, sendTransferCancelMessage, waitForTransferWebSocketOpen } from "@/lib/session/transfer-runtime"
-export type { CancelTransferRuntimeTaskOptions, ClearTransferRuntimeTaskHandlesOptions, CloseTransferWebSocketOptions, CreateTransferConcurrencyLimiterOptions, CreateTransferProgressWebSocketOptions, ReleaseTransferRuntimeSlot, ReleaseTransferRuntimeTaskHandlesOptions, TransferAuthTicketProvider, TransferAuthTicketRequest, TransferAuthTicketResponse, TransferConcurrencyLimiter, TransferProgressSocketKind, TransferRuntimeHandleStore, TransferRuntimeTaskLike, TransferRuntimeTaskType, TransferWebSocketConstructor, TransferWebSocketUrlResolver, WaitForTransferWebSocketOpenOptions } from "@/lib/session/transfer-runtime"
+export { appendTransferTask, applyTransferTaskUpdate, clearSettledTransferTasks, findTransferTask, getActiveTransferTasks, getSettledTransferTaskIds, getTransferTaskIds, isTransferTaskActiveStatus, isTransferTaskSettledStatus, markTransferTaskCancelled, mergeRestoredTransferTasks, removeTransferTaskById, TRANSFER_ACTIVE_STATUSES, TRANSFER_SETTLED_STATUSES } from "@/lib/session/transfer-controller"
+export type { ApplyTransferTaskUpdateOptions } from "@/lib/session/transfer-controller"
+export { createFileTransferController } from "@/lib/session/transfer-manager-controller"
+export type { CreateFileTransferControllerOptions, FileTransferController, FileTransferSftpApi, RestoreUploadTasksOptions, TransferTaskStateUpdater } from "@/lib/session/transfer-manager-controller"
+export { bindServerTransferProgressSocket, bindUploadTransferProgressSocket, cancelTransferRuntimeTask, clearTransferRuntimeTaskHandles, closeTransferWebSocket, consumeTransferCancelledBeforeStart, createTransferConcurrencyLimiter, createTransferProgressWebSocket, createTransferRuntimeHandleStore, createUploadHttpProgressHandler, DEFAULT_TRANSFER_CONCURRENCY_LIMIT, isTransferCancellationRequested, isTransferRuntimeTaskActive, isTransferWebSocketActive, markTransferCancelledBeforeStart, registerTransferWebSocket, registerTransferXhr, releaseTransferRuntimeTaskHandles, sendTransferCancelMessage, waitForTransferWebSocketOpen } from "@/lib/session/transfer-runtime"
+export type { BindServerTransferProgressSocketOptions, BindUploadTransferProgressSocketOptions, CancelTransferRuntimeTaskOptions, ClearTransferRuntimeTaskHandlesOptions, CloseTransferWebSocketOptions, CreateTransferConcurrencyLimiterOptions, CreateTransferProgressWebSocketOptions, CreateUploadHttpProgressHandlerOptions, ReleaseTransferRuntimeSlot, ReleaseTransferRuntimeTaskHandlesOptions, ServerTransferProgressSocketWatcher, TransferAuthTicketProvider, TransferAuthTicketRequest, TransferAuthTicketResponse, TransferConcurrencyLimiter, TransferProgressSocketKind, TransferRuntimeHandleStore, TransferRuntimeTaskLike, TransferRuntimeTaskType, TransferWebSocketConstructor, TransferWebSocketUrlResolver, WaitForTransferWebSocketOpenOptions } from "@/lib/session/transfer-runtime"
 export { createSftpSessionApi, defaultSftpSessionApi } from "@/lib/session/sftp-session-api"
 export type { SftpBatchDownloadMode, SftpSessionApi, SftpSessionApiAdapter } from "@/lib/session/sftp-session-api"
 export { useSftpSession } from "@/hooks/useSftpSession"
 export type { FileItem, SftpSessionNotifier, SftpSessionState, SimpleFileItem, UseSftpSessionOptions } from "@/hooks/useSftpSession"
-export { createSftpWorkspaceSessionStoreAdapter, useSftpSessionStore } from "@/stores/sftp-session-store"
-export { createTerminalWorkspaceSessionStoreAdapter, useTerminalStore } from "@/stores/terminal-store"
+export { createSftpWorkspaceSessionController, createSftpWorkspaceSessionControllerAdapter, createSftpWorkspaceSessionStoreAdapter, useSftpSessionStore } from "@/stores/sftp-session-store"
+export { createTerminalWorkspaceSessionController, createTerminalWorkspaceSessionControllerAdapter, createTerminalWorkspaceSessionStoreAdapter, useTerminalStore } from "@/stores/terminal-store"
 export { SftpManager } from "@/components/sftp/sftp-manager"
 export type { SftpManagerFileItem, SftpManagerProps } from "@/components/sftp/sftp-manager"
 export { useSftpFileBrowserController } from "@/components/sftp/use-sftp-file-browser-controller"
@@ -79,8 +83,8 @@ export { useTerminalContainerApi } from "@/components/terminal/use-terminal-cont
 export type { TerminalContainerApiElement, UseTerminalContainerApiOptions } from "@/components/terminal/use-terminal-container-api"
 export { useTerminalInputActions } from "@/components/terminal/use-terminal-input-actions"
 export type { UseTerminalInputActionsOptions } from "@/components/terminal/use-terminal-input-actions"
-export { formatTerminalFontFamily, resolveTerminalRendererTheme, useTerminalRendererSettings } from "@/components/terminal/use-terminal-renderer-settings"
-export type { ResolveTerminalRendererThemeOptions, TerminalAppThemeMode, TerminalCursorStyle, TerminalRendererThemeResult, TerminalThemeName, UseTerminalRendererSettingsOptions } from "@/components/terminal/use-terminal-renderer-settings"
+export { formatTerminalFontFamily, resolveTerminalAppThemeMode, resolveTerminalRendererTheme, resolveTerminalThemeName, useTerminalRendererSettings } from "@/components/terminal/use-terminal-renderer-settings"
+export type { ResolveTerminalRendererThemeOptions, TerminalAppThemeMode, TerminalCursorStyle, TerminalRendererThemeResult, TerminalThemeModePreference, TerminalThemeName, UseTerminalRendererSettingsOptions } from "@/components/terminal/use-terminal-renderer-settings"
 export { WebTerminal } from "@/components/terminal/web-terminal"
 export type { WebTerminalProps } from "@/components/terminal/web-terminal"
 export type { TerminalWebSocketAuthTicketProvider, TerminalWebSocketAuthTicketRequest, TerminalWebSocketConstructor, TerminalWebSocketOptions, TerminalWebSocketUrlRequest, TerminalWebSocketUrlResolver } from "@/lib/websocket-terminal"
@@ -95,18 +99,30 @@ export type {
   SshWorkspaceI18n,
   SshWorkspaceLayout,
   SshWorkspaceNotifier,
+  SshWorkspacePaneAdapter,
   SshWorkspacePreferenceAdapter,
   SshWorkspaceProps,
   SshWorkspaceServerPicker,
+  SshWorkspaceSessionController,
   SshWorkspaceSessionStoreAdapter,
   SshWorkspaceSettingsAdapter,
+  SshWorkspaceSftpSessionController,
   SshWorkspaceThemeAdapter,
+  SshWorkspaceTerminalSessionController,
+  SshWorkspaceTransferHistoryAdapter,
   SshWorkspaceTransferManager,
   WorkspaceNotifierActionOptions,
+  WorkspaceSessionListUpdater,
   WorkspaceSessionSeed,
   WorkspaceSessionSnapshot,
   WorkspaceTerminalCredentialSaveRequest,
   WorkspaceTerminalSession,
+  WorkspaceTransferHistoryItem,
+  WorkspaceTransferHistoryListParams,
+  WorkspaceTransferHistoryListResult,
+  WorkspaceTransferHistoryStatistics,
+  WorkspaceTransferHistoryStatus,
+  WorkspaceTransferHistoryType,
   WorkspaceTransferStatus,
   WorkspaceTransferTask,
 } from "@/lib/session/workspace"

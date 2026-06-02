@@ -1,3 +1,11 @@
+import type { TransferProgressMessage } from "@/lib/api/sftp"
+import {
+  mapTransferProgressMessageToTaskUpdate,
+  mapUploadProgressMessageToTransferUpdate,
+  type TransferTaskUpdate,
+  type UploadProgressMessageLike,
+} from "./transfer-tasks"
+
 export type TransferProgressSocketKind = "upload" | "serverTransfer"
 
 export interface TransferAuthTicketRequest {
@@ -75,6 +83,37 @@ export interface CancelTransferRuntimeTaskOptions {
   markCancelled?: (taskId: string) => void
   closeWebSocket?: boolean
   logError?: (message: string, error: unknown) => void
+}
+
+export interface BindUploadTransferProgressSocketOptions {
+  socket: WebSocket
+  taskId: string
+  fileSizeBytes: number
+  onTaskUpdate: (taskId: string, update: TransferTaskUpdate) => void
+  onProgress?: (loaded: number, total: number) => void
+  logError?: (message: string, error?: unknown) => void
+}
+
+export interface BindServerTransferProgressSocketOptions {
+  socket: WebSocket
+  taskId: string
+  handles: TransferRuntimeHandleStore
+  onTaskUpdate: (taskId: string, update: TransferTaskUpdate) => void
+  onUnexpectedClose?: (taskId: string, event: CloseEvent) => void
+  logError?: (message: string, error?: unknown) => void
+  logWarn?: (message: string, ...args: unknown[]) => void
+}
+
+export interface ServerTransferProgressSocketWatcher {
+  completion: Promise<void>
+  isTransferFinished: () => boolean
+}
+
+export interface CreateUploadHttpProgressHandlerOptions {
+  taskId: string
+  fileSizeBytes: number
+  onTaskUpdate: (taskId: string, update: TransferTaskUpdate) => void
+  onProgress?: (loaded: number, total: number) => void
 }
 
 export type ReleaseTransferRuntimeSlot = () => void
@@ -185,6 +224,125 @@ export function waitForTransferWebSocketOpen(
       }
     }
   })
+}
+
+export function bindUploadTransferProgressSocket({
+  socket,
+  taskId,
+  fileSizeBytes,
+  onTaskUpdate,
+  onProgress,
+  logError = (message, error) => console.error(message, error),
+}: BindUploadTransferProgressSocketOptions): void {
+  socket.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data) as UploadProgressMessageLike
+      const mapped = mapUploadProgressMessageToTransferUpdate(message, {
+        fileSizeBytes,
+      })
+
+      if (mapped.update) {
+        onTaskUpdate(taskId, mapped.update)
+      }
+      if (mapped.progressEvent) {
+        onProgress?.(mapped.progressEvent.loaded, mapped.progressEvent.total)
+      }
+      if (mapped.isError) {
+        logError("[transfer-runtime] SFTP error:", mapped.errorMessage)
+      }
+    } catch (error) {
+      logError("[transfer-runtime] Failed to parse WS message:", error)
+    }
+  }
+
+  socket.onerror = (error) => {
+    logError("[transfer-runtime] WebSocket error:", error)
+  }
+}
+
+export function bindServerTransferProgressSocket({
+  socket,
+  taskId,
+  handles,
+  onTaskUpdate,
+  onUnexpectedClose,
+  logError = (message, error) => console.error(message, error),
+  logWarn = (message, ...args) => console.warn(message, ...args),
+}: BindServerTransferProgressSocketOptions): ServerTransferProgressSocketWatcher {
+  let transferFinished = false
+  let resolveTransfer = () => {}
+  let rejectTransfer = (_error: Error) => {}
+  const completion = new Promise<void>((resolve, reject) => {
+    resolveTransfer = resolve
+    rejectTransfer = reject
+  })
+
+  socket.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data) as TransferProgressMessage
+      const update = mapTransferProgressMessageToTaskUpdate(message)
+
+      if (update) {
+        onTaskUpdate(taskId, update)
+      }
+
+      if (message.type === "complete") {
+        transferFinished = true
+        resolveTransfer()
+      } else if (message.type === "error") {
+        transferFinished = true
+        rejectTransfer(new Error(message.message || "传输失败"))
+      } else if (message.type === "cancelled") {
+        transferFinished = true
+        resolveTransfer()
+      }
+    } catch (error) {
+      logError("[transfer-runtime] Failed to parse WS message:", error)
+    }
+  }
+
+  socket.onerror = (error) => {
+    logError("[transfer-runtime] WebSocket error:", error)
+  }
+
+  socket.onclose = (event) => {
+    if (isTransferCancellationRequested(handles, taskId)) {
+      transferFinished = true
+      resolveTransfer()
+      return
+    }
+
+    if (!transferFinished) {
+      logWarn("[transfer-runtime] WebSocket closed unexpectedly:", event.code, event.reason)
+      onUnexpectedClose?.(taskId, event)
+      rejectTransfer(new Error("连接断开"))
+    }
+  }
+
+  return {
+    completion,
+    isTransferFinished: () => transferFinished,
+  }
+}
+
+export function createUploadHttpProgressHandler({
+  taskId,
+  fileSizeBytes,
+  onTaskUpdate,
+  onProgress,
+}: CreateUploadHttpProgressHandlerOptions) {
+  return (loaded: number, total: number) => {
+    const progress = total > 0 ? Math.round((loaded / total) * 100) : 0
+    const displayLoaded = Math.min(loaded, fileSizeBytes)
+
+    onTaskUpdate(taskId, {
+      progress,
+      bytesTransferred: displayLoaded,
+      status: "uploading",
+      stage: "stream",
+    })
+    onProgress?.(loaded, total)
+  }
 }
 
 export function sendTransferCancelMessage(socket: WebSocket | undefined, taskId: string): boolean {
