@@ -17,7 +17,7 @@ export const routePolicies: RoutePolicy[] = [
   { pattern: /^\/dashboard\/sftp(?:\/|$)/, requiredCapabilities: ["sftp"], fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/storage(?:\/|$)/, requiredCapabilities: ["sftp"], fallbackPath: "/dashboard/servers" },
   { pattern: /^\/dashboard\/transfers(?:\/|$)/, requiredCapabilities: ["transfers"], fallbackPath: "/dashboard/servers" },
-  { pattern: /^\/dashboard\/terminal(?:\/|$)/, requiredCapabilities: ["terminal"], profiles: ["desktop"], fallbackPath: "/dashboard/servers" },
+  { pattern: /^\/dashboard\/terminal(?:\/|$)/, requiredCapabilities: ["terminal"], fallbackPath: "/dashboard/servers" },
 ]
 
 export function getRoutePolicy(pathname: string | null | undefined) {

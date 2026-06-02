@@ -586,6 +586,16 @@ input:focus {
   white-space: nowrap;
 }
 
+.status-strip .workspace-badge {
+  flex: 0 1 auto;
+  max-width: 360px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent), transparent 58%);
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent), transparent 90%);
+}
+
 .settings-popover {
   position: fixed;
   top: 56px;

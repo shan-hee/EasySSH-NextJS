@@ -11,9 +11,9 @@ import type {
   SshWorkspaceSessionStoreAdapter,
   SshWorkspaceSettingsAdapter,
   SshWorkspaceThemeAdapter,
+  SshWorkspaceTransferHistoryAdapter,
   SshWorkspaceTransferManager,
   WorkspaceSessionSnapshot,
-  WorkspaceTransferHistoryAdapter,
   WorkspaceTransferHistoryItem,
   WorkspaceTransferHistoryListResult,
   WorkspaceTransferHistoryStatistics,
@@ -308,7 +308,7 @@ export function mapFileTransferStatisticsToWorkspaceStatistics(
 
 export function createWorkspaceTransferHistoryAdapter(
   api: FileTransfersApiLike,
-): WorkspaceTransferHistoryAdapter {
+): SshWorkspaceTransferHistoryAdapter {
   return {
     async list(params) {
       const response = await api.list({

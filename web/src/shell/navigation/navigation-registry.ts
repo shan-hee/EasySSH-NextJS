@@ -63,7 +63,6 @@ const core: NavigationItemDefinition[] = [
     titleKey: "terminal",
     url: "/dashboard/terminal",
     icon: Terminal,
-    profiles: ["desktop"],
     requiredCapabilities: ["terminal"],
   },
   {

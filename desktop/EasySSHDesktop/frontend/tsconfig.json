@@ -1,5 +1,11 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@easyssh/ssh-workspace": ["../../../web/packages/ssh-workspace/src/index.ts"],
+      "@easyssh/ssh-workspace/desktop": ["../../../web/packages/ssh-workspace/src/desktop.ts"],
+      "@/*": ["../../../web/src/*"]
+    },
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],

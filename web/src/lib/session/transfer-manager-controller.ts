@@ -340,7 +340,7 @@ export function createFileTransferController({
                   error: "连接断开",
                 })
               }
-              return prev
+              return [...prev]
             })
           },
           logError: runtimeLogError,

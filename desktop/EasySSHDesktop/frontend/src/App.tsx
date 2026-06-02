@@ -1,5 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DesktopRuntimeInfo, DesktopService } from '../bindings/github.com/easyssh/easyssh-desktop'
+import {
+  DEFAULT_SFTP_DOWNLOAD_EXCLUDE_PATTERNS,
+  createWorkspaceCapabilitiesFromRuntime,
+  SshWorkspace,
+  useOptionalSshWorkspace,
+} from '@easyssh/ssh-workspace/desktop'
+import type {
+  SshWorkspaceAdapters,
+  SshWorkspaceI18n,
+  SshWorkspaceNotifier,
+  SshWorkspacePreferenceAdapter,
+  SshWorkspaceSessionController,
+  SshWorkspaceThemeAdapter,
+  SftpWorkspaceSession,
+  WorkspaceSessionSeed,
+  WorkspaceSessionSnapshot,
+  WorkspaceTerminalSession,
+  WorkspaceTransferTask,
+  RuntimeInfo,
+} from '@easyssh/ssh-workspace/desktop'
 
 type ThemeMode = 'dark' | 'light'
 type DensityMode = 'comfortable' | 'compact'
@@ -21,6 +41,7 @@ interface WorkspaceSession {
   path: string
   status: SessionStatus
   lastSeen: string
+  lastActivity: number
   files: WorkspaceFile[]
   terminalLines: string[]
 }
@@ -93,6 +114,7 @@ const initialSessions: WorkspaceSession[] = [
     path: '/var/www',
     status: 'connected',
     lastSeen: 'active',
+    lastActivity: Date.now() - 120000,
     files: createFiles('/var/www'),
     terminalLines: createTerminalLines('deploy', 'production.internal', '/var/www', 'connected'),
   },
@@ -104,6 +126,7 @@ const initialSessions: WorkspaceSession[] = [
     path: '/srv/app',
     status: 'idle',
     lastSeen: 'ready',
+    lastActivity: Date.now() - 240000,
     files: createFiles('/srv/app'),
     terminalLines: createTerminalLines('deploy', 'staging.internal', '/srv/app', 'idle'),
   },
@@ -114,12 +137,230 @@ const initialTransfers: TransferTask[] = [
   { id: 'backup', name: 'backup.sql', status: 'queued', progress: 12, target: 'staging' },
 ]
 
+const cloneWorkspaceSession = (session: WorkspaceSession): WorkspaceSession => ({
+  ...session,
+  files: session.files.map((file) => ({ ...file })),
+  terminalLines: [...session.terminalLines],
+})
+
+const cloneInitialWorkspaceSessions = () => initialSessions.map(cloneWorkspaceSession)
+
 const normalizePath = (value: string) => {
   const path = value.trim() || '/'
   return path.startsWith('/') ? path : `/${path}`
 }
 
 const sessionIdFor = (user: string, host: string) => `${user}@${host}`.replace(/[^a-zA-Z0-9@._-]/g, '-')
+
+const buildWorkspaceRuntime = (runtime: DesktopRuntimeInfo | null): RuntimeInfo | null => {
+  if (!runtime) {
+    return null
+  }
+
+  return {
+    profile: runtime.profile === 'web' ? 'web' : 'desktop',
+    principal: {
+      kind: 'local_owner',
+      role: 'owner',
+    },
+    single_user: true,
+    portable: !!runtime.capabilities.portable_mode,
+    managed: false,
+    data_dir: runtime.dataDir,
+    version: runtime.version,
+    capabilities: runtime.capabilities,
+  }
+}
+
+const mapSessionStatusToConnectionPhase = (status: SessionStatus) => {
+  if (status === 'connected') {
+    return 'ready' as const
+  }
+
+  if (status === 'connecting') {
+    return 'ssh_connecting' as const
+  }
+
+  return 'idle' as const
+}
+
+const mapTerminalSessionToSessionStatus = (session: WorkspaceTerminalSession): SessionStatus => {
+  if (session.status === 'connected' || session.connectionPhase === 'ready') {
+    return 'connected'
+  }
+
+  if (
+    session.shouldConnect ||
+    session.status === 'reconnecting' ||
+    session.connectionPhase === 'ticket' ||
+    session.connectionPhase === 'ws_connecting' ||
+    session.connectionPhase === 'ssh_connecting' ||
+    session.connectionPhase === 'authenticating' ||
+    session.connectionPhase === 'reconnecting'
+  ) {
+    return 'connecting'
+  }
+
+  return 'idle'
+}
+
+const mapSftpSessionToSessionStatus = (session: SftpWorkspaceSession): SessionStatus => {
+  if (session.isLoading) {
+    return 'connecting'
+  }
+
+  return session.isConnected ? 'connected' : 'idle'
+}
+
+const mapSessionToTerminalSession = (
+  session: WorkspaceSession,
+): WorkspaceTerminalSession => ({
+  id: session.id,
+  serverId: session.id,
+  serverName: session.label,
+  host: session.host,
+  username: session.user,
+  port: undefined,
+  shouldConnect: session.status !== 'idle',
+  connectionPhase: mapSessionStatusToConnectionPhase(session.status),
+  status: session.status === 'connected' ? 'connected' : session.status === 'connecting' ? 'reconnecting' : 'disconnected',
+  lastActivity: session.lastActivity,
+  type: session.status === 'idle' ? 'quick' : 'terminal',
+  pinned: session.status === 'connected',
+})
+
+const mapSessionToSftpSession = (
+  session: WorkspaceSession,
+): SftpWorkspaceSession => ({
+  id: session.id,
+  serverId: session.id,
+  serverName: session.label,
+  host: session.host,
+  username: session.user,
+  label: session.label,
+  color: session.status === 'connected' ? 'var(--ok)' : 'var(--muted)',
+  currentPath: session.path,
+  files: session.files.map((file) => ({
+    name: file.name,
+    type: file.kind,
+    size: file.size,
+    sizeBytes: file.kind === 'directory' ? 0 : Number.parseInt(file.size.replace(/[^0-9]/g, ''), 10) || 0,
+    modified: session.lastSeen,
+    permissions: file.kind === 'directory' ? 'drwxr-xr-x' : '-rw-r--r--',
+  })),
+  isConnected: session.status === 'connected',
+  isLoading: session.status === 'connecting',
+})
+
+const createWorkspaceSessionFromTerminalSession = (
+  session: WorkspaceTerminalSession,
+  fallback?: WorkspaceSession,
+): WorkspaceSession => {
+  const status = mapTerminalSessionToSessionStatus(session)
+  const host = session.host || fallback?.host || 'localhost'
+  const user = session.username || fallback?.user || 'user'
+  const path = fallback?.path ?? '/home/user'
+  const label = session.serverName || fallback?.label || host.split('.')[0] || session.id
+
+  return {
+    id: session.id,
+    label,
+    host,
+    user,
+    path,
+    status,
+    lastSeen: status === 'connected' ? 'active' : status === 'connecting' ? 'connecting' : 'ready',
+    lastActivity: session.lastActivity ?? fallback?.lastActivity ?? Date.now(),
+    files: fallback?.files.map((file) => ({ ...file })) ?? createFiles(path),
+    terminalLines: createTerminalLines(user, host, path, status),
+  }
+}
+
+const createWorkspaceSessionFromSftpSession = (
+  session: SftpWorkspaceSession,
+  fallback?: WorkspaceSession,
+): WorkspaceSession => {
+  const status = mapSftpSessionToSessionStatus(session)
+  const host = session.host || fallback?.host || 'localhost'
+  const user = session.username || fallback?.user || 'user'
+  const path = session.currentPath || fallback?.path || '/'
+  const label = session.label || session.serverName || fallback?.label || host.split('.')[0] || session.id
+  const files = session.files.length > 0
+    ? session.files.map((file) => ({
+        name: file.name,
+        kind: file.type,
+        size: file.size,
+      }))
+    : fallback?.files.map((file) => ({ ...file })) ?? createFiles(path)
+
+  return {
+    id: session.id,
+    label,
+    host,
+    user,
+    path,
+    status,
+    lastSeen: status === 'connected' ? 'active' : status === 'connecting' ? 'connecting' : 'ready',
+    lastActivity: fallback?.lastActivity ?? Date.now(),
+    files,
+    terminalLines: createTerminalLines(user, host, path, status),
+  }
+}
+
+const mapTransferToWorkspaceTransferTask = (task: TransferTask): WorkspaceTransferTask => ({
+  id: task.id,
+  fileName: task.name,
+  fileSize: `${task.progress}%`,
+  fileSizeBytes: task.progress,
+  progress: task.progress,
+  status: task.status === 'completed'
+    ? 'completed'
+    : task.status === 'cancelled'
+      ? 'cancelled'
+      : task.status === 'queued'
+        ? 'pending'
+        : 'uploading',
+  type: 'upload',
+  sourceServer: 'desktop',
+  targetServer: task.target,
+  transferMethod: 'sftp',
+  stage: 'http',
+})
+
+const buildWorkspaceSnapshot = (
+  sessions: WorkspaceSession[],
+  transfers: TransferTask[],
+  activeSessionId: string | null,
+): WorkspaceSessionSnapshot => ({
+  terminalSessions: sessions.map(mapSessionToTerminalSession),
+  sftpSessions: sessions.map(mapSessionToSftpSession),
+  transferTasks: transfers.map(mapTransferToWorkspaceTransferTask),
+  activeSessionId,
+})
+
+const buildWorkspaceSessionSeeds = (sessions: WorkspaceSession[]): WorkspaceSessionSeed[] => (
+  sessions.map((session) => ({
+    serverId: session.id,
+    serverName: session.label,
+    host: session.host,
+    username: session.user,
+    initialPath: session.path,
+  }))
+)
+
+function WorkspaceMountBadge() {
+  const workspace = useOptionalSshWorkspace()
+
+  if (!workspace) {
+    return null
+  }
+
+  return (
+    <span className="workspace-badge">
+      {workspace.layout} workspace · {workspace.snapshot.terminalSessions.length} terminals · {workspace.snapshot.sftpSessions.length} sftp · {workspace.snapshot.transferTasks.length} transfers
+    </span>
+  )
+}
 
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => (
@@ -130,12 +371,248 @@ function App() {
   ))
   const [runtime, setRuntime] = useState<DesktopRuntimeInfo | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sessions, setSessions] = useState<WorkspaceSession[]>(initialSessions)
-  const [activeSessionId, setActiveSessionId] = useState(initialSessions[0].id)
+  const [sessions, setSessions] = useState<WorkspaceSession[]>(() => cloneInitialWorkspaceSessions())
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(initialSessions[0].id)
   const [transfers, setTransfers] = useState<TransferTask[]>(initialTransfers)
   const [quickHost, setQuickHost] = useState(initialSessions[0].host)
   const [quickUser, setQuickUser] = useState(initialSessions[0].user)
   const [quickPath, setQuickPath] = useState(initialSessions[0].path)
+  const sessionsRef = useRef(sessions)
+  sessionsRef.current = sessions
+  const activeSessionIdRef = useRef<string | null>(activeSessionId)
+  activeSessionIdRef.current = activeSessionId
+  const workspaceRuntime = useMemo(() => buildWorkspaceRuntime(runtime), [runtime])
+  const workspaceCapabilities = useMemo(() => createWorkspaceCapabilitiesFromRuntime(workspaceRuntime, {
+    defaults: {
+      terminal: true,
+      sftp: true,
+      transfers: true,
+      ai: true,
+      monitor: true,
+      docker: true,
+      fullscreen: true,
+      crossSessionDrag: true,
+    },
+  }), [workspaceRuntime])
+  const workspaceSnapshot = useMemo(
+    () => buildWorkspaceSnapshot(sessions, transfers, activeSessionId),
+    [activeSessionId, sessions, transfers],
+  )
+  const workspaceSnapshotRef = useRef(workspaceSnapshot)
+  workspaceSnapshotRef.current = workspaceSnapshot
+  const workspaceSnapshotListenersRef = useRef(new Set<(snapshot: WorkspaceSessionSnapshot) => void>())
+
+  useEffect(() => {
+    workspaceSnapshotListenersRef.current.forEach((listener) => {
+      listener(workspaceSnapshotRef.current)
+    })
+  }, [workspaceSnapshot])
+
+  const workspaceSessionStore = useMemo<SshWorkspaceAdapters["sessionStore"]>(() => ({
+    getSnapshot: () => workspaceSnapshotRef.current,
+    subscribe: (listener) => {
+      workspaceSnapshotListenersRef.current.add(listener)
+      listener(workspaceSnapshotRef.current)
+      return () => {
+        workspaceSnapshotListenersRef.current.delete(listener)
+      }
+    },
+  }), [])
+
+  const syncWorkspaceSelection = useCallback((nextSessions: WorkspaceSession[], preferredSessionId: string | null = activeSessionIdRef.current) => {
+    const resolvedSession = nextSessions.find((session) => session.id === preferredSessionId)
+      ?? nextSessions[0]
+      ?? null
+
+    setActiveSessionId(resolvedSession?.id ?? null)
+
+    if (resolvedSession) {
+      setQuickHost(resolvedSession.host)
+      setQuickUser(resolvedSession.user)
+      setQuickPath(resolvedSession.path)
+      return
+    }
+
+    setQuickHost('localhost')
+    setQuickUser('user')
+    setQuickPath('/')
+  }, [])
+
+  const commitWorkspaceSessions = useCallback((nextSessions: WorkspaceSession[], preferredSessionId: string | null = activeSessionIdRef.current) => {
+    setSessions(nextSessions)
+    syncWorkspaceSelection(nextSessions, preferredSessionId)
+  }, [syncWorkspaceSelection])
+
+  const activateWorkspaceSession = useCallback((sessionId: string | null) => {
+    syncWorkspaceSelection(sessionsRef.current, sessionId)
+  }, [syncWorkspaceSelection])
+
+  const closeWorkspaceSession = useCallback((sessionId: string) => {
+    const remainingSessions = sessionsRef.current.filter((session) => session.id !== sessionId)
+    commitWorkspaceSessions(remainingSessions, activeSessionIdRef.current === sessionId ? null : activeSessionIdRef.current)
+  }, [commitWorkspaceSessions])
+
+  const resetWorkspaceSessions = useCallback(() => {
+    const nextSessions = cloneInitialWorkspaceSessions()
+    commitWorkspaceSessions(nextSessions, nextSessions[0]?.id ?? null)
+  }, [commitWorkspaceSessions])
+
+  const workspaceSessionController = useMemo<SshWorkspaceSessionController>(() => ({
+    terminal: {
+      getSessions: () => workspaceSnapshotRef.current.terminalSessions,
+      getActiveSessionId: () => activeSessionIdRef.current,
+      setSessions: (updater) => {
+        const currentSessions = sessionsRef.current
+        const currentTerminalSessions = currentSessions.map(mapSessionToTerminalSession)
+        const nextTerminalSessions = typeof updater === 'function'
+          ? updater(currentTerminalSessions)
+          : updater
+
+        const nextSessions = nextTerminalSessions.map((session) => createWorkspaceSessionFromTerminalSession(
+          session,
+          currentSessions.find((item) => item.id === session.id),
+        ))
+
+        commitWorkspaceSessions(nextSessions, activeSessionIdRef.current)
+      },
+      addSession: (session) => {
+        const currentSessions = sessionsRef.current
+        const nextSession = createWorkspaceSessionFromTerminalSession(
+          session,
+          currentSessions.find((item) => item.id === session.id),
+        )
+        const nextSessions = currentSessions.some((item) => item.id === session.id)
+          ? currentSessions.map((item) => item.id === session.id ? nextSession : item)
+          : [...currentSessions, nextSession]
+
+        commitWorkspaceSessions(nextSessions, session.id)
+      },
+      updateSession: (sessionId, update) => {
+        const currentSessions = sessionsRef.current
+        const nextSessions = currentSessions.map((session) => {
+          if (session.id !== sessionId) {
+            return session
+          }
+
+          return createWorkspaceSessionFromTerminalSession({
+            ...mapSessionToTerminalSession(session),
+            ...update,
+          }, session)
+        })
+
+        commitWorkspaceSessions(nextSessions, activeSessionIdRef.current)
+      },
+      activateSession: activateWorkspaceSession,
+      closeSession: closeWorkspaceSession,
+      reset: resetWorkspaceSessions,
+    },
+    sftp: {
+      getSessions: () => workspaceSnapshotRef.current.sftpSessions,
+      getActiveSessionId: () => activeSessionIdRef.current,
+      setSessions: (updater) => {
+        const currentSessions = sessionsRef.current
+        const currentSftpSessions = currentSessions.map(mapSessionToSftpSession)
+        const nextSftpSessions = typeof updater === 'function'
+          ? updater(currentSftpSessions)
+          : updater
+
+        const nextSessions = nextSftpSessions.map((session) => createWorkspaceSessionFromSftpSession(
+          session,
+          currentSessions.find((item) => item.id === session.id),
+        ))
+
+        commitWorkspaceSessions(nextSessions, activeSessionIdRef.current)
+      },
+      addSession: (session) => {
+        const currentSessions = sessionsRef.current
+        const nextSession = createWorkspaceSessionFromSftpSession(
+          session,
+          currentSessions.find((item) => item.id === session.id),
+        )
+        const nextSessions = currentSessions.some((item) => item.id === session.id)
+          ? currentSessions.map((item) => item.id === session.id ? nextSession : item)
+          : [...currentSessions, nextSession]
+
+        commitWorkspaceSessions(nextSessions, session.id)
+      },
+      updateSession: (sessionId, update) => {
+        const currentSessions = sessionsRef.current
+        const nextSessions = currentSessions.map((session) => {
+          if (session.id !== sessionId) {
+            return session
+          }
+
+          return createWorkspaceSessionFromSftpSession({
+            ...mapSessionToSftpSession(session),
+            ...update,
+          }, session)
+        })
+
+        commitWorkspaceSessions(nextSessions, activeSessionIdRef.current)
+      },
+      activateSession: activateWorkspaceSession,
+      closeSession: closeWorkspaceSession,
+      setFullscreenSession: activateWorkspaceSession,
+      reset: resetWorkspaceSessions,
+    },
+    resetAll: resetWorkspaceSessions,
+  }), [activateWorkspaceSession, closeWorkspaceSession, commitWorkspaceSessions, resetWorkspaceSessions])
+
+  const workspaceI18n = useMemo<SshWorkspaceI18n>(() => ({
+    locale: typeof navigator !== 'undefined' ? navigator.language : 'en-US',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    t: (_namespace, key) => key,
+  }), [])
+  const workspaceNotifier = useMemo<SshWorkspaceNotifier>(() => ({
+    success: (message) => {
+      console.info('[EasySSH Desktop]', message)
+    },
+    error: (message) => {
+      console.error('[EasySSH Desktop]', message)
+    },
+    promise: <T,>(promise: Promise<T>, messages: {
+      loading: string
+      success: string | ((data: T) => string)
+      error: string | ((error: unknown) => string)
+    }) => {
+      void messages
+      return promise
+    },
+  }), [])
+  const workspacePreferences = useMemo<SshWorkspacePreferenceAdapter>(() => ({
+    getString: (key) => {
+      try {
+        return window.localStorage.getItem(key)
+      } catch {
+        return null
+      }
+    },
+    setString: (key, value) => {
+      try {
+        window.localStorage.setItem(key, value)
+      } catch {
+        void key
+        void value
+      }
+    },
+    removeString: (key) => {
+      try {
+        window.localStorage.removeItem(key)
+      } catch {
+        void key
+      }
+    },
+  }), [])
+  const workspaceTheme = useMemo<SshWorkspaceThemeAdapter>(() => ({
+    mode: theme,
+    terminalTheme: theme === 'dark' ? 'dark' : 'light',
+  }), [theme])
+  const workspaceSettings = useMemo(() => ({
+    sftp: {
+      downloadExcludePatterns: DEFAULT_SFTP_DOWNLOAD_EXCLUDE_PATTERNS,
+    },
+  }), [])
+  const workspaceSessionSeeds = useMemo(() => buildWorkspaceSessionSeeds(sessions), [sessions])
 
   useEffect(() => {
     DesktopService.RuntimeInfo()
@@ -177,19 +654,19 @@ function App() {
   ), [activeSessionId, sessions])
 
   const capabilitySummary = useMemo(() => {
-    if (!runtime) {
+    if (!workspaceRuntime) {
       return 'loading runtime'
     }
 
     return ['terminal', 'sftp', 'transfers']
-      .filter((capability) => runtime.capabilities[capability])
+      .filter((capability) => workspaceCapabilities[capability])
       .join(' / ')
-  }, [runtime])
+  }, [workspaceCapabilities, workspaceRuntime])
 
   const connectedCount = sessions.filter((session) => session.status === 'connected').length
   const activeTransfers = transfers.filter((task) => task.status === 'uploading' || task.status === 'queued').length
 
-  const openSession = () => {
+  const openSession = useCallback(() => {
     const host = quickHost.trim() || 'localhost'
     const user = quickUser.trim() || 'user'
     const path = normalizePath(quickPath)
@@ -203,6 +680,7 @@ function App() {
       path,
       status: 'connected',
       lastSeen: 'active',
+      lastActivity: Date.now(),
       files: createFiles(path),
       terminalLines: createTerminalLines(user, host, path, 'connected'),
     }
@@ -214,9 +692,9 @@ function App() {
         : [...current, session]
     })
     setActiveSessionId(id)
-  }
+  }, [quickHost, quickPath, quickUser])
 
-  const createDraftSession = () => {
+  const createDraftSession = useCallback(() => {
     const index = sessions.length + 1
     const id = `draft-${Date.now()}`
     const session: WorkspaceSession = {
@@ -227,6 +705,7 @@ function App() {
       path: '/home/user',
       status: 'idle',
       lastSeen: 'draft',
+      lastActivity: Date.now(),
       files: createFiles('/home/user'),
       terminalLines: createTerminalLines('user', 'new.server.local', '/home/user', 'idle'),
     }
@@ -236,9 +715,9 @@ function App() {
     setQuickHost(session.host)
     setQuickUser(session.user)
     setQuickPath(session.path)
-  }
+  }, [sessions.length])
 
-  const queueTransfer = () => {
+  const queueTransfer = useCallback(() => {
     const target = activeSession?.label ?? 'workspace'
     const nextIndex = transfers.length + 1
     setTransfers((current) => [{
@@ -248,24 +727,53 @@ function App() {
       progress: 4,
       target,
     }, ...current])
-  }
+  }, [activeSession?.label, transfers.length])
 
-  const cancelTransfer = (taskId: string) => {
+  const cancelTransfer = useCallback((taskId: string) => {
     setTransfers((current) => current.map((task) => (
       task.id === taskId && task.status !== 'completed'
         ? { ...task, status: 'cancelled', progress: 0 }
         : task
     )))
-  }
+  }, [])
 
-  const clearFinishedTransfers = () => {
+  const clearFinishedTransfers = useCallback(() => {
     setTransfers((current) => current.filter((task) => (
       task.status !== 'completed' && task.status !== 'cancelled'
     )))
-  }
+  }, [])
+
+  const workspaceTransferManager = useMemo(() => ({
+    tasks: workspaceSnapshot.transferTasks,
+    clearCompleted: clearFinishedTransfers,
+    cancelTask: cancelTransfer,
+  }), [clearFinishedTransfers, cancelTransfer, workspaceSnapshot.transferTasks])
+
+  const workspaceAdapters = useMemo<SshWorkspaceAdapters>(() => ({
+    i18n: workspaceI18n,
+    notifier: workspaceNotifier,
+    theme: workspaceTheme,
+    panes: {
+      fileManager: {
+        mountMode: 'page',
+        anchorTop: 0,
+      },
+    },
+    settings: workspaceSettings,
+    preferences: workspacePreferences,
+    transferManager: workspaceTransferManager,
+    sessionStore: workspaceSessionStore,
+    sessionController: workspaceSessionController,
+  }), [workspaceI18n, workspaceNotifier, workspacePreferences, workspaceSettings, workspaceTheme, workspaceTransferManager, workspaceSessionStore, workspaceSessionController])
 
   return (
-    <main className={`desktop-shell theme-${theme} density-${density}`}>
+    <SshWorkspace
+      adapters={workspaceAdapters}
+      capabilities={workspaceCapabilities}
+      initialSessions={workspaceSessionSeeds}
+      layout="desktop"
+    >
+      <main className={`desktop-shell theme-${theme} density-${density}`}>
       <header className="titlebar">
         <div className="brand-block">
           <div className="brand-mark">E</div>
@@ -390,6 +898,7 @@ function App() {
         <span>{connectedCount} connected</span>
         <span>{activeTransfers} active transfer</span>
         <span>{runtime ? `${runtime.platform}/${runtime.arch}` : 'runtime loading'}</span>
+        <WorkspaceMountBadge />
       </footer>
 
       {settingsOpen && (
@@ -402,7 +911,8 @@ function App() {
           <div className="settings-row data-dir"><span>Data</span><strong>{runtime?.dataDir ?? '-'}</strong></div>
         </aside>
       )}
-    </main>
+      </main>
+    </SshWorkspace>
   )
 }
 

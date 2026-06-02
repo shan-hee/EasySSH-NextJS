@@ -2,7 +2,7 @@
 
 `web/src/components/ssh-workspace` 是当前 Web 内部的可嵌入 SSH/SFTP Workspace 入口。它不实现 Dashboard 侧边栏、导航、权限、设置或运行形态判断，只提供工作台根组件、上下文和终端/SFTP/传输 UI building blocks。
 
-当前 Web 应用通过内部包名 `@easyssh/ssh-workspace` 消费这个入口；该包位于 `web/packages/ssh-workspace`，现阶段是指向本目录的 facade。后续如果继续提取源码，应优先保持该包名稳定，再逐步迁移实现文件。
+当前 Web 应用通过内部包名 `@easyssh/ssh-workspace` 消费这个入口；该包位于 `web/packages/ssh-workspace`，现阶段是指向本目录的 facade。Desktop Shell 则通过 `@easyssh/ssh-workspace/desktop` 进入轻量子入口，只拿 Workspace 根组件、context、基础 settings/capabilities/helper 和类型，不把 Web/Next 专属 barrel 一起带进去。后续如果继续提取源码，应优先保持这两个导入名稳定，再逐步迁移实现文件。
 
 当前导出的主要能力：
 
