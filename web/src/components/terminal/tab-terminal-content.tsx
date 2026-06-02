@@ -9,7 +9,7 @@
 import React, { useEffect, useState } from 'react'
 import { MonitorWebSocketProvider } from './monitor/contexts/MonitorWebSocketContext'
 import { Button } from '@/components/ui/button'
-import { Maximize2, Minimize2, Settings, FolderOpen, Activity, Bot } from 'lucide-react'
+import { FolderOpen, Activity, Bot } from 'lucide-react'
 import { NetworkLatencyPopover } from './network-latency-popover'
 import { MonitorPanel } from './monitor/MonitorPanel'
 import { WebTerminal } from './web-terminal'
@@ -88,7 +88,6 @@ interface TabTerminalContentProps {
   onConnectionPhaseChange: (phase: TerminalConnectionPhase) => void
   onAuthCancelled: () => void
   onToggleFullscreen: () => void
-  onToggleSettings: () => void
   onStartConnectionFromQuick: (server: QuickServer) => void
   onInternalBackHandlerChange?: (
     sessionId: string,
@@ -111,7 +110,6 @@ export function TabTerminalContent({
   onConnectionPhaseChange,
   onAuthCancelled,
   onToggleFullscreen,
-  onToggleSettings,
   onStartConnectionFromQuick,
   onInternalBackHandlerChange,
   onInternalBackAvailabilityChange,
@@ -154,7 +152,6 @@ export function TabTerminalContent({
   const canUseMonitorCapability = workspaceCapabilities?.monitor !== false
   const canUseAiCapability = workspaceCapabilities?.ai !== false
   const canUseDockerCapability = workspaceCapabilities?.docker !== false
-  const canUseFullscreenCapability = workspaceCapabilities?.fullscreen !== false
 
   const isDesktopMonitorOpen = tabState.isMonitorOpen
   const isMobileMonitorOpen = tabState.isMobileMonitorOpen ?? false
@@ -402,7 +399,7 @@ export function TabTerminalContent({
           {session.type !== 'quick' && !effectiveIsLoading && (
             <div
               className={cn(
-                'border-b text-sm flex items-center justify-between px-3 py-1.5 backdrop-blur-md transition-colors',
+                'border-b text-sm flex items-center px-3 py-1.5 backdrop-blur-md transition-colors',
                 'border-border/60 bg-card/45 text-foreground shadow-sm'
               )}
             >
@@ -461,34 +458,6 @@ export function TabTerminalContent({
                     <Bot className="h-3.5 w-3.5" />
                   </Button>
                 )}
-              </div>
-
-              {/* 右侧工具按钮 */}
-              <div className="flex items-center gap-1">
-                {canUseFullscreenCapability && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
-                    onClick={onToggleFullscreen}
-                    title={
-                      isFullscreen
-                        ? tTerminal("titleExitFullscreen")
-                        : tTerminal("titleEnterFullscreen")
-                    }
-                  >
-                    {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-md transition-colors text-foreground hover:bg-accent/80 hover:text-accent-foreground"
-                  onClick={onToggleSettings}
-                  title={tTerminal("titleSettings")}
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                </Button>
               </div>
             </div>
           )}

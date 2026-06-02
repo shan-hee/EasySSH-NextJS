@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { TerminalSession } from "@/components/terminal/types"
-import { Plus, Settings, X } from "lucide-react"
+import { Maximize2, Minimize2, Plus, Settings, X } from "lucide-react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -47,7 +47,7 @@ interface SessionTabBarProps {
   onTogglePin: (id: string) => void
   onReorder: (newOrderIds: string[]) => void
   isFullscreen: boolean
-  onToggleFullscreen: () => void
+  onToggleFullscreen?: () => void
   onOpenSettings?: () => void
   hideBreadcrumb?: boolean
 }
@@ -165,6 +165,8 @@ export function SessionTabBar(props: SessionTabBarProps) {
     onCloseAll,
     onTogglePin,
     onReorder,
+    isFullscreen,
+    onToggleFullscreen,
     onOpenSettings,
     hideBreadcrumb = false,
   } = props
@@ -308,6 +310,9 @@ export function SessionTabBar(props: SessionTabBarProps) {
   const onDoubleClick = (id: string) => onTogglePin(id)
 
   const activeSession = sessions.find(s => s.id === activeId)
+  const fullscreenButtonLabel = isFullscreen
+    ? tTerminal("titleExitFullscreen")
+    : tTerminal("titleEnterFullscreen")
 
   return (
     <>
@@ -532,20 +537,37 @@ export function SessionTabBar(props: SessionTabBarProps) {
             </div>
           )}
 
-          {onOpenSettings && (
+          {(onOpenSettings || onToggleFullscreen) && (
             <div className="flex items-center gap-1 border-l border-border/60 px-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground",
-                )}
-                onClick={onOpenSettings}
-                aria-label={tTerminal("ariaSettings")}
-                title={tTerminal("ariaSettings")}
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
+              {onOpenSettings && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground",
+                  )}
+                  onClick={onOpenSettings}
+                  aria-label={tTerminal("ariaSettings")}
+                  title={tTerminal("titleSettings")}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              )}
+
+              {onToggleFullscreen && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground",
+                  )}
+                  onClick={onToggleFullscreen}
+                  aria-label={fullscreenButtonLabel}
+                  title={fullscreenButtonLabel}
+                >
+                  {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
+              )}
             </div>
           )}
         </div>

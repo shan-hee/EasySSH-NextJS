@@ -18,6 +18,7 @@ import {
 import { TabTerminalContent } from "./tab-terminal-content"
 import { useTabUIStore } from "@/stores/tab-ui-store"
 import { useTranslations } from "next-intl"
+import { useOptionalSshWorkspace } from "@/components/ssh-workspace/ssh-workspace"
 
 type LoaderState = "entering" | "loading" | "exiting"
 
@@ -160,6 +161,7 @@ export function TerminalComponent({
   onBehaviorSettingsChange,
 }: TerminalComponentProps) {
   const tTerminal = useTranslations("terminal")
+  const workspace = useOptionalSshWorkspace()
   const [activeSession, setActiveSession] = useState<string>(
     externalActiveSessionId || sessions[0]?.id || ""
   )
@@ -186,6 +188,10 @@ export function TerminalComponent({
     [sessions]
   )
   const active = sessions.find((s) => s.id === activeSession)
+  const canUseFullscreenCapability = workspace?.capabilities.fullscreen !== false
+  const handleToggleFullscreen = useCallback(() => {
+    setIsFullscreen((current) => !current)
+  }, [])
 
   const setActiveSessionFromUser = useCallback((nextSessionId: string) => {
     setActiveSession((previousSessionId) => {
@@ -671,7 +677,8 @@ export function TerminalComponent({
             onTogglePin={onTogglePin}
             onReorder={onReorderSessions}
             isFullscreen={isFullscreen}
-            onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+            onToggleFullscreen={canUseFullscreenCapability ? handleToggleFullscreen : undefined}
+            onOpenSettings={() => setIsSettingsOpen(true)}
             hideBreadcrumb
           />
 
@@ -713,8 +720,7 @@ export function TerminalComponent({
                         onCommand={(command) => handleCommand(session.id, command)}
                         onConnectionPhaseChange={(phase) => onConnectionPhaseChange?.(session.id, phase)}
                         onAuthCancelled={() => onAuthCancelled?.(session.id)}
-                        onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-                        onToggleSettings={() => setIsSettingsOpen(true)}
+                        onToggleFullscreen={handleToggleFullscreen}
                         onStartConnectionFromQuick={(server) => onStartConnectionFromQuick(session.id, server)}
                         onInternalBackHandlerChange={handleInternalBackHandlerChange}
                         onInternalBackAvailabilityChange={handleInternalBackAvailabilityChange}
