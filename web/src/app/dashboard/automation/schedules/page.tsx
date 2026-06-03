@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { getErrorMessage } from "@/lib/error-utils"
@@ -28,8 +30,10 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import {
  Plus,
+ AlertTriangle,
  Calendar,
  CheckCircle,
+ Clock3,
  Pause,
  Zap,
  Search,
@@ -49,8 +53,12 @@ import { useSystemConfig } from "@/hooks/use-system-config"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 import { useTranslations } from "next-intl"
-import { StatCard } from "../../components/stat-card"
 import { createScheduledTaskColumns } from "./components/scheduled-task-columns"
+import {
+  DashboardMetricCard,
+  DashboardSideList,
+  InlineStatusBadge,
+} from "../../logs/components/log-dashboard-widgets"
 
 export default function AutomationSchedulesPage() {
  const { ready } = useAuthReady()
@@ -415,7 +423,7 @@ export default function AutomationSchedulesPage() {
  }
 
  // 格式化日期（按用户/系统时区）
- const formatDate = (dateString: string | undefined) => {
+ const formatDate = useCallback((dateString: string | undefined) => {
    if (!dateString) return "-"
    return formatInTimezone(
      dateString,
@@ -423,7 +431,7 @@ export default function AutomationSchedulesPage() {
      effectiveLocale,
      effectiveTimezone,
    )
- }
+ }, [effectiveLocale, effectiveTimezone])
 
  // 创建表格列配置
  const columns = createScheduledTaskColumns(t, {
@@ -434,62 +442,247 @@ export default function AutomationSchedulesPage() {
  formatDate,
  })
 
+ const failedTaskCount = useMemo(() => (
+ tasks.filter((task) => task.last_status === "failed").length
+ ), [tasks])
+
+ const totalFailures = useMemo(() => (
+ tasks.reduce((sum, task) => sum + (task.failure_count || 0), 0)
+ ), [tasks])
+
+ const successRate = useMemo(() => {
+ const totalRuns = statistics.totalRuns || tasks.reduce((sum, task) => sum + (task.run_count || 0), 0)
+ if (totalRuns === 0) return 100
+ return Math.max(0, Math.round(((totalRuns - totalFailures) / totalRuns) * 100))
+ }, [statistics.totalRuns, tasks, totalFailures])
+
+ const taskSpark = useMemo(() => (
+ tasks.slice(-12).map((task) => task.run_count || 0)
+ ), [tasks])
+
+ const typeCounts = useMemo(() => ({
+ command: tasks.filter((task) => task.task_type === "command").length,
+ script: tasks.filter((task) => task.task_type === "script").length,
+ batch: tasks.filter((task) => task.task_type === "batch").length,
+ }), [tasks])
+
+ const targetServerCount = useMemo(() => {
+ const serverIds = new Set<string>()
+ tasks.forEach((task) => (task.server_ids || []).forEach((id) => serverIds.add(id)))
+ return serverIds.size
+ }, [tasks])
+
+ const upcomingTasks = useMemo(() => (
+ [...tasks]
+ .filter((task) => task.enabled && task.next_run_at)
+ .sort((a, b) => new Date(a.next_run_at || 0).getTime() - new Date(b.next_run_at || 0).getTime())
+ .slice(0, 5)
+ ), [tasks])
+
+ const recentTasks = useMemo(() => (
+ [...tasks]
+ .filter((task) => task.last_run_at)
+ .sort((a, b) => new Date(b.last_run_at || 0).getTime() - new Date(a.last_run_at || 0).getTime())
+ .slice(0, 5)
+ ), [tasks])
+
+ const recentFailureItems = useMemo(() => (
+ recentTasks
+ .filter((task) => task.last_status === "failed")
+ .map((task) => ({
+ id: task.id,
+ icon: AlertTriangle,
+ title: task.task_name,
+ description: task.description || task.cron_expression,
+ time: formatDate(task.last_run_at),
+ tone: "rose" as const,
+ }))
+ ), [formatDate, recentTasks])
+
  return (
  <>
  {confirmDialog}
  <PageHeader title={t("pageTitle")} />
 
- <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
- <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
- <StatCard title={t("statsTotalTasks")} value={statistics.total} icon={Calendar} tone="emerald" loading={loading} />
- <StatCard title={t("statsEnabled")} value={statistics.enabled} icon={CheckCircle} tone="blue" loading={loading} />
- <StatCard title={t("statsDisabled")} value={statistics.disabled} icon={Pause} tone="amber" loading={loading} />
- <StatCard title={t("statsTotalRuns")} value={statistics.totalRuns} icon={Zap} tone="violet" loading={loading} />
- </div>
+ <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
+   <div className="flex flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+     <p>集中查看定时任务、执行节奏和失败风险，便于快速判断调度状态。</p>
+     <div className="flex items-center gap-2">
+       <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" />
+       <span>调度服务运行中</span>
+     </div>
+   </div>
 
- {/* 任务列表 */}
- <DataTable
- data={tasks}
- columns={columns}
- loading={loading || refreshing}
- emptyMessage={t("emptyAll")}
- className="min-h-0"
- density="compact"
- toolbar={(table) => (
- <DataTableToolbar
- table={table}
- searchKey="task_name"
- searchPlaceholder={t("searchPlaceholder")}
- filters={[
- {
- column: "enabled",
- title: t("statusFilterPlaceholder"),
- options: [
- { label: t("statusFilterEnabled"), value: "enabled" },
- { label: t("statusFilterDisabled"), value: "disabled" },
- ],
- },
- {
- column: "task_type",
- title: t("typeFilterPlaceholder"),
- options: [
- { label: t("typeCommand"), value: "command" },
- { label: t("typeScript"), value: "script" },
- { label: t("typeBatch"), value: "batch" },
- ],
- },
- ]}
- onRefresh={handleRefresh}
- showRefresh={true}
- isRefreshing={refreshing}
- >
- <Button size="sm" onClick={() => setIsDialogOpen(true)}>
- <Plus className="mr-2 h-4 w-4" />
- {t("newTask")}
- </Button>
- </DataTableToolbar>
- )}
- />
+   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+     <DashboardMetricCard title={t("statsTotalTasks")} value={statistics.total} icon={Calendar} tone="emerald" spark={taskSpark} loading={loading} />
+     <DashboardMetricCard title={t("statsEnabled")} value={statistics.enabled} icon={CheckCircle} tone="blue" spark={tasks.map((task) => task.enabled ? 1 : 0)} loading={loading} />
+     <DashboardMetricCard title={t("statsDisabled")} value={statistics.disabled} icon={Pause} tone="amber" spark={tasks.map((task) => task.enabled ? 0 : 1)} loading={loading} />
+     <DashboardMetricCard title={t("statsTotalRuns")} value={statistics.totalRuns} icon={Zap} tone="violet" spark={taskSpark} loading={loading} />
+     <DashboardMetricCard title="成功率" value={`${successRate}%`} icon={CheckCircle} tone={successRate >= 90 ? "emerald" : successRate >= 70 ? "amber" : "rose"} spark={taskSpark} loading={loading} />
+   </div>
+
+   <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.85fr)] xl:overflow-hidden">
+     <div className="flex min-h-0 flex-col gap-3">
+       <Card className="shrink-0 gap-0 p-4 sm:p-5">
+         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+           <div>
+             <h2 className="text-base font-semibold">调度时间线</h2>
+             <p className="mt-1 text-sm text-muted-foreground">最近准备执行的任务按时间排列，异常任务会在右侧聚合。</p>
+           </div>
+           <Button size="sm" onClick={() => setIsDialogOpen(true)}>
+             <Plus className="mr-2 h-4 w-4" />
+             {t("newTask")}
+           </Button>
+         </div>
+         <div className="mt-4 grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
+           {upcomingTasks.length === 0 ? (
+             <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground md:col-span-2 2xl:col-span-4">
+               {t("emptyAll")}
+             </div>
+           ) : upcomingTasks.slice(0, 4).map((task) => (
+             <div key={task.id} className="rounded-md border bg-background p-3">
+               <div className="flex items-start justify-between gap-3">
+                 <div className="min-w-0">
+                   <div className="truncate text-sm font-medium">{task.task_name}</div>
+                   <div className="mt-1 truncate text-xs text-muted-foreground">{task.cron_expression}</div>
+                 </div>
+                 <InlineStatusBadge
+                   label={task.task_type === "command" ? t("typeCommand") : task.task_type === "script" ? t("typeScript") : t("typeBatch")}
+                   tone={task.task_type === "command" ? "blue" : task.task_type === "script" ? "violet" : "amber"}
+                 />
+               </div>
+               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                 <span>{formatDate(task.next_run_at)}</span>
+                 <span className="tabular-nums">{(task.server_ids || []).length} 台</span>
+               </div>
+             </div>
+           ))}
+         </div>
+       </Card>
+
+       <DataTable
+         data={tasks}
+         columns={columns}
+         loading={loading || refreshing}
+         emptyMessage={t("emptyAll")}
+         className="min-h-0"
+         density="compact"
+         toolbar={(table) => (
+           <DataTableToolbar
+             table={table}
+             searchKey="task_name"
+             searchPlaceholder={t("searchPlaceholder")}
+             filters={[
+               {
+                 column: "enabled",
+                 title: t("statusFilterPlaceholder"),
+                 options: [
+                   { label: t("statusFilterEnabled"), value: "enabled" },
+                   { label: t("statusFilterDisabled"), value: "disabled" },
+                 ],
+               },
+               {
+                 column: "task_type",
+                 title: t("typeFilterPlaceholder"),
+                 options: [
+                   { label: t("typeCommand"), value: "command" },
+                   { label: t("typeScript"), value: "script" },
+                   { label: t("typeBatch"), value: "batch" },
+                 ],
+               },
+             ]}
+             onRefresh={handleRefresh}
+             showRefresh={true}
+             isRefreshing={refreshing}
+           >
+             <Button size="sm" onClick={() => setIsDialogOpen(true)}>
+               <Plus className="mr-2 h-4 w-4" />
+               {t("newTask")}
+             </Button>
+           </DataTableToolbar>
+         )}
+       />
+     </div>
+
+     <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
+       <Card className="gap-0 p-4 sm:p-5">
+         <div className="flex items-center justify-between gap-3">
+           <h2 className="text-base font-semibold">任务健康度</h2>
+           <InlineStatusBadge label={failedTaskCount === 0 ? "稳定" : "需关注"} tone={failedTaskCount === 0 ? "emerald" : "rose"} />
+         </div>
+         <div className="mt-4 space-y-4">
+           <div>
+             <div className="mb-2 flex items-center justify-between text-sm">
+               <span className="text-muted-foreground">执行成功率</span>
+               <span className="font-semibold tabular-nums">{successRate}%</span>
+             </div>
+             <Progress value={successRate} className="h-2" />
+           </div>
+           <div className="grid grid-cols-2 gap-2 text-sm">
+             <div className="rounded-md bg-muted/50 p-3">
+               <div className="text-xs text-muted-foreground">失败任务</div>
+               <div className="mt-1 font-semibold tabular-nums">{failedTaskCount}</div>
+             </div>
+             <div className="rounded-md bg-muted/50 p-3">
+               <div className="text-xs text-muted-foreground">目标服务器</div>
+               <div className="mt-1 font-semibold tabular-nums">{targetServerCount}</div>
+             </div>
+           </div>
+         </div>
+       </Card>
+
+       <Card className="gap-0 p-4 sm:p-5">
+         <h2 className="text-base font-semibold">任务类型分布</h2>
+         <div className="mt-4 space-y-3 text-sm">
+           {[
+             { label: t("typeCommand"), value: typeCounts.command, tone: "blue" as const },
+             { label: t("typeScript"), value: typeCounts.script, tone: "violet" as const },
+             { label: t("typeBatch"), value: typeCounts.batch, tone: "amber" as const },
+           ].map((item) => {
+             const percent = statistics.total > 0 ? Math.round((item.value / statistics.total) * 100) : 0
+             return (
+               <div key={item.label} className="space-y-1.5">
+                 <div className="flex items-center justify-between gap-3">
+                   <InlineStatusBadge label={item.label} tone={item.tone} />
+                   <span className="text-muted-foreground tabular-nums">{item.value} / {percent}%</span>
+                 </div>
+                 <Progress value={percent} className="h-1.5" />
+               </div>
+             )
+           })}
+         </div>
+       </Card>
+
+       <DashboardSideList
+         title="最近异常"
+         empty="暂无失败执行"
+         items={recentFailureItems}
+       />
+
+       <Card className="gap-0 p-4 sm:p-5">
+         <div className="flex items-center justify-between gap-3">
+           <h2 className="text-base font-semibold">最近执行</h2>
+           <Clock3 className="h-4 w-4 text-muted-foreground" />
+         </div>
+         <div className="mt-4 space-y-2">
+           {recentTasks.length === 0 ? (
+             <div className="py-8 text-center text-sm text-muted-foreground">{t("emptyAll")}</div>
+           ) : recentTasks.map((task) => (
+             <div key={task.id} className="flex items-start justify-between gap-3 rounded-md px-1 py-2 hover:bg-accent">
+               <div className="min-w-0">
+                 <div className="truncate text-sm font-medium">{task.task_name}</div>
+                 <div className="truncate text-xs text-muted-foreground">{formatDate(task.last_run_at)}</div>
+               </div>
+               <InlineStatusBadge
+                 label={task.last_status === "failed" ? t("lastStatusFailed") : task.last_status === "success" ? t("lastStatusSuccess") : t("statusPending")}
+                 tone={task.last_status === "failed" ? "rose" : task.last_status === "success" ? "emerald" : "slate"}
+               />
+             </div>
+           ))}
+         </div>
+       </Card>
+     </div>
+   </div>
  </div>
 
  {/* 新建任务对话框 */}

@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
 import { getErrorMessage } from "@/lib/error-utils"
 import {
@@ -44,7 +46,25 @@ import { useUserColumns } from "./components/user-columns"
 import { usePermissionColumns, staticPermissions } from "./components/permission-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
-import { StatCard } from "../components/stat-card"
+import {
+  DashboardMetricCard,
+  DashboardSideList,
+  InlineStatusBadge,
+} from "../logs/components/log-dashboard-widgets"
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function isLockedUser(user: UserDetail) {
+  if (!user.locked_until) return false
+  return new Date(user.locked_until) > new Date()
+}
+
+function formatUserTime(value?: string) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
 
 export default function UsersPage() {
   const t = useTranslations("users")
@@ -571,117 +591,281 @@ export default function UsersPage() {
     },
   ]
 
+  const lockedUsers = useMemo(() => users.filter(isLockedUser), [users])
+
+  const recentActiveUsers = useMemo(() => {
+    const threshold = Date.now() - 7 * DAY_MS
+    return users.filter((user) => {
+      if (!user.last_login_at) return false
+      const loginTime = new Date(user.last_login_at).getTime()
+      return !Number.isNaN(loginTime) && loginTime >= threshold
+    })
+  }, [users])
+
+  const userSpark = useMemo(() => [
+    statistics.viewerUsers,
+    statistics.normalUsers,
+    statistics.adminUsers,
+    recentActiveUsers.length,
+    users.length,
+  ], [recentActiveUsers.length, statistics.adminUsers, statistics.normalUsers, statistics.viewerUsers, users.length])
+
+  const roleDistribution = useMemo(() => [
+    { label: t("filterRoleAdmin"), value: statistics.adminUsers, tone: "violet" as const },
+    { label: t("filterRoleUser"), value: statistics.normalUsers, tone: "blue" as const },
+    { label: t("filterRoleViewer"), value: statistics.viewerUsers, tone: "slate" as const },
+  ], [statistics.adminUsers, statistics.normalUsers, statistics.viewerUsers, t])
+
+  const permissionModuleStats = useMemo(() => {
+    const labels: Record<Permission["module"], string> = {
+      server: t("permModuleServer"),
+      file: t("permModuleFile"),
+      terminal: t("permModuleTerminal"),
+      audit: t("permModuleAudit"),
+      system: t("permModuleSystem"),
+    }
+
+    return (["server", "file", "terminal", "audit", "system"] as Permission["module"][]).map((module) => ({
+      module,
+      label: labels[module],
+      count: permissions.filter((permission) => permission.module === module).length,
+    }))
+  }, [permissions, t])
+
+  const rolePermissionCoverage = useMemo(() => ([
+    { label: t("filterRoleAdmin"), role: "admin" as const, tone: "violet" as const },
+    { label: t("filterRoleUser"), role: "user" as const, tone: "blue" as const },
+    { label: t("filterRoleViewer"), role: "viewer" as const, tone: "slate" as const },
+  ].map((item) => ({
+    ...item,
+    count: permissions.filter((permission) => permission.roles.includes(item.role)).length,
+    percent: permissions.length > 0
+      ? Math.round((permissions.filter((permission) => permission.roles.includes(item.role)).length / permissions.length) * 100)
+      : 0,
+  }))), [permissions, t])
+
+  const recentLoginItems = useMemo(() => (
+    [...users]
+      .filter((user) => user.last_login_at)
+      .sort((a, b) => new Date(b.last_login_at || 0).getTime() - new Date(a.last_login_at || 0).getTime())
+      .slice(0, 5)
+      .map((user) => ({
+        id: user.id,
+        icon: user.role === "admin" ? Shield : user.role === "viewer" ? Eye : Users,
+        title: user.username,
+        description: user.email,
+        time: formatUserTime(user.last_login_at),
+        tone: user.role === "admin" ? "violet" as const : user.role === "viewer" ? "slate" as const : "blue" as const,
+      }))
+  ), [users])
+
   return (
     <>
       {confirmDialog}
       <PageHeader title={t("pageTitle")} />
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
-        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard title={t("statsTotalUsers")} value={statistics.totalUsers} icon={Users} tone="emerald" loading={loading} />
-          <StatCard title={t("statsAdmins")} value={statistics.adminUsers} icon={Shield} tone="violet" loading={loading} />
-          <StatCard title={t("statsNormalUsers")} value={statistics.normalUsers} icon={Users} tone="blue" loading={loading} />
-          <StatCard title={t("statsViewers")} value={statistics.viewerUsers} icon={Eye} tone="cyan" loading={loading} />
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
+        <div className="flex flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+          <p>集中维护团队成员、角色权限和账号风险，保持小团队协作边界清晰。</p>
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" />
+            <span>组织状态正常</span>
+          </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "users" | "permissions")} className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="w-fit">
-            <TabsTrigger value="users" className="gap-2">
-              <Users className="h-4 w-4" />
-              {t("tabUsers")}
-            </TabsTrigger>
-            <TabsTrigger value="permissions" className="gap-2">
-              <KeyRound className="h-4 w-4" />
-              {t("tabPermissions")}
-            </TabsTrigger>
-          </TabsList>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+          <DashboardMetricCard title={t("statsTotalUsers")} value={statistics.totalUsers} icon={Users} tone="emerald" spark={userSpark} loading={loading} />
+          <DashboardMetricCard title="近 7 天活跃" value={recentActiveUsers.length} icon={Users} tone="blue" spark={userSpark} loading={loading} />
+          <DashboardMetricCard title={t("statsAdmins")} value={statistics.adminUsers} icon={Shield} tone="violet" spark={userSpark} loading={loading} />
+          <DashboardMetricCard title="锁定账户" value={lockedUsers.length} icon={Shield} tone={lockedUsers.length > 0 ? "rose" : "slate"} spark={lockedUsers.map(() => 1)} loading={loading} />
+          <DashboardMetricCard title={t("tabPermissions")} value={permissions.length} icon={KeyRound} tone="amber" spark={permissionModuleStats.map((item) => item.count)} loading={loading} />
+        </div>
 
-          {/* 用户列表 Tab */}
-          <TabsContent value="users" className="mt-3 min-h-0 flex-1 overflow-hidden">
-            <DataTable
-                data={users}
-                columns={columns}
-                loading={loading || refreshing}
-                emptyMessage={t("tableEmpty")}
-                enableRowSelection={true}
-                className="min-h-0"
-                density="compact"
-                toolbar={(table) => (
-                  <DataTableToolbar
-                    table={table}
-                    searchKey="username"
-                    searchPlaceholder={t("searchPlaceholder")}
-                    filters={roleFilters}
-                    onRefresh={handleRefresh}
-                    showRefresh={true}
-                    isRefreshing={refreshing}
-                  >
-                    <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      {t("btnNewUser")}
-                    </Button>
-                  </DataTableToolbar>
-                )}
-                batchActions={(table) => (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      const selectedRows = table.getFilteredSelectedRowModel().rows
-                      const userIds = selectedRows.map(row => row.original.id)
-                      handleBatchDelete(userIds)
-                    }}
-                    className="h-7"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {t("batchDelete")}
-                  </Button>
-                )}
-            />
-          </TabsContent>
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(340px,0.9fr)] xl:overflow-hidden">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "users" | "permissions")} className="flex min-h-0 flex-col">
+            <div className="flex shrink-0 flex-col gap-3 rounded-md border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <div>
+                <h2 className="text-base font-semibold">成员与权限工作区</h2>
+                <p className="mt-1 text-sm text-muted-foreground">在同一工作区维护成员账号、角色策略和模块授权。</p>
+              </div>
+              <TabsList className="w-fit">
+                <TabsTrigger value="users" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  {t("tabUsers")}
+                </TabsTrigger>
+                <TabsTrigger value="permissions" className="gap-2">
+                  <KeyRound className="h-4 w-4" />
+                  {t("tabPermissions")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          {/* 权限列表 Tab */}
-          <TabsContent value="permissions" className="mt-3 min-h-0 flex-1 overflow-hidden">
-            <DataTable
-                data={permissions}
-                columns={permissionColumns}
-                loading={loading}
-                emptyMessage={t("permTableEmpty")}
-                enableRowSelection={true}
-                className="min-h-0"
-                density="compact"
-                toolbar={(table) => (
-                  <DataTableToolbar
-                    table={table}
-                    searchKey="name"
-                    searchPlaceholder={t("permSearchPlaceholder")}
-                    filters={moduleFilters}
-                    showRefresh={false}
-                  >
-                    <Button size="sm" onClick={handleOpenPermCreateDialog}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      {t("permBtnNew")}
+            {/* 用户列表 Tab */}
+            <TabsContent value="users" className="mt-3 min-h-0 flex-1 overflow-hidden">
+              <DataTable
+                  data={users}
+                  columns={columns}
+                  loading={loading || refreshing}
+                  emptyMessage={t("tableEmpty")}
+                  enableRowSelection={true}
+                  className="min-h-0"
+                  density="compact"
+                  toolbar={(table) => (
+                    <DataTableToolbar
+                      table={table}
+                      searchKey="username"
+                      searchPlaceholder={t("searchPlaceholder")}
+                      filters={roleFilters}
+                      onRefresh={handleRefresh}
+                      showRefresh={true}
+                      isRefreshing={refreshing}
+                    >
+                      <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        {t("btnNewUser")}
+                      </Button>
+                    </DataTableToolbar>
+                  )}
+                  batchActions={(table) => (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        const selectedRows = table.getFilteredSelectedRowModel().rows
+                        const userIds = selectedRows.map(row => row.original.id)
+                        handleBatchDelete(userIds)
+                      }}
+                      className="h-7"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {t("batchDelete")}
                     </Button>
-                  </DataTableToolbar>
-                )}
-                batchActions={(table) => (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      const selectedRows = table.getFilteredSelectedRowModel().rows
-                      const permissionIds = selectedRows.map(row => row.original.id)
-                      handleBatchDeletePermissions(permissionIds)
-                    }}
-                    className="h-7"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {t("batchDelete")}
-                  </Button>
-                )}
+                  )}
+              />
+            </TabsContent>
+
+            {/* 权限列表 Tab */}
+            <TabsContent value="permissions" className="mt-3 min-h-0 flex-1 overflow-hidden">
+              <DataTable
+                  data={permissions}
+                  columns={permissionColumns}
+                  loading={loading}
+                  emptyMessage={t("permTableEmpty")}
+                  enableRowSelection={true}
+                  className="min-h-0"
+                  density="compact"
+                  toolbar={(table) => (
+                    <DataTableToolbar
+                      table={table}
+                      searchKey="name"
+                      searchPlaceholder={t("permSearchPlaceholder")}
+                      filters={moduleFilters}
+                      showRefresh={false}
+                    >
+                      <Button size="sm" onClick={handleOpenPermCreateDialog}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        {t("permBtnNew")}
+                      </Button>
+                    </DataTableToolbar>
+                  )}
+                  batchActions={(table) => (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        const selectedRows = table.getFilteredSelectedRowModel().rows
+                        const permissionIds = selectedRows.map(row => row.original.id)
+                        handleBatchDeletePermissions(permissionIds)
+                      }}
+                      className="h-7"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {t("batchDelete")}
+                    </Button>
+                  )}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
+            <Card className="gap-0 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold">角色分布</h2>
+                <InlineStatusBadge label={`${statistics.totalUsers} 人`} tone="emerald" />
+              </div>
+              <div className="mt-4 space-y-3 text-sm">
+                {roleDistribution.map((item) => {
+                  const percent = statistics.totalUsers > 0 ? Math.round((item.value / statistics.totalUsers) * 100) : 0
+                  return (
+                    <div key={item.label} className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <InlineStatusBadge label={item.label} tone={item.tone} />
+                        <span className="text-muted-foreground tabular-nums">{item.value} / {percent}%</span>
+                      </div>
+                      <Progress value={percent} className="h-1.5" />
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+
+            <Card className="gap-0 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold">权限覆盖</h2>
+                <InlineStatusBadge label={`${permissions.length} 项`} tone="amber" />
+              </div>
+              <div className="mt-4 space-y-3 text-sm">
+                {rolePermissionCoverage.map((item) => (
+                  <div key={item.role} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <InlineStatusBadge label={item.label} tone={item.tone} />
+                      <span className="text-muted-foreground tabular-nums">{item.count} / {item.percent}%</span>
+                    </div>
+                    <Progress value={item.percent} className="h-1.5" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="gap-0 p-4 sm:p-5">
+              <h2 className="text-base font-semibold">模块权限</h2>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                {permissionModuleStats.map((item) => (
+                  <div key={item.module} className="rounded-md bg-muted/50 p-3">
+                    <div className="truncate text-xs text-muted-foreground">{item.label}</div>
+                    <div className="mt-1 font-semibold tabular-nums">{item.count}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="gap-0 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold">账号风险</h2>
+                <InlineStatusBadge label={lockedUsers.length === 0 ? "无锁定" : `${lockedUsers.length} 个锁定`} tone={lockedUsers.length === 0 ? "emerald" : "rose"} />
+              </div>
+              <div className="mt-4 space-y-2">
+                {lockedUsers.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-muted-foreground">暂无锁定账户</div>
+                ) : lockedUsers.slice(0, 4).map((user) => (
+                  <div key={user.id} className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate font-medium">{user.username}</span>
+                      <InlineStatusBadge label="锁定" tone="rose" />
+                    </div>
+                    <div className="mt-1 truncate text-xs text-muted-foreground">{user.lock_reason || formatUserTime(user.locked_until)}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <DashboardSideList
+              title="最近登录"
+              empty="暂无登录记录"
+              items={recentLoginItems}
             />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </div>
 
       {/* 新建用户对话框 */}

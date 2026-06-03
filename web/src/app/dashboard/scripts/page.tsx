@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Kbd } from "@/components/ui/kbd"
@@ -22,7 +23,7 @@ import {
  DialogHeader,
  DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, X, RefreshCw, Search, Check, Terminal, Server as ServerIcon, FileText, Tag, User, List } from "lucide-react"
+import { Plus, X, RefreshCw, Search, Check, Terminal, Server as ServerIcon, FileText, Tag, User, Star, Play } from "lucide-react"
 import { scriptsApi, serversApi, batchTasksApi, type Script, type Server } from "@/lib/api"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -32,7 +33,18 @@ import { useRouter } from "next/navigation"
 import { createScriptColumns } from "./components/script-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
-import { StatCard } from "../components/stat-card"
+import { cn } from "@/lib/utils"
+import {
+  DashboardMetricCard,
+  InlineStatusBadge,
+} from "../logs/components/log-dashboard-widgets"
+
+function formatScriptTime(value?: string) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
 
 export default function ScriptsPage() {
  const t = useTranslations("scripts")
@@ -69,6 +81,8 @@ export default function ScriptsPage() {
    updated_at: true,
    executions: true,
  })
+ const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null)
+ const [scriptCategory, setScriptCategory] = useState("all")
 
  // 新建脚本表单状态
  const [newScript, setNewScript] = useState({
@@ -128,6 +142,17 @@ export default function ScriptsPage() {
    setLoading(true)
    loadScripts()
  }, [page, pageSize, loadScripts, ready])
+
+ useEffect(() => {
+   if (scripts.length === 0) {
+     setSelectedScriptId(null)
+     return
+   }
+
+   if (!selectedScriptId || !scripts.some((script) => script.id === selectedScriptId)) {
+     setSelectedScriptId(scripts[0].id)
+   }
+ }, [scripts, selectedScriptId])
 
  // 自动滚动选中的建议项到可见区域
  useEffect(() => {
@@ -368,6 +393,39 @@ const filterOptions = useMemo(() => {
   }
 }, [scripts])
 
+const tagCounts = useMemo(() => {
+  const counts = new Map<string, number>()
+  scripts.forEach((script) => {
+    ;(script.tags || []).forEach((tag) => counts.set(tag, (counts.get(tag) || 0) + 1))
+  })
+  return Array.from(counts.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count)
+}, [scripts])
+
+const tableScripts = useMemo(() => {
+  if (scriptCategory === "all") return scripts
+  return scripts.filter((script) => (script.tags || []).includes(scriptCategory))
+}, [scriptCategory, scripts])
+
+const featuredScripts = useMemo(() => (
+  [...scripts]
+    .sort((a, b) => (b.executions || 0) - (a.executions || 0))
+    .slice(0, 4)
+), [scripts])
+
+const selectedScript = useMemo(() => (
+  scripts.find((script) => script.id === selectedScriptId) || tableScripts[0] || scripts[0] || null
+), [scripts, selectedScriptId, tableScripts])
+
+const scriptSpark = useMemo(() => (
+  scripts.slice(-12).map((script) => script.executions || 0)
+), [scripts])
+
+const totalExecutions = useMemo(() => (
+  scripts.reduce((sum, script) => sum + (script.executions || 0), 0)
+), [scripts])
+
  const handleAddTag = (tag?: string) => {
  const tagToAdd = tag || tagInput.trim()
  if (tagToAdd && !newScript.tags.includes(tagToAdd)) {
@@ -593,66 +651,236 @@ const filterOptions = useMemo(() => {
  <PageHeader title={t("pageTitle")} />
 
  <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
- <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
- <StatCard title={t("statsTotalScripts")} value={totalRows || scripts.length} icon={FileText} tone="emerald" loading={loading} />
- <StatCard title={t("statsTags")} value={filterOptions.tags.length} icon={Tag} tone="blue" loading={loading} />
- <StatCard title={t("statsAuthors")} value={filterOptions.authors.length} icon={User} tone="violet" loading={loading} />
- <StatCard title={t("statsCurrentPage")} value={scripts.length} icon={List} tone="cyan" loading={loading} />
- </div>
+   <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+     <DashboardMetricCard title={t("statsTotalScripts")} value={totalRows || scripts.length} icon={FileText} tone="emerald" spark={scriptSpark} loading={loading} />
+     <DashboardMetricCard title={t("statsTags")} value={filterOptions.tags.length} icon={Tag} tone="blue" spark={tagCounts.slice(0, 12).map((item) => item.count)} loading={loading} />
+     <DashboardMetricCard title={t("statsAuthors")} value={filterOptions.authors.length} icon={User} tone="violet" spark={filterOptions.authors.map(() => 1)} loading={loading} />
+     <DashboardMetricCard title="累计执行" value={totalExecutions} icon={Play} tone="amber" spark={scriptSpark} loading={loading} />
+   </div>
 
- <DataTable
- data={scripts}
- columns={visibleColumns}
- loading={loading || refreshing}
- currentPage={page}
- pageCount={totalPages}
- pageSize={pageSize}
- totalRows={totalRows}
- onPageChange={setPage}
- onPageSizeChange={(newPageSize) => {
- setPageSize(newPageSize)
- setPage(1)
- }}
- emptyMessage={t("tableEmpty")}
- className="min-h-0"
- density="compact"
- toolbar={(table) => (
- <DataTableToolbar
- table={table}
- searchKey="name"
- searchPlaceholder={t("tableSearchPlaceholder")}
- filters={[
- { column: 'author', title: t("filterAuthorTitle"), options: filterOptions.authors },
- { column: 'tags', title: t("filterTagsTitle"), options: filterOptions.tags },
- ]}
- onRefresh={handleRefresh}
- showRefresh={true}
- isRefreshing={refreshing}
- >
- <ColumnVisibility
- columns={[
- { id: 'name', label: t("cvName") },
- { id: 'description', label: t("cvDescription") },
- { id: 'content', label: t("cvContent") },
- { id: 'updated_at', label: t("cvUpdatedAt") },
- { id: 'executions', label: t("cvExecutions") },
- ].map(column => ({
- id: column.id,
- label: column.label,
- visible: columnVisibility[column.id] ?? true,
- onToggle: () => setColumnVisibility(prev => ({
- ...prev,
- [column.id]: !prev[column.id]
- }))
- }))}
- />
- <Button size="sm" onClick={handleOpenDialog}>
- <Plus className="mr-2 h-4 w-4" />
- {t("btnNew")}
- </Button>
- </DataTableToolbar>
- )}
- />
+   <section className="grid shrink-0 gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+     <Card className="gap-0 p-4">
+       <div className="flex flex-wrap items-center justify-between gap-3">
+         <div>
+           <h2 className="text-base font-semibold">精选脚本</h2>
+           <p className="mt-1 text-sm text-muted-foreground">按复用频次聚合常用脚本，便于快速定位和批量执行。</p>
+         </div>
+         <Button size="sm" onClick={handleOpenDialog}>
+           <Plus className="mr-2 h-4 w-4" />
+           {t("btnNew")}
+         </Button>
+       </div>
+       <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+         {featuredScripts.length === 0 ? (
+           <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground md:col-span-2 2xl:col-span-4">
+             {t("tableEmpty")}
+           </div>
+         ) : featuredScripts.map((script) => (
+           <button
+             key={script.id}
+             type="button"
+             onClick={() => setSelectedScriptId(script.id)}
+             className={cn(
+               "rounded-md border bg-background p-3 text-left transition-colors hover:bg-accent",
+               selectedScriptId === script.id && "border-primary bg-accent"
+             )}
+           >
+             <div className="flex items-start justify-between gap-3">
+               <div className="min-w-0">
+                 <div className="truncate text-sm font-medium">{script.name}</div>
+                 <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{script.description || "暂无描述"}</div>
+               </div>
+               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                 <Star className="h-4 w-4" />
+               </span>
+             </div>
+             <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+               <span>{script.tags?.[0] || "未分类"}</span>
+               <span className="tabular-nums">{script.executions || 0} 次执行</span>
+             </div>
+           </button>
+         ))}
+       </div>
+     </Card>
+
+     <Card className="hidden gap-0 p-4 xl:flex xl:flex-col">
+       <div className="flex items-center justify-between gap-3">
+         <h2 className="text-base font-semibold">资产概览</h2>
+         <InlineStatusBadge label="脚本库" tone="emerald" />
+       </div>
+       <div className="mt-4 space-y-3 text-sm">
+         <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+           <span className="text-muted-foreground">当前页脚本</span>
+           <span className="font-medium tabular-nums">{scripts.length}</span>
+         </div>
+         <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+           <span className="text-muted-foreground">标签覆盖</span>
+           <span className="font-medium tabular-nums">{tagCounts.length}</span>
+         </div>
+         <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+           <span className="text-muted-foreground">作者数量</span>
+           <span className="font-medium tabular-nums">{filterOptions.authors.length}</span>
+         </div>
+       </div>
+     </Card>
+   </section>
+
+   <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[190px_minmax(0,1fr)_340px]">
+     <Card className="hidden min-h-0 gap-0 p-3 xl:flex xl:flex-col">
+       <div className="px-1 pb-3">
+         <h2 className="text-sm font-semibold">分类</h2>
+         <p className="mt-1 text-xs text-muted-foreground">按标签聚合脚本集合。</p>
+       </div>
+       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+         <button
+           type="button"
+           onClick={() => {
+             setScriptCategory("all")
+             setPage(1)
+           }}
+           className={cn(
+             "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent",
+             scriptCategory === "all" && "bg-accent font-medium"
+           )}
+         >
+           <span>全部脚本</span>
+           <span className="text-xs tabular-nums text-muted-foreground">{scripts.length}</span>
+         </button>
+         {tagCounts.map((item) => (
+           <button
+             key={item.tag}
+             type="button"
+             onClick={() => {
+               setScriptCategory(item.tag)
+               setPage(1)
+               const nextScript = scripts.find((script) => (script.tags || []).includes(item.tag))
+               if (nextScript) setSelectedScriptId(nextScript.id)
+             }}
+             className={cn(
+               "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent",
+               scriptCategory === item.tag && "bg-accent font-medium"
+             )}
+           >
+             <span className="truncate">{item.tag}</span>
+             <span className="ml-2 text-xs tabular-nums text-muted-foreground">{item.count}</span>
+           </button>
+         ))}
+       </div>
+     </Card>
+
+     <DataTable
+       data={tableScripts}
+       columns={visibleColumns}
+       loading={loading || refreshing}
+       currentPage={scriptCategory === "all" ? page : 1}
+       pageCount={scriptCategory === "all" ? totalPages : 1}
+       pageSize={pageSize}
+       totalRows={scriptCategory === "all" ? totalRows : tableScripts.length}
+       onPageChange={setPage}
+       onPageSizeChange={(newPageSize) => {
+         setPageSize(newPageSize)
+         setPage(1)
+       }}
+       emptyMessage={t("tableEmpty")}
+       className="min-h-0"
+       density="compact"
+       toolbar={(table) => (
+         <DataTableToolbar
+           table={table}
+           searchKey="name"
+           searchPlaceholder={t("tableSearchPlaceholder")}
+           filters={[
+             { column: 'author', title: t("filterAuthorTitle"), options: filterOptions.authors },
+             { column: 'tags', title: t("filterTagsTitle"), options: filterOptions.tags },
+           ]}
+           onRefresh={handleRefresh}
+           showRefresh={true}
+           isRefreshing={refreshing}
+         >
+           <ColumnVisibility
+             columns={[
+               { id: 'name', label: t("cvName") },
+               { id: 'description', label: t("cvDescription") },
+               { id: 'content', label: t("cvContent") },
+               { id: 'updated_at', label: t("cvUpdatedAt") },
+               { id: 'executions', label: t("cvExecutions") },
+             ].map(column => ({
+               id: column.id,
+               label: column.label,
+               visible: columnVisibility[column.id] ?? true,
+               onToggle: () => setColumnVisibility(prev => ({
+                 ...prev,
+                 [column.id]: !prev[column.id]
+               }))
+             }))}
+           />
+           <Button size="sm" onClick={handleOpenDialog}>
+             <Plus className="mr-2 h-4 w-4" />
+             {t("btnNew")}
+           </Button>
+         </DataTableToolbar>
+       )}
+     />
+
+     <Card className="hidden min-h-0 gap-0 overflow-hidden p-4 xl:flex xl:flex-col">
+       <div className="flex items-start justify-between gap-3">
+         <div className="min-w-0">
+           <h2 className="truncate text-base font-semibold">脚本详情</h2>
+           <p className="mt-1 text-sm text-muted-foreground">查看当前选中脚本的标签、内容和最近更新。</p>
+         </div>
+         {selectedScript && <InlineStatusBadge label={selectedScript.language || "bash"} tone="blue" />}
+       </div>
+       {selectedScript ? (
+         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
+           <div>
+             <div className="text-sm font-medium">{selectedScript.name}</div>
+             <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">{selectedScript.description || "暂无描述"}</p>
+           </div>
+           <div className="grid grid-cols-2 gap-2 text-sm">
+             <div className="rounded-md bg-muted/50 p-3">
+               <div className="text-xs text-muted-foreground">执行次数</div>
+               <div className="mt-1 font-semibold tabular-nums">{selectedScript.executions || 0}</div>
+             </div>
+             <div className="rounded-md bg-muted/50 p-3">
+               <div className="text-xs text-muted-foreground">作者</div>
+               <div className="mt-1 truncate font-semibold">{selectedScript.author || "-"}</div>
+             </div>
+           </div>
+           <div className="flex flex-wrap gap-1">
+             {(selectedScript.tags || []).length === 0 ? (
+               <InlineStatusBadge label="未分类" tone="slate" />
+             ) : selectedScript.tags.map((tag) => (
+               <InlineStatusBadge key={tag} label={tag} tone="violet" />
+             ))}
+           </div>
+           <pre className="min-h-0 flex-1 overflow-auto rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">{selectedScript.content}</pre>
+           <div className="space-y-2 text-xs text-muted-foreground">
+             <div className="flex items-center justify-between gap-3">
+               <span>创建时间</span>
+               <span className="truncate text-right tabular-nums">{formatScriptTime(selectedScript.created_at)}</span>
+             </div>
+             <div className="flex items-center justify-between gap-3">
+               <span>更新时间</span>
+               <span className="truncate text-right tabular-nums">{formatScriptTime(selectedScript.updated_at)}</span>
+             </div>
+           </div>
+           <div className="flex gap-2">
+             <Button className="flex-1" size="sm" onClick={() => handleExecute(selectedScript.id)}>
+               <Play className="mr-2 h-4 w-4" />
+               执行
+             </Button>
+             <Button variant="outline" size="sm" onClick={() => handleEdit(selectedScript.id)}>
+               编辑
+             </Button>
+           </div>
+         </div>
+       ) : (
+         <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
+           {t("tableEmpty")}
+         </div>
+       )}
+     </Card>
+   </section>
  </div>
 
  {/* 新建脚本弹窗 */}
