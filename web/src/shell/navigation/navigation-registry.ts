@@ -78,9 +78,6 @@ const workbench: NavigationItemDefinition[] = [
     titleKey: "operationLogs",
     url: "/dashboard/operation-logs",
     icon: ScrollText,
-    adminOnly: true,
-    profiles: ["web"],
-    requiredCapabilities: ["audit"],
   },
 ]
 

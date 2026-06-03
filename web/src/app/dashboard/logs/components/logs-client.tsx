@@ -1,39 +1,25 @@
 "use client"
 
 import * as React from "react"
+import type { ColumnDef } from "@tanstack/react-table"
 import {
   Activity,
   AlertTriangle,
   Download,
   KeyRound,
-  Loader2,
-  Search,
   ShieldAlert,
   ShieldCheck,
-  Trash2,
   User,
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { useAuthReady } from "@/hooks/use-auth-ready"
-import { useClientAuth } from "@/components/client-auth-provider"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { toast } from "@/components/ui/sonner"
-import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/error-utils"
 import { logsApi, type AuditLog, type AuditLogStatisticsResponse } from "@/lib/api/logs"
+import { DataTable } from "@/components/ui/data-table"
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import {
   DashboardDonutCard,
   DashboardMetricCard,
@@ -59,7 +45,6 @@ interface LogsClientProps {
   defaultAction?: string
 }
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50]
 const TREND_BUCKETS = 12
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -211,7 +196,6 @@ function exportLogs(logs: AuditLog[]) {
 
 export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
   const { ready } = useAuthReady()
-  const { user } = useClientAuth()
   const t = useTranslations("logsAudit")
   const [logs, setLogs] = React.useState<AuditLog[]>(initialData?.logs || [])
   const [statistics, setStatistics] = React.useState<AuditLogStatisticsResponse | null>(initialData?.statistics || null)
@@ -222,11 +206,6 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
   const [pageSize, setPageSize] = React.useState(initialData?.pageSize || 20)
   const [totalPages, setTotalPages] = React.useState(initialData?.totalPages || 1)
   const [totalRows, setTotalRows] = React.useState(initialData?.totalCount || 0)
-  const [cleanupOpen, setCleanupOpen] = React.useState(false)
-  const [cleanupLoading, setCleanupLoading] = React.useState(false)
-  const [retentionDays, setRetentionDays] = React.useState("90")
-  const [query, setQuery] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | AuditLog["status"]>("all")
   const [selectedLogId, setSelectedLogId] = React.useState<string | null>(null)
 
   const loadStatistics = React.useCallback(async () => {
@@ -288,25 +267,9 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, initialData, defaultAction])
 
-  const filteredLogs = React.useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    return logs.filter((log) => {
-      const matchesStatus = statusFilter === "all" || log.status === statusFilter
-      const matchesKeyword = !keyword || [
-        log.username,
-        log.action,
-        log.resource,
-        log.ip,
-        log.details,
-        log.error_msg,
-      ].some((value) => value?.toLowerCase().includes(keyword))
-      return matchesStatus && matchesKeyword
-    })
-  }, [logs, query, statusFilter])
-
   const selectedLog = React.useMemo(
-    () => filteredLogs.find((log) => log.id === selectedLogId) || filteredLogs[0] || null,
-    [filteredLogs, selectedLogId]
+    () => logs.find((log) => log.id === selectedLogId) || logs[0] || null,
+    [logs, selectedLogId]
   )
 
   const actionEntries = React.useMemo(() => {
@@ -367,8 +330,6 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
     }))
   }, [statistics, t, trendLogs])
 
-  const canCleanup = user?.role === "admin"
-
   const handleRefresh = () => {
     void Promise.all([
       loadLogs(page, pageSize, { showTableLoading: true }),
@@ -387,29 +348,97 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
     void loadLogs(1, nextSize, { showTableLoading: true })
   }
 
-  const handleCleanupLogs = async () => {
-    const parsedRetentionDays = Number(retentionDays)
-    if (!Number.isInteger(parsedRetentionDays) || parsedRetentionDays < 1 || parsedRetentionDays > 3650) {
-      toast.error(t("cleanupInvalidRetention"))
-      return
-    }
-
-    try {
-      setCleanupLoading(true)
-      const result = await logsApi.cleanup(parsedRetentionDays)
-      toast.success(t("cleanupSuccess", { count: result.deleted_count }))
-      setCleanupOpen(false)
-      setPage(1)
-      await Promise.all([
-        loadLogs(1, pageSize, { showTableLoading: true }),
-        loadStatistics(),
-      ])
-    } catch (error: unknown) {
-      toast.error(getErrorMessage(error, t("cleanupFailed")))
-    } finally {
-      setCleanupLoading(false)
-    }
-  }
+  const logColumns = React.useMemo<ColumnDef<AuditLog>[]>(() => [
+    {
+      id: "created_at",
+      accessorKey: "created_at",
+      header: t("columnTime"),
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap font-mono text-xs">
+          {formatTime(row.original.created_at)}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      accessorKey: "status",
+      header: t("columnStatus"),
+      cell: ({ row }) => (
+        <InlineStatusBadge
+          label={statusLabel(t, row.original.status)}
+          tone={statusTone(row.original.status)}
+        />
+      ),
+      filterFn: (row, id, value) => {
+        const selected = (value as string[]) || []
+        if (selected.length === 0) return true
+        return selected.includes(row.getValue(id) as string)
+      },
+    },
+    {
+      id: "action",
+      accessorKey: "action",
+      header: t("columnAction"),
+      cell: ({ row }) => (
+        <InlineStatusBadge
+          label={actionLabel(t, row.original.action)}
+          tone={actionTone(row.original.action)}
+        />
+      ),
+    },
+    {
+      id: "username",
+      accessorKey: "username",
+      header: t("columnUser"),
+      cell: ({ row }) => row.original.username || "-",
+    },
+    {
+      id: "resource",
+      accessorKey: "resource",
+      header: t("columnResource"),
+      cell: ({ row }) => (
+        <span className="block max-w-[180px] truncate" title={row.original.resource || undefined}>
+          {row.original.resource || "-"}
+        </span>
+      ),
+    },
+    {
+      id: "ip",
+      accessorKey: "ip",
+      header: t("columnIp"),
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap font-mono text-xs">
+          {row.original.ip || "-"}
+        </span>
+      ),
+    },
+    {
+      id: "details",
+      accessorKey: "details",
+      header: t("columnDetails"),
+      cell: ({ row }) => {
+        const details = row.original.details || row.original.error_msg || "-"
+        return (
+          <span className="block max-w-[260px] truncate text-muted-foreground" title={details === "-" ? undefined : details}>
+            {details}
+          </span>
+        )
+      },
+      filterFn: (row, _id, value) => {
+        const keyword = String(value || "").trim().toLowerCase()
+        if (!keyword) return true
+        const log = row.original
+        return [
+          log.username,
+          log.action,
+          log.resource,
+          log.ip,
+          log.details,
+          log.error_msg,
+        ].some((item) => item?.toLowerCase().includes(keyword))
+      },
+    },
+  ], [t])
 
   const total = statistics?.total_logs || 0
 
@@ -429,128 +458,51 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
       </div>
 
       <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.85fr)] xl:overflow-hidden">
-        <Card className="min-h-[520px] gap-0 overflow-hidden p-0 xl:min-h-0">
-          <div className="flex shrink-0 flex-col gap-3 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-base font-semibold">{t("activityTableTitle")}</h2>
-                <p className="text-sm text-muted-foreground">{t("tableDescription", { count: totalRows })}</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={tableLoading}>
-                  {tableLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Activity className="mr-2 h-4 w-4" />}
-                  {t("refresh")}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => exportLogs(filteredLogs)}>
-                  <Download className="mr-2 h-4 w-4" />
-                  {t("exportLogs")}
-                </Button>
-                {canCleanup && (
-                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setCleanupOpen(true)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {t("cleanupButton")}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("activitySearchPlaceholder")} className="pl-9" />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {(["all", "success", "warning", "failure"] as const).map((status) => (
-                  <Button
-                    key={status}
-                    variant={statusFilter === status ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setStatusFilter(status)}
-                    className="h-9"
-                  >
-                    {status === "all" ? t("filterAll") : statusLabel(t, status)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col border-t">
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[920px] text-sm">
-                <thead className="sticky top-0 z-10 bg-muted/95 text-xs text-muted-foreground backdrop-blur">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium">{t("columnTime")}</th>
-                    <th className="px-4 py-3 text-left font-medium">{t("columnStatus")}</th>
-                    <th className="px-4 py-3 text-left font-medium">{t("columnAction")}</th>
-                    <th className="px-4 py-3 text-left font-medium">{t("columnUser")}</th>
-                    <th className="px-4 py-3 text-left font-medium">{t("columnResource")}</th>
-                    <th className="px-4 py-3 text-left font-medium">{t("columnIp")}</th>
-                    <th className="px-4 py-3 text-left font-medium">{t("columnDetails")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {initialLoading || tableLoading ? (
-                    <tr>
-                      <td colSpan={7} className="h-40 text-center text-muted-foreground">
-                        <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-                        {t("loading")}
-                      </td>
-                    </tr>
-                  ) : filteredLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="h-40 text-center text-muted-foreground">{t("emptyMessage")}</td>
-                    </tr>
-                  ) : filteredLogs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className={cn(
-                        "cursor-pointer border-t transition-colors hover:bg-accent/60",
-                        selectedLog?.id === log.id && "bg-emerald-500/5"
-                      )}
-                      onClick={() => setSelectedLogId(log.id)}
-                    >
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{formatTime(log.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <InlineStatusBadge label={statusLabel(t, log.status)} tone={statusTone(log.status)} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <InlineStatusBadge label={actionLabel(t, log.action)} tone={actionTone(log.action)} />
-                      </td>
-                      <td className="px-4 py-3">{log.username || "-"}</td>
-                      <td className="px-4 py-3">{log.resource || "-"}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{log.ip || "-"}</td>
-                      <td className="max-w-[260px] truncate px-4 py-3 text-muted-foreground" title={log.details || log.error_msg || undefined}>
-                        {log.details || log.error_msg || "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>{t("tableDescription", { count: totalRows })}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1 || tableLoading} onClick={() => handlePageChange(page - 1)}>
-                  {t("previous")}
-                </Button>
-                <span className="px-2 tabular-nums">{t("pageInfo", { page, total: totalPages })}</span>
-                <Button variant="outline" size="sm" disabled={page >= totalPages || tableLoading} onClick={() => handlePageChange(page + 1)}>
-                  {t("next")}
-                </Button>
-                <select
-                  className="h-8 rounded-md border bg-background px-2 text-xs"
-                  value={pageSize}
-                  onChange={(event) => handlePageSizeChange(Number(event.target.value))}
-                >
-                  {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>{t("pageSize", { size })}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        </Card>
+        <DataTable
+          data={logs}
+          columns={logColumns}
+          loading={initialLoading || tableLoading}
+          currentPage={page}
+          pageCount={totalPages}
+          pageSize={pageSize}
+          totalRows={totalRows}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          emptyMessage={t("emptyMessage")}
+          className="min-h-[520px] overflow-hidden xl:min-h-0"
+          tableClassName="min-w-[920px]"
+          density="compact"
+          onRowClick={(log) => setSelectedLogId(log.id)}
+          getRowClassName={(log) => (
+            selectedLog?.id === log.id ? "bg-emerald-500/5 hover:bg-emerald-500/10" : undefined
+          )}
+          toolbar={(table) => (
+            <DataTableToolbar
+              table={table}
+              searchKey="details"
+              searchPlaceholder={t("activitySearchPlaceholder")}
+              filters={[
+                {
+                  column: "status",
+                  title: t("filterStatusTitle"),
+                  options: [
+                    { value: "success", label: statusLabel(t, "success") },
+                    { value: "warning", label: statusLabel(t, "warning") },
+                    { value: "failure", label: statusLabel(t, "failure") },
+                  ],
+                },
+              ]}
+              showRefresh
+              onRefresh={handleRefresh}
+              isRefreshing={tableLoading}
+            >
+              <Button variant="outline" size="sm" onClick={() => exportLogs(table.getFilteredRowModel().rows.map((row) => row.original))} className="h-8">
+                <Download className="mr-2 h-4 w-4" />
+                {t("exportLogs")}
+              </Button>
+            </DataTableToolbar>
+          )}
+        />
 
         <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
           <DashboardTrendCard title={t("activityTrendTitle")} label={t("last24Hours")} data={hasTrendData ? trend : []} tone="emerald" emptyLabel={t("activityEmpty")} loading={initialLoading} />
@@ -591,47 +543,6 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
           </Card>
         </div>
       </div>
-
-      <AlertDialog open={cleanupOpen} onOpenChange={setCleanupOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("cleanupDialogTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("cleanupDialogDescription")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="audit-log-retention-days">{t("cleanupRetentionLabel")}</Label>
-            <Input
-              id="audit-log-retention-days"
-              type="number"
-              min={1}
-              max={3650}
-              value={retentionDays}
-              disabled={cleanupLoading}
-              onChange={(event) => setRetentionDays(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">{t("cleanupRetentionHint")}</p>
-            <p className="text-xs text-destructive">{t("cleanupWarning")}</p>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={cleanupLoading}>{t("cleanupCancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={cleanupLoading}
-              onClick={(event) => {
-                event.preventDefault()
-                void handleCleanupLogs()
-              }}
-            >
-              {cleanupLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t("cleanupRunning")}
-                </>
-              ) : t("cleanupConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

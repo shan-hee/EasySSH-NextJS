@@ -44,11 +44,14 @@ interface DataTableProps<TData, TValue = unknown> {
   emptyMessage?: string
   className?: string
   scrollContainerClassName?: string
+  tableClassName?: string
   enableRowSelection?: boolean
   toolbar?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode
   density?: TableDensity
   onDensityChange?: (density: TableDensity) => void
   batchActions?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode
+  onRowClick?: (row: TData) => void
+  getRowClassName?: (row: TData) => string | undefined
 }
 
 export function formatTimestamp(timestamp: string): { date: string; time: string } {
@@ -151,10 +154,14 @@ export function DataTable<TData, TValue = unknown>({
   onPageSizeChange,
   emptyMessage,
   className,
+  scrollContainerClassName,
+  tableClassName,
   enableRowSelection = false,
   toolbar,
   density = "standard",
   batchActions,
+  onRowClick,
+  getRowClassName,
 }: DataTableProps<TData, TValue>) {
   const tCommon = useTranslations("common")
   const [sorting, setSorting] = React.useState<SortingState>([])
@@ -276,10 +283,11 @@ export function DataTable<TData, TValue = unknown>({
           ref={scrollContainerRef}
           className={cn(
             "flex-1 scrollbar-custom relative bg-table",
-            loading ? "overflow-hidden" : "overflow-auto"
+            loading ? "overflow-hidden" : "overflow-auto",
+            scrollContainerClassName
           )}
         >
-          <Table className={loading ? "invisible" : ""}>
+          <Table className={cn(loading ? "invisible" : "", tableClassName)}>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
@@ -311,6 +319,11 @@ export function DataTable<TData, TValue = unknown>({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && "selected"}
+                    onClick={() => onRowClick?.(row.original)}
+                    className={cn(
+                      onRowClick && "cursor-pointer",
+                      getRowClassName?.(row.original)
+                    )}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell

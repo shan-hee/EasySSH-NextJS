@@ -14,6 +14,7 @@ import {
   Archive,
   Bot,
   Mail,
+  ScrollText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -27,6 +28,7 @@ import { SessionManagementTab } from "./security-center/_tabs/session-management
 import { NetworkSecurityTab } from "./security-center/_tabs/network-security-tab"
 
 import { BackupRestoreTab } from "./management/_tabs/backup-restore-tab"
+import { LogManagementTab } from "./management/_tabs/log-management-tab"
 
 import { NotificationConfigWrapper } from "./integrations/_tabs/notification-config-wrapper"
 import { AIConfigWrapper } from "./integrations/_tabs/ai-config-wrapper"
@@ -48,6 +50,7 @@ const tabs: TabItem[] = [
   { id: "network", nameKey: "itemNetworkSecurity", icon: Globe, component: NetworkSecurityTab },
   { id: "ai-config", nameKey: "itemAIConfig", icon: Bot, component: AIConfigWrapper },
   { id: "notification-config", nameKey: "itemNotificationConfig", icon: Mail, component: NotificationConfigWrapper },
+  { id: "logs", nameKey: "itemLogs", icon: ScrollText, component: LogManagementTab },
   { id: "backup", nameKey: "itemBackup", icon: Archive, component: BackupRestoreTab },
 ]
 

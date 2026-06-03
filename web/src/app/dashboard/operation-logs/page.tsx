@@ -1,15 +1,13 @@
 "use client"
 
 import * as React from "react"
+import type { ColumnDef } from "@tanstack/react-table"
 import {
   AlertTriangle,
   Download,
   FileText,
   History,
-  Loader2,
-  RefreshCw,
   Rocket,
-  Search,
   TerminalSquare,
   Upload,
   XCircle,
@@ -19,11 +17,11 @@ import { useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "@/components/ui/sonner"
-import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/error-utils"
+import { DataTable } from "@/components/ui/data-table"
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import {
   operationRecordsApi,
   type OperationRecord,
@@ -43,7 +41,6 @@ import {
   type DonutItem,
 } from "../logs/components/log-dashboard-widgets"
 
-const PAGE_SIZE = 20
 const TREND_BUCKETS = 12
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -183,12 +180,11 @@ function OperationLogsContent() {
   const [trendRecords, setTrendRecords] = React.useState<OperationRecord[]>([])
   const [statistics, setStatistics] = React.useState<OperationRecordStatistics | null>(null)
   const [page, setPage] = React.useState(1)
+  const [pageSize, setPageSize] = React.useState(20)
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
-  const [query, setQuery] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<"all" | OperationRecordStatus>("all")
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
 
   const typeLabels = React.useMemo<Record<OperationRecordType, string>>(() => ({
@@ -207,13 +203,18 @@ function OperationLogsContent() {
     timeout: t("statusTimeout"),
   }), [t])
 
-  const loadData = React.useCallback(async (nextPage = page, showRefresh = false, nextType = type) => {
+  const loadData = React.useCallback(async (
+    nextPage = page,
+    showRefresh = false,
+    nextType = type,
+    nextPageSize = pageSize,
+  ) => {
     try {
       if (showRefresh) setRefreshing(true)
       else setLoading(true)
 
       const [list, stats, recent] = await Promise.all([
-        operationRecordsApi.list({ page: nextPage, page_size: PAGE_SIZE, type: nextType }),
+        operationRecordsApi.list({ page: nextPage, page_size: nextPageSize, type: nextType }),
         operationRecordsApi.getStatistics({ type: nextType, ...getTodayRange() }),
         operationRecordsApi.list({
           page: 1,
@@ -239,7 +240,7 @@ function OperationLogsContent() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [page, t, type])
+  }, [page, pageSize, t, type])
 
   React.useEffect(() => {
     if (!ready) return
@@ -255,26 +256,9 @@ function OperationLogsContent() {
     setSelectedId(null)
   }, [initialType])
 
-  const filteredRecords = React.useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    return records.filter((record) => {
-      const matchesStatus = statusFilter === "all" || record.status === statusFilter
-      const matchesKeyword = !keyword || [
-        record.username,
-        record.server_name,
-        record.title,
-        record.resource,
-        record.source,
-        record.action,
-        record.error_message,
-      ].some((value) => value?.toLowerCase().includes(keyword))
-      return matchesStatus && matchesKeyword
-    })
-  }, [query, records, statusFilter])
-
   const selectedRecord = React.useMemo(
-    () => filteredRecords.find((record) => record.id === selectedId) || filteredRecords[0] || null,
-    [filteredRecords, selectedId]
+    () => records.find((record) => record.id === selectedId) || records[0] || null,
+    [records, selectedId]
   )
 
   const trend = React.useMemo(() => buildTrend(trendRecords), [trendRecords])
@@ -330,16 +314,143 @@ function OperationLogsContent() {
       }))
   ), [trendRecords, typeLabels])
 
-  const handleTypeChange = (nextType: OperationRecordType | undefined) => {
-    setType(nextType)
-    setPage(1)
-    setSelectedId(null)
-  }
-
   const handlePageChange = (nextPage: number) => {
     setPage(nextPage)
-    void loadData(nextPage, true, type)
+    void loadData(nextPage, true, type, pageSize)
   }
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize)
+    setPage(1)
+    void loadData(1, true, type, nextPageSize)
+  }
+
+  const handleRefresh = () => {
+    void loadData(page, true, type, pageSize)
+  }
+
+  const recordColumns = React.useMemo<ColumnDef<OperationRecord>[]>(() => [
+    {
+      id: "started_at",
+      accessorFn: (record) => record.started_at || record.created_at,
+      header: t("columnTime"),
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap font-mono text-xs">
+          {formatTime(row.original.started_at || row.original.created_at)}
+        </span>
+      ),
+    },
+    {
+      id: "type",
+      accessorKey: "type",
+      header: t("columnType"),
+      cell: ({ row }) => (
+        <InlineStatusBadge label={typeLabels[row.original.type]} tone={typeTone(row.original.type)} />
+      ),
+      filterFn: (row, id, value) => {
+        const selected = (value as string[]) || []
+        if (selected.length === 0) return true
+        return selected.includes(row.getValue(id) as string)
+      },
+    },
+    {
+      id: "status",
+      accessorKey: "status",
+      header: t("columnStatus"),
+      cell: ({ row }) => (
+        <InlineStatusBadge label={statusLabels[row.original.status] || row.original.status} tone={statusTone(row.original.status)} />
+      ),
+      filterFn: (row, id, value) => {
+        const selected = (value as string[]) || []
+        if (selected.length === 0) return true
+        return selected.includes(row.getValue(id) as string)
+      },
+    },
+    {
+      id: "action",
+      accessorKey: "action",
+      header: t("columnAction"),
+      cell: ({ row }) => {
+        const record = row.original
+        const TypeIcon = typeIcon(record.type)
+        return (
+          <div className="flex min-w-[220px] items-center gap-2">
+            <TypeIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <div className="truncate font-medium">{record.title || record.resource || record.action}</div>
+              <div className="truncate text-xs text-muted-foreground">{record.resource || record.source || "-"}</div>
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      id: "username",
+      accessorKey: "username",
+      header: t("columnUser"),
+      cell: ({ row }) => row.original.username || "-",
+    },
+    {
+      id: "server_name",
+      accessorKey: "server_name",
+      header: t("columnServer"),
+      cell: ({ row }) => (
+        <span className="block max-w-[160px] truncate" title={row.original.server_name || undefined}>
+          {row.original.server_name || "-"}
+        </span>
+      ),
+    },
+    {
+      id: "progress",
+      accessorKey: "progress",
+      header: t("columnProgress"),
+      cell: ({ row }) => (
+        row.original.progress > 0 ? (
+          <div className="flex min-w-[110px] items-center gap-2">
+            <Progress
+              value={row.original.progress}
+              className="h-1.5"
+              indicatorClassName={row.original.status === "failure" ? "bg-rose-500" : undefined}
+            />
+            <span className="w-9 text-xs tabular-nums">{row.original.progress}%</span>
+          </div>
+        ) : "-"
+      ),
+    },
+    {
+      id: "duration_ms",
+      accessorKey: "duration_ms",
+      header: t("columnDuration"),
+      cell: ({ row }) => formatDuration(row.original.duration_ms),
+    },
+    {
+      id: "result",
+      accessorFn: (record) => record.error_message || record.source || "",
+      header: t("columnResult"),
+      cell: ({ row }) => {
+        const result = row.original.error_message || row.original.source || "-"
+        return (
+          <span className="block max-w-[260px] truncate text-muted-foreground" title={result === "-" ? undefined : result}>
+            {result}
+          </span>
+        )
+      },
+      filterFn: (row, _id, value) => {
+        const keyword = String(value || "").trim().toLowerCase()
+        if (!keyword) return true
+        const record = row.original
+        return [
+          record.username,
+          record.server_name,
+          record.title,
+          record.resource,
+          record.source,
+          record.action,
+          record.error_message,
+        ].some((item) => item?.toLowerCase().includes(keyword))
+      },
+    },
+  ], [statusLabels, t, typeLabels])
 
   return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
@@ -357,150 +468,60 @@ function OperationLogsContent() {
         </div>
 
         <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.85fr)] xl:overflow-hidden">
-          <Card className="min-h-[520px] gap-0 overflow-hidden p-0 xl:min-h-0">
-            <div className="flex shrink-0 flex-col gap-3 p-4 sm:p-5">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="mr-2 text-base font-semibold">{t("recordsTitle")}</h2>
-                  {[
-                    { label: t("filterAll"), value: undefined },
-                    { label: t("typeConnection"), value: "connection" as const },
-                    { label: t("typeTransfer"), value: "transfer" as const },
-                    { label: t("typeExecution"), value: "execution" as const },
-                  ].map((item) => (
-                    <Button
-                      key={item.label}
-                      variant={type === item.value ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => handleTypeChange(item.value)}
-                      className="h-9"
-                    >
-                      {item.label}
-                    </Button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => void loadData(page, true, type)} disabled={refreshing}>
-                    {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    {t("refresh")}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => exportRecords(filteredRecords)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    {t("exportRecords")}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto]">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("searchPlaceholder")} className="pl-9" />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {(["all", "running", "success", "failure"] as const).map((status) => (
-                    <Button
-                      key={status}
-                      variant={statusFilter === status ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setStatusFilter(status)}
-                      className="h-9"
-                    >
-                      {status === "all" ? t("filterAll") : statusLabels[status]}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col border-t">
-              <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full min-w-[980px] text-sm">
-                  <thead className="sticky top-0 z-10 bg-muted/95 text-xs text-muted-foreground backdrop-blur">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnTime")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnType")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnStatus")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnAction")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnUser")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnServer")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnProgress")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnDuration")}</th>
-                      <th className="px-4 py-3 text-left font-medium">{t("columnResult")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading || refreshing ? (
-                      <tr>
-                        <td colSpan={9} className="h-40 text-center text-muted-foreground">
-                          <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-                          {t("loading")}
-                        </td>
-                      </tr>
-                    ) : filteredRecords.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="h-40 text-center text-muted-foreground">{t("empty")}</td>
-                      </tr>
-                    ) : filteredRecords.map((record) => {
-                      const TypeIcon = typeIcon(record.type)
-                      return (
-                        <tr
-                          key={record.id}
-                          className={cn(
-                            "cursor-pointer border-t transition-colors hover:bg-accent/60",
-                            selectedRecord?.id === record.id && "bg-emerald-500/5"
-                          )}
-                          onClick={() => setSelectedId(record.id)}
-                        >
-                          <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{formatTime(record.started_at || record.created_at)}</td>
-                          <td className="px-4 py-3">
-                            <InlineStatusBadge label={typeLabels[record.type]} tone={typeTone(record.type)} />
-                          </td>
-                          <td className="px-4 py-3">
-                            <InlineStatusBadge label={statusLabels[record.status] || record.status} tone={statusTone(record.status)} />
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <TypeIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <div className="min-w-0">
-                                <div className="truncate font-medium">{record.title || record.resource || record.action}</div>
-                                <div className="truncate text-xs text-muted-foreground">{record.resource || record.source || "-"}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">{record.username || "-"}</td>
-                          <td className="px-4 py-3">{record.server_name || "-"}</td>
-                          <td className="px-4 py-3">
-                            {record.progress > 0 ? (
-                              <div className="flex min-w-[110px] items-center gap-2">
-                                <Progress value={record.progress} className="h-1.5" indicatorClassName={record.status === "failure" ? "bg-rose-500" : undefined} />
-                                <span className="w-9 text-xs tabular-nums">{record.progress}%</span>
-                              </div>
-                            ) : "-"}
-                          </td>
-                          <td className="px-4 py-3">{formatDuration(record.duration_ms)}</td>
-                          <td className="max-w-[260px] truncate px-4 py-3 text-muted-foreground" title={record.error_message || record.source || undefined}>
-                            {record.error_message || record.source || "-"}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                <span>{t("totalRows", { count: totalRows })}</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1 || loading || refreshing} onClick={() => handlePageChange(page - 1)}>
-                    {t("previous")}
-                  </Button>
-                  <span className="px-2 tabular-nums">{t("pageInfo", { page, total: totalPages })}</span>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages || loading || refreshing} onClick={() => handlePageChange(page + 1)}>
-                    {t("next")}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </Card>
+          <DataTable
+            data={records}
+            columns={recordColumns}
+            loading={loading || refreshing}
+            currentPage={page}
+            pageCount={totalPages}
+            pageSize={pageSize}
+            totalRows={totalRows}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            emptyMessage={t("empty")}
+            className="min-h-[520px] overflow-hidden xl:min-h-0"
+            tableClassName="min-w-[980px]"
+            density="compact"
+            onRowClick={(record) => setSelectedId(record.id)}
+            getRowClassName={(record) => (
+              selectedRecord?.id === record.id ? "bg-emerald-500/5 hover:bg-emerald-500/10" : undefined
+            )}
+            toolbar={(table) => (
+              <DataTableToolbar
+                table={table}
+                searchKey="result"
+                searchPlaceholder={t("searchPlaceholder")}
+                filters={[
+                  {
+                    column: "type",
+                    title: t("filterTypeTitle"),
+                    options: [
+                      { value: "connection", label: t("typeConnection") },
+                      { value: "transfer", label: t("typeTransfer") },
+                      { value: "execution", label: t("typeExecution") },
+                    ],
+                  },
+                  {
+                    column: "status",
+                    title: t("filterStatusTitle"),
+                    options: [
+                      { value: "running", label: statusLabels.running },
+                      { value: "success", label: statusLabels.success },
+                      { value: "failure", label: statusLabels.failure },
+                    ],
+                  },
+                ]}
+                showRefresh
+                onRefresh={handleRefresh}
+                isRefreshing={refreshing}
+              >
+                <Button variant="outline" size="sm" onClick={() => exportRecords(table.getFilteredRowModel().rows.map((row) => row.original))} className="h-8">
+                  <Download className="mr-2 h-4 w-4" />
+                  {t("exportRecords")}
+                </Button>
+              </DataTableToolbar>
+            )}
+          />
 
           <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
             <DashboardTrendCard title={t("trendTitle")} label={t("last24Hours")} data={hasTrendData ? trend : []} tone="emerald" emptyLabel={t("empty")} loading={loading} />
