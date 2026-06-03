@@ -1551,7 +1551,7 @@ const messages = {
     statusPending: "Pending",
   },
   logsAudit: {
-    pageTitle: "Operation logs",
+    pageTitle: "Activity Logs",
     activityPageTitle: "Activity records",
     auditPageTitle: "Security audit",
     logsPageTitle: "Activity Logs",
@@ -1821,6 +1821,10 @@ const messages = {
     btnNew: "New script",
     cardTitle: "Script library",
     cardDescription: "Showing {count} scripts",
+    statsTotalScripts: "Total scripts",
+    statsTags: "Tags",
+    statsAuthors: "Authors",
+    statsCurrentPage: "Current page",
 
     // Columns
     colName: "Script name",

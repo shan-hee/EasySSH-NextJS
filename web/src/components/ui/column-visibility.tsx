@@ -26,7 +26,7 @@ export function ColumnVisibility({ columns }: ColumnVisibilityProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="ml-auto">
+        <Button variant="outline" size="sm" className="h-8">
           <Settings2 className="h-4 w-4" />
           {tCommon("tableColumns")}
         </Button>

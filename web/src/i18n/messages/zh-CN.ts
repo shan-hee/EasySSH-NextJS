@@ -1609,6 +1609,10 @@ const messages = {
     btnNew: "新建脚本",
     cardTitle: "脚本库",
     cardDescription: "显示 {count} 条记录",
+    statsTotalScripts: "总脚本数",
+    statsTags: "标签数",
+    statsAuthors: "作者数",
+    statsCurrentPage: "当前页记录",
 
     // 列
     colName: "脚本名称",
@@ -1700,7 +1704,7 @@ const messages = {
     executeTaskPrefix: "执行脚本",
   },
   logsAudit: {
-    pageTitle: "操作日志",
+    pageTitle: "活动日志",
     activityPageTitle: "活动记录",
     auditPageTitle: "安全审计",
     logsPageTitle: "活动日志",

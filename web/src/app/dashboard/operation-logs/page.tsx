@@ -160,6 +160,19 @@ function exportRecords(records: OperationRecord[]) {
 
 export default function OperationLogsPage() {
   const t = useTranslations("operationLogs")
+
+  return (
+    <>
+      <PageHeader title={t("pageTitle")} />
+      <React.Suspense fallback={<div className="flex min-h-0 flex-1" />}>
+        <OperationLogsContent />
+      </React.Suspense>
+    </>
+  )
+}
+
+function OperationLogsContent() {
+  const t = useTranslations("operationLogs")
   const searchParams = useSearchParams()
   const { ready } = useAuthReady()
   const typeParam = searchParams.get("type")
@@ -329,18 +342,13 @@ export default function OperationLogsPage() {
   }
 
   return (
-    <>
-      <PageHeader title={t("pageTitle")} />
-      <div className="flex flex-1 flex-col gap-4 overflow-auto p-3 pt-0 sm:gap-5 sm:p-4 sm:pt-0">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{t("dashboardTitle")}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("dashboardDescription")}</p>
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
+        <div className="flex flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+          <p>{t("dashboardDescription")}</p>
           <DashboardStatusLine label={t("systemHealthy")} timestamp={formatDateTime(new Date().toISOString())} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
           <DashboardMetricCard title={t("metricTodayOps")} value={total} icon={FileText} tone="emerald" spark={trend} loading={loading} />
           <DashboardMetricCard title={t("metricConnections")} value={byType.connection || 0} icon={TerminalSquare} tone="blue" spark={connectionTrend} loading={loading} />
           <DashboardMetricCard title={t("metricTransfers")} value={byType.transfer || 0} icon={Upload} tone="violet" spark={transferTrend} loading={loading} />
@@ -348,9 +356,9 @@ export default function OperationLogsPage() {
           <DashboardMetricCard title={t("metricFailures")} value={statistics?.failure_count || 0} icon={AlertTriangle} tone="rose" spark={failureTrend} loading={loading} />
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.85fr)]">
-          <Card className="min-h-0 gap-0 p-5">
-            <div className="flex flex-col gap-4">
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.85fr)] xl:overflow-hidden">
+          <Card className="min-h-[520px] gap-0 overflow-hidden p-0 xl:min-h-0">
+            <div className="flex shrink-0 flex-col gap-3 p-4 sm:p-5">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="mr-2 text-base font-semibold">{t("recordsTitle")}</h2>
@@ -404,10 +412,10 @@ export default function OperationLogsPage() {
               </div>
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-lg border">
-              <div className="overflow-auto">
+            <div className="flex min-h-0 flex-1 flex-col border-t">
+              <div className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[980px] text-sm">
-                  <thead className="bg-muted/45 text-xs text-muted-foreground">
+                  <thead className="sticky top-0 z-10 bg-muted/95 text-xs text-muted-foreground backdrop-blur">
                     <tr>
                       <th className="px-4 py-3 text-left font-medium">{t("columnTime")}</th>
                       <th className="px-4 py-3 text-left font-medium">{t("columnType")}</th>
@@ -479,9 +487,9 @@ export default function OperationLogsPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
+              <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <span>{t("totalRows", { count: totalRows })}</span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button variant="outline" size="sm" disabled={page <= 1 || loading || refreshing} onClick={() => handlePageChange(page - 1)}>
                     {t("previous")}
                   </Button>
@@ -494,50 +502,48 @@ export default function OperationLogsPage() {
             </div>
           </Card>
 
-          <div className="grid gap-4">
+          <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
             <DashboardTrendCard title={t("trendTitle")} label={t("last24Hours")} data={hasTrendData ? trend : []} tone="emerald" emptyLabel={t("empty")} loading={loading} />
             <DashboardDonutCard title={t("typeDistributionTitle")} totalLabel={t("totalLabel")} totalValue={total} items={donutItems} loading={loading} />
             <DashboardSideList title={t("recentExceptionsTitle")} empty={t("empty")} items={recentExceptions} />
+            <Card className="gap-0 p-4 sm:p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold">{t("detailTitle")}</h2>
+                {selectedRecord && <InlineStatusBadge label={typeLabels[selectedRecord.type]} tone={typeTone(selectedRecord.type)} />}
+                {selectedRecord && <span className="font-mono text-xs text-muted-foreground">ID: {selectedRecord.id}</span>}
+              </div>
+              {selectedRecord ? (
+                <div className="mt-4 grid gap-4">
+                  <div className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-1">
+                    <Detail label={t("columnType")} value={typeLabels[selectedRecord.type]} />
+                    <Detail label={t("columnStatus")} value={statusLabels[selectedRecord.status] || selectedRecord.status} />
+                    <Detail label={t("columnUser")} value={selectedRecord.username || "-"} />
+                    <Detail label={t("columnServer")} value={selectedRecord.server_name || "-"} />
+                    <Detail label={t("columnSource")} value={selectedRecord.source || "-"} />
+                    <Detail label={t("columnDuration")} value={formatDuration(selectedRecord.duration_ms)} />
+                    <Detail label={t("detailStartedAt")} value={formatDateTime(selectedRecord.started_at || selectedRecord.created_at)} />
+                    <Detail label={t("detailFinishedAt")} value={formatDateTime(selectedRecord.finished_at)} />
+                    <Detail label={t("detailTraffic")} value={`${formatBytes(selectedRecord.bytes_processed)} / ${formatBytes(selectedRecord.bytes_total)}`} />
+                  </div>
+                  <div className="rounded-lg border bg-muted/25 p-4">
+                    <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">
+                      <span>{t("detailPreviewTitle")}</span>
+                      <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => navigator.clipboard?.writeText(selectedRecord.detail_json || selectedRecord.error_message || "")}>
+                        {t("copy")}
+                      </Button>
+                    </div>
+                    <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/70 p-3 font-mono text-xs text-muted-foreground">
+                      {selectedRecord.detail_json || selectedRecord.error_message || selectedRecord.resource || "-"}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-sm text-muted-foreground">{t("empty")}</div>
+              )}
+            </Card>
           </div>
         </div>
-
-        <Card className="gap-0 p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold">{t("detailTitle")}</h2>
-            {selectedRecord && <InlineStatusBadge label={typeLabels[selectedRecord.type]} tone={typeTone(selectedRecord.type)} />}
-            {selectedRecord && <span className="font-mono text-xs text-muted-foreground">ID: {selectedRecord.id}</span>}
-          </div>
-          {selectedRecord ? (
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-              <div className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                <Detail label={t("columnType")} value={typeLabels[selectedRecord.type]} />
-                <Detail label={t("columnStatus")} value={statusLabels[selectedRecord.status] || selectedRecord.status} />
-                <Detail label={t("columnUser")} value={selectedRecord.username || "-"} />
-                <Detail label={t("columnServer")} value={selectedRecord.server_name || "-"} />
-                <Detail label={t("columnSource")} value={selectedRecord.source || "-"} />
-                <Detail label={t("columnDuration")} value={formatDuration(selectedRecord.duration_ms)} />
-                <Detail label={t("detailStartedAt")} value={formatDateTime(selectedRecord.started_at || selectedRecord.created_at)} />
-                <Detail label={t("detailFinishedAt")} value={formatDateTime(selectedRecord.finished_at)} />
-                <Detail label={t("detailTraffic")} value={`${formatBytes(selectedRecord.bytes_processed)} / ${formatBytes(selectedRecord.bytes_total)}`} />
-              </div>
-              <div className="rounded-lg border bg-muted/25 p-4">
-                <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">
-                  <span>{t("detailPreviewTitle")}</span>
-                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => navigator.clipboard?.writeText(selectedRecord.detail_json || selectedRecord.error_message || "")}>
-                    {t("copy")}
-                  </Button>
-                </div>
-                <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/70 p-3 font-mono text-xs text-muted-foreground">
-                  {selectedRecord.detail_json || selectedRecord.error_message || selectedRecord.resource || "-"}
-                </pre>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 text-sm text-muted-foreground">{t("empty")}</div>
-          )}
-        </Card>
       </div>
-    </>
   )
 }
 

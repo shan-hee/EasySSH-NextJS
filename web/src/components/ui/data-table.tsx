@@ -355,8 +355,8 @@ export function DataTable<TData, TValue = unknown>({
       </div>
 
       {/* 分页控件 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <div>
             {tCommon("tableRange", {
               from: Math.min((currentPage - 1) * pageSize + 1, totalItems),
@@ -374,7 +374,7 @@ export function DataTable<TData, TValue = unknown>({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {/* 每页显示数量 */}
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground whitespace-nowrap">
@@ -408,7 +408,7 @@ export function DataTable<TData, TValue = unknown>({
             </Button>
 
             {/* 页码显示 */}
-            <div className="flex items-center gap-1">
+            <div className="hidden items-center gap-1 sm:flex">
               {totalPages > 0 && (
                 <>
                   {/* 第一页 */}
@@ -487,7 +487,7 @@ export function DataTable<TData, TValue = unknown>({
 
           {/* 页面跳转 */}
           {totalPages > 1 && (
-            <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 lg:flex">
               <span className="text-sm text-muted-foreground">
                 {tCommon("tableJumpTo")}
               </span>

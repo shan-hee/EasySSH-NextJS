@@ -52,8 +52,8 @@ export function DataTableToolbar<TData>({
   const isFiltered = table.getState().columnFilters.length > 0
 
   return (
-    <div className="flex items-center justify-between gap-2 p-4 border-b bg-muted/30">
-      <div className="flex flex-1 items-center gap-2 flex-wrap">
+    <div className="flex flex-col gap-3 border-b bg-muted/30 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         {/* 搜索框 */}
         {searchKey && (
           <Input
@@ -62,7 +62,7 @@ export function DataTableToolbar<TData>({
             onChange={(event) =>
               table.getColumn(searchKey)?.setFilterValue(event.target.value)
             }
-            className="h-8 w-[200px] lg:w-[300px]"
+            className="h-8 w-full min-w-[180px] sm:w-[240px] lg:w-[300px]"
           />
         )}
 
@@ -96,7 +96,7 @@ export function DataTableToolbar<TData>({
       </div>
 
       {/* 右侧操作按钮 */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
         {/* 自定义内容插槽 */}
         {children}
 

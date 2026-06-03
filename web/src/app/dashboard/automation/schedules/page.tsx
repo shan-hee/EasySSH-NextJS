@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,7 +49,7 @@ import { useSystemConfig } from "@/hooks/use-system-config"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { formatInTimezone, getEffectiveLocale, getEffectiveTimezone } from "@/utils/datetime"
 import { useTranslations } from "next-intl"
-import { SkeletonStatsCard } from "@/components/ui/loading"
+import { StatCard } from "../../components/stat-card"
 import { createScheduledTaskColumns } from "./components/scheduled-task-columns"
 
 export default function AutomationSchedulesPage() {
@@ -440,69 +439,22 @@ export default function AutomationSchedulesPage() {
  {confirmDialog}
  <PageHeader title={t("pageTitle")} />
 
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
- {/* 统计卡片 - 加载时显示骨架屏 */}
- {loading ? (
- <div className="grid gap-4 md:grid-cols-4">
- <SkeletonStatsCard />
- <SkeletonStatsCard />
- <SkeletonStatsCard />
- <SkeletonStatsCard />
+ <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
+ <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+ <StatCard title={t("statsTotalTasks")} value={statistics.total} icon={Calendar} tone="emerald" loading={loading} />
+ <StatCard title={t("statsEnabled")} value={statistics.enabled} icon={CheckCircle} tone="blue" loading={loading} />
+ <StatCard title={t("statsDisabled")} value={statistics.disabled} icon={Pause} tone="amber" loading={loading} />
+ <StatCard title={t("statsTotalRuns")} value={statistics.totalRuns} icon={Zap} tone="violet" loading={loading} />
  </div>
- ) : (
- <div className="grid gap-4 md:grid-cols-4">
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">{t("statsTotalTasks")}</CardTitle>
- <Calendar className="h-4 w-4 text-muted-foreground" />
- </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold">{statistics.total}</div>
- <p className="text-xs text-muted-foreground">{t("statsTotalTasksDesc")}</p>
- </CardContent>
- </Card>
-
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">{t("statsEnabled")}</CardTitle>
- <CheckCircle className="h-4 w-4 text-green-600" />
- </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold">{statistics.enabled}</div>
- <p className="text-xs text-muted-foreground">{t("statsEnabledDesc")}</p>
- </CardContent>
- </Card>
-
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">{t("statsDisabled")}</CardTitle>
- <Pause className="h-4 w-4 text-muted-foreground" />
- </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold">{statistics.disabled}</div>
- <p className="text-xs text-muted-foreground">{t("statsDisabledDesc")}</p>
- </CardContent>
- </Card>
-
- <Card>
- <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
- <CardTitle className="text-sm font-medium">{t("statsTotalRuns")}</CardTitle>
- <Zap className="h-4 w-4 text-yellow-600" />
- </CardHeader>
- <CardContent>
- <div className="text-2xl font-bold">{statistics.totalRuns}</div>
- <p className="text-xs text-muted-foreground">{t("statsTotalRunsDesc")}</p>
- </CardContent>
- </Card>
- </div>
- )}
 
  {/* 任务列表 */}
  <DataTable
  data={tasks}
  columns={columns}
- loading={loading}
+ loading={loading || refreshing}
  emptyMessage={t("emptyAll")}
+ className="min-h-0"
+ density="compact"
  toolbar={(table) => (
  <DataTableToolbar
  table={table}

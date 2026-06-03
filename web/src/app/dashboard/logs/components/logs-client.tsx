@@ -414,16 +414,13 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
   const total = statistics?.total_logs || 0
 
   return (
-    <div className="flex flex-1 flex-col gap-4 overflow-auto p-3 pt-0 sm:gap-5 sm:p-4 sm:pt-0">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("activityDashboardTitle")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("activityDashboardDescription")}</p>
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
+      <div className="flex flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+        <p>{t("activityDashboardDescription")}</p>
         <DashboardStatusLine label={t("collectionHealthy")} timestamp={formatDateTime(new Date().toISOString())} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <DashboardMetricCard title={t("metricTodayEvents")} value={total} icon={Activity} tone="emerald" spark={trend} loading={initialLoading} />
         <DashboardMetricCard title={t("metricFailedLogins")} value={statistics?.failure_count || 0} icon={AlertTriangle} tone="rose" spark={failureTrend} loading={initialLoading} />
         <DashboardMetricCard title={t("metricCommandRuns")} value={statistics?.success_count || 0} icon={ShieldCheck} tone="blue" spark={successTrend} loading={initialLoading} />
@@ -431,9 +428,9 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
         <DashboardMetricCard title={t("metricActiveUsers")} value={activeUserCount} icon={User} tone="violet" spark={activeUserTrend} loading={initialLoading} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.85fr)]">
-        <Card className="min-h-0 gap-0 p-5">
-          <div className="flex flex-col gap-4">
+      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.85fr)] xl:overflow-hidden">
+        <Card className="min-h-[520px] gap-0 overflow-hidden p-0 xl:min-h-0">
+          <div className="flex shrink-0 flex-col gap-3 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-base font-semibold">{t("activityTableTitle")}</h2>
@@ -478,10 +475,10 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
             </div>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-lg border">
-            <div className="overflow-auto">
+          <div className="flex min-h-0 flex-1 flex-col border-t">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[920px] text-sm">
-                <thead className="bg-muted/45 text-xs text-muted-foreground">
+                <thead className="sticky top-0 z-10 bg-muted/95 text-xs text-muted-foreground backdrop-blur">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium">{t("columnTime")}</th>
                     <th className="px-4 py-3 text-left font-medium">{t("columnStatus")}</th>
@@ -531,9 +528,9 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
+            <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>{t("tableDescription", { count: totalRows })}</span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1 || tableLoading} onClick={() => handlePageChange(page - 1)}>
                   {t("previous")}
                 </Button>
@@ -555,46 +552,45 @@ export function LogsClient({ initialData, defaultAction }: LogsClientProps) {
           </div>
         </Card>
 
-        <div className="grid gap-4">
+        <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
           <DashboardTrendCard title={t("activityTrendTitle")} label={t("last24Hours")} data={hasTrendData ? trend : []} tone="emerald" emptyLabel={t("activityEmpty")} loading={initialLoading} />
           <DashboardDonutCard title={t("riskDistributionTitle")} totalLabel={t("totalLabel")} totalValue={total} items={donutItems} loading={initialLoading} />
           <DashboardSideList title={t("recentAlertsTitle")} empty={t("activityEmpty")} items={recentAlerts} />
+          <Card className="gap-0 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold">{t("logDetailsTitle")}</h2>
+              {selectedLog && <InlineStatusBadge label={actionLabel(t, selectedLog.action)} tone={actionTone(selectedLog.action)} />}
+              {selectedLog && <span className="font-mono text-xs text-muted-foreground">ID: {selectedLog.id}</span>}
+            </div>
+            {selectedLog ? (
+              <div className="mt-4 grid gap-4">
+                <div className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-1">
+                  <Detail label={t("columnTime")} value={`${formatDate(selectedLog.created_at)} ${formatTime(selectedLog.created_at)}`} />
+                  <Detail label={t("columnUser")} value={selectedLog.username || "-"} />
+                  <Detail label={t("columnResource")} value={selectedLog.resource || "-"} />
+                  <Detail label={t("columnIp")} value={selectedLog.ip || "-"} />
+                  <Detail label={t("columnStatus")} value={statusLabel(t, selectedLog.status)} />
+                  <Detail label={t("columnDuration")} value={formatDuration(selectedLog.duration)} />
+                  <Detail label={t("columnCategory")} value={selectedLog.category === "activity" ? t("categoryActivity") : t("categoryAudit")} />
+                  <Detail label={t("columnAction")} value={actionLabel(t, selectedLog.action)} />
+                  <Detail label={t("columnServer")} value={selectedLog.server_id || "-"} />
+                </div>
+                <div className="rounded-lg border bg-muted/25 p-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <KeyRound className="h-4 w-4 text-muted-foreground" />
+                    {t("detailPayloadTitle")}
+                  </div>
+                  <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
+                    {selectedLog.details || selectedLog.error_msg || selectedLog.user_agent || "-"}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 text-sm text-muted-foreground">{t("emptyMessage")}</div>
+            )}
+          </Card>
         </div>
       </div>
-
-      <Card className="gap-0 p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold">{t("logDetailsTitle")}</h2>
-          {selectedLog && <InlineStatusBadge label={actionLabel(t, selectedLog.action)} tone={actionTone(selectedLog.action)} />}
-          {selectedLog && <span className="font-mono text-xs text-muted-foreground">ID: {selectedLog.id}</span>}
-        </div>
-        {selectedLog ? (
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-            <div className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <Detail label={t("columnTime")} value={`${formatDate(selectedLog.created_at)} ${formatTime(selectedLog.created_at)}`} />
-              <Detail label={t("columnUser")} value={selectedLog.username || "-"} />
-              <Detail label={t("columnResource")} value={selectedLog.resource || "-"} />
-              <Detail label={t("columnIp")} value={selectedLog.ip || "-"} />
-              <Detail label={t("columnStatus")} value={statusLabel(t, selectedLog.status)} />
-              <Detail label={t("columnDuration")} value={formatDuration(selectedLog.duration)} />
-              <Detail label={t("columnCategory")} value={selectedLog.category === "activity" ? t("categoryActivity") : t("categoryAudit")} />
-              <Detail label={t("columnAction")} value={actionLabel(t, selectedLog.action)} />
-              <Detail label={t("columnServer")} value={selectedLog.server_id || "-"} />
-            </div>
-            <div className="rounded-lg border bg-muted/25 p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                <KeyRound className="h-4 w-4 text-muted-foreground" />
-                {t("detailPayloadTitle")}
-              </div>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
-                {selectedLog.details || selectedLog.error_msg || selectedLog.user_agent || "-"}
-              </pre>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 text-sm text-muted-foreground">{t("emptyMessage")}</div>
-        )}
-      </Card>
 
       <AlertDialog open={cleanupOpen} onOpenChange={setCleanupOpen}>
         <AlertDialogContent>

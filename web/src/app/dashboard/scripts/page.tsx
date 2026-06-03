@@ -5,14 +5,12 @@ import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Kbd } from "@/components/ui/kbd"
 import { toast } from "sonner"
 import { getErrorMessage } from "@/lib/error-utils"
-// DataTable 相关组件
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { ColumnVisibility } from "@/components/ui/column-visibility"
@@ -24,7 +22,7 @@ import {
  DialogHeader,
  DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, X, RefreshCw, Search, Check, Terminal, Server as ServerIcon } from "lucide-react"
+import { Plus, X, RefreshCw, Search, Check, Terminal, Server as ServerIcon, FileText, Tag, User, List } from "lucide-react"
 import { scriptsApi, serversApi, batchTasksApi, type Script, type Server } from "@/lib/api"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -34,10 +32,10 @@ import { useRouter } from "next/navigation"
 import { createScriptColumns } from "./components/script-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
+import { StatCard } from "../components/stat-card"
 
 export default function ScriptsPage() {
  const t = useTranslations("scripts")
- const tCommon = useTranslations("common")
  const router = useRouter()
  const { ready } = useAuthReady()
  const { confirm: requestConfirm, confirmDialog } = useConfirmDialog()
@@ -594,81 +592,68 @@ const filterOptions = useMemo(() => {
  {confirmDialog}
  <PageHeader title={t("pageTitle")} />
 
-<div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
-  <Card className="flex-1 min-h-0">
-    <CardHeader className="flex flex-row items-center justify-between">
-      <div>
-        <CardTitle className="text-lg">{t("cardTitle")}</CardTitle>
-        <CardDescription>{t("cardDescription", { count: scripts.length })}</CardDescription>
-      </div>
-      <div className="flex items-center gap-2">
-        <ColumnVisibility
-          columns={[
-            { id: 'name', label: t("cvName") },
-            { id: 'description', label: t("cvDescription") },
-            { id: 'content', label: t("cvContent") },
-            // 以下列用于筛选，为避免报错，不允许在此处隐藏
-            // { id: 'tags', label: '标签' },
-            // { id: 'language', label: '语言' },
-            // { id: 'author', label: '作者' },
-            { id: 'updated_at', label: t("cvUpdatedAt") },
-            { id: 'executions', label: t("cvExecutions") },
-          ].map(column => ({
-            id: column.id,
-            label: column.label,
-            visible: columnVisibility[column.id] ?? true,
-            onToggle: () => setColumnVisibility(prev => ({
-              ...prev,
-              [column.id]: !prev[column.id]
-            }))
-          }))}
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          {tCommon("tableRefresh")}
-        </Button>
-        <Button size="sm" onClick={handleOpenDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          {t("btnNew")}
-        </Button>
-      </div>
-    </CardHeader>
-    <CardContent className="flex-1 min-h-0 p-4 pt-0">
-      <DataTable
-        data={scripts}
-        columns={visibleColumns}
-        loading={loading || refreshing}
-        currentPage={page}
-        pageCount={totalPages}
-        pageSize={pageSize}
-        totalRows={totalRows}
-        onPageChange={setPage}
-        onPageSizeChange={(newPageSize) => {
-          setPageSize(newPageSize)
-          setPage(1)
-        }}
-        emptyMessage={t("tableEmpty")}
-        className="flex h-full flex-col"
-        toolbar={(table) => (
-          <DataTableToolbar
-            table={table}
-            searchKey="name"
-            searchPlaceholder={t("tableSearchPlaceholder")}
-            filters={[
-              { column: 'author', title: t("filterAuthorTitle"), options: filterOptions.authors },
-              { column: 'tags', title: t("filterTagsTitle"), options: filterOptions.tags },
-            ]}
-          />
-        )}
-      />
-    </CardContent>
-  </Card>
-</div>
+ <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
+ <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+ <StatCard title={t("statsTotalScripts")} value={totalRows || scripts.length} icon={FileText} tone="emerald" loading={loading} />
+ <StatCard title={t("statsTags")} value={filterOptions.tags.length} icon={Tag} tone="blue" loading={loading} />
+ <StatCard title={t("statsAuthors")} value={filterOptions.authors.length} icon={User} tone="violet" loading={loading} />
+ <StatCard title={t("statsCurrentPage")} value={scripts.length} icon={List} tone="cyan" loading={loading} />
+ </div>
+
+ <DataTable
+ data={scripts}
+ columns={visibleColumns}
+ loading={loading || refreshing}
+ currentPage={page}
+ pageCount={totalPages}
+ pageSize={pageSize}
+ totalRows={totalRows}
+ onPageChange={setPage}
+ onPageSizeChange={(newPageSize) => {
+ setPageSize(newPageSize)
+ setPage(1)
+ }}
+ emptyMessage={t("tableEmpty")}
+ className="min-h-0"
+ density="compact"
+ toolbar={(table) => (
+ <DataTableToolbar
+ table={table}
+ searchKey="name"
+ searchPlaceholder={t("tableSearchPlaceholder")}
+ filters={[
+ { column: 'author', title: t("filterAuthorTitle"), options: filterOptions.authors },
+ { column: 'tags', title: t("filterTagsTitle"), options: filterOptions.tags },
+ ]}
+ onRefresh={handleRefresh}
+ showRefresh={true}
+ isRefreshing={refreshing}
+ >
+ <ColumnVisibility
+ columns={[
+ { id: 'name', label: t("cvName") },
+ { id: 'description', label: t("cvDescription") },
+ { id: 'content', label: t("cvContent") },
+ { id: 'updated_at', label: t("cvUpdatedAt") },
+ { id: 'executions', label: t("cvExecutions") },
+ ].map(column => ({
+ id: column.id,
+ label: column.label,
+ visible: columnVisibility[column.id] ?? true,
+ onToggle: () => setColumnVisibility(prev => ({
+ ...prev,
+ [column.id]: !prev[column.id]
+ }))
+ }))}
+ />
+ <Button size="sm" onClick={handleOpenDialog}>
+ <Plus className="mr-2 h-4 w-4" />
+ {t("btnNew")}
+ </Button>
+ </DataTableToolbar>
+ )}
+ />
+ </div>
 
  {/* 新建脚本弹窗 */}
  <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>

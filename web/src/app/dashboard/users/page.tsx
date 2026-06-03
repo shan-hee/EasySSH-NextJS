@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTranslations } from "next-intl"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,23 +24,27 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Plus,
-  Users,
-  Shield,
   Eye,
-  Trash2,
+  FileText,
+  FolderKey,
   KeyRound,
+  Plus,
+  Server,
+  Settings,
+  Shield,
+  Terminal,
+  Trash2,
+  Users,
 } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { permissionsApi, usersApi, type Permission, type UserDetail, type UserRole } from "@/lib/api"
-import { SkeletonStatsCard, SkeletonTable } from "@/components/ui/loading"
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import { useUserColumns } from "./components/user-columns"
 import { usePermissionColumns, staticPermissions } from "./components/permission-columns"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
-import { Server, FolderKey, Terminal, FileText, Settings } from "lucide-react"
+import { StatCard } from "../components/stat-card"
 
 export default function UsersPage() {
   const t = useTranslations("users")
@@ -573,150 +576,80 @@ export default function UsersPage() {
       {confirmDialog}
       <PageHeader title={t("pageTitle")} />
 
-      {loading ? (
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
-          {/* 统计卡片骨架屏 */}
-          <div className="grid gap-4 md:grid-cols-4 shrink-0">
-            <SkeletonStatsCard />
-            <SkeletonStatsCard />
-            <SkeletonStatsCard />
-            <SkeletonStatsCard />
-          </div>
-          {/* 表格骨架屏 */}
-          <Card className="flex-1 min-h-0 flex flex-col">
-            <CardContent className="flex-1 overflow-y-auto scrollbar-custom p-6">
-              <SkeletonTable rows={10} columns={5} showCheckbox showActions />
-            </CardContent>
-          </Card>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard title={t("statsTotalUsers")} value={statistics.totalUsers} icon={Users} tone="emerald" loading={loading} />
+          <StatCard title={t("statsAdmins")} value={statistics.adminUsers} icon={Shield} tone="violet" loading={loading} />
+          <StatCard title={t("statsNormalUsers")} value={statistics.normalUsers} icon={Users} tone="blue" loading={loading} />
+          <StatCard title={t("statsViewers")} value={statistics.viewerUsers} icon={Eye} tone="cyan" loading={loading} />
         </div>
-      ) : (
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0 h-full overflow-hidden">
-          {/* 统计卡片 */}
-          <div className="grid gap-4 md:grid-cols-4 shrink-0">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("statsTotalUsers")}
-                </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{statistics.totalUsers}</div>
-                <p className="text-xs text-muted-foreground">
-                  {t("statsTotalUsersDesc")}
-                </p>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("statsAdmins")}
-                </CardTitle>
-                <Shield className="h-4 w-4 text-purple-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{statistics.adminUsers}</div>
-                <p className="text-xs text-muted-foreground">
-                  {t("statsAdminsDesc")}
-                </p>
-              </CardContent>
-            </Card>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "users" | "permissions")} className="flex min-h-0 flex-1 flex-col">
+          <TabsList className="w-fit">
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="h-4 w-4" />
+              {t("tabUsers")}
+            </TabsTrigger>
+            <TabsTrigger value="permissions" className="gap-2">
+              <KeyRound className="h-4 w-4" />
+              {t("tabPermissions")}
+            </TabsTrigger>
+          </TabsList>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("statsNormalUsers")}
-                </CardTitle>
-                <Users className="h-4 w-4 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{statistics.normalUsers}</div>
-                <p className="text-xs text-muted-foreground">
-                  {t("statsNormalUsersDesc")}
-                </p>
-              </CardContent>
-            </Card>
+          {/* 用户列表 Tab */}
+          <TabsContent value="users" className="mt-3 min-h-0 flex-1 overflow-hidden">
+            <DataTable
+                data={users}
+                columns={columns}
+                loading={loading || refreshing}
+                emptyMessage={t("tableEmpty")}
+                enableRowSelection={true}
+                className="min-h-0"
+                density="compact"
+                toolbar={(table) => (
+                  <DataTableToolbar
+                    table={table}
+                    searchKey="username"
+                    searchPlaceholder={t("searchPlaceholder")}
+                    filters={roleFilters}
+                    onRefresh={handleRefresh}
+                    showRefresh={true}
+                    isRefreshing={refreshing}
+                  >
+                    <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      {t("btnNewUser")}
+                    </Button>
+                  </DataTableToolbar>
+                )}
+                batchActions={(table) => (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      const selectedRows = table.getFilteredSelectedRowModel().rows
+                      const userIds = selectedRows.map(row => row.original.id)
+                      handleBatchDelete(userIds)
+                    }}
+                    className="h-7"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {t("batchDelete")}
+                  </Button>
+                )}
+            />
+          </TabsContent>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {t("statsViewers")}
-                </CardTitle>
-                <Eye className="h-4 w-4 text-gray-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{statistics.viewerUsers}</div>
-                <p className="text-xs text-muted-foreground">
-                  {t("statsViewersDesc")}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* 用户/权限切换 Tab */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "users" | "permissions")} className="flex-1 min-h-0 flex flex-col">
-            <TabsList className="w-fit">
-              <TabsTrigger value="users" className="gap-2">
-                <Users className="h-4 w-4" />
-                {t("tabUsers")}
-              </TabsTrigger>
-              <TabsTrigger value="permissions" className="gap-2">
-                <KeyRound className="h-4 w-4" />
-                {t("tabPermissions")}
-              </TabsTrigger>
-            </TabsList>
-
-            {/* 用户列表 Tab */}
-            <TabsContent value="users" className="mt-4 flex-1 min-h-0">
-              <DataTable
-            data={users}
-            columns={columns}
-            loading={refreshing}
-            emptyMessage={t("tableEmpty")}
-            enableRowSelection={true}
-            toolbar={(table) => (
-              <DataTableToolbar
-                table={table}
-                searchKey="username"
-                searchPlaceholder={t("searchPlaceholder")}
-                filters={roleFilters}
-                onRefresh={handleRefresh}
-                showRefresh={true}
-                isRefreshing={refreshing}
-              >
-                <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t("btnNewUser")}
-                </Button>
-              </DataTableToolbar>
-            )}
-            batchActions={(table) => (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  const selectedRows = table.getFilteredSelectedRowModel().rows
-                  const userIds = selectedRows.map(row => row.original.id)
-                  handleBatchDelete(userIds)
-                }}
-                className="h-7"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                {t("batchDelete")}
-              </Button>
-            )}
-          />
-            </TabsContent>
-
-            {/* 权限列表 Tab */}
-            <TabsContent value="permissions" className="mt-4 flex-1 min-h-0">
-              <DataTable
+          {/* 权限列表 Tab */}
+          <TabsContent value="permissions" className="mt-3 min-h-0 flex-1 overflow-hidden">
+            <DataTable
                 data={permissions}
                 columns={permissionColumns}
-                loading={false}
+                loading={loading}
                 emptyMessage={t("permTableEmpty")}
                 enableRowSelection={true}
+                className="min-h-0"
+                density="compact"
                 toolbar={(table) => (
                   <DataTableToolbar
                     table={table}
@@ -746,11 +679,10 @@ export default function UsersPage() {
                     {t("batchDelete")}
                   </Button>
                 )}
-              />
-            </TabsContent>
-          </Tabs>
-        </div>
-      )}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {/* 新建用户对话框 */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
