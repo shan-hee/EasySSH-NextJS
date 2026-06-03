@@ -67,5 +67,13 @@ type activityLogRow struct {
 type operationTrendRow struct {
 	Type      string
 	Action    string
+	StartedAt *time.Time
 	CreatedAt time.Time
+}
+
+func (row operationTrendRow) occurredAt() time.Time {
+	if row.StartedAt != nil && !row.StartedAt.IsZero() {
+		return *row.StartedAt
+	}
+	return row.CreatedAt
 }

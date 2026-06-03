@@ -58,8 +58,8 @@ func (r *repository) GetActivityLogsSince(ctx context.Context, userID *uuid.UUID
 func (r *repository) GetOperationTrendsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]operationTrendRow, error) {
 	query := r.db.WithContext(ctx).
 		Table("operation_records").
-		Select("type, action, created_at").
-		Where("deleted_at IS NULL AND created_at >= ?", since)
+		Select("type, action, started_at, created_at").
+		Where("deleted_at IS NULL AND (started_at >= ? OR (started_at IS NULL AND created_at >= ?))", since, since)
 
 	if userID != nil {
 		query = query.Where("user_id = ?", *userID)

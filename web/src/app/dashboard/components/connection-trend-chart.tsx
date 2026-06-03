@@ -61,6 +61,11 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
     [dates]
   )
   const values = React.useMemo(() => series[metric] ?? [], [series, metric])
+  const maxValue = React.useMemo(
+    () => values.reduce((max, value) => Math.max(max, value), 0),
+    [values]
+  )
+  const hasData = maxValue > 0
 
   const option: EChartsOption = React.useMemo(() => {
     return {
@@ -88,6 +93,7 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
       },
       yAxis: {
         type: "value",
+        max: hasData ? Math.max(2, Math.ceil(maxValue * 1.2)) : 1,
         minInterval: 1,
         axisLine: { show: false },
         axisTick: { show: false },
@@ -98,9 +104,10 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
         {
           name: metricLabel(metric),
           type: "line",
+          data: values,
           smooth: true,
           smoothMonotone: "x",
-          showSymbol: false,
+          showSymbol: hasData,
           symbol: "circle",
           symbolSize: 6,
           lineStyle: { width: 2.4, color: lineColor },
@@ -126,12 +133,12 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
           },
           // 高亮最后一个数据点
           markPoint:
-            values.length > 0
+            hasData && values.length > 0
               ? {
                   symbol: "circle",
                   symbolSize: 8,
                   itemStyle: { color: lineColor, borderColor: chartTheme.pointFill, borderWidth: 2 },
-                  data: [{ name: "latest", coord: [xLabels.length - 1, values[values.length - 1]] }],
+                  data: [{ name: "latest", coord: [xLabels[xLabels.length - 1], values[values.length - 1]] }],
                   label: { show: false },
                 }
               : undefined,
@@ -139,7 +146,7 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
       ],
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xLabels, values, lineColor, chartTheme, metric])
+  }, [xLabels, values, lineColor, chartTheme, metric, hasData, maxValue])
 
   return (
     <Card className="h-full gap-0 py-4">

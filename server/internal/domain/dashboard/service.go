@@ -107,10 +107,11 @@ func (s *service) GetOverview(ctx context.Context, userID *uuid.UUID) (*Overview
 		if dim == "" {
 			dim = "commands"
 		}
+		occurredAt := row.occurredAt()
 
-		recordTrendEvent(row.CreatedAt, dim)
+		recordTrendEvent(occurredAt, dim)
 
-		day := row.CreatedAt.Local().Format("2006-01-02")
+		day := occurredAt.Local().Format("2006-01-02")
 		if operationDimsByDay[day] == nil {
 			operationDimsByDay[day] = make(map[string]bool)
 		}
