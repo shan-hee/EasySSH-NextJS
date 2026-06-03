@@ -62,3 +62,10 @@ type activityLogRow struct {
 	IP        string
 	CreatedAt time.Time
 }
+
+// operationTrendRow 是 operation_records 趋势聚合所需的轻量行。
+type operationTrendRow struct {
+	Type      string
+	Action    string
+	CreatedAt time.Time
+}

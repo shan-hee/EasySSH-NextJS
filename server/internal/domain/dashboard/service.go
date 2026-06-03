@@ -19,6 +19,13 @@ var actionDimension = map[string]string{
 	"sftp_download":  "uploads",
 }
 
+// operation_records type → 趋势维度的映射。
+var operationDimension = map[string]string{
+	"connection": "connections",
+	"transfer":   "uploads",
+	"execution":  "commands",
+}
+
 // Service 仪表盘服务接口
 type Service interface {
 	// GetOverview 获取仪表盘聚合数据。userID 为 nil 表示管理员（全局统计）。
@@ -45,6 +52,10 @@ func (s *service) GetOverview(ctx context.Context, userID *uuid.UUID) (*Overview
 	if err != nil {
 		return nil, err
 	}
+	operationRows, err := s.repo.GetOperationTrendsSince(ctx, userID, windowStart)
+	if err != nil {
+		return nil, err
+	}
 
 	// 生成近 trendDays 天的连续日期（含今天）
 	dates := buildDateRange(now, trendDays)
@@ -66,14 +77,10 @@ func (s *service) GetOverview(ctx context.Context, userID *uuid.UUID) (*Overview
 	todayStart := startOfDay(now)
 
 	var curCommands, prevCommands, todayCommands int64
+	operationDimsByDay := make(map[string]map[string]bool)
 
-	for _, row := range logs {
-		day := row.CreatedAt.Local().Format("2006-01-02")
-		dim := actionDimension[row.Action]
-		if dim == "" {
-			dim = "commands" // 其余操作归入「命令/操作」维度
-		}
-
+	recordTrendEvent := func(createdAt time.Time, dim string) {
+		day := createdAt.Local().Format("2006-01-02")
 		// 填充近 trendDays 天的按天序列
 		if idx, ok := dateIndex[day]; ok {
 			series[dim][idx]++
@@ -82,7 +89,7 @@ func (s *service) GetOverview(ctx context.Context, userID *uuid.UUID) (*Overview
 
 		// 命令数环比：以「commands 维度」计（连接、上传不计入命令数）
 		if dim == "commands" {
-			t := row.CreatedAt
+			t := createdAt
 			switch {
 			case !t.Before(curPeriodStart):
 				curCommands++
@@ -93,6 +100,36 @@ func (s *service) GetOverview(ctx context.Context, userID *uuid.UUID) (*Overview
 				todayCommands++
 			}
 		}
+	}
+
+	for _, row := range operationRows {
+		dim := operationDimension[row.Type]
+		if dim == "" {
+			dim = "commands"
+		}
+
+		recordTrendEvent(row.CreatedAt, dim)
+
+		day := row.CreatedAt.Local().Format("2006-01-02")
+		if operationDimsByDay[day] == nil {
+			operationDimsByDay[day] = make(map[string]bool)
+		}
+		operationDimsByDay[day][dim] = true
+	}
+
+	for _, row := range logs {
+		day := row.CreatedAt.Local().Format("2006-01-02")
+		dim := actionDimension[row.Action]
+		if dim == "" {
+			dim = "commands" // 其余操作归入「命令/操作」维度
+		}
+
+		// 新版本连接/传输已写入 operation_records；同日同维度有记录时，活动日志只做兜底，避免双算。
+		if (dim == "connections" || dim == "uploads") && operationDimsByDay[day][dim] {
+			continue
+		}
+
+		recordTrendEvent(row.CreatedAt, dim)
 	}
 
 	// 服务器统计

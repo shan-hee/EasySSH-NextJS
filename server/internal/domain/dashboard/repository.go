@@ -13,6 +13,9 @@ type Repository interface {
 	// GetActivityLogsSince 查询时间窗内的活动记录（轻量字段），按时间正序返回，供 service 在内存中按天分桶
 	GetActivityLogsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]activityLogRow, error)
 
+	// GetOperationTrendsSince 查询时间窗内的统一操作记录，供趋势图按天分桶。
+	GetOperationTrendsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]operationTrendRow, error)
+
 	// GetRecentActivity 查询最近活动记录（用于活动时间线）
 	GetRecentActivity(ctx context.Context, userID *uuid.UUID, limit int) ([]activityLogRow, error)
 
@@ -47,6 +50,22 @@ func (r *repository) GetActivityLogsSince(ctx context.Context, userID *uuid.UUID
 	}
 
 	var rows []activityLogRow
+	err := query.Order("created_at ASC").Scan(&rows).Error
+	return rows, err
+}
+
+// GetOperationTrendsSince 查询时间窗内的统一操作记录。
+func (r *repository) GetOperationTrendsSince(ctx context.Context, userID *uuid.UUID, since time.Time) ([]operationTrendRow, error) {
+	query := r.db.WithContext(ctx).
+		Table("operation_records").
+		Select("type, action, created_at").
+		Where("deleted_at IS NULL AND created_at >= ?", since)
+
+	if userID != nil {
+		query = query.Where("user_id = ?", *userID)
+	}
+
+	var rows []operationTrendRow
 	err := query.Order("created_at ASC").Scan(&rows).Error
 	return rows, err
 }

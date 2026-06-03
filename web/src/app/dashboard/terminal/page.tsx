@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback, useMemo, Suspense, startTransition } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "@/components/ui/sonner"
 import { SshWorkspace } from "@easyssh/ssh-workspace"
 import { TerminalComponent } from "@/components/terminal/terminal-component"
@@ -46,6 +47,27 @@ const createConfigSession = (
   }
 }
 
+const createTerminalSessionFromServer = (
+  sessionId: string,
+  server: Server,
+  now: number = Date.now()
+): TerminalSession => ({
+  id: sessionId,
+  serverId: String(server.id),
+  serverName: server.name || `${server.username}@${server.host}:${server.port}`,
+  host: server.host,
+  port: server.port,
+  username: server.username,
+  shouldConnect: true,
+  connectionPhase: "idle",
+  status: "reconnecting",
+  lastActivity: now,
+  group: server.group,
+  tags: server.tags,
+  pinned: false,
+  type: "terminal",
+})
+
 const readTerminalBehaviorSettings = (defaults: { maxTabs: number; inactiveMinutes: number }) => {
   if (typeof window === "undefined") {
     return defaults
@@ -85,6 +107,8 @@ const readTerminalBehaviorSettings = (defaults: { maxTabs: number; inactiveMinut
 
 function TerminalPageContent() {
   const { ready } = useAuthReady()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { config: systemConfig } = useSystemConfig()
   const { runtime } = useRuntime()
   const tCommon = useTranslations("common")
@@ -96,6 +120,8 @@ function TerminalPageContent() {
   const [inactiveMinutes, setInactiveMinutes] = useState(60)
   const inactivityNotifiedRef = useRef<Set<string>>(new Set())
   const initializedRef = useRef(false)
+  const consumedServerIdRef = useRef<string | null>(null)
+  const serverIdFromSearch = searchParams.get("serverId")?.trim() ?? ""
 
   const sessions = useTerminalStore((state) => state.sessions)
   const activeSessionId = useTerminalStore((state) => state.activeSessionId)
@@ -245,7 +271,7 @@ function TerminalPageContent() {
     return id
   }
 
-  const handleStartConnectionFromConfig = (sessionId: string, server: Server) => {
+  const handleStartConnectionFromConfig = useCallback((sessionId: string, server: Server) => {
     const now = Date.now()
     const terminalStore = useTerminalStore.getState()
 
@@ -258,27 +284,99 @@ function TerminalPageContent() {
         })
       }
 
-      setSessions((prev) => prev.map((session) => session.id === sessionId ? {
-        id: sessionId,
-        serverId: String(server.id),
-        serverName: server.name || `${server.username}@${server.host}:${server.port}`,
-        host: server.host,
-        port: server.port,
-        username: server.username,
-        shouldConnect: true,
-        connectionPhase: "idle",
-        status: "reconnecting",
-        lastActivity: now,
-        group: server.group,
-        tags: server.tags,
-        pinned: false,
-        type: "terminal",
-      } : session))
+      setSessions((prev) => prev.map((session) => (
+        session.id === sessionId
+          ? createTerminalSessionFromServer(sessionId, server, now)
+          : session
+      )))
 
       setActiveSessionId(sessionId)
       updateSessionActivity(sessionId, now)
     })
-  }
+  }, [setActiveSessionId, setSessions, updateSessionActivity])
+
+  useEffect(() => {
+    if (!serverIdFromSearch) {
+      consumedServerIdRef.current = null
+    }
+  }, [serverIdFromSearch])
+
+  useEffect(() => {
+    if (!ready || !serverIdFromSearch || sessions.length === 0) {
+      return
+    }
+    if (consumedServerIdRef.current === serverIdFromSearch) {
+      return
+    }
+
+    consumedServerIdRef.current = serverIdFromSearch
+    let cancelled = false
+
+    const cleanSearchParam = () => {
+      if (typeof window === "undefined") {
+        return
+      }
+      const url = new URL(window.location.href)
+      url.searchParams.delete("serverId")
+      router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false })
+    }
+
+    const connectFromSearch = async () => {
+      try {
+        const server = await serversApi.getById(serverIdFromSearch)
+        if (cancelled) {
+          return
+        }
+
+        const targetSession =
+          sessions.find((session) => session.id === activeSessionId && session.type === "config") ??
+          sessions.find((session) => session.type === "config")
+
+        if (targetSession) {
+          handleStartConnectionFromConfig(targetSession.id, server)
+          cleanSearchParam()
+          return
+        }
+
+        if (sessions.length >= maxTabs) {
+          toast.error(t("errorMaxTabsReached", { max: maxTabs }))
+          cleanSearchParam()
+          return
+        }
+
+        const now = Date.now()
+        const sessionId = `session-${now}`
+        setSessions((prev) => [...prev, createTerminalSessionFromServer(sessionId, server, now)])
+        setActiveSessionId(sessionId)
+        updateSessionActivity(sessionId, now)
+        cleanSearchParam()
+      } catch (error) {
+        consumedServerIdRef.current = null
+        console.error("Failed to connect server from quick access:", error)
+        toast.error(tServers("toastLoadFailed"))
+        cleanSearchParam()
+      }
+    }
+
+    void connectFromSearch()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeSessionId,
+    handleStartConnectionFromConfig,
+    maxTabs,
+    ready,
+    router,
+    serverIdFromSearch,
+    sessions,
+    setActiveSessionId,
+    setSessions,
+    t,
+    tServers,
+    updateSessionActivity,
+  ])
 
   const handleCloseSession = useCallback((sessionId: string) => {
     if (sessions.length <= 1) {
