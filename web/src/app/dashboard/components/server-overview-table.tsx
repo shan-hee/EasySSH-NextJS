@@ -81,12 +81,18 @@ export function ServerOverviewTable({ servers, loading }: ServerOverviewTablePro
   }
 
   return (
-    <Card className="gap-0">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
+    <Card className="h-full min-h-0 gap-0 overflow-hidden py-4">
+      <CardHeader className="flex shrink-0 flex-row items-center justify-between pb-2">
         <CardTitle className="text-base">{t("serverOverview")}</CardTitle>
+        <Button asChild variant="ghost" size="sm" className="h-8 text-muted-foreground">
+          <Link href="/dashboard/terminal">
+            {t("viewAllServers")}
+            <ArrowRight className="ml-1 h-4 w-4" />
+          </Link>
+        </Button>
       </CardHeader>
-      <CardContent className="pt-2">
-        <div className="space-y-3 md:hidden">
+      <CardContent className="flex min-h-0 flex-1 flex-col pt-2">
+        <div className="space-y-3 overflow-auto md:hidden">
           {loading && servers.length === 0 ? (
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="rounded-md border p-3">
@@ -177,7 +183,7 @@ export function ServerOverviewTable({ servers, loading }: ServerOverviewTablePro
           )}
         </div>
 
-        <div className="scrollbar-custom hidden max-h-[340px] overflow-y-auto overflow-x-auto md:block">
+        <div className="scrollbar-custom hidden min-h-0 flex-1 overflow-auto md:block">
           <Table className="min-w-[760px]">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="hover:bg-transparent">
@@ -297,15 +303,6 @@ export function ServerOverviewTable({ servers, loading }: ServerOverviewTablePro
           </Table>
         </div>
 
-        {/* 查看全部 */}
-        <div className="mt-3 flex justify-center border-t pt-3">
-          <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-            <Link href="/dashboard/terminal">
-              {t("viewAllServers")}
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
       </CardContent>
     </Card>
   )

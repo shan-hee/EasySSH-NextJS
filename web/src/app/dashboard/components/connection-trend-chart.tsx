@@ -142,8 +142,8 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
   }, [xLabels, values, lineColor, chartTheme, metric])
 
   return (
-    <Card className="gap-0">
-      <CardHeader className="flex flex-col items-start gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
+    <Card className="h-full gap-0 py-4">
+      <CardHeader className="flex shrink-0 flex-col items-start gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-base leading-6">{t("connectionTrend")}</CardTitle>
         <Select value={metric} onValueChange={(v) => setMetric(v as MetricKey)}>
           <SelectTrigger size="sm" className="w-full sm:w-[130px]">
@@ -158,8 +158,8 @@ export function ConnectionTrendChart({ dates, series, loading }: ConnectionTrend
           </SelectContent>
         </Select>
       </CardHeader>
-      <CardContent className="pt-2">
-        <div className="h-[220px] w-full sm:h-[260px]">
+      <CardContent className="min-h-0 flex-1 pt-2">
+        <div className="h-[170px] w-full 2xl:h-[210px]">
           {loading ? (
             <div className="h-full w-full animate-pulse rounded-lg bg-primary/5" />
           ) : (

@@ -248,22 +248,22 @@ export function UserManagementContent() {
 
   // 渲染主体内容（去掉 PageHeader）
   return loading ? (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
       {/* 统计卡片骨架屏 */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid shrink-0 gap-3 md:grid-cols-4">
         <SkeletonCard showHeader={false} lines={2} />
         <SkeletonCard showHeader={false} lines={2} />
         <SkeletonCard showHeader={false} lines={2} />
         <SkeletonCard showHeader={false} lines={2} />
       </div>
       {/* 表格骨架屏 */}
-      <SkeletonCard showHeader lines={8} className="flex-1" />
+      <SkeletonCard showHeader lines={8} className="min-h-0 flex-1" />
     </div>
   ) : (
-    <div className="flex flex-1 h-full min-h-0 flex-col gap-4 p-4 pt-0 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
       {confirmDialog}
       {/* 统计卡片 */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid shrink-0 gap-3 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -326,8 +326,8 @@ export function UserManagementContent() {
       </div>
 
       {/* 用户管理表格 */}
-      <Card className="flex-1 min-h-0">
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="min-h-0 flex-1 gap-0 overflow-hidden">
+        <CardHeader className="flex shrink-0 flex-row items-center justify-between">
           <div>
             <CardTitle className="text-lg">{t("pageTitle")}</CardTitle>
             <CardDescription>
@@ -339,7 +339,7 @@ export function UserManagementContent() {
             {t("btnNewUser")}
           </Button>
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 p-4 pt-0">
+        <CardContent className="min-h-0 flex-1 p-4 pt-0">
           <DataTable
             columns={columns}
             data={users}

@@ -9,14 +9,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Code2, ArrowUpDown, ArrowUp, ArrowDown, Play, Edit, Trash2, User, CalendarClock, Hash } from "lucide-react"
+import { Code2, ArrowUpDown, ArrowUp, ArrowDown, Play, Edit, Trash2, User, CalendarClock, Hash, MoreHorizontal } from "lucide-react"
 import { type Script } from "@/lib/api"
 import { formatTimestamp } from "@/components/ui/data-table"
+import { cn } from "@/lib/utils"
 
 interface Handlers {
   onExecute: (id: string) => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
+  onSelect?: (id: string) => void
+  selectedId?: string | null
   t: (key: string) => string
 }
 
@@ -24,6 +27,8 @@ export function createScriptColumns({
   onExecute,
   onEdit,
   onDelete,
+  onSelect,
+  selectedId,
   t,
 }: Handlers): ColumnDef<Script>[] {
   const columns: ColumnDef<Script>[] = [
@@ -51,11 +56,33 @@ export function createScriptColumns({
       ),
       cell: ({ row }) => {
         const script = row.original
+        const primaryTag = script.tags?.[0]
         return (
-          <div className="flex items-center gap-2">
-            <Code2 className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{script.name}</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => onSelect?.(script.id)}
+            className={cn(
+              "flex min-w-[200px] max-w-[340px] items-start gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-accent/60",
+              selectedId === script.id && "bg-accent text-accent-foreground"
+            )}
+          >
+            <Code2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 space-y-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate font-medium">{script.name}</span>
+                {primaryTag && (
+                  <Badge variant="secondary" className="shrink-0 text-[10px]">
+                    {primaryTag}
+                  </Badge>
+                )}
+              </div>
+              {script.description && (
+                <p className="line-clamp-1 text-xs text-muted-foreground">
+                  {script.description}
+                </p>
+              )}
+            </div>
+          </button>
         )
       },
       filterFn: (row, id, value) => {
@@ -73,8 +100,8 @@ export function createScriptColumns({
       accessorKey: "description",
       header: t("colDescription"),
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground line-clamp-2">
-          {row.original.description}
+        <span className="line-clamp-2 max-w-[240px] text-xs text-muted-foreground">
+          {row.original.description || "-"}
         </span>
       ),
       enableSorting: false,
@@ -84,8 +111,8 @@ export function createScriptColumns({
       accessorKey: "content",
       header: t("colContent"),
       cell: ({ row }) => (
-        <div className="bg-muted rounded-md px-3 py-2 max-w-[420px]">
-          <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap line-clamp-3">
+        <div className="max-w-[320px] rounded-md bg-muted px-3 py-2">
+          <pre className="line-clamp-2 whitespace-pre-wrap font-mono text-xs text-muted-foreground">
             {row.original.content}
           </pre>
         </div>
@@ -99,15 +126,22 @@ export function createScriptColumns({
       cell: ({ row }) => {
         const tags = row.original.tags || []
         return (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex max-w-[150px] flex-wrap gap-1">
             {tags.length === 0 ? (
               <span className="text-sm text-muted-foreground">-</span>
             ) : (
-              tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              ))
+              <>
+                {tags.slice(0, 2).map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+                {tags.length > 2 && (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                    +{tags.length - 2}
+                  </Badge>
+                )}
+              </>
             )}
           </div>
         )
@@ -142,7 +176,7 @@ export function createScriptColumns({
         </Button>
       ),
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{row.original.author}</span>
+        <span className="block max-w-[96px] truncate text-sm text-muted-foreground">{row.original.author || "-"}</span>
       ),
       filterFn: (row, id, value) => {
         const selected = (value as string[]) || []
@@ -176,7 +210,7 @@ export function createScriptColumns({
         const ts = row.original.updated_at
         const { date, time } = formatTimestamp(ts)
         return (
-          <div className="text-sm text-muted-foreground">
+          <div className="whitespace-nowrap text-sm text-muted-foreground">
             <div>{time}</div>
             <div className="text-xs">{date}</div>
           </div>
@@ -206,7 +240,7 @@ export function createScriptColumns({
         </Button>
       ),
       cell: ({ row }) => (
-        <span className="text-sm">{row.original.executions}</span>
+        <span className="tabular-nums">{row.original.executions || 0}</span>
       ),
     },
     {
@@ -227,8 +261,8 @@ export function createScriptColumns({
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <ArrowDown className="h-4 w-4 rotate-90" />
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title={t("colActions")}>
+                  <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

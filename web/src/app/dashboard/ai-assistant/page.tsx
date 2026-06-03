@@ -480,7 +480,7 @@ export default function AIAssistantPage() {
   }, [attachments.length, t])
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {confirmDialog}
       <PageHeader
         title={t("pageTitle")}
@@ -705,9 +705,9 @@ export default function AIAssistantPage() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="h-full min-w-0 overflow-y-auto pb-4 md:pb-6 lg:overflow-hidden">
-          <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden pb-4 md:pb-6">
+          <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-hidden">
               {hasTimeline ? (
                 <Conversation className="h-full w-full">

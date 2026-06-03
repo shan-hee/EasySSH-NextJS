@@ -139,9 +139,9 @@ export default function TerminalSessionsPage() {
         </Button>
       </PageHeader>
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
         {/* 统计卡片 */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid shrink-0 gap-3 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{t("statsActive")}</CardTitle>
@@ -200,11 +200,11 @@ export default function TerminalSessionsPage() {
         </div>
 
         {/* 搜索栏 */}
-        <Card>
-          <CardHeader>
+        <Card className="shrink-0 gap-0 py-0">
+          <CardHeader className="py-3 sm:py-4">
             <CardTitle className="text-lg">{t("searchTitle")}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pb-4">
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
@@ -218,8 +218,8 @@ export default function TerminalSessionsPage() {
         </Card>
 
         {/* 活动会话表格 */}
-        <Card>
-            <CardHeader>
+        <Card className="min-h-0 flex-1 gap-0 overflow-hidden p-0">
+            <CardHeader className="shrink-0 p-4 sm:p-5">
               <CardTitle className="text-lg">{t("tableTitle")}</CardTitle>
               <CardDescription>
                 {t("tableDescription", {
@@ -228,19 +228,19 @@ export default function TerminalSessionsPage() {
                 })}
               </CardDescription>
             </CardHeader>
-          <CardContent>
+          <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
             {loading ? (
-              <div className="flex items-center justify-center py-8">
+              <div className="flex h-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : sessions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="flex h-full items-center justify-center text-muted-foreground">
                 {t("empty")}
               </div>
             ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
+              <div className="h-full overflow-auto border-t">
+                <Table className="min-w-[980px]">
+                  <TableHeader className="sticky top-0 z-10 bg-card">
                     <TableRow>
                       <TableHead>{t("colSessionId")}</TableHead>
                       <TableHead>{t("colClientInfo")}</TableHead>

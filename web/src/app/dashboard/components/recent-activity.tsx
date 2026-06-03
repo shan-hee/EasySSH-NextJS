@@ -88,11 +88,11 @@ export function RecentActivity({ items, loading }: RecentActivityProps) {
   }
 
   return (
-    <Card className="gap-0">
-      <CardHeader className="pb-2">
+    <Card className="h-full min-h-0 gap-0 overflow-hidden">
+      <CardHeader className="shrink-0 pb-2">
         <CardTitle className="text-base">{t("recentActivity")}</CardTitle>
       </CardHeader>
-      <CardContent className="pt-2">
+      <CardContent className="min-h-0 flex-1 overflow-auto pt-2">
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (

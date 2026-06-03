@@ -849,11 +849,11 @@ const offlineServers = servers.filter(s => s.status !== "online")
  )}
  </PageHeader>
 
- <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+ <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
  {sessions.length === 0 ? (
  // 初始欢迎页 - 首次打开
- <div className="h-full flex flex-col">
- <div className="text-center py-12 space-y-4">
+ <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+ <div className="shrink-0 text-center py-8 space-y-4 xl:py-10">
  <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl border border-border bg-muted">
  <FolderOpen className="h-8 w-8 text-primary" />
  </div>
@@ -951,9 +951,9 @@ const offlineServers = servers.filter(s => s.status !== "online")
  </div>
  ) : fullscreenSessionId ? (
  // 全屏模式 - 只显示一个会话
- <div className="h-full relative">
+ <div className="relative min-h-0 flex-1 overflow-hidden">
  {sessions.filter(s => s.id === fullscreenSessionId).map(session => (
- <div key={session.id} className="h-full" data-session-id={session.id}>
+ <div key={session.id} className="h-full min-h-0" data-session-id={session.id}>
  <SftpSessionCard
    session={session}
    isFullscreen={true}
@@ -992,7 +992,7 @@ const offlineServers = servers.filter(s => s.status !== "online")
  <div
  ref={parentRef}
  className={cn(
- "h-full",
+ "h-full min-h-0",
  sessions.length >= 5 ? "overflow-auto" : "overflow-hidden"
  )}
  >

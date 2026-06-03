@@ -6,15 +6,15 @@ import { SkeletonCard } from "@/components/ui/loading"
  */
 export function DashboardSkeleton() {
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
       {/* 统计卡片骨架屏 */}
-      <div className="grid auto-rows-min gap-4 md:grid-cols-3">
+      <div className="grid shrink-0 auto-rows-min gap-3 md:grid-cols-3">
         <SkeletonCard showHeader={false} lines={2} />
         <SkeletonCard showHeader={false} lines={2} />
         <SkeletonCard showHeader={false} lines={2} />
       </div>
       {/* 快速操作骨架屏 */}
-      <SkeletonCard showHeader lines={4} className="flex-1" />
+      <SkeletonCard showHeader lines={4} className="min-h-0 flex-1" />
     </div>
   )
 }

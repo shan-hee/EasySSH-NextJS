@@ -665,7 +665,7 @@ export default function UsersPage() {
       <PageHeader title={t("pageTitle")} />
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
-        <div className="flex flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+        <div className="flex shrink-0 flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
           <p>集中维护团队成员、角色权限和账号风险，保持小团队协作边界清晰。</p>
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" />
@@ -673,7 +673,7 @@ export default function UsersPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
           <DashboardMetricCard title={t("statsTotalUsers")} value={statistics.totalUsers} icon={Users} tone="emerald" spark={userSpark} loading={loading} />
           <DashboardMetricCard title="近 7 天活跃" value={recentActiveUsers.length} icon={Users} tone="blue" spark={userSpark} loading={loading} />
           <DashboardMetricCard title={t("statsAdmins")} value={statistics.adminUsers} icon={Shield} tone="violet" spark={userSpark} loading={loading} />
@@ -787,7 +787,7 @@ export default function UsersPage() {
             </TabsContent>
           </Tabs>
 
-          <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
+          <div className="scrollbar-custom grid min-h-0 gap-3 overflow-visible xl:overflow-auto xl:pr-1">
             <Card className="gap-0 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-base font-semibold">角色分布</h2>

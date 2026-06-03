@@ -75,7 +75,7 @@ function SettingsContent() {
   return (
     <>
       <PageHeader title={t("pageTitle")} />
-      <div className="flex flex-1 flex-col min-h-0 px-4 pt-2">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-2">
         {/* 页签栏 */}
         <div className="flex items-center gap-1 border-b pb-0 mb-0 overflow-x-auto overflow-y-hidden scrollbar-none shrink-0">
           {tabs.map((tab) => {
@@ -99,7 +99,7 @@ function SettingsContent() {
         </div>
 
         {/* 内容区域 */}
-        <main className="flex-1 flex flex-col min-h-0 mt-3">
+        <main className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
           {ActiveComponent && <ActiveComponent />}
         </main>
       </div>

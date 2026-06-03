@@ -9,7 +9,6 @@ import {
 import { monitoringApi, type ServerResourceSummary } from "@/lib/api"
 import {
   Server,
-  Activity,
   Cpu,
   MemoryStick,
   TerminalSquare,
@@ -23,17 +22,12 @@ import { cn } from "@/lib/utils"
 import { WelcomeHeader } from "./components/welcome-header"
 import { StatCard } from "./components/stat-card"
 import { ConnectionTrendChart } from "./components/connection-trend-chart"
-import { QuickActionsPanel } from "./components/quick-actions-panel"
 import { ServerDistribution } from "./components/server-distribution"
 import {
   ServerOverviewTable,
   type ServerOverviewRow,
 } from "./components/server-overview-table"
 import { RecentActivity } from "./components/recent-activity"
-import {
-  ResourceDistributionChart,
-  type ResourceShare,
-} from "./components/resource-distribution-chart"
 
 // ---- 数据转换工具 ----
 
@@ -189,15 +183,6 @@ export default function DashboardPage() {
     return [...servers].sort((a, b) => order[a.status] - order[b.status])
   }, [servers])
 
-  // 资源分布环形图数据（分片按已用内存，中心显示总内存）
-  const resourceShares = useMemo<ResourceShare[]>(
-    () =>
-      servers
-        .filter((s) => s.status === "online" || s.status === "warning")
-        .map((s) => ({ name: s.name, used: s.memory.used, total: s.memory.total })),
-    [servers]
-  )
-
   // 在线服务器数（实时，来自 SSE）
   const onlineCount = useMemo(
     () => servers.filter((s) => s.status === "online" || s.status === "warning").length,
@@ -224,12 +209,12 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="flex flex-1 flex-col gap-4 p-3 pt-0 sm:gap-5 sm:p-4 sm:pt-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:p-4 sm:pt-0 xl:overflow-hidden">
         {/* 欢迎区 */}
         <WelcomeHeader />
 
-        {/* 5 个统计卡 */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+        {/* 4 个统计卡 */}
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             title={t("statsOnlineServers")}
             value={`${onlineCount} / ${stats?.total_servers ?? 0}`}
@@ -260,44 +245,32 @@ export default function DashboardPage() {
             tone="cyan"
             loading={loadingServers && servers.length === 0}
           />
-          <StatCard
-            title={t("statsTodayConnections")}
-            value={stats?.today_commands.value ?? 0}
-            icon={Activity}
-            tone="amber"
-            changePct={stats?.today_commands.change_pct}
-            changeLabel={t("comparedToYesterday")}
-            spark={stats?.today_commands.spark}
-            loading={loadingOverview && !stats}
-          />
         </div>
 
-        {/* 趋势图 + 快捷操作 + 分布 */}
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)_minmax(360px,1fr)]">
-          <div>
+        {/* 趋势图 + 服务器分布 */}
+        <div className="grid shrink-0 items-stretch gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
+          <div className="min-w-0">
             <ConnectionTrendChart
               dates={trend?.dates ?? []}
               series={trend?.series ?? {}}
               loading={loadingOverview && !trend}
             />
           </div>
-          <QuickActionsPanel />
           <ServerDistribution
             distribution={overview?.distribution ?? []}
             loading={loadingOverview && !overview}
           />
         </div>
 
-        {/* 服务器概览表 + 最近活动 + 资源分布 */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)_minmax(320px,1fr)]">
-          <div className="md:col-span-2 xl:col-span-1">
+        {/* 服务器概览表 + 最近活动 */}
+        <div className="grid min-h-[260px] flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:min-h-[320px] 2xl:grid-cols-[minmax(0,1fr)_360px] xl:overflow-hidden">
+          <div className="min-h-0">
             <ServerOverviewTable servers={sortedServers} loading={loadingServers} />
           </div>
           <RecentActivity
             items={overview?.recent_activity ?? []}
             loading={loadingOverview && !overview}
           />
-          <ResourceDistributionChart items={resourceShares} loading={loadingServers && servers.length === 0} />
         </div>
       </div>
     </>

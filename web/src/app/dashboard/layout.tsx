@@ -11,7 +11,6 @@ import { useSystemConfig } from "@/contexts/system-config-context"
 import { DashboardI18nProvider } from "@/providers/dashboard-i18n-provider"
 import { getAuthRedirectDecision, getCurrentBrowserPath } from "@/lib/auth-redirect"
 import type { User } from "@/lib/api/auth"
-import { cn } from "@/lib/utils"
 import { useRuntime } from "@/shell/runtime/runtime-provider"
 import { getRouteFallback, isRouteAllowed } from "@/shell/navigation/route-policy"
 
@@ -48,7 +47,6 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const { authStatus, isLoading } = useSystemConfig()
   const { runtime, isLoading: isRuntimeLoading } = useRuntime()
-  const disableOuterScroll = pathname?.startsWith("/dashboard/ai-assistant")
   const initialUser: User | null =
     authStatus && authStatus.is_authenticated && authStatus.user
       ? authStatus.user
@@ -83,12 +81,7 @@ export default function DashboardLayout({
             <AppSidebar />
             <SidebarInset>
               {/* 添加淡入动画，使界面显示更平滑 */}
-              <div
-                className={cn(
-                  "animate-in fade-in duration-300 flex flex-1 flex-col min-h-0 scrollbar-custom",
-                  disableOuterScroll ? "overflow-hidden" : "overflow-auto"
-                )}
-              >
+              <div className="animate-in fade-in duration-300 flex min-h-0 flex-1 flex-col overflow-hidden scrollbar-custom">
                 {children}
               </div>
             </SidebarInset>

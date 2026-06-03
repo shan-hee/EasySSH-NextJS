@@ -28,7 +28,7 @@ export default function ManagementPage() {
     <>
       <PageHeader title={t("pageTitle")} />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <SidebarProvider>
           {/* 左侧导航栏 - 桌面端 */}
           <Sidebar collapsible="none" className="hidden md:flex md:w-44 lg:w-48 border-r shrink-0">
@@ -57,7 +57,7 @@ export default function ManagementPage() {
           </Sidebar>
 
           {/* 右侧内容区 */}
-          <main className="flex min-h-[400px] flex-1 flex-col overflow-hidden">
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* 移动端下拉选择器 */}
             <div className="md:hidden border-b px-4 py-3">
               <Select value={activeSection} onValueChange={(value: SectionId) => handleSectionChange(value)}>
@@ -78,7 +78,7 @@ export default function ManagementPage() {
             </div>
 
             {/* 内容滚动区域 */}
-            <div className="flex-1 overflow-y-auto scrollbar-custom">
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-custom">
               <div className="space-y-4 p-4">
                 {activeSection === "users" && <UserManagementContent />}
                 {activeSection === "backup" && <BackupRestoreTab />}

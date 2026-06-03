@@ -366,14 +366,14 @@ export function ServerDistribution({ distribution, loading }: ServerDistribution
   )
 
   return (
-    <Card className="gap-0">
-      <CardHeader className="pb-2">
+    <Card className="h-full gap-0 overflow-hidden py-4">
+      <CardHeader className="shrink-0 pb-2">
         <CardTitle className="text-base">{t("serverDistribution")}</CardTitle>
       </CardHeader>
-      <CardContent className="pt-2">
-        <div className="flex flex-col gap-3 xl:flex-row">
+      <CardContent className="min-h-0 flex-1 pt-2">
+        <div className="flex h-full min-h-0 flex-col gap-3 xl:flex-row">
           {/* 地图 */}
-          <div className="relative h-[180px] min-w-0 flex-1 overflow-hidden rounded-md sm:h-[210px] xl:h-[220px]">
+          <div className="relative h-[170px] min-w-0 flex-1 overflow-hidden rounded-md 2xl:h-[210px]">
             {loading || !mapReady ? (
               <div className="h-full w-full animate-pulse rounded-lg bg-primary/5" />
             ) : (
@@ -423,7 +423,7 @@ export function ServerDistribution({ distribution, loading }: ServerDistribution
           </div>
 
           {/* 区域统计列表 */}
-          <div className="grid w-full shrink-0 grid-cols-1 gap-1 sm:grid-cols-2 xl:block xl:w-40 xl:space-y-1 2xl:w-44">
+          <div className="scrollbar-custom grid w-full shrink-0 grid-cols-1 gap-1 overflow-auto sm:grid-cols-2 xl:block xl:max-h-full xl:w-44 xl:space-y-1 2xl:w-48">
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-8 w-full animate-pulse rounded bg-primary/5" />

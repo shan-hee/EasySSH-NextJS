@@ -651,16 +651,16 @@ export function TerminalComponent({
   // 每个页签独立管理快捷键
 
   return (
-    <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
+    <div className={cn("flex min-h-0 flex-1 flex-col", isFullscreen && "fixed inset-0 z-50 bg-background")}>
       {!isFullscreen && (
         <PageHeader title={active?.serverName || tTerminal("connectionConfigTitle")}>
           <ActivityLogPane />
         </PageHeader>
       )}
 
-      <div className="flex-1 flex flex-col min-h-0 p-4 pt-0">
+      <div className="flex min-h-0 flex-1 flex-col p-3 pt-0 sm:p-4 sm:pt-0">
         <div className={cn(
-          "flex-1 flex flex-col min-h-0 rounded-xl border overflow-hidden shadow-2xl transition-colors",
+          "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border shadow-2xl transition-colors",
           "border-border/60 bg-background/70 text-foreground backdrop-blur-md"
         )}>
           {/* 页签栏（仅保留标签，不显示面包屑） */}
@@ -681,13 +681,13 @@ export function TerminalComponent({
             hideBreadcrumb
           />
 
-          <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {sessions.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="flex flex-1 items-center justify-center text-muted-foreground">
                 {tTerminal("emptySessionHint")}
               </div>
             ) : (
-              <Tabs value={active?.id || sessions[0]?.id || ''} className="flex-1 flex flex-col gap-0">
+              <Tabs value={active?.id || sessions[0]?.id || ''} className="flex min-h-0 flex-1 flex-col gap-0">
                 {/* ==================== 每个页签独立的 Provider 和内容 ==================== */}
                 {sessions.map((session) => {
                   const isActive = session.id === activeSession
@@ -698,7 +698,7 @@ export function TerminalComponent({
                       value={session.id}
                       forceMount // 强制保持挂载
                       className={cn(
-                        "flex-1 flex flex-col m-0 absolute inset-0 transition-none"
+                        "absolute inset-0 m-0 flex min-h-0 flex-1 flex-col transition-none"
                       )}
                       style={{
                         visibility: isActive ? 'visible' : 'hidden',

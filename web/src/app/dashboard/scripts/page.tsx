@@ -23,7 +23,7 @@ import {
  DialogHeader,
  DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, X, RefreshCw, Search, Check, Terminal, Server as ServerIcon, FileText, Tag, User, Star, Play } from "lucide-react"
+import { Plus, X, RefreshCw, Search, Check, Terminal, Server as ServerIcon, FileText, Tag, User, Play } from "lucide-react"
 import { scriptsApi, serversApi, batchTasksApi, type Script, type Server } from "@/lib/api"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -74,8 +74,8 @@ export default function ScriptsPage() {
  const [totalRows, setTotalRows] = useState(0)
  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
    name: true,
-   description: true,
-   content: true,
+   description: false,
+   content: false,
    tags: true,
    author: true,
    updated_at: true,
@@ -373,8 +373,10 @@ const columns = useMemo(() => createScriptColumns({
   onExecute: handleExecute,
   onEdit: handleEdit,
   onDelete: handleDelete,
+  onSelect: setSelectedScriptId,
+  selectedId: selectedScriptId,
   t: (key: string) => t(key),
-}), [handleExecute, handleEdit, handleDelete, t])
+}), [handleExecute, handleEdit, handleDelete, selectedScriptId, t])
 
 const visibleColumns = useMemo(
   () => columns.filter((col) =>
@@ -407,12 +409,6 @@ const tableScripts = useMemo(() => {
   if (scriptCategory === "all") return scripts
   return scripts.filter((script) => (script.tags || []).includes(scriptCategory))
 }, [scriptCategory, scripts])
-
-const featuredScripts = useMemo(() => (
-  [...scripts]
-    .sort((a, b) => (b.executions || 0) - (a.executions || 0))
-    .slice(0, 4)
-), [scripts])
 
 const selectedScript = useMemo(() => (
   scripts.find((script) => script.id === selectedScriptId) || tableScripts[0] || scripts[0] || null
@@ -650,7 +646,7 @@ const totalExecutions = useMemo(() => (
  {confirmDialog}
  <PageHeader title={t("pageTitle")} />
 
- <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0">
+ <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
    <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
      <DashboardMetricCard title={t("statsTotalScripts")} value={totalRows || scripts.length} icon={FileText} tone="emerald" spark={scriptSpark} loading={loading} />
      <DashboardMetricCard title={t("statsTags")} value={filterOptions.tags.length} icon={Tag} tone="blue" spark={tagCounts.slice(0, 12).map((item) => item.count)} loading={loading} />
@@ -658,74 +654,7 @@ const totalExecutions = useMemo(() => (
      <DashboardMetricCard title="累计执行" value={totalExecutions} icon={Play} tone="amber" spark={scriptSpark} loading={loading} />
    </div>
 
-   <section className="grid shrink-0 gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
-     <Card className="gap-0 p-4">
-       <div className="flex flex-wrap items-center justify-between gap-3">
-         <div>
-           <h2 className="text-base font-semibold">精选脚本</h2>
-           <p className="mt-1 text-sm text-muted-foreground">按复用频次聚合常用脚本，便于快速定位和批量执行。</p>
-         </div>
-         <Button size="sm" onClick={handleOpenDialog}>
-           <Plus className="mr-2 h-4 w-4" />
-           {t("btnNew")}
-         </Button>
-       </div>
-       <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-         {featuredScripts.length === 0 ? (
-           <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground md:col-span-2 2xl:col-span-4">
-             {t("tableEmpty")}
-           </div>
-         ) : featuredScripts.map((script) => (
-           <button
-             key={script.id}
-             type="button"
-             onClick={() => setSelectedScriptId(script.id)}
-             className={cn(
-               "rounded-md border bg-background p-3 text-left transition-colors hover:bg-accent",
-               selectedScriptId === script.id && "border-primary bg-accent"
-             )}
-           >
-             <div className="flex items-start justify-between gap-3">
-               <div className="min-w-0">
-                 <div className="truncate text-sm font-medium">{script.name}</div>
-                 <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{script.description || "暂无描述"}</div>
-               </div>
-               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                 <Star className="h-4 w-4" />
-               </span>
-             </div>
-             <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-               <span>{script.tags?.[0] || "未分类"}</span>
-               <span className="tabular-nums">{script.executions || 0} 次执行</span>
-             </div>
-           </button>
-         ))}
-       </div>
-     </Card>
-
-     <Card className="hidden gap-0 p-4 xl:flex xl:flex-col">
-       <div className="flex items-center justify-between gap-3">
-         <h2 className="text-base font-semibold">资产概览</h2>
-         <InlineStatusBadge label="脚本库" tone="emerald" />
-       </div>
-       <div className="mt-4 space-y-3 text-sm">
-         <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-           <span className="text-muted-foreground">当前页脚本</span>
-           <span className="font-medium tabular-nums">{scripts.length}</span>
-         </div>
-         <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-           <span className="text-muted-foreground">标签覆盖</span>
-           <span className="font-medium tabular-nums">{tagCounts.length}</span>
-         </div>
-         <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-           <span className="text-muted-foreground">作者数量</span>
-           <span className="font-medium tabular-nums">{filterOptions.authors.length}</span>
-         </div>
-       </div>
-     </Card>
-   </section>
-
-   <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[190px_minmax(0,1fr)_340px]">
+   <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[170px_minmax(0,1fr)_300px] 2xl:grid-cols-[180px_minmax(0,1fr)_320px]">
      <Card className="hidden min-h-0 gap-0 p-3 xl:flex xl:flex-col">
        <div className="px-1 pb-3">
          <h2 className="text-sm font-semibold">分类</h2>
@@ -782,7 +711,7 @@ const totalExecutions = useMemo(() => (
          setPage(1)
        }}
        emptyMessage={t("tableEmpty")}
-       className="min-h-0"
+       className="min-h-0 overflow-hidden"
        density="compact"
        toolbar={(table) => (
          <DataTableToolbar
@@ -802,6 +731,8 @@ const totalExecutions = useMemo(() => (
                { id: 'name', label: t("cvName") },
                { id: 'description', label: t("cvDescription") },
                { id: 'content', label: t("cvContent") },
+               { id: 'tags', label: t("cvTags") },
+               { id: 'author', label: t("cvAuthor") },
                { id: 'updated_at', label: t("cvUpdatedAt") },
                { id: 'executions', label: t("cvExecutions") },
              ].map(column => ({

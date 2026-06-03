@@ -505,7 +505,7 @@ export default function AutomationSchedulesPage() {
  <PageHeader title={t("pageTitle")} />
 
  <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 pt-0 sm:gap-4 sm:p-4 sm:pt-0 xl:overflow-hidden">
-   <div className="flex flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+   <div className="flex shrink-0 flex-col gap-2 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
      <p>集中查看定时任务、执行节奏和失败风险，便于快速判断调度状态。</p>
      <div className="flex items-center gap-2">
        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" />
@@ -513,7 +513,7 @@ export default function AutomationSchedulesPage() {
      </div>
    </div>
 
-   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+   <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
      <DashboardMetricCard title={t("statsTotalTasks")} value={statistics.total} icon={Calendar} tone="emerald" spark={taskSpark} loading={loading} />
      <DashboardMetricCard title={t("statsEnabled")} value={statistics.enabled} icon={CheckCircle} tone="blue" spark={tasks.map((task) => task.enabled ? 1 : 0)} loading={loading} />
      <DashboardMetricCard title={t("statsDisabled")} value={statistics.disabled} icon={Pause} tone="amber" spark={tasks.map((task) => task.enabled ? 0 : 1)} loading={loading} />
@@ -604,7 +604,7 @@ export default function AutomationSchedulesPage() {
        />
      </div>
 
-     <div className="grid min-h-0 gap-3 overflow-visible xl:overflow-auto">
+     <div className="scrollbar-custom grid min-h-0 gap-3 overflow-visible xl:overflow-auto xl:pr-1">
        <Card className="gap-0 p-4 sm:p-5">
          <div className="flex items-center justify-between gap-3">
            <h2 className="text-base font-semibold">任务健康度</h2>

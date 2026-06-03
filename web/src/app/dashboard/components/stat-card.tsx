@@ -75,9 +75,9 @@ export function StatCard({
 
   if (loading) {
     return (
-      <Card className="gap-0 p-5">
+      <Card className="gap-0 p-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 animate-pulse rounded-lg bg-primary/10" />
+          <div className="h-9 w-9 animate-pulse rounded-lg bg-primary/10" />
           <div className="space-y-2">
             <div className="h-3 w-16 animate-pulse rounded bg-primary/10" />
             <div className="h-6 w-12 animate-pulse rounded bg-primary/10" />
@@ -92,12 +92,13 @@ export function StatCard({
   const isUp = (changePct ?? 0) >= 0
   const changeColor = isUp ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
   const ChangeIcon = isUp ? ArrowUp : ArrowDown
+  const hasFooter = hasChange || (spark && spark.length > 0)
 
   return (
-    <Card className="gap-0 p-5 transition-shadow hover:shadow-md">
+    <Card className="gap-0 p-4 transition-shadow hover:shadow-md">
       {/* 顶部：图标 + 标题 + 数值 */}
       <div className="flex items-start gap-3">
-        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", toneStyle.wrap)}>
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", toneStyle.wrap)}>
           <Icon className={cn("h-5 w-5", toneStyle.icon)} />
         </div>
         <div className="min-w-0">
@@ -107,22 +108,24 @@ export function StatCard({
       </div>
 
       {/* 底部：环比 + 迷你趋势 */}
-      <div className="mt-4 flex items-end justify-between gap-2">
-        {hasChange ? (
-          <div className="flex items-center gap-1 text-xs">
-            <span className={cn("flex items-center gap-0.5 font-medium tabular-nums", changeColor)}>
-              <ChangeIcon className="h-3 w-3" />
-              {Math.abs(changePct ?? 0).toFixed(0)}%
-            </span>
-            {changeLabel && <span className="text-muted-foreground">{changeLabel}</span>}
-          </div>
-        ) : (
-          <span />
-        )}
-        {spark && spark.length > 0 && (
-          <Sparkline data={spark} className={toneStyle.spark} width={88} height={28} />
-        )}
-      </div>
+      {hasFooter && (
+        <div className="mt-2 flex items-end justify-between gap-2">
+          {hasChange ? (
+            <div className="flex items-center gap-1 text-xs">
+              <span className={cn("flex items-center gap-0.5 font-medium tabular-nums", changeColor)}>
+                <ChangeIcon className="h-3 w-3" />
+                {Math.abs(changePct ?? 0).toFixed(0)}%
+              </span>
+              {changeLabel && <span className="text-muted-foreground">{changeLabel}</span>}
+            </div>
+          ) : (
+            <span />
+          )}
+          {spark && spark.length > 0 && (
+            <Sparkline data={spark} className={toneStyle.spark} width={80} height={24} />
+          )}
+        </div>
+      )}
     </Card>
   )
 }
