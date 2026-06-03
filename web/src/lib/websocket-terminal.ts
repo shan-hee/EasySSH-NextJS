@@ -241,10 +241,6 @@ export class TerminalWebSocket {
   // 复用 TextDecoder/TextEncoder 实例以提升性能
   private decoder = new TextDecoder("utf-8")
   private encoder = new TextEncoder()
-  // 性能监控
-  private connectStartTime = 0
-  private handshakeTime = 0
-
   constructor(options: TerminalWebSocketOptions) {
     this.serverId = options.serverId
     this.cols = options.cols
@@ -323,8 +319,6 @@ export class TerminalWebSocket {
     }
 
     try {
-      // 性能监控：记录连接开始时间
-      this.connectStartTime = performance.now()
       performance.mark('ws-terminal-connect-start')
       this.setPhase("ticket")
 
@@ -655,7 +649,6 @@ export class TerminalWebSocket {
     switch (message.type) {
       case "handshake_complete":
         // WebSocket握手完成，SSH连接正在建立
-        this.handshakeTime = performance.now() - this.connectStartTime
         performance.mark('ws-terminal-handshake-complete')
         performance.measure('ws-terminal-handshake', 'ws-terminal-connect-start', 'ws-terminal-handshake-complete')
 

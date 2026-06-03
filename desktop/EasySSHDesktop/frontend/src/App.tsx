@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DesktopRuntimeInfo, DesktopService } from '../bindings/github.com/easyssh/easyssh-desktop'
+import { ActivityLogService, DesktopActivityLogStatus, DesktopRuntimeInfo, DesktopService } from '../bindings/github.com/easyssh/easyssh-desktop'
 import {
   DEFAULT_SFTP_DOWNLOAD_EXCLUDE_PATTERNS,
   createWorkspaceCapabilitiesFromRuntime,
@@ -8,6 +8,7 @@ import {
 } from '@easyssh/ssh-workspace/desktop'
 import type {
   SshWorkspaceAdapters,
+  SshWorkspaceActivityLogAdapter,
   SshWorkspaceI18n,
   SshWorkspaceNotifier,
   SshWorkspacePreferenceAdapter,
@@ -18,6 +19,10 @@ import type {
   WorkspaceSessionSnapshot,
   WorkspaceTerminalSession,
   WorkspaceTransferTask,
+  WorkspaceActivityLogItem,
+  WorkspaceActivityLogListResult,
+  WorkspaceActivityLogRecordInput,
+  WorkspaceActivityLogStatistics,
   RuntimeInfo,
 } from '@easyssh/ssh-workspace/desktop'
 
@@ -52,6 +57,45 @@ interface TransferTask {
   status: TransferStatus
   progress: number
   target: string
+}
+
+const emptyActivityStats: WorkspaceActivityLogStatistics = {
+  total: 0,
+  successCount: 0,
+  failureCount: 0,
+  byAction: {},
+}
+
+const activityActionLabels: Record<string, string> = {
+  ssh_connect: 'SSH connect',
+  ssh_disconnect: 'SSH disconnect',
+  sftp_upload: 'SFTP upload',
+  sftp_download: 'SFTP download',
+  sftp_delete: 'SFTP delete',
+  sftp_rename: 'SFTP rename',
+  sftp_mkdir: 'SFTP mkdir',
+  monitoring_query: 'Monitor query',
+}
+
+const formatActivityTime = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+const toDesktopActivityStatus = (status?: WorkspaceActivityLogRecordInput['status']) => {
+  switch (status) {
+    case 'failure':
+      return DesktopActivityLogStatus.DesktopActivityLogFailure
+    case 'warning':
+      return DesktopActivityLogStatus.DesktopActivityLogWarning
+    case 'success':
+    default:
+      return DesktopActivityLogStatus.DesktopActivityLogSuccess
+  }
 }
 
 const preferenceKeys = {
@@ -225,7 +269,7 @@ const mapSessionToTerminalSession = (
   connectionPhase: mapSessionStatusToConnectionPhase(session.status),
   status: session.status === 'connected' ? 'connected' : session.status === 'connecting' ? 'reconnecting' : 'disconnected',
   lastActivity: session.lastActivity,
-  type: session.status === 'idle' ? 'quick' : 'terminal',
+  type: session.status === 'idle' ? 'config' : 'terminal',
   pinned: session.status === 'connected',
 })
 
@@ -377,8 +421,15 @@ function App() {
   const [quickHost, setQuickHost] = useState(initialSessions[0].host)
   const [quickUser, setQuickUser] = useState(initialSessions[0].user)
   const [quickPath, setQuickPath] = useState(initialSessions[0].path)
+  const [activityItems, setActivityItems] = useState<WorkspaceActivityLogItem[]>([])
+  const [activityStats, setActivityStats] = useState<WorkspaceActivityLogStatistics>(emptyActivityStats)
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [activityError, setActivityError] = useState<string | null>(null)
   const sessionsRef = useRef(sessions)
   sessionsRef.current = sessions
+  const transfersRef = useRef(transfers)
+  transfersRef.current = transfers
+  const completedTransferIdsRef = useRef(new Set<string>())
   const activeSessionIdRef = useRef<string | null>(activeSessionId)
   activeSessionIdRef.current = activeSessionId
   const workspaceRuntime = useMemo(() => buildWorkspaceRuntime(runtime), [runtime])
@@ -390,6 +441,7 @@ function App() {
       ai: true,
       monitor: true,
       docker: true,
+      activityLog: true,
       fullscreen: true,
       crossSessionDrag: true,
     },
@@ -614,6 +666,93 @@ function App() {
   }), [])
   const workspaceSessionSeeds = useMemo(() => buildWorkspaceSessionSeeds(sessions), [sessions])
 
+  const loadActivityLog = useCallback(async () => {
+    try {
+      setActivityLoading(true)
+      setActivityError(null)
+      const [listResult, statistics] = await Promise.all([
+        ActivityLogService.List({ page: 1, limit: 8 }) as Promise<WorkspaceActivityLogListResult>,
+        ActivityLogService.GetStatistics({}) as Promise<WorkspaceActivityLogStatistics>,
+      ])
+
+      setActivityItems(listResult.items ?? [])
+      setActivityStats({
+        ...emptyActivityStats,
+        ...statistics,
+        byAction: statistics.byAction ?? {},
+      })
+    } catch (error) {
+      setActivityError(error instanceof Error ? error.message : 'Activity log unavailable')
+    } finally {
+      setActivityLoading(false)
+    }
+  }, [])
+
+  const activityLogAdapter = useMemo<SshWorkspaceActivityLogAdapter>(() => ({
+    list: async (params) => {
+      const result = await ActivityLogService.List({
+        page: params?.page,
+        limit: params?.limit,
+        action: params?.action,
+        serverId: params?.serverId,
+        status: params?.status ? toDesktopActivityStatus(params.status) : undefined,
+        startDate: params?.startDate,
+        endDate: params?.endDate,
+      }) as WorkspaceActivityLogListResult
+
+      return {
+        ...result,
+        items: result.items ?? [],
+      }
+    },
+    getById: async (id) => ActivityLogService.GetById(id) as Promise<WorkspaceActivityLogItem>,
+    getStatistics: async (params) => {
+      const statistics = await ActivityLogService.GetStatistics({
+        startDate: params?.startDate,
+        endDate: params?.endDate,
+      }) as WorkspaceActivityLogStatistics
+
+      return {
+        ...emptyActivityStats,
+        ...statistics,
+        byAction: statistics.byAction ?? {},
+      }
+    },
+    record: async (input) => {
+      const item = await ActivityLogService.Record({
+        action: input.action,
+        resource: input.resource,
+        status: toDesktopActivityStatus(input.status),
+        serverId: input.serverId,
+        durationMs: input.durationMs,
+        detail: input.detail,
+      }) as WorkspaceActivityLogItem
+      void loadActivityLog()
+      return item
+    },
+    clear: async (before) => {
+      const removed = await ActivityLogService.Clear(before ?? '')
+      void loadActivityLog()
+      return removed
+    },
+  }), [loadActivityLog])
+
+  const recordActivity = useCallback((input: WorkspaceActivityLogRecordInput) => {
+    void activityLogAdapter.record?.(input).catch((error: unknown) => {
+      setActivityError(error instanceof Error ? error.message : 'Failed to record activity')
+    })
+  }, [activityLogAdapter])
+
+  const clearActivityLog = useCallback(() => {
+    if (activityStats.total < 1 || !window.confirm('Clear local activity history?')) {
+      return
+    }
+
+    void activityLogAdapter.clear?.().catch((error: unknown) => {
+      setActivityError(error instanceof Error ? error.message : 'Failed to clear activity')
+    })
+  }, [activityLogAdapter, activityStats.total])
+
   useEffect(() => {
     DesktopService.RuntimeInfo()
       .then((value) => setRuntime(value))
@@ -621,6 +760,10 @@ function App() {
         console.error('[EasySSH Desktop] Failed to load runtime info:', error)
       })
   }, [])
+
+  useEffect(() => {
+    void loadActivityLog()
+  }, [loadActivityLog])
 
   useEffect(() => {
     window.localStorage.setItem(preferenceKeys.theme, theme)
@@ -649,6 +792,23 @@ function App() {
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    transfers.forEach((task) => {
+      if (task.status !== 'completed' || completedTransferIdsRef.current.has(task.id)) {
+        return
+      }
+
+      completedTransferIdsRef.current.add(task.id)
+      recordActivity({
+        action: 'sftp_upload',
+        resource: task.name,
+        status: 'success',
+        serverId: task.target,
+        detail: `Upload completed for ${task.target}`,
+      })
+    })
+  }, [recordActivity, transfers])
+
   const activeSession = useMemo(() => (
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0]
   ), [activeSessionId, sessions])
@@ -665,6 +825,9 @@ function App() {
 
   const connectedCount = sessions.filter((session) => session.status === 'connected').length
   const activeTransfers = transfers.filter((task) => task.status === 'uploading' || task.status === 'queued').length
+  const activitySuccessRate = activityStats.total > 0
+    ? Math.round((activityStats.successCount / activityStats.total) * 100)
+    : 0
 
   const openSession = useCallback(() => {
     const host = quickHost.trim() || 'localhost'
@@ -692,7 +855,14 @@ function App() {
         : [...current, session]
     })
     setActiveSessionId(id)
-  }, [quickHost, quickPath, quickUser])
+    recordActivity({
+      action: 'ssh_connect',
+      resource: `${user}@${host}${path}`,
+      status: 'success',
+      serverId: id,
+      detail: 'Desktop quick connect',
+    })
+  }, [quickHost, quickPath, quickUser, recordActivity])
 
   const createDraftSession = useCallback(() => {
     const index = sessions.length + 1
@@ -720,22 +890,40 @@ function App() {
   const queueTransfer = useCallback(() => {
     const target = activeSession?.label ?? 'workspace'
     const nextIndex = transfers.length + 1
+    const name = `workspace-sync-${nextIndex}.tar.gz`
     setTransfers((current) => [{
       id: `task-${Date.now()}`,
-      name: `workspace-sync-${nextIndex}.tar.gz`,
+      name,
       status: 'uploading',
       progress: 4,
       target,
     }, ...current])
-  }, [activeSession?.label, transfers.length])
+    recordActivity({
+      action: 'sftp_upload',
+      resource: name,
+      status: 'warning',
+      serverId: target,
+      detail: 'Upload queued in desktop workspace',
+    })
+  }, [activeSession?.label, recordActivity, transfers.length])
 
   const cancelTransfer = useCallback((taskId: string) => {
+    const task = transfersRef.current.find((item) => item.id === taskId)
     setTransfers((current) => current.map((task) => (
       task.id === taskId && task.status !== 'completed'
         ? { ...task, status: 'cancelled', progress: 0 }
         : task
     )))
-  }, [])
+    if (task && task.status !== 'completed' && task.status !== 'cancelled') {
+      recordActivity({
+        action: 'sftp_upload',
+        resource: task.name,
+        status: 'failure',
+        serverId: task.target,
+        detail: 'Transfer cancelled',
+      })
+    }
+  }, [recordActivity])
 
   const clearFinishedTransfers = useCallback(() => {
     setTransfers((current) => current.filter((task) => (
@@ -762,9 +950,10 @@ function App() {
     settings: workspaceSettings,
     preferences: workspacePreferences,
     transferManager: workspaceTransferManager,
+    activityLog: activityLogAdapter,
     sessionStore: workspaceSessionStore,
     sessionController: workspaceSessionController,
-  }), [workspaceI18n, workspaceNotifier, workspacePreferences, workspaceSettings, workspaceTheme, workspaceTransferManager, workspaceSessionStore, workspaceSessionController])
+  }), [activityLogAdapter, workspaceI18n, workspaceNotifier, workspacePreferences, workspaceSettings, workspaceTheme, workspaceTransferManager, workspaceSessionStore, workspaceSessionController])
 
   return (
     <SshWorkspace
@@ -875,21 +1064,58 @@ function App() {
               <div className="section-title">Transfers</div>
               <button className="text-action" type="button" onClick={clearFinishedTransfers}>Clear</button>
             </div>
-            {transfers.map((task) => (
-              <div className={`transfer-task ${task.status}`} key={task.id}>
-                <div className="transfer-header">
-                  <span>{task.name}</span>
-                  <small>{task.status}</small>
+            <div className="transfer-list">
+              {transfers.map((task) => (
+                <div className={`transfer-task ${task.status}`} key={task.id}>
+                  <div className="transfer-header">
+                    <span>{task.name}</span>
+                    <small>{task.status}</small>
+                  </div>
+                  <div className="progress-track"><div style={{ width: `${task.progress}%` }} /></div>
+                  <div className="transfer-footer">
+                    <small>{task.target}</small>
+                    {task.status !== 'completed' && task.status !== 'cancelled' && (
+                      <button className="inline-action" type="button" onClick={() => cancelTransfer(task.id)}>Cancel</button>
+                    )}
+                  </div>
                 </div>
-                <div className="progress-track"><div style={{ width: `${task.progress}%` }} /></div>
-                <div className="transfer-footer">
-                  <small>{task.target}</small>
-                  {task.status !== 'completed' && task.status !== 'cancelled' && (
-                    <button className="inline-action" type="button" onClick={() => cancelTransfer(task.id)}>Cancel</button>
-                  )}
-                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="activity-pane">
+            <div className="section-header">
+              <div className="section-title">Activity</div>
+              <div className="activity-actions">
+                <button className="text-action" type="button" onClick={() => void loadActivityLog()} disabled={activityLoading}>Refresh</button>
+                <button className="text-action" type="button" onClick={clearActivityLog} disabled={activityStats.total < 1}>Clear</button>
               </div>
-            ))}
+            </div>
+            <div className="activity-summary">
+              <div className="metric"><span>Total</span><strong>{activityStats.total}</strong></div>
+              <div className="metric"><span>Success</span><strong>{activitySuccessRate}%</strong></div>
+              <div className="metric"><span>Failed</span><strong>{activityStats.failureCount}</strong></div>
+            </div>
+            <div className="activity-list">
+              {activityError ? (
+                <div className="activity-empty error">{activityError}</div>
+              ) : activityLoading && activityItems.length === 0 ? (
+                <div className="activity-empty">Loading activity...</div>
+              ) : activityItems.length === 0 ? (
+                <div className="activity-empty">No local activity yet</div>
+              ) : activityItems.map((item) => (
+                <div className={`activity-row ${item.status}`} key={item.id}>
+                  <span className="activity-status" />
+                  <div>
+                    <div className="activity-line">
+                      <strong>{activityActionLabels[item.action] ?? item.action}</strong>
+                      <small>{formatActivityTime(item.createdAt)}</small>
+                    </div>
+                    <div className="activity-resource" title={item.resource}>{item.resource || '-'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         </aside>
       </section>

@@ -5,6 +5,191 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+export class DesktopActivityLogItem {
+    "id": string;
+    "action": string;
+    "resource": string;
+    "status": DesktopActivityLogStatus;
+    "serverId"?: string;
+    "durationMs"?: number;
+    "detail"?: string;
+    "createdAt": string;
+
+    /** Creates a new DesktopActivityLogItem instance. */
+    constructor($$source: Partial<DesktopActivityLogItem> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("action" in $$source)) {
+            this["action"] = "";
+        }
+        if (!("resource" in $$source)) {
+            this["resource"] = "";
+        }
+        if (!("status" in $$source)) {
+            this["status"] = DesktopActivityLogStatus.$zero;
+        }
+        if (!("createdAt" in $$source)) {
+            this["createdAt"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DesktopActivityLogItem instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DesktopActivityLogItem {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DesktopActivityLogItem($$parsedSource as Partial<DesktopActivityLogItem>);
+    }
+}
+
+export class DesktopActivityLogListParams {
+    "page"?: number;
+    "limit"?: number;
+    "action"?: string;
+    "serverId"?: string;
+    "status"?: DesktopActivityLogStatus;
+    "startDate"?: string;
+    "endDate"?: string;
+
+    /** Creates a new DesktopActivityLogListParams instance. */
+    constructor($$source: Partial<DesktopActivityLogListParams> = {}) {
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DesktopActivityLogListParams instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DesktopActivityLogListParams {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DesktopActivityLogListParams($$parsedSource as Partial<DesktopActivityLogListParams>);
+    }
+}
+
+export class DesktopActivityLogListResult {
+    "items": DesktopActivityLogItem[];
+    "total": number;
+    "page": number;
+    "pageSize": number;
+    "totalPages": number;
+
+    /** Creates a new DesktopActivityLogListResult instance. */
+    constructor($$source: Partial<DesktopActivityLogListResult> = {}) {
+        if (!("items" in $$source)) {
+            this["items"] = [];
+        }
+        if (!("total" in $$source)) {
+            this["total"] = 0;
+        }
+        if (!("page" in $$source)) {
+            this["page"] = 0;
+        }
+        if (!("pageSize" in $$source)) {
+            this["pageSize"] = 0;
+        }
+        if (!("totalPages" in $$source)) {
+            this["totalPages"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DesktopActivityLogListResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DesktopActivityLogListResult {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("items" in $$parsedSource) {
+            $$parsedSource["items"] = $$createField0_0($$parsedSource["items"]);
+        }
+        return new DesktopActivityLogListResult($$parsedSource as Partial<DesktopActivityLogListResult>);
+    }
+}
+
+export class DesktopActivityLogRecordInput {
+    "action": string;
+    "resource": string;
+    "status": DesktopActivityLogStatus;
+    "serverId"?: string;
+    "durationMs"?: number;
+    "detail"?: string;
+
+    /** Creates a new DesktopActivityLogRecordInput instance. */
+    constructor($$source: Partial<DesktopActivityLogRecordInput> = {}) {
+        if (!("action" in $$source)) {
+            this["action"] = "";
+        }
+        if (!("resource" in $$source)) {
+            this["resource"] = "";
+        }
+        if (!("status" in $$source)) {
+            this["status"] = DesktopActivityLogStatus.$zero;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DesktopActivityLogRecordInput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DesktopActivityLogRecordInput {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DesktopActivityLogRecordInput($$parsedSource as Partial<DesktopActivityLogRecordInput>);
+    }
+}
+
+export class DesktopActivityLogStatistics {
+    "total": number;
+    "successCount": number;
+    "failureCount": number;
+    "byAction": { [_ in string]?: number };
+
+    /** Creates a new DesktopActivityLogStatistics instance. */
+    constructor($$source: Partial<DesktopActivityLogStatistics> = {}) {
+        if (!("total" in $$source)) {
+            this["total"] = 0;
+        }
+        if (!("successCount" in $$source)) {
+            this["successCount"] = 0;
+        }
+        if (!("failureCount" in $$source)) {
+            this["failureCount"] = 0;
+        }
+        if (!("byAction" in $$source)) {
+            this["byAction"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DesktopActivityLogStatistics instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DesktopActivityLogStatistics {
+        const $$createField3_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("byAction" in $$parsedSource) {
+            $$parsedSource["byAction"] = $$createField3_0($$parsedSource["byAction"]);
+        }
+        return new DesktopActivityLogStatistics($$parsedSource as Partial<DesktopActivityLogStatistics>);
+    }
+}
+
+export enum DesktopActivityLogStatus {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    DesktopActivityLogSuccess = "success",
+    DesktopActivityLogFailure = "failure",
+    DesktopActivityLogWarning = "warning",
+};
+
 export type DesktopCapability = string;
 
 export class DesktopRuntimeInfo {
@@ -43,7 +228,7 @@ export class DesktopRuntimeInfo {
      * Creates a new DesktopRuntimeInfo instance from a string or object.
      */
     static createFrom($$source: any = {}): DesktopRuntimeInfo {
-        const $$createField5_0 = $$createType0;
+        const $$createField5_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("capabilities" in $$parsedSource) {
             $$parsedSource["capabilities"] = $$createField5_0($$parsedSource["capabilities"]);
@@ -53,4 +238,7 @@ export class DesktopRuntimeInfo {
 }
 
 // Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
+const $$createType0 = DesktopActivityLogItem.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $Create.Map($Create.Any, $Create.Any);
+const $$createType3 = $Create.Map($Create.Any, $Create.Any);

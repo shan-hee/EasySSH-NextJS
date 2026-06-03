@@ -94,7 +94,8 @@ button {
 
 .density-compact .quick-connect,
 .density-compact .file-pane,
-.density-compact .transfer-pane {
+.density-compact .transfer-pane,
+.density-compact .activity-pane {
   padding: 10px;
 }
 
@@ -239,6 +240,7 @@ label span,
 .quick-connect,
 .file-pane,
 .transfer-pane,
+.activity-pane,
 .settings-popover {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -362,17 +364,20 @@ label span,
 
 .side-pane {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(118px, 0.8fr) minmax(118px, 0.68fr) minmax(156px, 0.86fr);
   gap: 10px;
   padding: 10px;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   background: transparent;
   border: 0;
 }
 
 .quick-connect,
 .file-pane,
-.transfer-pane {
+.transfer-pane,
+.activity-pane {
   padding: 12px;
 }
 
@@ -454,6 +459,20 @@ input:focus {
   background: var(--panel-soft);
 }
 
+.text-action:disabled,
+.inline-action:disabled,
+.pill-action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.text-action:disabled:hover,
+.inline-action:disabled:hover,
+.pill-action:disabled:hover {
+  color: var(--accent);
+  background: transparent;
+}
+
 .text-action {
   height: 26px;
   padding: 0 8px;
@@ -478,8 +497,13 @@ input:focus {
   background: var(--panel-strong);
 }
 
-.file-pane {
+.file-pane,
+.transfer-pane,
+.activity-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  overflow: hidden;
 }
 
 .file-row {
@@ -507,6 +531,12 @@ input:focus {
 
 .file-row.file {
   color: var(--text);
+}
+
+.transfer-list {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 
 .transfer-task {
@@ -566,6 +596,133 @@ input:focus {
   color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.activity-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.activity-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.metric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--border), transparent 18%);
+  border-radius: 7px;
+  background: var(--panel-strong);
+}
+
+.metric span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.metric strong {
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-list {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.activity-row {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 38%);
+}
+
+.activity-row:last-child {
+  border-bottom: 0;
+}
+
+.activity-status {
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.activity-row.success .activity-status {
+  background: var(--ok);
+}
+
+.activity-row.warning .activity-status {
+  background: var(--warning);
+}
+
+.activity-row.failure .activity-status {
+  background: var(--danger);
+}
+
+.activity-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.activity-line strong,
+.activity-line small,
+.activity-resource {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-line strong {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.activity-line small,
+.activity-resource {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.activity-line small {
+  flex: 0 0 auto;
+}
+
+.activity-resource {
+  margin-top: 2px;
+}
+
+.activity-empty {
+  display: grid;
+  min-height: 86px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.activity-empty.error {
+  color: var(--danger);
 }
 
 .status-strip {

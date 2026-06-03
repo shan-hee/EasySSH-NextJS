@@ -19,11 +19,14 @@ var assets embed.FS
 // main initializes the desktop shell. The first screen is the SSH/SFTP workspace;
 // Dashboard navigation and server administration stay outside this window shell.
 func main() {
+	activityLogService := NewActivityLogService()
+
 	app := application.New(application.Options{
 		Name:        "EasySSH",
 		Description: "EasySSH Desktop",
 		Services: []application.Service{
 			application.NewService(&DesktopService{}),
+			application.NewService(activityLogService),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
