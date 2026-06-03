@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/easyssh/server/internal/api/middleware"
+	"github.com/easyssh/server/internal/domain/operationrecord"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
@@ -41,15 +42,17 @@ type TransferProgressMessage struct {
 
 // TransferTask 传输任务
 type TransferTask struct {
-	ID             string
-	SourceServerID uuid.UUID
-	SourcePath     string
-	TargetServerID uuid.UUID
-	TargetPath     string
-	UserID         uuid.UUID
-	StartTime      time.Time
-	CancelFunc     context.CancelFunc
-	Status         string // "pending", "running", "completed", "failed", "cancelled"
+	ID               string
+	SourceServerID   uuid.UUID
+	SourceServerName string
+	SourcePath       string
+	TargetServerID   uuid.UUID
+	TargetServerName string
+	TargetPath       string
+	UserID           uuid.UUID
+	StartTime        time.Time
+	CancelFunc       context.CancelFunc
+	Status           string // "pending", "running", "completed", "failed", "cancelled"
 }
 
 // SFTPTransferHandler 跨服务器传输 WebSocket 处理器
@@ -62,13 +65,14 @@ type SFTPTransferHandler struct {
 	lastProgress map[string]TransferProgressMessage
 	mu           sync.RWMutex
 
-	serverService   server.Service
-	serverRepo      server.Repository
-	encryptor       *crypto.Encryptor
-	securityService security.Service
-	webDevPort      int
-	hostKeyCallback ssh.HostKeyCallback
-	defaultTaskTTL  time.Duration
+	serverService    server.Service
+	serverRepo       server.Repository
+	encryptor        *crypto.Encryptor
+	securityService  security.Service
+	webDevPort       int
+	hostKeyCallback  ssh.HostKeyCallback
+	defaultTaskTTL   time.Duration
+	operationRecords operationrecord.Service
 }
 
 // NewSFTPTransferHandler 创建跨服务器传输处理器
@@ -79,21 +83,23 @@ func NewSFTPTransferHandler(
 	securityService security.Service,
 	webDevPort int,
 	hostKeyCallback ssh.HostKeyCallback,
+	operationRecords operationrecord.Service,
 ) *SFTPTransferHandler {
 	if webDevPort <= 0 {
 		webDevPort = 3000
 	}
 	return &SFTPTransferHandler{
-		connections:     make(map[string]*websocket.Conn),
-		tasks:           make(map[string]*TransferTask),
-		lastProgress:    make(map[string]TransferProgressMessage),
-		serverService:   serverService,
-		serverRepo:      serverRepo,
-		encryptor:       encryptor,
-		securityService: securityService,
-		webDevPort:      webDevPort,
-		hostKeyCallback: hostKeyCallback,
-		defaultTaskTTL:  30 * time.Minute,
+		connections:      make(map[string]*websocket.Conn),
+		tasks:            make(map[string]*TransferTask),
+		lastProgress:     make(map[string]TransferProgressMessage),
+		serverService:    serverService,
+		serverRepo:       serverRepo,
+		encryptor:        encryptor,
+		securityService:  securityService,
+		webDevPort:       webDevPort,
+		hostKeyCallback:  hostKeyCallback,
+		defaultTaskTTL:   30 * time.Minute,
+		operationRecords: operationRecords,
 	}
 }
 
@@ -282,20 +288,23 @@ func (h *SFTPTransferHandler) StartDirectTransfer(
 
 	// 注册任务
 	task := &TransferTask{
-		ID:             taskID,
-		SourceServerID: sourceServerID,
-		SourcePath:     sourcePath,
-		TargetServerID: targetServerID,
-		TargetPath:     targetPath,
-		UserID:         userID,
-		StartTime:      time.Now(),
-		CancelFunc:     cancel,
-		Status:         "running",
+		ID:               taskID,
+		SourceServerID:   sourceServerID,
+		SourceServerName: sourceServer.Name,
+		SourcePath:       sourcePath,
+		TargetServerID:   targetServerID,
+		TargetServerName: targetServer.Name,
+		TargetPath:       targetPath,
+		UserID:           userID,
+		StartTime:        time.Now(),
+		CancelFunc:       cancel,
+		Status:           "running",
 	}
 
 	h.mu.Lock()
 	h.tasks[taskID] = task
 	h.mu.Unlock()
+	h.upsertTransferOperationRecord(task, operationrecord.StatusRunning, "", nil)
 
 	// 发送开始消息
 	_ = h.SendProgress(taskID, TransferProgressMessage{
@@ -316,16 +325,20 @@ func (h *SFTPTransferHandler) StartDirectTransfer(
 
 		log.Printf("[SFTPTransferWS] 开始 SFTP 中转传输: taskID=%s", taskID)
 		transferErr := h.executeSftpRelayTransfer(transferCtx, taskID, sourceServer, sourcePath, targetServer, targetPath)
+		finishedAt := time.Now()
 
 		if transferErr != nil {
 			if transferCtx.Err() == context.Canceled {
+				task.Status = "cancelled"
 				_ = h.SendProgress(taskID, TransferProgressMessage{
 					Type:    "cancelled",
 					TaskID:  taskID,
 					Message: "传输已取消",
 					Method:  "sftp",
 				})
+				h.upsertTransferOperationRecord(task, operationrecord.StatusCanceled, "传输已取消", &finishedAt)
 			} else {
+				task.Status = "failed"
 				log.Printf("[SFTPTransferWS] 传输失败: taskID=%s, error=%v", taskID, transferErr)
 				_ = h.SendProgress(taskID, TransferProgressMessage{
 					Type:    "error",
@@ -333,11 +346,85 @@ func (h *SFTPTransferHandler) StartDirectTransfer(
 					Message: transferErr.Error(),
 					Method:  "sftp",
 				})
+				h.upsertTransferOperationRecord(task, operationrecord.StatusFailure, transferErr.Error(), &finishedAt)
 			}
+		} else {
+			task.Status = "completed"
+			h.upsertTransferOperationRecord(task, operationrecord.StatusSuccess, "", &finishedAt)
 		}
 	}()
 
 	return nil
+}
+
+func (h *SFTPTransferHandler) upsertTransferOperationRecord(task *TransferTask, status operationrecord.Status, errorMessage string, finishedAt *time.Time) {
+	if h.operationRecords == nil || task == nil || task.UserID == uuid.Nil || task.SourceServerID == uuid.Nil || task.ID == "" {
+		return
+	}
+
+	h.mu.RLock()
+	last := h.lastProgress[task.ID]
+	h.mu.RUnlock()
+
+	detail, _ := json.Marshal(map[string]interface{}{
+		"source_server_id":   task.SourceServerID,
+		"source_server_name": task.SourceServerName,
+		"target_server_id":   task.TargetServerID,
+		"target_server_name": task.TargetServerName,
+		"source_path":        task.SourcePath,
+		"dest_path":          task.TargetPath,
+		"file_name":          filepath.Base(task.SourcePath),
+		"method":             "sftp",
+		"task_status":        task.Status,
+	})
+
+	progress := int(last.Progress)
+	if status == operationrecord.StatusSuccess {
+		progress = 100
+	}
+
+	var durationMs int64
+	if finishedAt != nil {
+		durationMs = finishedAt.Sub(task.StartTime).Milliseconds()
+	}
+
+	successCount := 0
+	failureCount := 0
+	if status == operationrecord.StatusSuccess {
+		successCount = 1
+	} else if status == operationrecord.StatusFailure || status == operationrecord.StatusCanceled || status == operationrecord.StatusTimeout {
+		failureCount = 1
+	}
+
+	now := time.Now()
+	record := &operationrecord.OperationRecord{
+		UserID:         task.UserID,
+		Type:           operationrecord.TypeTransfer,
+		Action:         "transfer",
+		Status:         status,
+		ServerID:       &task.SourceServerID,
+		ServerName:     task.SourceServerName,
+		Title:          filepath.Base(task.SourcePath),
+		Resource:       fmt.Sprintf("%s -> %s", task.SourcePath, task.TargetPath),
+		Source:         "sftp",
+		StartedAt:      &task.StartTime,
+		FinishedAt:     finishedAt,
+		DurationMs:     durationMs,
+		Progress:       progress,
+		SuccessCount:   successCount,
+		FailureCount:   failureCount,
+		BytesTotal:     last.BytesTotal,
+		BytesProcessed: last.BytesCopied,
+		SpeedBps:       last.SpeedBps,
+		ErrorMessage:   errorMessage,
+		DetailJSON:     string(detail),
+		SourceTable:    "sftp_direct_transfers",
+		SourceID:       task.ID,
+		CreatedAt:      task.StartTime,
+		UpdatedAt:      now,
+	}
+
+	_ = h.operationRecords.Upsert(context.Background(), record)
 }
 
 // CancelTaskForUser 取消传输任务（强校验 userID）

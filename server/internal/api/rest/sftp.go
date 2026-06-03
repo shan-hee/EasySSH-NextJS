@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/easyssh/server/internal/api/ws"
 	"github.com/easyssh/server/internal/domain/auth"
+	"github.com/easyssh/server/internal/domain/operationrecord"
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/sftp"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
@@ -47,17 +49,18 @@ func (r *ctxReader) Read(p []byte) (int, error) {
 
 // SFTPHandler SFTP 处理器
 type SFTPHandler struct {
-	serverService   server.Service
-	serverRepo      server.Repository
-	encryptor       *crypto.Encryptor
-	uploadWSHandler *ws.SFTPUploadHandler
-	transferHandler *ws.SFTPTransferHandler // 跨服务器直连传输处理器
-	hostKeyCallback ssh.HostKeyCallback     // SSH主机密钥验证回调
-	pool            *sftp.Pool              // SFTP 连接池
+	serverService    server.Service
+	serverRepo       server.Repository
+	encryptor        *crypto.Encryptor
+	uploadWSHandler  *ws.SFTPUploadHandler
+	transferHandler  *ws.SFTPTransferHandler // 跨服务器直连传输处理器
+	hostKeyCallback  ssh.HostKeyCallback     // SSH主机密钥验证回调
+	pool             *sftp.Pool              // SFTP 连接池
+	operationRecords operationrecord.Service
 }
 
 // NewSFTPHandler 创建 SFTP 处理器
-func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor, uploadWSHandler *ws.SFTPUploadHandler, hostKeyCallback ssh.HostKeyCallback, poolConfig *sftp.PoolConfig) *SFTPHandler {
+func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, encryptor *crypto.Encryptor, uploadWSHandler *ws.SFTPUploadHandler, hostKeyCallback ssh.HostKeyCallback, poolConfig *sftp.PoolConfig, operationRecords operationrecord.Service) *SFTPHandler {
 	// 创建连接池
 	pool := sftp.NewPool(
 		poolConfig,
@@ -68,12 +71,13 @@ func NewSFTPHandler(serverService server.Service, serverRepo server.Repository, 
 	)
 
 	return &SFTPHandler{
-		serverService:   serverService,
-		serverRepo:      serverRepo,
-		encryptor:       encryptor,
-		uploadWSHandler: uploadWSHandler,
-		hostKeyCallback: hostKeyCallback,
-		pool:            pool,
+		serverService:    serverService,
+		serverRepo:       serverRepo,
+		encryptor:        encryptor,
+		uploadWSHandler:  uploadWSHandler,
+		hostKeyCallback:  hostKeyCallback,
+		pool:             pool,
+		operationRecords: operationRecords,
 	}
 }
 
@@ -92,6 +96,121 @@ func (h *SFTPHandler) Close() {
 	if h.pool != nil {
 		h.pool.CloseAll()
 	}
+}
+
+type sftpTransferRecordInput struct {
+	UserID         uuid.UUID
+	ServerID       uuid.UUID
+	ServerName     string
+	TaskID         string
+	Action         string
+	Status         operationrecord.Status
+	SourcePath     string
+	DestPath       string
+	FileName       string
+	BytesTotal     int64
+	BytesProcessed int64
+	SpeedBps       int64
+	StartedAt      time.Time
+	FinishedAt     *time.Time
+	ErrorMessage   string
+	TotalCount     int
+	SuccessCount   int
+	FailureCount   int
+	Detail         map[string]interface{}
+}
+
+func (h *SFTPHandler) upsertSFTPTransferRecord(input sftpTransferRecordInput) {
+	if h.operationRecords == nil || input.UserID == uuid.Nil || input.ServerID == uuid.Nil {
+		return
+	}
+	if input.StartedAt.IsZero() {
+		input.StartedAt = time.Now()
+	}
+	if input.TaskID == "" {
+		input.TaskID = uuid.NewString()
+	}
+	if input.Action == "" {
+		input.Action = "transfer"
+	}
+	if input.Status == "" {
+		input.Status = operationrecord.StatusSuccess
+	}
+
+	detail := map[string]interface{}{
+		"source_path": input.SourcePath,
+		"dest_path":   input.DestPath,
+		"file_name":   input.FileName,
+		"task_id":     input.TaskID,
+	}
+	for key, value := range input.Detail {
+		detail[key] = value
+	}
+	detailJSON, _ := json.Marshal(detail)
+
+	progress := 0
+	if input.BytesTotal > 0 {
+		progress = int(float64(input.BytesProcessed) / float64(input.BytesTotal) * 100)
+		if progress > 100 {
+			progress = 100
+		}
+	}
+	if input.Status == operationrecord.StatusSuccess {
+		progress = 100
+	}
+
+	title := input.FileName
+	if title == "" {
+		title = input.Action
+	}
+	resource := input.SourcePath
+	if input.DestPath != "" {
+		resource = fmt.Sprintf("%s -> %s", input.SourcePath, input.DestPath)
+	}
+
+	var durationMs int64
+	if input.FinishedAt != nil {
+		durationMs = input.FinishedAt.Sub(input.StartedAt).Milliseconds()
+	}
+
+	now := time.Now()
+	record := &operationrecord.OperationRecord{
+		UserID:         input.UserID,
+		Type:           operationrecord.TypeTransfer,
+		Action:         input.Action,
+		Status:         input.Status,
+		ServerID:       &input.ServerID,
+		ServerName:     input.ServerName,
+		Title:          title,
+		Resource:       resource,
+		Source:         "sftp",
+		StartedAt:      &input.StartedAt,
+		FinishedAt:     input.FinishedAt,
+		DurationMs:     durationMs,
+		Progress:       progress,
+		TotalCount:     input.TotalCount,
+		SuccessCount:   input.SuccessCount,
+		FailureCount:   input.FailureCount,
+		BytesTotal:     input.BytesTotal,
+		BytesProcessed: input.BytesProcessed,
+		SpeedBps:       input.SpeedBps,
+		ErrorMessage:   input.ErrorMessage,
+		DetailJSON:     string(detailJSON),
+		SourceTable:    "sftp_transfers",
+		SourceID:       input.TaskID,
+		CreatedAt:      input.StartedAt,
+		UpdatedAt:      now,
+	}
+
+	_ = h.operationRecords.Upsert(context.Background(), record)
+}
+
+func (h *SFTPHandler) sftpRecordServerName(ctx context.Context, userID uuid.UUID, serverID uuid.UUID) string {
+	srv, err := h.serverService.GetByID(ctx, userID, serverID)
+	if err != nil || srv == nil {
+		return ""
+	}
+	return srv.Name
 }
 
 // CreateUploadTask 创建一个服务端上传任务 ID（用于上传进度 WebSocket）
@@ -317,6 +436,12 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
 		return
 	}
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+	serverName := h.sftpRecordServerName(c.Request.Context(), userID, serverID)
 
 	// 获取可选的 WebSocket 任务 ID
 	wsTaskID := c.Query("ws_task_id")
@@ -336,10 +461,28 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 	} else {
 		remotePath = path.Join(remotePath, header.Filename)
 	}
+	transferStartedAt := time.Now()
 
 	// 从连接池获取 SFTP 客户端
 	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:       userID,
+			ServerID:     serverID,
+			ServerName:   serverName,
+			TaskID:       wsTaskID,
+			Action:       "upload",
+			Status:       operationrecord.StatusFailure,
+			SourcePath:   header.Filename,
+			DestPath:     remotePath,
+			FileName:     header.Filename,
+			BytesTotal:   header.Size,
+			StartedAt:    transferStartedAt,
+			FinishedAt:   &finishedAt,
+			ErrorMessage: err.Error(),
+			FailureCount: 1,
+		})
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
@@ -364,7 +507,7 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 		var (
 			lastProgressTime = time.Now()
 			totalSize        = header.Size
-			startTime        = time.Now()
+			startTime        = transferStartedAt
 		)
 
 		// 上传文件并报告进度
@@ -405,6 +548,23 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 					TaskID:  wsTaskID,
 					Message: "upload cancelled",
 				})
+				finishedAt := time.Now()
+				h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+					UserID:       userID,
+					ServerID:     serverID,
+					ServerName:   serverName,
+					TaskID:       wsTaskID,
+					Action:       "upload",
+					Status:       operationrecord.StatusCanceled,
+					SourcePath:   header.Filename,
+					DestPath:     remotePath,
+					FileName:     header.Filename,
+					BytesTotal:   totalSize,
+					StartedAt:    transferStartedAt,
+					FinishedAt:   &finishedAt,
+					ErrorMessage: "upload cancelled",
+					FailureCount: 1,
+				})
 				RespondError(c, http.StatusRequestTimeout, "upload_cancelled", "upload cancelled by client")
 				return
 			}
@@ -414,6 +574,23 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 				Type:    "error",
 				TaskID:  wsTaskID,
 				Message: err.Error(),
+			})
+			finishedAt := time.Now()
+			h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+				UserID:       userID,
+				ServerID:     serverID,
+				ServerName:   serverName,
+				TaskID:       wsTaskID,
+				Action:       "upload",
+				Status:       operationrecord.StatusFailure,
+				SourcePath:   header.Filename,
+				DestPath:     remotePath,
+				FileName:     header.Filename,
+				BytesTotal:   totalSize,
+				StartedAt:    transferStartedAt,
+				FinishedAt:   &finishedAt,
+				ErrorMessage: err.Error(),
+				FailureCount: 1,
 			})
 			RespondError(c, http.StatusInternalServerError, "upload_failed", err.Error())
 			return
@@ -431,6 +608,22 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 	} else {
 		// 无 WebSocket，使用普通上传
 		if err := sftpClient.UploadFile(file, remotePath); err != nil {
+			finishedAt := time.Now()
+			h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+				UserID:       userID,
+				ServerID:     serverID,
+				ServerName:   serverName,
+				Action:       "upload",
+				Status:       operationrecord.StatusFailure,
+				SourcePath:   header.Filename,
+				DestPath:     remotePath,
+				FileName:     header.Filename,
+				BytesTotal:   header.Size,
+				StartedAt:    transferStartedAt,
+				FinishedAt:   &finishedAt,
+				ErrorMessage: err.Error(),
+				FailureCount: 1,
+			})
 			RespondError(c, http.StatusInternalServerError, "upload_failed", err.Error())
 			return
 		}
@@ -439,9 +632,44 @@ func (h *SFTPHandler) UploadFile(c *gin.Context) {
 	// 上传完成后,返回新文件的详细信息,便于前端进行差异更新
 	fileInfo, err := sftpClient.GetFileInfo(remotePath)
 	if err != nil {
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:         userID,
+			ServerID:       serverID,
+			ServerName:     serverName,
+			TaskID:         wsTaskID,
+			Action:         "upload",
+			Status:         operationrecord.StatusFailure,
+			SourcePath:     header.Filename,
+			DestPath:       remotePath,
+			FileName:       header.Filename,
+			BytesTotal:     header.Size,
+			BytesProcessed: header.Size,
+			StartedAt:      transferStartedAt,
+			FinishedAt:     &finishedAt,
+			ErrorMessage:   err.Error(),
+			FailureCount:   1,
+		})
 		RespondError(c, http.StatusInternalServerError, "stat_failed", err.Error())
 		return
 	}
+	finishedAt := time.Now()
+	h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+		UserID:         userID,
+		ServerID:       serverID,
+		ServerName:     serverName,
+		TaskID:         wsTaskID,
+		Action:         "upload",
+		Status:         operationrecord.StatusSuccess,
+		SourcePath:     header.Filename,
+		DestPath:       remotePath,
+		FileName:       header.Filename,
+		BytesTotal:     fileInfo.Size,
+		BytesProcessed: fileInfo.Size,
+		StartedAt:      transferStartedAt,
+		FinishedAt:     &finishedAt,
+		SuccessCount:   1,
+	})
 
 	RespondSuccess(c, fileInfo)
 }
@@ -461,6 +689,12 @@ func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
 		RespondError(c, http.StatusUnauthorized, "unauthorized", "Missing user")
 		return
 	}
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Invalid user session")
+		return
+	}
+	serverName := h.sftpRecordServerName(c.Request.Context(), userID, serverID)
 	if h.uploadWSHandler == nil {
 		RespondError(c, http.StatusServiceUnavailable, "ws_not_available", "Upload WebSocket not available")
 		return
@@ -528,12 +762,33 @@ func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
 			RespondError(c, http.StatusBadRequest, "invalid_path", "Path must not contain '..'")
 			return
 		}
+		transferStartedAt := time.Now()
 
 		if ok := h.uploadWSHandler.PrepareTask(userIDStr.(string), taskID, serverID.String(), remotePath, fileName, expectedSize); !ok {
 			RespondError(c, http.StatusForbidden, "forbidden", "Invalid upload task")
 			return
 		}
 		if h.uploadWSHandler.IsTaskCancelled(userIDStr.(string), taskID) {
+			finishedAt := time.Now()
+			h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+				UserID:       userID,
+				ServerID:     serverID,
+				ServerName:   serverName,
+				TaskID:       taskID,
+				Action:       "upload",
+				Status:       operationrecord.StatusCanceled,
+				SourcePath:   fileName,
+				DestPath:     remotePath,
+				FileName:     fileName,
+				BytesTotal:   expectedSize,
+				StartedAt:    transferStartedAt,
+				FinishedAt:   &finishedAt,
+				ErrorMessage: "upload cancelled",
+				FailureCount: 1,
+				Detail: map[string]interface{}{
+					"stage": "stream",
+				},
+			})
 			RespondError(c, http.StatusRequestTimeout, "upload_cancelled", "upload cancelled by client")
 			return
 		}
@@ -552,12 +807,32 @@ func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
 				Total:   expectedSize,
 				Message: err.Error(),
 			})
+			finishedAt := time.Now()
+			h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+				UserID:       userID,
+				ServerID:     serverID,
+				ServerName:   serverName,
+				TaskID:       taskID,
+				Action:       "upload",
+				Status:       operationrecord.StatusFailure,
+				SourcePath:   fileName,
+				DestPath:     remotePath,
+				FileName:     fileName,
+				BytesTotal:   expectedSize,
+				StartedAt:    transferStartedAt,
+				FinishedAt:   &finishedAt,
+				ErrorMessage: err.Error(),
+				FailureCount: 1,
+				Detail: map[string]interface{}{
+					"stage": "stream",
+				},
+			})
 			RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 			return
 		}
 		defer sftpClient.Release()
 
-		startTime := time.Now()
+		startTime := transferStartedAt
 		lastProgressTime := startTime
 		_ = h.uploadWSHandler.SendProgress(taskID, ws.UploadProgressMessage{
 			Type:    "started",
@@ -600,6 +875,26 @@ func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
 					Total:   expectedSize,
 					Message: "upload cancelled",
 				})
+				finishedAt := time.Now()
+				h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+					UserID:       userID,
+					ServerID:     serverID,
+					ServerName:   serverName,
+					TaskID:       taskID,
+					Action:       "upload",
+					Status:       operationrecord.StatusCanceled,
+					SourcePath:   fileName,
+					DestPath:     remotePath,
+					FileName:     fileName,
+					BytesTotal:   expectedSize,
+					StartedAt:    transferStartedAt,
+					FinishedAt:   &finishedAt,
+					ErrorMessage: "upload cancelled",
+					FailureCount: 1,
+					Detail: map[string]interface{}{
+						"stage": "stream",
+					},
+				})
 				RespondError(c, http.StatusRequestTimeout, "upload_cancelled", "upload cancelled by client")
 				return
 			}
@@ -610,6 +905,26 @@ func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
 				Stage:   "stream",
 				Total:   expectedSize,
 				Message: err.Error(),
+			})
+			finishedAt := time.Now()
+			h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+				UserID:       userID,
+				ServerID:     serverID,
+				ServerName:   serverName,
+				TaskID:       taskID,
+				Action:       "upload",
+				Status:       operationrecord.StatusFailure,
+				SourcePath:   fileName,
+				DestPath:     remotePath,
+				FileName:     fileName,
+				BytesTotal:   expectedSize,
+				StartedAt:    transferStartedAt,
+				FinishedAt:   &finishedAt,
+				ErrorMessage: err.Error(),
+				FailureCount: 1,
+				Detail: map[string]interface{}{
+					"stage": "stream",
+				},
 			})
 			RespondError(c, http.StatusInternalServerError, "upload_failed", err.Error())
 			return
@@ -623,6 +938,27 @@ func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
 				Stage:   "stream",
 				Total:   expectedSize,
 				Message: err.Error(),
+			})
+			finishedAt := time.Now()
+			h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+				UserID:         userID,
+				ServerID:       serverID,
+				ServerName:     serverName,
+				TaskID:         taskID,
+				Action:         "upload",
+				Status:         operationrecord.StatusFailure,
+				SourcePath:     fileName,
+				DestPath:       remotePath,
+				FileName:       fileName,
+				BytesTotal:     expectedSize,
+				BytesProcessed: expectedSize,
+				StartedAt:      transferStartedAt,
+				FinishedAt:     &finishedAt,
+				ErrorMessage:   err.Error(),
+				FailureCount:   1,
+				Detail: map[string]interface{}{
+					"stage": "stream",
+				},
 			})
 			RespondError(c, http.StatusInternalServerError, "stat_failed", err.Error())
 			return
@@ -639,6 +975,26 @@ func (h *SFTPHandler) UploadFileStream(c *gin.Context) {
 			Total:   totalSize,
 			Stage:   "stream",
 			Message: "Upload completed successfully",
+		})
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:         userID,
+			ServerID:       serverID,
+			ServerName:     serverName,
+			TaskID:         taskID,
+			Action:         "upload",
+			Status:         operationrecord.StatusSuccess,
+			SourcePath:     fileName,
+			DestPath:       remotePath,
+			FileName:       fileName,
+			BytesTotal:     totalSize,
+			BytesProcessed: totalSize,
+			StartedAt:      transferStartedAt,
+			FinishedAt:     &finishedAt,
+			SuccessCount:   1,
+			Detail: map[string]interface{}{
+				"stage": "stream",
+			},
 		})
 
 		RespondSuccess(c, fileInfo)
@@ -670,6 +1026,12 @@ func (h *SFTPHandler) DownloadFile(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
 		return
 	}
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+	serverName := h.sftpRecordServerName(c.Request.Context(), userID, serverID)
 
 	// 获取路径参数
 	remotePath := ""
@@ -682,10 +1044,27 @@ func (h *SFTPHandler) DownloadFile(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "missing_ticket", "ticket is required")
 		return
 	}
+	transferStartedAt := time.Now()
+	fileName := path.Base(remotePath)
 
 	// 从连接池获取 SFTP 客户端
 	sftpClient, err := h.getPooledClient(c, serverID)
 	if err != nil {
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:       userID,
+			ServerID:     serverID,
+			ServerName:   serverName,
+			Action:       "download",
+			Status:       operationrecord.StatusFailure,
+			SourcePath:   remotePath,
+			DestPath:     fileName,
+			FileName:     fileName,
+			StartedAt:    transferStartedAt,
+			FinishedAt:   &finishedAt,
+			ErrorMessage: err.Error(),
+			FailureCount: 1,
+		})
 		RespondError(c, http.StatusInternalServerError, "sftp_error", err.Error())
 		return
 	}
@@ -694,22 +1073,69 @@ func (h *SFTPHandler) DownloadFile(c *gin.Context) {
 	// 获取文件信息
 	fileInfo, err := sftpClient.GetFileInfo(remotePath)
 	if err != nil {
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:       userID,
+			ServerID:     serverID,
+			ServerName:   serverName,
+			Action:       "download",
+			Status:       operationrecord.StatusFailure,
+			SourcePath:   remotePath,
+			DestPath:     fileName,
+			FileName:     fileName,
+			StartedAt:    transferStartedAt,
+			FinishedAt:   &finishedAt,
+			ErrorMessage: err.Error(),
+			FailureCount: 1,
+		})
 		RespondError(c, http.StatusNotFound, "file_not_found", err.Error())
 		return
 	}
 
 	// 设置响应头
-	filename := path.Base(remotePath)
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
 
 	// 下载文件
 	if err := sftpClient.DownloadFile(remotePath, c.Writer); err != nil {
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:         userID,
+			ServerID:       serverID,
+			ServerName:     serverName,
+			Action:         "download",
+			Status:         operationrecord.StatusFailure,
+			SourcePath:     remotePath,
+			DestPath:       fileName,
+			FileName:       fileName,
+			BytesTotal:     fileInfo.Size,
+			BytesProcessed: fileInfo.Size,
+			StartedAt:      transferStartedAt,
+			FinishedAt:     &finishedAt,
+			ErrorMessage:   err.Error(),
+			FailureCount:   1,
+		})
 		// 如果已经开始写入响应，无法返回错误 JSON
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	finishedAt := time.Now()
+	h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+		UserID:         userID,
+		ServerID:       serverID,
+		ServerName:     serverName,
+		Action:         "download",
+		Status:         operationrecord.StatusSuccess,
+		SourcePath:     remotePath,
+		DestPath:       fileName,
+		FileName:       fileName,
+		BytesTotal:     fileInfo.Size,
+		BytesProcessed: fileInfo.Size,
+		StartedAt:      transferStartedAt,
+		FinishedAt:     &finishedAt,
+		SuccessCount:   1,
+	})
 }
 
 // CreateDirectory 创建目录
@@ -1180,6 +1606,12 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid_server_id", "Invalid server ID")
 		return
 	}
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+	serverName := h.sftpRecordServerName(c.Request.Context(), userID, serverID)
 
 	// 解析请求：支持 JSON 与原生表单提交（用于浏览器流式下载）
 	var req BatchDownloadRequest
@@ -1234,6 +1666,35 @@ func (h *SFTPHandler) BatchDownload(c *gin.Context) {
 	}
 
 	elapsed := time.Since(startTime)
+	finishedAt := time.Now()
+	status := operationrecord.StatusSuccess
+	successCount := 1
+	failureCount := 0
+	if c.Writer.Status() >= http.StatusBadRequest {
+		status = operationrecord.StatusFailure
+		successCount = 0
+		failureCount = 1
+	}
+	h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+		UserID:       userID,
+		ServerID:     serverID,
+		ServerName:   serverName,
+		Action:       "batch_download",
+		Status:       status,
+		SourcePath:   strings.Join(req.Paths, ", "),
+		DestPath:     "batch-download",
+		FileName:     "batch-download",
+		StartedAt:    startTime,
+		FinishedAt:   &finishedAt,
+		TotalCount:   len(req.Paths),
+		SuccessCount: successCount,
+		FailureCount: failureCount,
+		Detail: map[string]interface{}{
+			"mode":             req.Mode,
+			"paths":            req.Paths,
+			"exclude_patterns": req.ExcludePatterns,
+		},
+	})
 	fmt.Printf("[SFTP BatchDownload] Download completed in %v, mode=%s\n", elapsed, req.Mode)
 }
 
@@ -1678,20 +2139,62 @@ func (h *SFTPHandler) Transfer(c *gin.Context) {
 	startTime := time.Now()
 	fmt.Printf("[SFTP Transfer] Starting transfer: source=%s:%s -> target=%s:%s\n",
 		req.SourceServerID, req.SourcePath, req.TargetServerID, req.TargetPath)
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		RespondError(c, http.StatusUnauthorized, "unauthorized", "Invalid user session")
+		return
+	}
 
 	// 创建源服务器 SFTP 客户端
-	sourceClient, _, err := h.createSFTPClient(c, sourceServerID)
+	sourceClient, sourceServer, err := h.createSFTPClient(c, sourceServerID)
 	if err != nil {
 		fmt.Printf("[SFTP Transfer] Failed to connect to source server: %v\n", err)
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:       userID,
+			ServerID:     sourceServerID,
+			ServerName:   h.sftpRecordServerName(c.Request.Context(), userID, sourceServerID),
+			Action:       "transfer",
+			Status:       operationrecord.StatusFailure,
+			SourcePath:   req.SourcePath,
+			DestPath:     req.TargetPath,
+			FileName:     path.Base(req.SourcePath),
+			StartedAt:    startTime,
+			FinishedAt:   &finishedAt,
+			ErrorMessage: err.Error(),
+			FailureCount: 1,
+			Detail: map[string]interface{}{
+				"target_server_id": req.TargetServerID,
+			},
+		})
 		RespondError(c, http.StatusInternalServerError, "source_connection_failed", fmt.Sprintf("Failed to connect to source server: %v", err))
 		return
 	}
 	defer sourceClient.Close()
 
 	// 创建目标服务器 SFTP 客户端
-	targetClient, _, err := h.createSFTPClient(c, targetServerID)
+	targetClient, targetServer, err := h.createSFTPClient(c, targetServerID)
 	if err != nil {
 		fmt.Printf("[SFTP Transfer] Failed to connect to target server: %v\n", err)
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:       userID,
+			ServerID:     sourceServerID,
+			ServerName:   sourceServer.Name,
+			Action:       "transfer",
+			Status:       operationrecord.StatusFailure,
+			SourcePath:   req.SourcePath,
+			DestPath:     req.TargetPath,
+			FileName:     path.Base(req.SourcePath),
+			StartedAt:    startTime,
+			FinishedAt:   &finishedAt,
+			ErrorMessage: err.Error(),
+			FailureCount: 1,
+			Detail: map[string]interface{}{
+				"target_server_id":   req.TargetServerID,
+				"target_server_name": "",
+			},
+		})
 		RespondError(c, http.StatusInternalServerError, "target_connection_failed", fmt.Sprintf("Failed to connect to target server: %v", err))
 		return
 	}
@@ -1701,6 +2204,25 @@ func (h *SFTPHandler) Transfer(c *gin.Context) {
 	sourceInfo, err := sourceClient.GetFileInfo(req.SourcePath)
 	if err != nil {
 		fmt.Printf("[SFTP Transfer] Source file not found: %s, error: %v\n", req.SourcePath, err)
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:       userID,
+			ServerID:     sourceServerID,
+			ServerName:   sourceServer.Name,
+			Action:       "transfer",
+			Status:       operationrecord.StatusFailure,
+			SourcePath:   req.SourcePath,
+			DestPath:     req.TargetPath,
+			FileName:     path.Base(req.SourcePath),
+			StartedAt:    startTime,
+			FinishedAt:   &finishedAt,
+			ErrorMessage: err.Error(),
+			FailureCount: 1,
+			Detail: map[string]interface{}{
+				"target_server_id":   targetServerID,
+				"target_server_name": targetServer.Name,
+			},
+		})
 		RespondError(c, http.StatusNotFound, "source_not_found", fmt.Sprintf("Source file not found: %v", err))
 		return
 	}
@@ -1725,11 +2247,52 @@ func (h *SFTPHandler) Transfer(c *gin.Context) {
 
 	if err != nil {
 		fmt.Printf("[SFTP Transfer] Transfer failed: %v\n", err)
+		finishedAt := time.Now()
+		h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+			UserID:         userID,
+			ServerID:       sourceServerID,
+			ServerName:     sourceServer.Name,
+			Action:         "transfer",
+			Status:         operationrecord.StatusFailure,
+			SourcePath:     req.SourcePath,
+			DestPath:       targetPath,
+			FileName:       sourceInfo.Name,
+			BytesTotal:     sourceInfo.Size,
+			BytesProcessed: bytesCopied,
+			StartedAt:      startTime,
+			FinishedAt:     &finishedAt,
+			ErrorMessage:   err.Error(),
+			FailureCount:   1,
+			Detail: map[string]interface{}{
+				"target_server_id":   targetServerID,
+				"target_server_name": targetServer.Name,
+			},
+		})
 		RespondError(c, http.StatusInternalServerError, "transfer_failed", err.Error())
 		return
 	}
 
 	elapsed := time.Since(startTime)
+	finishedAt := time.Now()
+	h.upsertSFTPTransferRecord(sftpTransferRecordInput{
+		UserID:         userID,
+		ServerID:       sourceServerID,
+		ServerName:     sourceServer.Name,
+		Action:         "transfer",
+		Status:         operationrecord.StatusSuccess,
+		SourcePath:     req.SourcePath,
+		DestPath:       targetPath,
+		FileName:       sourceInfo.Name,
+		BytesTotal:     sourceInfo.Size,
+		BytesProcessed: bytesCopied,
+		StartedAt:      startTime,
+		FinishedAt:     &finishedAt,
+		SuccessCount:   1,
+		Detail: map[string]interface{}{
+			"target_server_id":   targetServerID,
+			"target_server_name": targetServer.Name,
+		},
+	})
 	fmt.Printf("[SFTP Transfer] Transfer completed in %v: %d bytes copied\n", elapsed, bytesCopied)
 
 	RespondSuccess(c, TransferResponse{

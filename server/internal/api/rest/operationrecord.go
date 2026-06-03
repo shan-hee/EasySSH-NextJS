@@ -20,10 +20,6 @@ func NewOperationRecordHandler(service operationrecord.Service) *OperationRecord
 // List 查询当前用户操作记录
 // GET /api/v1/operation-records?page=1&page_size=20&type=transfer
 func (h *OperationRecordHandler) List(c *gin.Context) {
-	if !requireAdmin(c) {
-		return
-	}
-
 	currentUserID, err := getUserIDFromContext(c)
 	if err != nil {
 		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -48,10 +44,6 @@ func (h *OperationRecordHandler) List(c *gin.Context) {
 // GetByID 获取当前用户操作记录详情
 // GET /api/v1/operation-records/:id
 func (h *OperationRecordHandler) GetByID(c *gin.Context) {
-	if !requireAdmin(c) {
-		return
-	}
-
 	currentUserID, err := getUserIDFromContext(c)
 	if err != nil {
 		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -76,10 +68,6 @@ func (h *OperationRecordHandler) GetByID(c *gin.Context) {
 // GetStatistics 获取当前用户操作记录统计
 // GET /api/v1/operation-records/statistics?days=30&type=connection
 func (h *OperationRecordHandler) GetStatistics(c *gin.Context) {
-	if !requireAdmin(c) {
-		return
-	}
-
 	currentUserID, err := getUserIDFromContext(c)
 	if err != nil {
 		RespondError(c, http.StatusUnauthorized, "unauthorized", err.Error())

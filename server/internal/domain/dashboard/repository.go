@@ -74,8 +74,8 @@ func (r *repository) GetRecentActivity(ctx context.Context, userID *uuid.UUID, l
 // CountActiveSessions 统计活跃 SSH 会话数
 func (r *repository) CountActiveSessions(ctx context.Context, userID *uuid.UUID) (int64, error) {
 	query := r.db.WithContext(ctx).
-		Table("ssh_sessions").
-		Where("status = ? AND deleted_at IS NULL", "active")
+		Table("operation_records").
+		Where("type = ? AND status = ? AND deleted_at IS NULL", "connection", "running")
 
 	if userID != nil {
 		query = query.Where("user_id = ?", *userID)

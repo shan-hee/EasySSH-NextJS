@@ -25,11 +25,12 @@ import type {
   WorkspaceTransferTask,
 } from "./workspace"
 import type {
-  FileTransfer,
-  FileTransferStatistics,
-  ListFileTransfersParams,
-  ListFileTransfersResponse,
-} from "@/lib/api/file-transfers"
+  OperationRecord,
+  OperationRecordListParams,
+  OperationRecordListResponse,
+  OperationRecordStatistics,
+  OperationRecordStatus,
+} from "@/lib/api/operation-records"
 import type { TransferAuthTicketProvider } from "./transfer-runtime"
 import type { TerminalWebSocketAuthTicketProvider } from "@/lib/websocket-terminal"
 import type {
@@ -257,43 +258,102 @@ export function createWorkspaceTransferManagerAdapter({
   return transferManager
 }
 
-export interface FileTransfersApiLike {
-  list: (params?: ListFileTransfersParams) => Promise<ListFileTransfersResponse>
-  getById: (id: string) => Promise<FileTransfer>
-  getStatistics: () => Promise<FileTransferStatistics>
-  delete: (id: string) => Promise<unknown>
+export interface OperationRecordsTransferApiLike {
+  list: (params?: OperationRecordListParams) => Promise<OperationRecordListResponse>
+  getById: (id: string) => Promise<OperationRecord>
+  getStatistics: (params?: Pick<OperationRecordListParams, "type" | "start_date" | "end_date">) => Promise<OperationRecordStatistics>
 }
 
-export function mapFileTransferToWorkspaceHistoryItem(
-  transfer: FileTransfer,
-): WorkspaceTransferHistoryItem {
-  return {
-    id: transfer.id,
-    serverId: transfer.server_id,
-    sessionId: transfer.session_id,
-    transferType: transfer.transfer_type,
-    sourcePath: transfer.source_path,
-    destPath: transfer.dest_path,
-    fileName: transfer.file_name,
-    fileSizeBytes: transfer.file_size,
-    status: transfer.status,
-    progress: transfer.progress,
-    bytesTransferred: transfer.bytes_transferred,
-    startedAt: transfer.started_at,
-    completedAt: transfer.completed_at,
-    durationSeconds: transfer.duration,
-    speedBytesPerSecond: transfer.speed,
-    errorMessage: transfer.error_message,
-    createdAt: transfer.created_at,
-    updatedAt: transfer.updated_at,
+function parseOperationRecordDetail(record: OperationRecord): Record<string, unknown> {
+  if (!record.detail_json) {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(record.detail_json)
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
   }
 }
 
-export function mapFileTransferListToWorkspaceHistoryResult(
-  response: ListFileTransfersResponse,
+function detailString(detail: Record<string, unknown>, key: string): string | undefined {
+  const value = detail[key]
+  return typeof value === "string" && value.trim() ? value : undefined
+}
+
+function mapOperationRecordStatusToWorkspaceTransferStatus(status: OperationRecordStatus): WorkspaceTransferHistoryItem["status"] {
+  if (status === "success") {
+    return "completed"
+  }
+  if (status === "pending") {
+    return "pending"
+  }
+  if (status === "running") {
+    return "transferring"
+  }
+  return "failed"
+}
+
+function mapOperationRecordActionToTransferType(action: string): WorkspaceTransferHistoryItem["transferType"] {
+  if (action.includes("download")) {
+    return "download"
+  }
+  if (action.includes("transfer")) {
+    return "transfer"
+  }
+  return "upload"
+}
+
+function mapWorkspaceTransferHistoryStatusToOperationRecordStatus(
+  status?: WorkspaceTransferHistoryItem["status"],
+): OperationRecordStatus | undefined {
+  if (status === "completed") {
+    return "success"
+  }
+  if (status === "failed") {
+    return "failure"
+  }
+  if (status === "transferring") {
+    return "running"
+  }
+  return status
+}
+
+export function mapOperationRecordToWorkspaceHistoryItem(
+  record: OperationRecord,
+): WorkspaceTransferHistoryItem {
+  const detail = parseOperationRecordDetail(record)
+  const sourcePath = detailString(detail, "source_path") ?? record.resource
+  const destPath = detailString(detail, "dest_path") ?? detailString(detail, "target_path") ?? ""
+  const fileName = detailString(detail, "file_name") ?? record.title ?? sourcePath.split("/").filter(Boolean).pop() ?? record.action
+
+  return {
+    id: record.id,
+    serverId: record.server_id ?? "",
+    sessionId: detailString(detail, "session_id"),
+    transferType: mapOperationRecordActionToTransferType(record.action),
+    sourcePath,
+    destPath,
+    fileName,
+    fileSizeBytes: record.bytes_total,
+    status: mapOperationRecordStatusToWorkspaceTransferStatus(record.status),
+    progress: record.progress,
+    bytesTransferred: record.bytes_processed,
+    startedAt: record.started_at,
+    completedAt: record.finished_at,
+    durationSeconds: record.duration_ms ? Math.round(record.duration_ms / 1000) : undefined,
+    speedBytesPerSecond: record.speed_bps,
+    errorMessage: record.error_message,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
+  }
+}
+
+export function mapOperationRecordListToWorkspaceHistoryResult(
+  response: OperationRecordListResponse,
 ): WorkspaceTransferHistoryListResult {
   return {
-    items: response.data.map(mapFileTransferToWorkspaceHistoryItem),
+    items: response.records.map(mapOperationRecordToWorkspaceHistoryItem),
     total: response.total,
     page: response.page,
     pageSize: response.page_size,
@@ -301,41 +361,41 @@ export function mapFileTransferListToWorkspaceHistoryResult(
   }
 }
 
-export function mapFileTransferStatisticsToWorkspaceStatistics(
-  statistics: FileTransferStatistics,
+export function mapOperationRecordStatisticsToWorkspaceStatistics(
+  statistics: OperationRecordStatistics,
 ): WorkspaceTransferHistoryStatistics {
   return {
-    totalTransfers: statistics.total_transfers,
-    completedTransfers: statistics.completed_transfers,
-    failedTransfers: statistics.failed_transfers,
-    totalBytesUploaded: statistics.total_bytes_uploaded,
-    totalBytesDownloaded: statistics.total_bytes_downloaded,
+    totalTransfers: statistics.total,
+    completedTransfers: statistics.success_count,
+    failedTransfers: statistics.failure_count,
+    totalBytesUploaded: 0,
+    totalBytesDownloaded: 0,
     byType: statistics.by_type,
     byStatus: statistics.by_status,
   }
 }
 
 export function createWorkspaceTransferHistoryAdapter(
-  api: FileTransfersApiLike,
+  api: OperationRecordsTransferApiLike,
 ): SshWorkspaceTransferHistoryAdapter {
   return {
     async list(params) {
       const response = await api.list({
         page: params?.page,
-        limit: params?.limit,
-        status: params?.status,
-        transfer_type: params?.transferType,
+        page_size: params?.limit,
+        status: mapWorkspaceTransferHistoryStatusToOperationRecordStatus(params?.status),
+        type: "transfer",
+        action: params?.transferType,
         server_id: params?.serverId,
       })
-      return mapFileTransferListToWorkspaceHistoryResult(response)
+      return mapOperationRecordListToWorkspaceHistoryResult(response)
     },
     async getById(id) {
-      return mapFileTransferToWorkspaceHistoryItem(await api.getById(id))
+      return mapOperationRecordToWorkspaceHistoryItem(await api.getById(id))
     },
     async getStatistics() {
-      return mapFileTransferStatisticsToWorkspaceStatistics(await api.getStatistics())
+      return mapOperationRecordStatisticsToWorkspaceStatistics(await api.getStatistics({ type: "transfer" }))
     },
-    delete: api.delete,
   }
 }
 

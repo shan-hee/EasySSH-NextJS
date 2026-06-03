@@ -41,10 +41,6 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     // 终端页内显示连接配置列表和会话页签，不显示面包屑标题。
     showTitle: false,
   },
-  '/dashboard/terminal/sessions': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
 
   // ===================
   // 自动化模块
@@ -88,14 +84,6 @@ export const breadcrumbRouteConfig: Record<string, BreadcrumbConfig> = {
     showTitle: true,
   },
   '/dashboard/operation-logs': {
-    showTitle: true,
-  },
-  '/dashboard/logs/commands': {
-    // 仅显示系统名称 + 当前页面标题
-    showTitle: true,
-  },
-  '/dashboard/logs/files': {
-    // 仅显示系统名称 + 当前页面标题
     showTitle: true,
   },
 

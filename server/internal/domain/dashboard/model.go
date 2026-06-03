@@ -15,7 +15,7 @@ type MetricWithTrend struct {
 type StatsBlock struct {
 	OnlineServers MetricWithTrend `json:"online_servers"` // 在线服务器数（趋势暂用今日值占位）
 	TotalServers  int             `json:"total_servers"`  // 服务器总数
-	ActiveConns   MetricWithTrend `json:"active_conns"`   // 活跃连接数（来自 ssh_sessions active）
+	ActiveConns   MetricWithTrend `json:"active_conns"`   // 活跃连接数（来自 operation_records running connection）
 	TodayCommands MetricWithTrend `json:"today_commands"` // 今日命令数（来自活动记录）
 }
 

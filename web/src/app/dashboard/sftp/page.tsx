@@ -34,8 +34,7 @@ import {
  rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { createPortal } from 'react-dom'
-import { serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
-import { fileTransfersApi } from "@/lib/api/file-transfers"
+import { operationRecordsApi, serversApi, sftpApi, type Server as ApiServer, type FileInfo } from "@/lib/api"
 import { createAuthTicket } from "@/lib/auth-ticket"
 import { toast } from "@/components/ui/sonner"
 import { getErrorMessage } from "@/lib/error-utils"
@@ -139,7 +138,7 @@ export default function SftpPage() {
  )
  const workspaceSessionController = React.useMemo(() => createSftpWorkspaceSessionControllerAdapter(), [])
  const workspacePreferences = React.useMemo(() => createBrowserWorkspacePreferenceAdapter(), [])
- const workspaceTransferHistory = React.useMemo(() => createWorkspaceTransferHistoryAdapter(fileTransfersApi), [])
+ const workspaceTransferHistory = React.useMemo(() => createWorkspaceTransferHistoryAdapter(operationRecordsApi), [])
  const workspaceAdapters = React.useMemo(() => createWorkspaceAdapters({
    apiClient: {
      sftp: sftpSessionApi,

@@ -204,7 +204,7 @@ export type SshWorkspaceAuthTicketProvider = (
 ) => Promise<string>
 
 export type WorkspaceTransferHistoryStatus = "pending" | "transferring" | "completed" | "failed"
-export type WorkspaceTransferHistoryType = "upload" | "download"
+export type WorkspaceTransferHistoryType = "upload" | "download" | "transfer"
 
 export interface WorkspaceTransferHistoryItem {
   id: string

@@ -24,7 +24,6 @@ import (
 	"github.com/easyssh/server/internal/domain/batchtask"
 	"github.com/easyssh/server/internal/domain/completion"
 	"github.com/easyssh/server/internal/domain/dashboard"
-	"github.com/easyssh/server/internal/domain/filetransfer"
 	"github.com/easyssh/server/internal/domain/monitor"
 	"github.com/easyssh/server/internal/domain/monitoring"
 	"github.com/easyssh/server/internal/domain/notification"
@@ -39,9 +38,7 @@ import (
 	"github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshhostkey"
 	"github.com/easyssh/server/internal/domain/sshkey"
-	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/domain/systemconfig"
-	"github.com/easyssh/server/internal/domain/taskexecution"
 	"github.com/easyssh/server/internal/domain/taskexecutor"
 	"github.com/easyssh/server/internal/domain/taskscheduler"
 	"github.com/easyssh/server/internal/domain/user"
@@ -97,8 +94,6 @@ func main() {
 		&script.Script{},                   // 脚本表
 		&batchtask.BatchTask{},             // 批量任务表
 		&scheduledtask.ScheduledTask{},     // 定时任务表
-		&sshsession.SSHSession{},           // SSH会话表
-		&filetransfer.FileTransfer{},       // 文件传输表
 		&operationrecord.OperationRecord{}, // 统一操作记录表
 		// 新的配置表
 		&systemconfig.SystemConfig{},             // 系统配置表
@@ -109,9 +104,6 @@ func main() {
 		// 其他表
 		&sshkey.SSHKey{},         // SSH密钥表
 		&sshhostkey.SSHHostKey{}, // SSH主机密钥表（TOFU安全验证）
-		// 任务执行相关表
-		&taskexecution.TaskExecution{},       // 任务执行历史表
-		&taskexecution.TaskExecutionServer{}, // 任务执行服务器结果表
 		// 安全增强相关表
 		&auth.LoginAttempt{},       // 登录尝试记录表
 		&auth.TrustedDevice{},      // 可信设备表
@@ -321,16 +313,11 @@ func main() {
 	operationRecordRepo := operationrecord.NewRepository(database)
 	operationRecordService := operationrecord.NewService(operationRecordRepo)
 
-	// 任务执行历史服务
-	taskExecutionRepo := taskexecution.NewRepository(database)
-	taskExecutionService := taskexecution.NewService(taskExecutionRepo)
-
 	// 任务执行引擎
 	taskExecutor := taskexecutor.NewExecutor(
 		serverService,
 		scriptService,
 		scheduledTaskRepo,
-		taskExecutionRepo,
 		encryptor,
 		10, // 最大并发数
 		operationRecordService,
@@ -352,14 +339,6 @@ func main() {
 	} else {
 		log.Println("✅ Task scheduler started")
 	}
-
-	// SSH会话服务
-	sshSessionRepo := sshsession.NewRepository(database)
-	sshSessionService := sshsession.NewService(sshSessionRepo, operationRecordService)
-
-	// 文件传输服务
-	fileTransferRepo := filetransfer.NewRepository(database)
-	fileTransferService := filetransfer.NewService(fileTransferRepo, operationRecordService)
 
 	// 用户管理服务
 	userRepo := user.NewRepository(database)
@@ -389,6 +368,7 @@ func main() {
 		securityService,
 		cfg.Server.WebDevPort,
 		sshHostKeyService.GetHostKeyCallback(),
+		operationRecordService,
 	)
 
 	// 令牌有效期（秒），用于 Cookie 和 API 响应
@@ -422,10 +402,10 @@ func main() {
 		ConnTimeout:            time.Duration(cfg.SFTP.ConnTimeoutSeconds) * time.Second,
 		MaxSFTPSessionsPerConn: cfg.SFTP.MaxSFTPSessionsPerConn,
 	}
-	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback(), sftpPoolConfig)
+	sftpHandler := rest.NewSFTPHandler(serverService, serverRepo, encryptor, sftpUploadWSHandler, sshHostKeyService.GetHostKeyCallback(), sftpPoolConfig, operationRecordService)
 	sftpHandler.SetTransferHandler(sftpTransferWSHandler) // 注入跨服务器传输处理器
 
-	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, sshSessionService, sshHostKeyService, securityService, cfg.Server.WebDevPort, completionService, systemConfigService)
+	terminalHandler := ws.NewTerminalHandler(serverService, serverRepo, sessionManager, encryptor, operationRecordService, sshHostKeyService, securityService, cfg.Server.WebDevPort, completionService, systemConfigService)
 	monitorHandler := ws.NewMonitorHandler(monitorConnectionPool, securityService, cfg.Server.WebDevPort)
 	auditLogHandler := rest.NewAuditLogHandler(auditLogService)
 	dashboardHandler := rest.NewDashboardHandler(dashboardService)
@@ -434,9 +414,6 @@ func main() {
 	scriptHandler := rest.NewScriptHandler(scriptService)
 	batchTaskHandler := rest.NewBatchTaskHandler(batchTaskService)
 	scheduledTaskHandler := rest.NewScheduledTaskHandler(scheduledTaskService)
-	taskExecutionHandler := rest.NewTaskExecutionHandler(taskExecutionService)
-	sshSessionHandler := rest.NewSSHSessionHandler(sshSessionService)
-	fileTransferHandler := rest.NewFileTransferHandler(fileTransferService)
 	operationRecordHandler := rest.NewOperationRecordHandler(operationRecordService)
 	userHandler := rest.NewUserHandler(userService, accountLockService)
 	permissionHandler := rest.NewPermissionHandler(permissionService)
@@ -765,10 +742,9 @@ func main() {
 			logRoutes.GET("/:id", auditLogHandler.GetAnyByID)
 		}
 
-		// 统一操作记录路由（团队治理，需要管理员审计权限）
+		// 统一操作记录路由：普通用户查看自己的记录，管理员可查看全局记录
 		operationRecordRoutes := v1.Group("/operation-records")
 		operationRecordRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
-		operationRecordRoutes.Use(middleware.RequirePermission(permissionService, "audit:view"))
 		{
 			operationRecordRoutes.GET("", operationRecordHandler.List)
 			operationRecordRoutes.GET("/statistics", operationRecordHandler.GetStatistics)
@@ -812,40 +788,6 @@ func main() {
 			scheduledTaskRoutes.DELETE("/:id", scheduledTaskHandler.Delete)            // 删除任务
 			scheduledTaskRoutes.POST("/:id/toggle", scheduledTaskHandler.Toggle)       // 启用/禁用
 			scheduledTaskRoutes.POST("/:id/trigger", scheduledTaskHandler.Trigger)     // 手动触发
-		}
-
-		// 任务执行历史路由（需要认证）
-		taskExecutionRoutes := v1.Group("/task-executions")
-		taskExecutionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
-		{
-			taskExecutionRoutes.GET("", taskExecutionHandler.List)                     // 执行历史列表
-			taskExecutionRoutes.GET("/statistics", taskExecutionHandler.GetStatistics) // 统计信息
-			taskExecutionRoutes.GET("/:id", taskExecutionHandler.GetByID)              // 执行详情
-			taskExecutionRoutes.GET("/:id/results", taskExecutionHandler.GetResults)   // 服务器执行结果
-		}
-
-		// SSH会话路由（需要认证）
-		sshSessionRoutes := v1.Group("/ssh-sessions")
-		sshSessionRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
-		{
-			sshSessionRoutes.GET("", sshSessionHandler.List)                     // 会话列表
-			sshSessionRoutes.DELETE("", sshSessionHandler.CleanupOldHistory)     // 清理旧会话记录
-			sshSessionRoutes.GET("/statistics", sshSessionHandler.GetStatistics) // 统计信息
-			sshSessionRoutes.GET("/:id", sshSessionHandler.GetByID)              // 会话详情
-			sshSessionRoutes.DELETE("/:id", sshSessionHandler.Delete)            // 删除会话
-			sshSessionRoutes.POST("/:id/close", sshSessionHandler.Close)         // 关闭会话
-		}
-
-		// 文件传输路由（需要认证）
-		fileTransferRoutes := v1.Group("/file-transfers")
-		fileTransferRoutes.Use(middleware.AuthMiddleware(jwtService, ticketService, authRepo))
-		{
-			fileTransferRoutes.GET("", fileTransferHandler.List)                     // 传输列表
-			fileTransferRoutes.POST("", fileTransferHandler.Create)                  // 创建传输记录
-			fileTransferRoutes.GET("/statistics", fileTransferHandler.GetStatistics) // 统计信息
-			fileTransferRoutes.GET("/:id", fileTransferHandler.GetByID)              // 传输详情
-			fileTransferRoutes.PUT("/:id", fileTransferHandler.Update)               // 更新传输记录
-			fileTransferRoutes.DELETE("/:id", fileTransferHandler.Delete)            // 删除传输记录
 		}
 
 		// 系统设置路由（需要认证）

@@ -281,9 +281,7 @@ func (s *service) StartBatchTask(userID uuid.UUID, id uuid.UUID) error {
 			log.Printf("[BatchTask] 开始执行批量任务: taskID=%s, type=%s", task.ID, task.TaskType)
 			s.executor.Execute(context.Background(), scheduledTask, taskexecutor.TriggerManual)
 
-			// 执行完成后更新批量任务状态
-			// 注意：实际状态由 taskexecutor 更新到 task_executions 表
-			// 这里只是标记批量任务为已完成
+			// 执行完成后更新批量任务状态；详细执行结果由 taskexecutor 写入统一操作记录。
 			s.CompleteBatchTask(task.ID, "completed")
 			log.Printf("[BatchTask] 批量任务执行完成: taskID=%s", task.ID)
 		}()

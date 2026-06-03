@@ -14,11 +14,11 @@ import (
 
 	"github.com/easyssh/server/internal/api/middleware"
 	"github.com/easyssh/server/internal/domain/completion"
+	"github.com/easyssh/server/internal/domain/operationrecord"
 	"github.com/easyssh/server/internal/domain/security"
 	"github.com/easyssh/server/internal/domain/server"
 	sshDomain "github.com/easyssh/server/internal/domain/ssh"
 	"github.com/easyssh/server/internal/domain/sshhostkey"
-	"github.com/easyssh/server/internal/domain/sshsession"
 	"github.com/easyssh/server/internal/domain/systemconfig"
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/gin-gonic/gin"
@@ -48,7 +48,7 @@ type TerminalHandler struct {
 	serverRepo        server.Repository
 	sessionManager    *sshDomain.SessionManager
 	encryptor         *crypto.Encryptor
-	sshSessionService sshsession.Service
+	operationRecords  operationrecord.Service
 	hostKeyService    *sshhostkey.Service  // SSH主机密钥验证服务
 	securityService   security.Service     // 安全配置服务（用于 CORS）
 	webDevPort        int                  // 前端开发端口，用于默认同源白名单
@@ -59,13 +59,13 @@ type TerminalHandler struct {
 }
 
 // NewTerminalHandler 创建终端处理器
-func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, sshSessionService sshsession.Service, hostKeyService *sshhostkey.Service, securityService security.Service, webDevPort int, completionService completion.Service, systemConfigSvc systemconfig.Service) *TerminalHandler {
+func NewTerminalHandler(serverService server.Service, serverRepo server.Repository, sessionManager *sshDomain.SessionManager, encryptor *crypto.Encryptor, operationRecords operationrecord.Service, hostKeyService *sshhostkey.Service, securityService security.Service, webDevPort int, completionService completion.Service, systemConfigSvc systemconfig.Service) *TerminalHandler {
 	return &TerminalHandler{
 		serverService:     serverService,
 		serverRepo:        serverRepo,
 		sessionManager:    sessionManager,
 		encryptor:         encryptor,
-		sshSessionService: sshSessionService,
+		operationRecords:  operationRecords,
 		hostKeyService:    hostKeyService,
 		securityService:   securityService,
 		webDevPort:        webDevPort,
@@ -627,14 +627,14 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 	// 创建通道用于异步初始化结果
 	type initResult struct {
-		session   *sshDomain.Session
-		dbSession *sshsession.SSHSession
-		stdin     io.WriteCloser
-		stdout    io.Reader
-		stderr    io.Reader
-		err       error
-		errCode   string
-		errDetail interface{}
+		session    *sshDomain.Session
+		serverName string
+		stdin      io.WriteCloser
+		stdout     io.Reader
+		stderr     io.Reader
+		err        error
+		errCode    string
+		errDetail  interface{}
 	}
 	initCtx, cancelInit := context.WithTimeout(c.Request.Context(), terminalSSHInitTimeout)
 	defer cancelInit()
@@ -819,27 +819,6 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 		session := sshDomain.NewSession(userID, serverID, client, cols, rows)
 		session.SSHSession = sshSession
 
-		// 异步创建数据库会话记录
-		var dbSession *sshsession.SSHSession
-		dbSessionChan := make(chan *sshsession.SSHSession, 1)
-		go func() {
-			createReq := &sshsession.CreateSSHSessionRequest{
-				UserID:       userUUID,
-				ServerID:     serverUUID,
-				SessionID:    session.ID,
-				ClientIP:     clientIP,
-				ClientPort:   clientPort,
-				TerminalType: "xterm-256color",
-			}
-			dbSess, err := h.sshSessionService.CreateSSHSession(createReq)
-			if err != nil {
-				log.Printf("Failed to create SSH session record: %v", err)
-				dbSessionChan <- nil
-			} else {
-				dbSessionChan <- dbSess
-			}
-		}()
-
 		// 设置终端模式
 		modes := ssh.TerminalModes{
 			ssh.ECHO:          1,     // 启用回显
@@ -878,21 +857,25 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 			return
 		}
 
-		// 等待数据库会话创建完成（非阻塞）
-		select {
-		case dbSession = <-dbSessionChan:
-		case <-time.After(100 * time.Millisecond):
-			// 超时则继续，不阻塞连接建立
-			log.Printf("Database session creation timeout, continuing...")
-		}
+		h.upsertTerminalOperationRecord(terminalOperationRecord{
+			UserID:       userUUID,
+			ServerID:     serverUUID,
+			ServerName:   srv.Name,
+			SessionID:    session.ID,
+			ClientIP:     clientIP,
+			ClientPort:   clientPort,
+			TerminalType: "xterm-256color",
+			StartedAt:    session.CreatedAt,
+			Status:       operationrecord.StatusRunning,
+		})
 
 		initSucceeded = sendResult(initResult{
-			session:   session,
-			dbSession: dbSession,
-			stdin:     stdin,
-			stdout:    stdout,
-			stderr:    stderr,
-			err:       nil,
+			session:    session,
+			serverName: srv.Name,
+			stdin:      stdin,
+			stdout:     stdout,
+			stderr:     stderr,
+			err:        nil,
 		})
 	}()
 
@@ -924,13 +907,14 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 
 	// 初始化成功，注册会话
 	session := result.session
-	dbSession := result.dbSession
+	serverName := result.serverName
 	stdin := result.stdin
 	stdout := result.stdout
 	stderr := result.stderr
 
 	h.sessionManager.Add(session)
 	defer h.sessionManager.Remove(session.ID)
+	defer session.Close()
 
 	// 发送连接成功消息
 	if err := safeWriteJSON(Message{
@@ -1246,20 +1230,78 @@ func (h *TerminalHandler) HandleSSH(c *gin.Context) {
 	// 等待会话结束
 	<-done
 
-	// 更新数据库会话记录状态为关闭
-	if dbSession != nil {
-		updateReq := &sshsession.UpdateSSHSessionRequest{
-			Status: "closed",
-		}
-
-		if _, err := h.sshSessionService.UpdateSSHSession(dbSession.UserID, dbSession.ID, updateReq); err != nil {
-			log.Printf("Failed to update SSH session status: %v", err)
-		}
-	}
+	finishedAt := time.Now()
+	h.upsertTerminalOperationRecord(terminalOperationRecord{
+		UserID:       userUUID,
+		ServerID:     serverUUID,
+		ServerName:   serverName,
+		SessionID:    session.ID,
+		ClientIP:     clientIP,
+		ClientPort:   clientPort,
+		TerminalType: "xterm-256color",
+		StartedAt:    session.CreatedAt,
+		FinishedAt:   &finishedAt,
+		Status:       operationrecord.StatusSuccess,
+	})
 
 	// 尝试发送关闭消息（如果连接已关闭则静默忽略）
 	wsConn.SetWriteDeadline(time.Now().Add(time.Second))
 	_ = safeWriteJSON(Message{Type: "closed"})
+}
+
+type terminalOperationRecord struct {
+	UserID       uuid.UUID
+	ServerID     uuid.UUID
+	ServerName   string
+	SessionID    string
+	ClientIP     string
+	ClientPort   int
+	TerminalType string
+	StartedAt    time.Time
+	FinishedAt   *time.Time
+	Status       operationrecord.Status
+	ErrorMessage string
+}
+
+func (h *TerminalHandler) upsertTerminalOperationRecord(input terminalOperationRecord) {
+	if h.operationRecords == nil || input.UserID == uuid.Nil || input.ServerID == uuid.Nil || input.SessionID == "" {
+		return
+	}
+
+	detail, _ := json.Marshal(map[string]interface{}{
+		"client_ip":     input.ClientIP,
+		"client_port":   input.ClientPort,
+		"terminal_type": input.TerminalType,
+	})
+
+	var durationMs int64
+	if input.FinishedAt != nil {
+		durationMs = input.FinishedAt.Sub(input.StartedAt).Milliseconds()
+	}
+
+	now := time.Now()
+	record := &operationrecord.OperationRecord{
+		UserID:       input.UserID,
+		Type:         operationrecord.TypeConnection,
+		Action:       "ssh_session",
+		Status:       input.Status,
+		ServerID:     &input.ServerID,
+		ServerName:   input.ServerName,
+		Title:        "SSH session",
+		Resource:     input.SessionID,
+		Source:       "terminal",
+		StartedAt:    &input.StartedAt,
+		FinishedAt:   input.FinishedAt,
+		DurationMs:   durationMs,
+		ErrorMessage: input.ErrorMessage,
+		DetailJSON:   string(detail),
+		SourceTable:  "terminal_sessions",
+		SourceID:     input.SessionID,
+		CreatedAt:    input.StartedAt,
+		UpdatedAt:    now,
+	}
+
+	_ = h.operationRecords.Upsert(context.Background(), record)
 }
 
 func (h *TerminalHandler) registerCompletionSubscriber(key completionBroadcastKey, sub *completionSubscriber) {

@@ -204,7 +204,7 @@ function exportLogs(logs: AuditLog[]) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
-  a.download = `activity-logs-${Date.now()}.json`
+  a.download = `logs-${Date.now()}.json`
   a.click()
   URL.revokeObjectURL(url)
 }

@@ -2,6 +2,7 @@ package taskexecutor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -12,7 +13,6 @@ import (
 	"github.com/easyssh/server/internal/domain/script"
 	"github.com/easyssh/server/internal/domain/server"
 	"github.com/easyssh/server/internal/domain/ssh"
-	"github.com/easyssh/server/internal/domain/taskexecution"
 	"github.com/easyssh/server/internal/pkg/crypto"
 	"github.com/google/uuid"
 	gossh "golang.org/x/crypto/ssh"
@@ -26,12 +26,23 @@ const (
 	TriggerManual   TriggerType = "manual"
 )
 
+type executionStatus string
+
+const (
+	executionStatusPending  executionStatus = "pending"
+	executionStatusRunning  executionStatus = "running"
+	executionStatusSuccess  executionStatus = "success"
+	executionStatusFailed   executionStatus = "failed"
+	executionStatusPartial  executionStatus = "partial"
+	executionStatusTimeout  executionStatus = "timeout"
+	executionStatusCanceled executionStatus = "canceled"
+)
+
 // Executor 任务执行引擎
 type Executor struct {
 	serverService    server.Service
 	scriptService    script.Service
 	taskRepo         scheduledtask.Repository
-	executionRepo    taskexecution.Repository
 	operationRecords operationrecord.Service
 	encryptor        *crypto.Encryptor
 	hostKeyCallback  gossh.HostKeyCallback
@@ -43,7 +54,6 @@ func NewExecutor(
 	serverService server.Service,
 	scriptService script.Service,
 	taskRepo scheduledtask.Repository,
-	executionRepo taskexecution.Repository,
 	encryptor *crypto.Encryptor,
 	maxConcurrency int,
 	operationRecords operationrecord.Service,
@@ -55,7 +65,6 @@ func NewExecutor(
 		serverService:    serverService,
 		scriptService:    scriptService,
 		taskRepo:         taskRepo,
-		executionRepo:    executionRepo,
 		encryptor:        encryptor,
 		maxConcurrency:   maxConcurrency,
 		operationRecords: operationRecords,
@@ -74,42 +83,32 @@ func (e *Executor) Execute(ctx context.Context, task *scheduledtask.ScheduledTas
 		task.ID, task.TaskType, trigger)
 
 	startTime := time.Now()
+	executionID := uuid.New()
 
-	// 创建执行记录
-	execution := &taskexecution.TaskExecution{
+	record := taskExecutionRecord{
+		ID:              executionID,
 		ScheduledTaskID: task.ID,
 		UserID:          task.UserID,
 		TaskName:        task.TaskName,
 		TaskType:        task.TaskType,
-		TriggerType:     taskexecution.TriggerType(trigger),
+		TriggerType:     trigger,
 		Command:         task.Command,
-		Status:          taskexecution.StatusRunning,
+		Status:          executionStatusRunning,
 		TotalServers:    len(task.ServerIDs),
 		StartTime:       startTime,
 	}
-
-	if err := e.executionRepo.Create(execution); err != nil {
-		log.Printf("[TaskExecutor] 创建执行记录失败: %v", err)
-		return
-	}
-	e.syncOperationRecord(execution)
+	e.upsertOperationRecord(record)
 
 	// 根据任务类型获取要执行的命令
 	command, err := e.resolveCommand(ctx, task)
 	if err != nil {
 		log.Printf("[TaskExecutor] 解析命令失败: %v", err)
-		e.completeExecution(execution, taskexecution.StatusFailed, err.Error(), 0, 0)
+		e.completeExecution(&record, executionStatusFailed, err.Error(), 0, 0, nil)
 		e.updateTaskStatus(task.ID, "failed")
 		return
 	}
-	execution.Command = command
-
-	// 更新执行记录的命令
-	e.executionRepo.Update(execution.ID, map[string]interface{}{
-		"command": command,
-	})
-	execution.Command = command
-	e.syncOperationRecord(execution)
+	record.Command = command
+	e.upsertOperationRecord(record)
 
 	// 并发执行到所有服务器
 	results := e.executeOnServers(ctx, task.UserID, task.ServerIDs, command)
@@ -117,54 +116,31 @@ func (e *Executor) Execute(ctx context.Context, task *scheduledtask.ScheduledTas
 	// 统计结果
 	successCount := 0
 	failedCount := 0
-	var serverResults []taskexecution.TaskExecutionServer
 
 	for _, result := range results {
-		serverResult := taskexecution.TaskExecutionServer{
-			ExecutionID:  execution.ID,
-			ServerID:     result.ServerID,
-			ServerName:   result.ServerName,
-			ServerHost:   result.ServerHost,
-			Status:       result.Status,
-			ExitCode:     result.ExitCode,
-			Output:       result.Output,
-			ErrorMessage: result.ErrorMessage,
-			StartTime:    result.StartTime,
-			EndTime:      result.EndTime,
-			Duration:     result.Duration,
-		}
-		serverResults = append(serverResults, serverResult)
-
-		if result.Status == taskexecution.StatusSuccess {
+		if result.Status == executionStatusSuccess {
 			successCount++
 		} else {
 			failedCount++
 		}
 	}
 
-	// 保存服务器执行结果
-	for _, sr := range serverResults {
-		if err := e.executionRepo.CreateServerResult(&sr); err != nil {
-			log.Printf("[TaskExecutor] 保存服务器执行结果失败: %v", err)
-		}
-	}
-
 	// 确定最终状态
-	var finalStatus taskexecution.ExecutionStatus
+	var finalStatus executionStatus
 	if failedCount == 0 && successCount > 0 {
-		finalStatus = taskexecution.StatusSuccess
+		finalStatus = executionStatusSuccess
 	} else if successCount == 0 {
-		finalStatus = taskexecution.StatusFailed
+		finalStatus = executionStatusFailed
 	} else {
-		finalStatus = taskexecution.StatusPartial
+		finalStatus = executionStatusPartial
 	}
 
 	// 完成执行记录
-	e.completeExecution(execution, finalStatus, "", successCount, failedCount)
+	e.completeExecution(&record, finalStatus, "", successCount, failedCount, results)
 
 	// 更新任务状态
 	taskStatus := "success"
-	if finalStatus != taskexecution.StatusSuccess {
+	if finalStatus != executionStatusSuccess {
 		taskStatus = "failed"
 	}
 	e.updateTaskStatus(task.ID, taskStatus)
@@ -178,7 +154,7 @@ type ServerExecutionResult struct {
 	ServerID     uuid.UUID
 	ServerName   string
 	ServerHost   string
-	Status       taskexecution.ExecutionStatus
+	Status       executionStatus
 	ExitCode     *int
 	Output       string
 	ErrorMessage string
@@ -267,7 +243,7 @@ func (e *Executor) executeOnSingleServer(
 	startTime := time.Now()
 	result := ServerExecutionResult{
 		StartTime: startTime,
-		Status:    taskexecution.StatusFailed,
+		Status:    executionStatusFailed,
 	}
 
 	// 解析服务器ID
@@ -325,11 +301,11 @@ func (e *Executor) executeOnSingleServer(
 		// 尝试从错误中提取退出码
 		exitCode := 1
 		result.ExitCode = &exitCode
-		result.Status = taskexecution.StatusFailed
+		result.Status = executionStatusFailed
 	} else {
 		exitCode := 0
 		result.ExitCode = &exitCode
-		result.Status = taskexecution.StatusSuccess
+		result.Status = executionStatusSuccess
 	}
 
 	return result
@@ -337,62 +313,73 @@ func (e *Executor) executeOnSingleServer(
 
 // completeExecution 完成执行记录
 func (e *Executor) completeExecution(
-	execution *taskexecution.TaskExecution,
-	status taskexecution.ExecutionStatus,
+	execution *taskExecutionRecord,
+	status executionStatus,
 	errorMsg string,
 	successCount, failedCount int,
+	serverResults []ServerExecutionResult,
 ) {
 	endTime := time.Now()
 	duration := endTime.Sub(execution.StartTime).Milliseconds()
-
-	updates := map[string]interface{}{
-		"status":        status,
-		"end_time":      endTime,
-		"duration":      duration,
-		"success_count": successCount,
-		"failed_count":  failedCount,
-	}
-
-	if errorMsg != "" {
-		updates["error_message"] = errorMsg
-	}
-
-	if err := e.executionRepo.Update(execution.ID, updates); err != nil {
-		log.Printf("[TaskExecutor] 更新执行记录失败: %v", err)
-	}
 	execution.Status = status
 	execution.EndTime = &endTime
 	execution.Duration = duration
 	execution.SuccessCount = successCount
 	execution.FailedCount = failedCount
 	execution.ErrorMessage = errorMsg
-	e.syncOperationRecord(execution)
+	execution.ServerResults = serverResults
+	e.upsertOperationRecord(*execution)
 }
 
-func (e *Executor) syncOperationRecord(execution *taskexecution.TaskExecution) {
-	if execution == nil {
+type taskExecutionRecord struct {
+	ID              uuid.UUID
+	ScheduledTaskID uuid.UUID
+	UserID          uuid.UUID
+	TaskName        string
+	TaskType        string
+	TriggerType     TriggerType
+	Command         string
+	Status          executionStatus
+	TotalServers    int
+	SuccessCount    int
+	FailedCount     int
+	StartTime       time.Time
+	EndTime         *time.Time
+	Duration        int64
+	ErrorMessage    string
+	ServerResults   []ServerExecutionResult
+}
+
+func (e *Executor) upsertOperationRecord(execution taskExecutionRecord) {
+	if e.operationRecords == nil || execution.UserID == uuid.Nil || execution.ID == uuid.Nil {
 		return
 	}
 
 	status := operationrecord.StatusRunning
 	switch execution.Status {
-	case taskexecution.StatusPending:
+	case executionStatusPending:
 		status = operationrecord.StatusPending
-	case taskexecution.StatusSuccess:
+	case executionStatusSuccess:
 		status = operationrecord.StatusSuccess
-	case taskexecution.StatusFailed:
+	case executionStatusFailed:
 		status = operationrecord.StatusFailure
-	case taskexecution.StatusPartial:
+	case executionStatusPartial:
 		status = operationrecord.StatusPartial
-	case taskexecution.StatusTimeout:
+	case executionStatusTimeout:
 		status = operationrecord.StatusTimeout
-	case taskexecution.StatusCanceled:
+	case executionStatusCanceled:
 		status = operationrecord.StatusCanceled
 	}
+	detail, _ := json.Marshal(map[string]interface{}{
+		"scheduled_task_id": execution.ScheduledTaskID,
+		"task_type":         execution.TaskType,
+		"trigger_type":      execution.TriggerType,
+		"server_results":    execution.ServerResults,
+	})
+	now := time.Now()
 
 	record := &operationrecord.OperationRecord{
 		UserID:       execution.UserID,
-		Username:     execution.Username,
 		Type:         operationrecord.TypeExecution,
 		Action:       "task_execute",
 		Status:       status,
@@ -406,16 +393,11 @@ func (e *Executor) syncOperationRecord(execution *taskexecution.TaskExecution) {
 		SuccessCount: execution.SuccessCount,
 		FailureCount: execution.FailedCount,
 		ErrorMessage: execution.ErrorMessage,
-		SourceTable:  "task_executions",
+		DetailJSON:   string(detail),
+		SourceTable:  "task_runs",
 		SourceID:     execution.ID.String(),
-		CreatedAt:    execution.CreatedAt,
-		UpdatedAt:    execution.UpdatedAt,
-	}
-	if record.CreatedAt.IsZero() {
-		record.CreatedAt = execution.StartTime
-	}
-	if record.UpdatedAt.IsZero() {
-		record.UpdatedAt = time.Now()
+		CreatedAt:    execution.StartTime,
+		UpdatedAt:    now,
 	}
 
 	_ = e.operationRecords.Upsert(context.Background(), record)
